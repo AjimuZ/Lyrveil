@@ -1,0 +1,204 @@
+# Runtime contracts
+
+Status: verified at the pinned upstream tags on 2026-11-01 by reading the official
+source and API documents. Nothing here has run against a loaded model yet. Exit
+checks in P02, P05 and P06 confirm these contracts at runtime.
+
+Lyrveil calls only what this page lists. To use anything else, verify it at the
+pinned tag and add it here in the same commit.
+
+## KoboldCpp v1.124.1
+
+Sources: `koboldcpp.py` and `embd_res/kcpp_docs.embd` at tag `v1.124.1`.
+
+### Flags
+
+The image entrypoint launches `/opt/koboldcpp/koboldcpp-launcher`, extracted at build
+time with `--unpack`, so each start skips self-extraction.
+
+| Flag | Value | Purpose |
+| --- | --- | --- |
+| `--model` | `/models/llm/Rocinante-12B-v1.1-Q4_K_M.gguf` | Model file. |
+| `--usecuda` | No argument | CUDA acceleration. |
+| `--contextsize` | `8192` | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-fallback-profiles). |
+| `--gpulayers` | `-1` | Autofit, the upstream default. It adapts when other programs hold VRAM. |
+| `--batchsize` | `512` | Logical batch size, the upstream default. |
+| `--host` | `0.0.0.0` | Listens on the internal network only, because no port is published. |
+| `--port` | `5001` | Upstream default port. |
+| `--skiplauncher` | No argument | Never opens the GUI launcher. |
+| `--quiet` | No argument | Hides generation inputs and outputs from logs. **Required for privacy.** |
+
+Flash attention is on by default and needs no flag. These flags are never used:
+`--remotetunnel`, `--websearch`, `--admin`, `--admindir`, `--sdmodel`, `--mcpfile`,
+`--hordekey`, `--savedatafile`, `--preloadstory`, `--password`. Port isolation makes a
+password unnecessary, and a shared secret would add a value to manage.
+
+Source facts used by the design:
+
+- Text model load happens before the HTTP API starts, so a reachable API implies a
+  loaded model.
+- A failed text model load exits with status 3 and the message `Could not load text model`.
+
+### Endpoints
+
+| Method and path | Use | Contract |
+| --- | --- | --- |
+| `GET /api/v1/model` | Readiness and identity | `{"result": "koboldcpp/<model name>"}` |
+| `GET /api/extra/version` | Version check | Holds the string fields `result` and `version`. `version` must match the pinned release. |
+| `GET /api/extra/true_max_context_length` | Real context size | Used to size budgets after a fallback. |
+| `GET /api/extra/perf` | Monitoring | Includes `last_process`, `last_eval`, `last_token_count`, `stop_reason`, `queue`, `idle`, `uptime`. |
+| `POST /api/extra/tokencount` | Tokenizer | Request `{"prompt": "...", "special": false}`. Response `{"value": N, "ids": [...], "prompt": "..."}`. `special` defaults to true and adds BOS. |
+| `POST /api/extra/generate/stream` | Streaming reply | Takes `GenerationInput`. SSE with `event: message` and JSON `data` holding `token` and `finish_reason`. `finish_reason` is null until the last event, which has an empty `token` and `stop`, `length` or `error`. The server then closes the connection. There is no `[DONE]`. |
+| `POST /api/v1/generate` | Structured tasks | Takes `GenerationInput`. Response `{"results": [{"text": "..."}]}`. |
+| `POST /api/extra/abort` | Cancel, preempt | Request `{"genkey": "..."}`. Response `{"success": "true", "done": "true"}`. Upstream states that it does not work with several queued requests. The lease guarantees one request at a time. |
+
+### GenerationInput fields used
+
+| Field | Notes |
+| --- | --- |
+| `prompt` | Assembled by Lyrveil. |
+| `max_context_length`, `max_length` | Set on every request. |
+| `temperature`, `top_p`, `top_k`, `min_p` | Sampler values. |
+| `rep_pen`, `rep_pen_range` | Repetition penalty. |
+| `dry_multiplier`, `dry_base`, `dry_allowed_length`, `dry_penalty_last_n`, `dry_sequence_breakers` | DRY. Upstream defaults: 0.0, 1.75, 2, 320, empty. Multiplier 0 disables it. |
+| `stop_sequence`, `trim_stop` | Text-level stops. `trim_stop` defaults to true. |
+| `grammar` | GBNF string for structured output. `grammar_retain_state` stays false. |
+| `genkey` | Unique per job. Needed for abort. |
+| `sampler_seed` | Integer from 1 to 999999. Only in reproducible tests. |
+
+`sampler_order` is left unset, so the upstream default applies. `json_schema` is not
+part of `GenerationInput`. Lyrveil uses `grammar`.
+
+## Rocinante 12B v1.1
+
+| Fact | Value | Source |
+| --- | --- | --- |
+| Base | Mistral Nemo Base 2407: `MistralForCausalLM`, 40 layers, hidden size 5120, head dim 128, 8 key-value heads | `config.json` of the original model |
+| Chat template in the GGUF | None | Hugging Face GGUF metadata |
+| Formats listed by the author | ChatML for roleplay, Alpaca for story, Mistral | Original model card |
+| `<\|im_start\|>`, `<\|im_end\|>` as special tokens | No. Absent from the 1000 entries of `added_tokens_decoder` | `tokenizer_config.json` |
+| BOS, EOS | `<s>`, `</s>`. `add_bos_token` is true | `tokenizer_config.json` |
+| Author's sampler advice | Use DRY. Temperature 0.7 is calmer, 1.2 is more intense | Original model card |
+| Italian | Listed for the base model. Not stated for this finetune | Model cards |
+
+Consequence: ChatML markers are ordinary text in this model. Lyrveil writes them into
+the prompt and stops on them with text-level stop sequences
+([ADR 0014](decisions/0014-chatml-plain-text-template.md)).
+
+### VRAM estimate
+
+Planning figures, not measurements. P02 measures the real values.
+
+| Part | Estimate |
+| --- | --- |
+| Weights, 7,477,203,712 bytes | 7131 MiB |
+| KV cache: 8192 tokens × (1024 + 1024) × 2 bytes × 40 layers | 1280 MiB |
+| Compute and output buffers | About 300 to 600 MiB |
+| **Total** | **About 8700 to 9000 MiB** |
+
+Measured free VRAM on the idle reference machine is 10522 MiB of 12282 MiB, which
+leaves an expected margin of about 1500 MiB.
+
+## ComfyUI v0.43.0
+
+Sources: `comfy/cli_args.py`, `nodes.py`, `README.md`,
+`script_examples/websockets_api_example.py` at tag `v0.43.0`, and
+`docs.comfy.org/development/comfyui-server`.
+
+### Flags
+
+| Flag | Value | Purpose |
+| --- | --- | --- |
+| `--listen` | `0.0.0.0` | Internal network only. |
+| `--port` | `8188` | Upstream default. |
+| `--disable-auto-launch` | No argument | No browser. |
+| `--offline` | No argument | Disables partner nodes and blocks frontend Internet access through a restrictive CSP. |
+| `--disable-all-custom-nodes` | No argument | Prevents loading any custom node. |
+| `--disable-metadata` | No argument | Keeps prompts out of the PNG. Lyrveil stores metadata in the database. |
+| `--preview-method` | `none` | No latent previews. |
+| `--output-directory`, `--input-directory`, `--temp-directory`, `--user-directory` | `/tmp/comfy/...` | All in tmpfs, so ComfyUI keeps no state. |
+| `--reserve-vram` | `1.5` | Leaves VRAM to the desktop. The idle reference machine uses 1489 MiB. |
+| `--log-stdout` | No argument | Docker collects logs from stdout. |
+
+Never used: `--enable-manager`, `--enable-assets`, `--multi-user`,
+`--enable-cors-header`, `--tls-*`.
+
+### Endpoints
+
+| Method and path | Use | Contract |
+| --- | --- | --- |
+| `GET /system_stats` | Readiness, version, VRAM | System information. |
+| `POST /prompt` | Submit | Body keys `prompt`, `client_id`, `prompt_id`. Success returns `prompt_id` and `number`. Validation failure returns `error` and `node_errors`. |
+| `WS /ws?clientId=<id>` | Progress | See below. Binary frames are previews and are ignored. |
+| `GET /history/{prompt_id}` | Outputs | Output nodes list `images` with `filename`, `subfolder`, `type`. |
+| `GET /view` | Fetch file | Query `filename`, `subfolder`, `type`. |
+| `POST /interrupt` | Cancel | Stops the current execution. |
+
+WebSocket messages used:
+
+| Type | Fields | Meaning for Lyrveil |
+| --- | --- | --- |
+| `execution_start` | `prompt_id` | Work began. |
+| `executing` | `node`, `prompt_id` | Current node. `node` null means finished. Node `1` means the checkpoint loads. |
+| `progress` | `node`, `prompt_id`, `value`, `max` | Sampler steps for the progress display. |
+| `execution_success` | `prompt_id`, `timestamp` | Success. |
+| `execution_error` | `prompt_id`, details | Failure. Text matching `OutOfMemoryError` maps to `IMAGE_OOM`. |
+| `execution_interrupted` | `prompt_id`, `node_id`, `node_type`, `executed` | Cancelled. |
+
+### Nodes used
+
+| Class | Inputs |
+| --- | --- |
+| `CheckpointLoaderSimple` | `ckpt_name` |
+| `CLIPSetLastLayer` | `clip`, `stop_at_clip_layer` |
+| `CLIPTextEncode` | `clip`, `text` |
+| `EmptyLatentImage` | `width`, `height`, `batch_size` |
+| `KSampler` | `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise` |
+| `VAEDecode` | `samples`, `vae` |
+| `VAEDecodeTiled` | `samples`, `vae`, `tile_size`, `overlap`, `temporal_size`, `temporal_overlap` |
+| `SaveImage` | `images`, `filename_prefix` |
+
+## Illustrious XL v1.0
+
+| Fact | Value | Source |
+| --- | --- | --- |
+| Native resolution | 1536x1536. Handles 512x512 to 1536x1536 and sizes like 1248x1824 | Model card |
+| Prompt style | Natural language, Danbooru-style tags, or both | Model card |
+| Recommended sampler, steps, CFG | Not stated by the model card | Model card |
+| Community guidance | Euler a, 20 to 28 steps, CFG 3 to 7, CLIP skip 2. Not official | Third-party guides, see [Image generation](image-generation.md#default-parameters) |
+| LoRA and ControlNet | Modules trained on Illustrious v0.1 are stated to work | Model card |
+
+## Docker Engine API
+
+The orchestrator pins API version `v1.44`. The measured engine reports API 1.56 and
+minimum 1.40. All calls use the Unix socket.
+
+| Call | Use |
+| --- | --- |
+| `GET /v1.44/containers/{name}/json` | State, exit code, health, labels. |
+| `POST /v1.44/containers/{name}/start` | Start a pre-created runtime. |
+| `POST /v1.44/containers/{name}/stop?t=<seconds>` | SIGTERM, then SIGKILL after the grace period. |
+| `GET /v1.44/containers/{name}/top` | Processes in a running container. |
+| `GET /v1.44/containers/{name}/logs?stdout=1&stderr=1&tail=200` | Classify a load failure. Never stored verbatim. |
+
+`{name}` is always `lyrveil-llm` or `lyrveil-image`. See
+[Security](security.md#docker-socket).
+
+## NVML and WSL2
+
+Source: NVIDIA CUDA on WSL User Guide, confirmed by a container run on 2026-11-01.
+
+- NVML has a limited feature set on WSL2. Upstream states that active compute process
+  queries are not supported. `nvidia-smi --query-compute-apps` returned nothing in the
+  container test.
+- Device memory queries work: the container reported 12282 MiB total, 1489 MiB used
+  and 10522 MiB free, matching the host.
+- `libnvidia-ml.so.1` and `/dev/dxg` are present with `--gpus all`. `/dev/nvidia*` is
+  absent. Never install a Linux NVIDIA driver in WSL2.
+
+Calls used: `nvmlInit`, `nvmlDeviceGetHandleByIndex`, `nvmlDeviceGetName`,
+`nvmlDeviceGetMemoryInfo`, `nvmlSystemGetDriverVersion`,
+`nvmlSystemGetCudaDriverVersion`.
+
+Consequence: NVML is a device-level memory gauge only. "Which process is active" comes
+from Docker ([GPU orchestration](gpu-orchestration.md#verifying-gpu-release)).

@@ -1,0 +1,29 @@
+# Architecture decisions
+
+One record per material decision. Records are never rewritten. A new record supersedes an old one.
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [0001](0001-documentation-language-and-status.md) | English documentation, Italian product, explicit delivery status | Accepted |
+| [0002](0002-license-apache-2.md) | Apache License 2.0 for original work | Accepted |
+| [0003](0003-service-topology-and-networks.md) | Five services and segmented internal networks | Accepted |
+| [0004](0004-single-sqlite-writer.md) | Backend is the only SQLite writer | Accepted |
+| [0005](0005-exclusive-gpu-by-container-lifecycle.md) | GPU exclusivity through container stop and start | Accepted |
+| [0006](0006-docker-socket-confined-to-orchestrator.md) | Docker socket only in the orchestrator, behind an allowlist | Accepted |
+| [0007](0007-own-runtime-images-pinned.md) | Locally built runtime images from pinned versions | Accepted |
+| [0008](0008-persistence-on-wsl2-ext4-bind-mounts.md) | Bind mounts on the WSL2 Linux filesystem | Accepted |
+| [0009](0009-synchronous-sqlalchemy.md) | Synchronous SQLAlchemy behind a thread boundary | Accepted |
+| [0010](0010-job-queue-and-scheduling-policy.md) | Durable SQLite job queue with mode batching | Accepted |
+| [0011](0011-memory-retrieval-fts5-without-embeddings.md) | FTS5 with Snowball stemming, no embeddings | Accepted |
+| [0012](0012-memory-provenance-and-history.md) | Memories with provenance, status and history | Accepted |
+| [0013](0013-structured-output-grammar-and-validation.md) | Structured output through grammar, schema and bounded repair | Accepted |
+| [0014](0014-chatml-plain-text-template.md) | ChatML as plain text over the native generate API | Accepted |
+| [0015](0015-angular-22-zoneless-signal-forms.md) | Angular 22, zoneless, Signal Forms, Angular Aria | Accepted |
+| [0016](0016-realtime-websocket-channel.md) | One event WebSocket, with REST as the source of truth | Accepted |
+| [0017](0017-local-only-security-model.md) | Local-only security model without authentication | Accepted |
+| [0018](0018-adult-only-characters-and-content-safeguards.md) | Adult-only characters and deterministic content safeguards | Accepted |
+| [0019](0019-hardware-tiers.md) | Target and reduced hardware tiers | Accepted |
+| [0020](0020-proactive-messages-default-off.md) | Proactive messages off by default, missed events skipped | Accepted |
+| [0021](0021-character-format-and-card-v2.md) | Own versioned JSON format, Character Card V2 after 1.0 | Accepted |
+| [0022](0022-root-scripts-and-repository-layout.md) | Thin root scripts, implementations in `scripts/` | Accepted |
+| [0023](0023-obsidian-bloom-accessibility-extensions.md) | Control border and semantic tokens added to the palette | Accepted |

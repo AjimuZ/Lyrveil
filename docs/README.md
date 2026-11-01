@@ -1,0 +1,57 @@
+# Documentation
+
+**Status (2026-11-01): the design is complete and no application code exists yet.** These documents describe the target system and are the specification for implementation. "Planned" means not yet built. Measured facts are marked as such.
+
+## Start here
+
+| Document | Purpose |
+| --- | --- |
+| [Requirements](requirements.md) | What the product must do, with stable identifiers and acceptance criteria |
+| [Architecture](architecture.md) | Components, invariants, flows and failure domains |
+| [Roadmap](roadmap.md) | Phases, tasks and exit checks |
+| [Risks](risks.md) | Open questions (none), assumptions and risks |
+| [Traceability](traceability.md) | Requirement to design, phase and test |
+| [Glossary](glossary.md) | Terms |
+
+## Design
+
+| Document | Purpose |
+| --- | --- |
+| [Technology choices](technology.md) | Stack, exact versions, licenses and alternatives |
+| [Runtime contracts](runtime-contracts.md) | Verified flags and endpoints of KoboldCpp, ComfyUI, Docker and NVML |
+| [Data model](data-model.md) | Tables, indexes, full-text search and deletion policy |
+| [APIs](api.md) | REST, event WebSocket and control API |
+| [Backend](backend.md) | Packages, services, ports and concurrency |
+| [Frontend](frontend.md) | Angular structure, routes, state and the ten screens |
+| [Design system](design-system.md) | Obsidian Bloom tokens, components and accessibility |
+
+## Subsystems
+
+| Document | Purpose |
+| --- | --- |
+| [Character system](character-system.md) | Creator, card schema, avatars and exchange format |
+| [Memory engine](memory-engine.md) | Layers, extraction, retrieval, contradictions, summaries and context |
+| [Consistency engine](consistency-engine.md) | Rules, state manager, versioning and validators |
+| [Prompting and language](prompting.md) | Templates, samplers, structured output and Italian quality |
+| [Image generation](image-generation.md) | Modes, prompt building, workflow and persistence |
+| [GPU orchestration](gpu-orchestration.md) | State machine, leases, scheduling, recovery |
+| [Proactive messages and time](scheduler.md) | Scheduler, limits and missed events |
+
+## Running and releasing
+
+| Document | Purpose |
+| --- | --- |
+| [Operations](operations.md) | Install, scripts, Compose, images, backup and troubleshooting |
+| [Configuration](configuration.md) | Environment, launch files and settings |
+| [Testing](testing.md) | Levels, commands and full test catalog |
+| [Security and privacy](security.md) | Threat model, controls and residual risks |
+| [Licensing](licensing.md) | Lyrveil, runtimes, models, dependencies and fonts |
+| [Publishing](publishing.md) | Repository rules, first push and pre-release audit |
+
+## Records
+
+| Document | Purpose |
+| --- | --- |
+| [Decisions](decisions/README.md) | One ADR per material decision |
+| [Environment, 2026-11-01](verification/2026-11-01-environment.md) | What was measured on the reference machine |
+| [Documentation checks, 2026-11-01](verification/2026-11-01-documentation.md) | Checks run on this documentation |
