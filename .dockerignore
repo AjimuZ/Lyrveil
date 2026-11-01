@@ -1,0 +1,54 @@
+# Every build context is the repository root, so this file is the single
+# guard that keeps weights, user data and secrets out of Docker images.
+
+# Never send to the Docker daemon
+.git
+.github
+models
+data
+backups
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+
+# Not needed inside images
+docs
+*.md
+tests
+**/tests
+**/*.spec.ts
+playwright-report
+test-results
+
+# Regenerated inside the image build
+**/node_modules
+**/dist
+**/.angular
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.hypothesis
+**/coverage
+
+# Editors, operating systems and temporary files
+.idea
+.vscode
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+**/*.tmp
+**/*.part

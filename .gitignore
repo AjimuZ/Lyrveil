@@ -1,0 +1,68 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Model weights are never committed: see docs/licensing.md
+models/*
+!models/.gitkeep
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# User data: databases, conversations, memories, generated and reference images
+data/*
+!data/.gitkeep
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-wal
+*.db-shm
+
+# Backups, logs and temporary files
+backups/
+*.bak
+*.tar
+*.tar.gz
+*.tar.zst
+logs/
+*.log
+tmp/
+*.tmp
+*.part
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+
+# Node and Angular
+node_modules/
+dist/
+.angular/
+playwright-report/
+test-results/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
