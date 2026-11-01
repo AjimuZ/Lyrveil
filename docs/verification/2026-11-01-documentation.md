@@ -38,12 +38,12 @@ The checks below ran from a temporary script outside the repository. Roadmap ite
 | Designed SQLite constraints | In-memory test with SQLite 3.53.4 | The partial unique index on `memories` refused a duplicate and allowed a superseded copy. The scope `CHECK` refused a conversation-scoped row with no conversation |
 | FTS5 weights | `bm25(memory_fts, 0.0, 2.0, 1.0)` with an unindexed first column | Works, ranks the two-term match first |
 | Palette contrast | WCAG formula, computed | Values in [Design system](../design-system.md#contrast) |
+| Mermaid diagrams | Opened on GitHub after the first push, on 2026-11-02, in `README.md`, `architecture.md`, `data-model.md`, `gpu-orchestration.md` and `memory-engine.md` | All 7 render. P01.8 adds a parser to CI |
 
 ## Not executed
 
 | Item | Reason | Follow-up |
 | --- | --- | --- |
-| Mermaid diagrams, machine parsing | No local parser is available, and loading one from a CDN was refused by the environment's policy. All 7 were reviewed by reading only | Check their rendering on GitHub after the first push. P01.8 adds a parser to CI |
 | External links | Not requested from each host. Main upstream pages were read during the research | P09 audit |
 | gitleaks | Not installed on the reference machine. The pattern scan above is narrower | P09 runs it on the whole history |
 | `.dockerignore` | No image exists yet | T-DCK-10 in P01 |
