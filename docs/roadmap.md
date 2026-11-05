@@ -6,7 +6,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | --- | --- | --- |
 | P00 | Complete design documentation | Done |
 | P01 | Foundations: empty app starts, stops and restarts cleanly | Planned |
-| P02 | A real streaming chat with Rocinante | Planned |
+| P02 | A real streaming chat with the default text profile | Planned |
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | Planned |
 | P04 | Memory and consistency | Planned |
 | P05 | Images in messages | Planned |
@@ -27,21 +27,24 @@ Through P03, the project delivers the complete working path from character creat
 - [x] P00.4 Record decisions as ADRs. Leave no open question.
 - [x] P00.5 Configure `.gitignore`, `.dockerignore` and `.gitattributes` before the first commit.
 - [x] P00.6 Check links, placeholders, requirement coverage and secrets.
+- [x] P00.7 Revise for the 32 GB RAM upgrade: selectable model profiles, prompt templates per model family, two-pass
+  image rendering, new hardware tiers and the KoboldCpp `v1.124.2` pin (ADRs 0024 to 0028).
 
 Exit: every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.
 
-Evidence: [environment](verification/2026-11-01-environment.md), [documentation checks](verification/2026-11-01-documentation.md).
+Evidence: [environment](verification/2026-11-01-environment.md), [documentation checks](verification/2026-11-01-documentation.md),
+[2026-11-05 revision](verification/2026-11-05-environment.md).
 
 ## P01: Foundations
 
 **Depends on:** P00. **Areas:** repository, Docker, backend, orchestrator, frontend.
 
-- [ ] P01.1 Move development to a clone inside Ubuntu on WSL2. Apply the `.wslconfig` for the machine's tier.
+- [ ] P01.1 Move development to a clone inside Ubuntu on WSL2. Apply the `.wslconfig` for the machine's tier: on the reference machine, the 32 GB values, so Docker sees at least 20 GiB.
 - [ ] P01.2 Create the repository structure, `.env.example`, `models/.gitkeep`, `data/.gitkeep` and `compose.yaml` with the three core services.
 - [ ] P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes.
 - [ ] P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight.
 - [ ] P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client.
-- [ ] P01.6 Scripts: `setup.sh`, `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh`, `scripts/download-models.sh`, `scripts/test.sh`.
+- [ ] P01.6 Scripts: `setup.sh`, `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh`, `scripts/download-models.sh` driven by the model catalog, `scripts/test.sh`.
 - [ ] P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers.
 - [ ] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
 
@@ -52,14 +55,15 @@ Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-
 **Depends on:** P01. **Areas:** LLM runtime, messaging.
 
 - [ ] P02.1 `docker/llm` image from the pinned binary. Confirm the unpacked launcher and read-only root.
+- [ ] P02.1a `config/model-catalog.json`, its validator and the tier defaults.
 - [ ] P02.2 Orchestrator loads and stops the LLM. Leases.
-- [ ] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort.
+- [ ] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`.
 - [ ] P02.4 Job queue with persistence and retries.
 - [ ] P02.5 Conversations, messages, variants, streaming over WebSocket, search.
 - [ ] P02.6 Chat list and conversation screens with a built-in minimal character form.
-- [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning). Record the numbers and update VRAM defaults.
+- [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule. Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
 
-Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06 pass. T-GPU-01 to T-GPU-04 pass on the reference machine. A long Italian chat with Rocinante survives a page reload and an application restart.
+Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01 and T-MOD-02 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.
 
 ## P03: Characters
 
@@ -96,15 +100,15 @@ Exit: T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 pass. T-QLT-01 meets 
 **Depends on:** P04. **Areas:** ComfyUI, visual pipeline, gallery.
 
 - [ ] P05.1 `docker/image` from the pinned commit, with a lock file.
-- [ ] P05.2 `ComfyUiRuntime`, workflow templates and progress.
+- [ ] P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes.
 - [ ] P05.3 `VisualConsistencyService`, profile translation and scene filter.
 - [ ] P05.4 `image_request` job, persistence, thumbnails and message integration.
 - [ ] P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation.
 - [ ] P05.6 Gallery.
 - [ ] P05.7 Mode switching through the orchestrator's normal path, with exclusivity enforced. Full automation and recovery follow in P06.
-- [ ] P05.8 Measure image VRAM. Update defaults. Run the parameter grid.
+- [ ] P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile. Apply the preset rule and the default rule.
 
-Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 pass. T-GPU-01, T-GPU-06 and T-QLT-02 pass. AC-07, AC-13 and AC-14 hold.
+Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13, T-IMG-14 pass. T-GPU-01, T-GPU-06 and T-QLT-02 pass. AC-07, AC-13 and AC-14 hold.
 
 ## P06: Orchestration
 
@@ -113,11 +117,11 @@ Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 p
 - [ ] P06.1 Complete the 18-step flow with all states.
 - [ ] P06.2 Release verification, VRAM guards and blocked states.
 - [ ] P06.3 Scheduling rules, batching, fairness, preemption and cancellation.
-- [ ] P06.4 Fallback profiles, out-of-memory handling and recovery table.
+- [ ] P06.4 Launch levels, out-of-memory handling and recovery table.
 - [ ] P06.5 Safe shutdown, drain and event persistence.
-- [ ] P06.6 AI resources screen and model settings.
+- [ ] P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration.
 
-Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.
+Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.
 
 ## P07: Advanced messaging
 

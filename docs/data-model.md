@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: planned, phases P01 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -201,7 +201,7 @@ Indexes: `(status, pinned_at, last_message_at DESC)`, `(character_id, status)`.
 | `active_variant_id` | TEXT | FK `message_variants`, SET NULL |
 | `content` | TEXT | Copy of the active variant's text, for the list and FTS |
 | `token_count` | INTEGER | NULL until counted |
-| `tokenizer_id` | TEXT | Which model produced `token_count` |
+| `tokenizer_id` | TEXT | Text profile whose tokenizer produced `token_count`. A different active profile makes the count stale |
 | `scheduled_event_id` | TEXT | FK, SET NULL. Set on proactive messages |
 | `edited_at`, `deleted_at`, `created_at` | TEXT | |
 
@@ -221,7 +221,7 @@ Every text or image version of a message. A user edit and a regeneration each ad
 | `image_id` | TEXT | FK `generated_images`, SET NULL |
 | `source` | TEXT | `user`, `generated`, `edited` |
 | `status` | TEXT | `streaming`, `complete`, `failed`, `interrupted` |
-| `generation_params_json` | TEXT | Sampler values, NULL for user text |
+| `generation_params_json` | TEXT | Text profile, file SHA-256, template family and sampler values. NULL for user text |
 | `prompt_assembly_id` | TEXT | FK, SET NULL |
 | `created_at` | TEXT | |
 
@@ -448,6 +448,10 @@ Retention: the newest 200 per conversation.
 | `sampler`, `scheduler` | TEXT | |
 | `clip_skip` | INTEGER | |
 | `checkpoint_file`, `checkpoint_sha256`, `model_version` | TEXT | |
+| `profile_id` | TEXT | Image profile used, for example `illustrious-xl-v2.0`, or `custom-<12 hex>` |
+| `quality_preset` | TEXT | `alta` or `rapida`, the preset that produced the file after any fallback |
+| `hires_denoise`, `hires_scale` | REAL | NULL for **Rapida** |
+| `hires_steps` | INTEGER | NULL for **Rapida** |
 | `workflow_id` | TEXT | Template name and version |
 | `workflow_json` | TEXT | Exact submitted workflow |
 | `comfyui_version` | TEXT | |

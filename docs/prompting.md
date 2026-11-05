@@ -1,6 +1,6 @@
 # Prompting and language
 
-Status: accepted (2026-11-01). Implementation: planned, phases P02 to P05.
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models. Implementation: planned, phases P02 to P05.
 
 `PromptTemplateService` loads templates from `backend/src/lyrveil/prompts/<language>/`. Each
 file has a version in its name, such as `extraction.v1.j2`. Rendering uses Jinja2 with
@@ -20,9 +20,53 @@ language. Image prompts are always English.
 
 ## Prompt format
 
-Rocinante's GGUF has no chat template, and the ChatML markers are not special tokens
-([ADR 0014](decisions/0014-chatml-plain-text-template.md)). Lyrveil writes the prompt itself and
-calls `/api/extra/generate/stream`, or `/api/v1/generate` for structured tasks.
+The prompt format depends on the active [text profile](models.md#text-profiles)
+([ADR 0025](decisions/0025-prompt-templates-per-model-family.md)). Lyrveil renders the text itself and
+calls `/api/extra/generate/stream`, or `/api/v1/generate` for structured tasks. `PromptFormatter`
+receives the same logical turns for every family: one system text built from blocks 1 to 6, then the
+user and character turns.
+
+KoboldCpp parses control tokens written in the prompt and adds BOS itself, so no template writes BOS.
+Thinking is always off.
+
+### `gemma4`
+
+Used by `gemma-4-26b-a4b`, `gemma-4-12b` and `orion-26b-a4b`. Matches the official template with
+thinking off:
+
+```text
+<|turn>system
+{blocks 1 to 6}<turn|>
+<|turn>user
+{older user message}<turn|>
+<|turn>model
+{older reply}<turn|>
+<|turn>user
+{current message}<turn|>
+<|turn>model
+<|channel>thought
+<channel|>
+```
+
+Stop sequences: `<turn|>`, `<|turn>`, and `\n{user_display_name}:`. Token 106, `<turn|>`, is also an
+end token of the model.
+
+### `mistral_v3_tekken`
+
+Used by `rocinante-x-12b`. No spaces around the markers, and the system text joins the last user turn,
+as in the template of its GGUF:
+
+```text
+[INST]{older user message}[/INST]{older reply}</s>[INST]{blocks 1 to 6}
+
+{current message}[/INST]
+```
+
+Stop sequences: `</s>`, `[INST]`, and `\n{user_display_name}:`.
+
+### `chatml`
+
+Used by `rocinante-12b-v1.1`. The markers are ordinary text in that tokenizer:
 
 ```text
 <|im_start|>system
@@ -38,31 +82,41 @@ calls `/api/extra/generate/stream`, or `/api/v1/generate` for structured tasks.
 
 Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}:`.
 
-The P02 exit check tokenizes this prompt with the real model and stores the identifiers as a test
-fixture.
+### Checks
+
+- A unit test compares each formatter with the output of the model's official template for the same
+  turns.
+- The P02 exit check tokenizes one prompt per family with the real model and stores the identifiers as
+  a test fixture.
 
 ## Sampler presets
 
-Values not listed are left to upstream defaults. The project's values start from the requirements
-and the author's advice to use DRY. P02 and P04 tune them with the quality protocol.
+Values not listed are left to upstream defaults. Each text profile names a preset. The Gemma 4 values
+start from the model card, which gives one configuration for all uses. The Mistral Nemo values start
+from the requirements and the Rocinante author's advice to use DRY. P02 and P04 tune them with the
+quality protocol.
 
-| Parameter | Chat | Structured tasks |
-| --- | --- | --- |
-| `temperature` | 0.8 | 0.3 |
-| `top_p` | 0.95 | 0.9 |
-| `top_k` | 0 | 0 |
-| `min_p` | 0.05 | 0.05 |
-| `rep_pen` | 1.05 | 1.0 |
-| `rep_pen_range` | 512 | Unset |
-| `dry_multiplier` | 0.8 | 0 |
-| `dry_base` | 1.75 | Unset |
-| `dry_allowed_length` | 2 | Unset |
-| `dry_penalty_last_n` | 320 | Unset |
-| `dry_sequence_breakers` | `["\n", ":", "\"", "*"]` | Unset |
-| `max_length` | 400 | By task, see below |
-| `grammar` | Unset | Generated from the schema |
+| Parameter | `gemma4` chat | `gemma4` structured | `nemo` chat | `nemo` structured |
+| --- | --- | --- | --- | --- |
+| `temperature` | 1.0 | 0.3 | 0.8 | 0.3 |
+| `top_p` | 0.95 | 0.95 | 0.95 | 0.9 |
+| `top_k` | 64 | 64 | 0 | 0 |
+| `min_p` | 0 | 0 | 0.05 | 0.05 |
+| `rep_pen` | 1.0 | 1.0 | 1.05 | 1.0 |
+| `rep_pen_range` | Unset | Unset | 512 | Unset |
+| `dry_multiplier` | 0.8 | 0 | 0.8 | 0 |
+| `dry_base` | 1.75 | Unset | 1.75 | Unset |
+| `dry_allowed_length` | 2 | Unset | 2 | Unset |
+| `dry_penalty_last_n` | 320 | Unset | 320 | Unset |
+| `dry_sequence_breakers` | `["\n", ":", "\"", "*"]` | Unset | `["\n", ":", "\"", "*"]` | Unset |
+| `max_length` | 400 | By task, see below | 400 | By task, see below |
+| `grammar` | Unset | Generated from the schema | Unset | Generated from the schema |
 
-Chat values can be changed in **Impostazioni > Modelli**.
+Structured tasks use a low temperature because the grammar already fixes the form, and the content
+should be stable. Custom profiles use the preset of their template family.
+
+Chat values can be changed in **Impostazioni > Modelli**. A changed value belongs to the profile that
+was active, so switching profiles restores that profile's values.
 
 ## System blocks
 
@@ -220,12 +274,14 @@ and [Scheduler](scheduler.md#generation-flow).
 
 ## Italian quality
 
-Mistral Nemo, the base model, lists Italian among its languages. The Rocinante finetune states nothing about
-Italian, so quality is a measured risk ([Risks](risks.md)). The levers are:
+No profile states Italian by name. Gemma 4 states more than 35 supported languages, Mistral Nemo lists
+Italian for the base model, and the roleplay finetunes state nothing about it. Quality is therefore a
+measured risk ([Risks](risks.md)). The levers are:
 
 - A character's example messages, which have the greatest influence on tone.
 - Global rules against calques and formula openings.
 - DRY and repetition penalty.
+- The choice of profile, compared with the protocol below.
 - `banned_tokens` is not used in 1.0, because stems of common words would hurt normal text.
 
 ### Calque and artifact list
@@ -262,5 +318,8 @@ characters with different registers.
 | M5. Owner rating of naturalness on 30 sampled replies | Average at least 4 out of 5 |
 | M6. Blind test: which character wrote each of 20 replies | At least 80 % correct |
 
-On failure the order is fixed: improve the examples and templates, then tune the samplers, and repeat. Replacing the
-model is not an option without the owner's authorization ([R-MOD-06](requirements.md#4-models)).
+P04 runs the protocol on the default text profile, `orion-26b-a4b` and `rocinante-x-12b`, with the same scripts.
+
+On failure the order is fixed: improve the examples and templates, then tune the samplers, and repeat. If the default
+still misses a target, the [default rule](models.md#defaults-and-how-they-can-change) applies. The owner authorized
+that rule on 2026-11-05. Lyrveil never changes the user's active profile by itself.

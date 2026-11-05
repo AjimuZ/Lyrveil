@@ -1,6 +1,6 @@
 # Operations
 
-Status: accepted (2026-11-01). The scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and the 32 GB reference machine. The scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification.
 
 ## Requirements
 
@@ -11,22 +11,25 @@ Status: accepted (2026-11-01). The scripts and files described here do not exist
 | Windows RAM | 32 GB | 16 GB | Under 16 GB |
 | WSL2 `memory` | `24GB` | `12GB` | Docker sees under 11 GiB |
 | WSL2 `swap` | `8GB` | `16GB` | |
-| Free disk | 40 GB for setup | Same | |
+| Free disk | 50 GB for setup with the default profiles | 40 GB | |
 | Software | Docker Desktop with WSL2 backend, an Ubuntu WSL distribution, Git | Same | |
 | NVIDIA driver | CUDA driver version at least 13.0, Windows driver only | Same | A Linux NVIDIA driver inside WSL2 |
 
-In the reduced tier, close other heavy programs during image generation. See [ADR 0019](decisions/0019-hardware-tiers.md).
+In the reduced tier, close other heavy programs during image generation. See [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md).
+Each tier has its own default text profile ([Model catalog](models.md#defaults-and-how-they-can-change)).
 
 ### Disk use
 
 | Item | Size |
 | --- | --- |
-| `Rocinante-12B-v1.1-Q4_K_M.gguf` | 7.48 GB |
-| `Illustrious-XL-v1.0.safetensors` | 6.94 GB |
+| Default text model, target tier: `gemma-4-26B_q4_0-it.gguf` | 14.44 GB |
+| Default text model, reduced tier: `gemma-4-12b-it-qat-q4_0.gguf` | 6.98 GB |
+| Default image model: `Illustrious-XL-v2.0.safetensors` | 6.94 GB |
+| Each optional profile | Its size in the [catalog](models.md) |
 | KoboldCpp image | About 1.5 GB |
 | ComfyUI image with PyTorch and CUDA | About 8 to 12 GB |
 | Frontend, backend and orchestrator images | Under 1 GB |
-| Application data | Grows with use. About 1.5 to 3 MB per image |
+| Application data | Grows with use. About 2 to 3 MB per **Rapida** image and 4 to 6 MB per **Alta** image |
 
 ## First installation
 
@@ -115,9 +118,10 @@ Options: `--accept-model-licenses`, `--verify-models`, `--rebuild`, `--skip-mode
 2. Refuse to continue from `/mnt/*`.
 3. Create `.env` if missing, with a new token, UID and GID.
 4. Create `data/` and `models/` subdirectories.
-5. Show model licenses and ask for acceptance. See [Licensing](licensing.md#models).
-6. Download and verify models with `scripts/download-models.sh`.
-7. Write default launch files if missing.
+5. Pick the default text profile from the memory Docker sees ([ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md)).
+   Show the licenses of the default profiles and ask for acceptance. See [Licensing](licensing.md#models).
+6. Download and verify the default profiles with `scripts/download-models.sh`.
+7. Write default launch files if missing, with the default text profile.
 8. Build images: `docker compose --profile ai build`.
 9. Create the runtime containers without starting them: `docker compose --profile ai create lyrveil-llm lyrveil-image`.
 
@@ -125,21 +129,26 @@ Running it again repeats only what is missing.
 
 ### `scripts/download-models.sh`
 
-| Model | URL | Destination | Bytes | SHA-256 |
-| --- | --- | --- | --- | --- |
-| Rocinante | `https://huggingface.co/bartowski/Rocinante-12B-v1.1-GGUF/resolve/9d15ca24c675a428fc5821cccc537f2a6f64987d/Rocinante-12B-v1.1-Q4_K_M.gguf` | `models/llm/` | 7477203712 | `5133341741709aafcbc162c8fe638143e466288b7942ba7a0e9d9ef4e08d056f` |
-| Illustrious | `https://huggingface.co/OnomaAIResearch/Illustrious-XL-v1.0/resolve/89d625482edf06d545b740265482f5c8fb2cadb0/Illustrious-XL-v1.0.safetensors` | `models/image/checkpoints/` | 6938040736 | `735cf3fefcbdc4f7817f53247e38b836ffd27c7641af6d8daa21d245242cb4bd` |
+URLs, sizes and hashes come from `config/model-catalog.json` ([Model catalog](models.md#catalog-file)). Text files go
+to `models/llm/`, image checkpoints to `models/image/checkpoints/`.
+
+| Option | Downloads |
+| --- | --- |
+| None | The default text and image profiles of the machine's tier: 21.38 GB on the target tier, 13.91 GB on the reduced tier |
+| `--model <id>` | One profile from the catalog. Repeatable. Asks for license acceptance unless `--accept-model-licenses` is given |
+| `--all` | Every profile allowed on the machine's tier |
+| `--list` | Prints the catalog with sizes, licenses and local state. Downloads nothing |
 
 Behavior:
 
-1. Show the required space (14.42 GB) and compare it with free space. Stop if insufficient.
+1. Show the required space for the chosen files and compare it with free space. Stop if insufficient.
 2. Skip a file when `models/.verified.json` records the same size and modification time and a matching hash.
 3. Download to `<file>.part` with `curl --fail --location --continue-at - --retry 5 --retry-delay 5`. Revisions are pinned, so a resume cannot mix two versions.
 4. Check the size, then compute the SHA-256.
 5. On a mismatch, keep nothing: delete the `.part` file and exit 4.
 6. Move to the final name atomically and update `models/.verified.json`.
 
-No account or token is needed, because both repositories are public and not gated. Downloads are independent of image builds, and weights never enter an image.
+No account or token is needed, because every catalog repository is public and not gated. Downloads are independent of image builds, and weights never enter an image.
 
 ### `start.sh`
 
@@ -147,11 +156,11 @@ No account or token is needed, because both repositories are public and not gate
 2. Verify Compose at least v2.30, and Engine API at least 1.44.
 3. Verify GPU support with `docker compose run --rm --no-deps lyrveil-orchestrator python -m lyrveil_orchestrator.preflight`, which reads NVML and Docker facts. On a first run the image does not exist yet, so step 6 runs first and this check follows it.
 4. Check persistent directories: exist, writable, not under `/mnt/*`.
-5. Check model files: presence and exact size. A full hash only runs through `setup.sh --verify-models`.
+5. Check the files of the active profiles: presence and exact size. A full hash only runs through `setup.sh --verify-models`.
 6. Run setup if `.env`, images or runtime containers are missing.
 7. Start core services: `docker compose up -d --no-build lyrveil-backend lyrveil-orchestrator lyrveil-frontend`.
 8. Wait up to 120 s for health checks. Exit 3 with the last logs on failure.
-9. Rocinante starts automatically: the orchestrator's default mode is `llm`. Wait up to 300 s for `LLM_READY`. On timeout, print a warning and continue, because the app works for reading and editing.
+9. The active text model starts automatically: the orchestrator's default mode is `llm`. Wait up to 300 s for `LLM_READY`. On timeout, print a warning and continue, because the app works for reading and editing.
 10. Show `Lyrveil è pronto: http://localhost:4200` with any warnings.
 
 ### `stop.sh`
@@ -293,8 +302,6 @@ services:
     gpus: all
     read_only: true
     tmpfs: [/tmp]
-    environment:
-      LLM_MODEL_FILE: ${LYRVEIL_LLM_MODEL_FILE:-Rocinante-12B-v1.1-Q4_K_M.gguf}
     volumes:
       - ${LYRVEIL_MODELS_DIR:-./models}/llm:/models/llm:ro
       - ${LYRVEIL_DATA_DIR:-./data}/runtime:/run/lyrveil:ro
@@ -359,20 +366,28 @@ Notes:
 3. Run `./koboldcpp-linux-x64 --unpack /opt/koboldcpp`, then remove the single-file binary.
 4. Copy `docker/llm/entrypoint.sh`.
 
-`entrypoint.sh` validates the launch file and runs:
+`entrypoint.sh` reads `/run/lyrveil/llm-launch.env` as data, never with `source`. It checks every key against the
+[allowed values](configuration.md#launch-files) and that `/models/llm/${MODEL_FILE}` exists, then runs:
 
 ```bash
+moe_args=()
+if [ "${MOE_CPU_LAYERS}" -gt 0 ]; then
+  moe_args=(--moecpu "${MOE_CPU_LAYERS}")
+fi
 exec /opt/koboldcpp/koboldcpp-launcher \
-  --model "/models/llm/${LLM_MODEL_FILE}" \
+  --model "/models/llm/${MODEL_FILE}" \
   --usecuda \
   --contextsize "${CONTEXT_SIZE}" \
   --gpulayers "${GPU_LAYERS}" \
   --batchsize "${BATCH_SIZE}" \
+  "${moe_args[@]}" \
   --host 0.0.0.0 \
   --port 5001 \
   --skiplauncher \
   --quiet
 ```
+
+The image is the same for every text profile. Only the launch file changes.
 
 The P02 exit check confirms this launcher at the pinned version. If it needs the single-file binary after all, the image keeps that binary, the root filesystem stays read-only and a tmpfs with exec permission holds the extraction.
 
@@ -403,9 +418,9 @@ data/
   runtime/                   Launch files
   backups/                   Backups
 models/
-  llm/Rocinante-12B-v1.1-Q4_K_M.gguf
-  image/checkpoints/Illustrious-XL-v1.0.safetensors
-  .verified.json
+  llm/                       Text model files, for example gemma-4-26B_q4_0-it.gguf
+  image/checkpoints/         Image checkpoints, for example Illustrious-XL-v2.0.safetensors
+  .verified.json             Size, modification time and hash of each verified file
 ```
 
 ## Backup and restore
@@ -465,7 +480,9 @@ docker compose --profile ai down --rmi local
 | Model size or hash mismatch | Interrupted or changed file | `./setup.sh --verify-models`. Invalid files are downloaded again |
 | "Altri programmi stanno usando la scheda video" | Games, browsers, video tools | Close them. Lyrveil retries by itself |
 | Replies are slow | Partial GPU offload, low free VRAM | **Risorse AI** shows free VRAM and speed. Close GPU programs |
-| Profile B or C in use | Earlier out-of-memory | Free VRAM, then return to profile A in **Impostazioni > Modelli** |
+| Level B or C in use | Earlier out-of-memory | Free VRAM, then return to level A in **Impostazioni > Modelli** |
+| `MODEL_FILE_MISSING` | The active profile's file was not downloaded or was moved | Run the command shown in **Impostazioni > Modelli**, or choose another profile |
+| Replies are slow with a 26B profile | Too little free VRAM, or too many experts in RAM | **Risorse AI** shows the speed. Close GPU programs, or choose `gemma-4-12b` |
 | State `ERROR` | Repeated failures | **Riprova** in **Risorse AI**, then `./logs.sh lyrveil-orchestrator` |
 | `RUNTIME_CONTAINER_MISSING` | Runtime containers removed | `./setup.sh` |
 | Black or broken image | VAE or model file problem | Regenerate. If it repeats, run `./setup.sh --verify-models` |

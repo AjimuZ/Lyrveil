@@ -30,8 +30,8 @@ flowchart LR
   B["Browser"] -->|"127.0.0.1:4200"| F["lyrveil-frontend<br/>Angular, nginx"]
   F --> K["lyrveil-backend<br/>FastAPI, SQLite, jobs, memory"]
   K --> O["lyrveil-orchestrator<br/>GPU state machine"]
-  K --> L["lyrveil-llm<br/>KoboldCpp + Rocinante"]
-  K --> I["lyrveil-image<br/>ComfyUI + Illustrious XL"]
+  K --> L["lyrveil-llm<br/>KoboldCpp + text model"]
+  K --> I["lyrveil-image<br/>ComfyUI + image model"]
   O -.->|"start, stop"| L
   O -.->|"start, stop"| I
 ```
@@ -44,8 +44,8 @@ Three services are always on. The two AI runtimes never run together. Details ar
 | --- | --- | --- |
 | Operating system | Windows 11 with WSL2 | Same |
 | GPU | NVIDIA RTX 4070, 12 GB | Same |
-| RAM | 32 GB | 16 GB, with [`.wslconfig`](docs/operations.md#wsl2-memory) and swap |
-| Disk | 40 GB free for setup | Same |
+| RAM | 32 GB, with [`.wslconfig`](docs/operations.md#wsl2-memory) | 16 GB, with `.wslconfig` and swap |
+| Disk | 50 GB free for setup | 40 GB |
 | Software | Docker Desktop with WSL2 backend, Ubuntu on WSL2, Git | Same |
 
 See the [full requirements](docs/operations.md#requirements).
@@ -66,7 +66,7 @@ cd lyrveil
 ./setup.sh
 ```
 
-`setup.sh` checks the system, shows the model licenses for your acceptance, downloads both models with verification, and builds the images.
+`setup.sh` checks the system, shows the model licenses for your acceptance, downloads the default text and image models of your hardware tier with verification, and builds the images.
 
 ## Configuration
 
@@ -82,12 +82,19 @@ Then open `http://localhost:4200`. The other commands are `./stop.sh`, `./restar
 
 ## Supported models
 
-The initial configuration uses exactly these two. They are downloaded on your machine from their upstream repositories, and they are never included in this repository or in a Docker image.
+You choose the active text and image models in **Impostazioni > Modelli**, from a catalog of verified profiles. One of
+each is active at a time. Files are downloaded on your machine from their upstream repositories, pinned by revision and
+hash, and they are never included in this repository or in a Docker image. The full catalog, with licenses and memory
+estimates, is in the [model catalog](docs/models.md).
 
-| Use | Model | File | Size | Runtime |
+| Use | Default | Size | Other profiles | Runtime |
 | --- | --- | --- | --- | --- |
-| Text | [Rocinante 12B v1.1 Q4_K_M](https://huggingface.co/bartowski/Rocinante-12B-v1.1-GGUF) | `Rocinante-12B-v1.1-Q4_K_M.gguf` | 7.48 GB | [KoboldCpp](https://github.com/LostRuins/koboldcpp) |
-| Images | [Illustrious XL v1.0](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v1.0) | `Illustrious-XL-v1.0.safetensors` | 6.94 GB | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) |
+| Text, 32 GB | [Gemma 4 26B-A4B](https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf), Q4_0 | 14.44 GB | Gemma 4 12B, Orion 26B-A4B, Rocinante-X 12B, Rocinante 12B v1.1 | [KoboldCpp](https://github.com/LostRuins/koboldcpp) |
+| Text, 16 GB | [Gemma 4 12B](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf), Q4_0 | 6.98 GB | Rocinante-X 12B, Rocinante 12B v1.1 | KoboldCpp |
+| Images | [Illustrious XL v2.0](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0) | 6.94 GB | Illustrious XL v1.0, NoobAI-XL 1.1 | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) |
+
+Images render in two passes by default (**Alta**): a first pass near one megapixel, then a refinement pass at 1.5 times
+the size, up to 1248 x 1824. **Rapida** renders one pass in about a third of the time.
 
 ## How memory works
 
@@ -108,7 +115,8 @@ These are expected in version 1.0:
 - Switching between text and image models is expected to take up to a couple of minutes.
 - Other programs using the GPU can delay or block loading a model. Lyrveil tells you, and never closes them.
 - Keeping a character's look consistent across images is best-effort. A seed alone cannot guarantee it.
-- Rocinante's card states nothing about Italian. Quality is measured, and known limits will be recorded here.
+- No model card names Italian among its supported languages. Quality is measured, and known limits will be recorded here.
+- The 26B text profiles keep part of their weights in system RAM. They need 32 GB and start a new long conversation more slowly than the 12B profiles.
 - Characters must be adults, and the safeguards are best-effort filters.
 - Data is not encrypted by Lyrveil. Use disk encryption.
 - All characters are simulated by AI models. They can be wrong, and are not a source of advice.
@@ -125,8 +133,10 @@ Lyrveil's original code and documentation are under the [Apache License 2.0](LIC
 | --- | --- |
 | KoboldCpp | GNU AGPL v3.0 |
 | ComfyUI | GNU GPL v3.0 |
-| Illustrious XL v1.0 | CreativeML Open RAIL++-M, including use restrictions |
-| Rocinante 12B v1.1 | Marked `other`, with no terms stated on its cards. Base model under Apache 2.0 |
+| Gemma 4, default text models | Apache 2.0 |
+| Illustrious XL v2.0 and v1.0 | CreativeML Open RAIL licenses, including use restrictions |
+| NoobAI-XL 1.1, optional | Fair AI Public License 1.0-SD, including use restrictions |
+| Orion, Rocinante-X and Rocinante, optional | No terms stated on their cards. Base models under Apache 2.0 |
 
 Details and obligations are in [Licensing](docs/licensing.md).
 
@@ -136,4 +146,4 @@ See [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md). All documentati
 
 ## Acknowledgements
 
-Lyrveil builds on the work of these projects: [KoboldCpp](https://github.com/LostRuins/koboldcpp) and KoboldAI Lite, [llama.cpp](https://github.com/ggml-org/llama.cpp) and GGML, [ComfyUI](https://github.com/Comfy-Org/ComfyUI), [Rocinante](https://huggingface.co/TheDrummer/Rocinante-12B-v1.1) by TheDrummer, the GGUF quantization by bartowski, [Mistral Nemo](https://huggingface.co/mistralai/Mistral-Nemo-Base-2407) by Mistral AI, [Illustrious XL](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v1.0) by OnomaAI Research, Stable Diffusion XL by Stability AI, and the Inter, Pixelify Sans and JetBrains Mono typefaces.
+Lyrveil builds on the work of these projects: [KoboldCpp](https://github.com/LostRuins/koboldcpp) and KoboldAI Lite, [llama.cpp](https://github.com/ggml-org/llama.cpp) and GGML, [ComfyUI](https://github.com/Comfy-Org/ComfyUI), [Gemma 4](https://huggingface.co/google/gemma-4-26B-A4B-it) by Google, Orion, Rocinante-X and [Rocinante](https://huggingface.co/TheDrummer/Rocinante-12B-v1.1) by TheDrummer, the GGUF quantizations by bartowski, [Mistral Nemo](https://huggingface.co/mistralai/Mistral-Nemo-Base-2407) by Mistral AI, [Illustrious XL](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0) by OnomaAI Research, [NoobAI-XL](https://huggingface.co/Laxhar/noobai-XL-1.1) by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, and the Inter, Pixelify Sans and JetBrains Mono typefaces.

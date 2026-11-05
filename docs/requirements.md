@@ -1,6 +1,6 @@
 # Requirements
 
-Status: accepted (2026-11-01). Implementation: not started.
+Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner. Implementation: not started.
 
 This document is the normative statement of what Lyrveil must do. Each requirement
 has a stable identifier. [Traceability](traceability.md) maps every group to its
@@ -44,8 +44,8 @@ receives generated messages and images.
 | R-HW-04 | Sources, models and persistent data live preferably on the Linux filesystem of WSL2. |
 | R-HW-05 | Automatic checks cover CUDA compatibility, GPU availability, VRAM, RAM and disk space. |
 
-The tiers, including the measured 16 GB reference machine, are defined in
-[ADR 0019](decisions/0019-hardware-tiers.md).
+The tiers are defined in [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md). The
+reference machine was measured at 32 GB on 2026-11-05.
 
 ## 3. Technology stack
 
@@ -61,13 +61,15 @@ The tiers, including the measured 16 GB reference machine, are defined in
 
 | ID | Requirement |
 | --- | --- |
-| R-MOD-01 | The text model is Rocinante 12B v1.1 Q4_K_M, file `Rocinante-12B-v1.1-Q4_K_M.gguf`, from `bartowski/Rocinante-12B-v1.1-GGUF`. |
-| R-MOD-02 | Initial text configuration: CUDA, optimized GPU offload, 8192-token context, streaming, configurable temperature starting at 0.8, ChatML verified against the model, DRY when available, configurable maximum reply length. |
+| R-MOD-01 | The text model is chosen by the user from a catalog of verified profiles. The default is Gemma 4 26B-A4B Q4_0 on the target tier and Gemma 4 12B Q4_0 on the reduced tier. The catalog also offers Orion 26B-A4B v1.1, Rocinante-X 12B v1 and the brief's original Rocinante 12B v1.1 Q4_K_M. |
+| R-MOD-02 | Initial text configuration: CUDA, optimized GPU offload, a context size set per profile (16384 tokens for Gemma 4, 8192 for the Mistral Nemo finetunes), streaming, configurable temperature with a per-profile starting value, the prompt format verified against each model's official template, DRY when available, configurable maximum reply length. |
 | R-MOD-03 | Parameters stay compatible with the available VRAM. Context, batch and offload are optimized after measuring real consumption. |
-| R-MOD-04 | The image model is Illustrious XL v1.0, file `Illustrious-XL-v1.0.safetensors`, from `OnomaAIResearch/Illustrious-XL-v1.0`. |
-| R-MOD-05 | Initial image settings: 1024x1024, vertical and horizontal resolutions, batch size 1, configurable seed, steps and CFG, SDXL workflow, positive and negative prompts, stored generation metadata. |
-| R-MOD-06 | The initial configuration uses only these two models. They are never replaced automatically, and no other model is added for embeddings, summaries or translation. |
-| R-MOD-07 | Modular adapters allow changing models later. |
+| R-MOD-04 | The image model is chosen by the user from a catalog of SDXL checkpoints of the Illustrious family. The default is Illustrious XL v2.0 from `OnomaAIResearch/Illustrious-XL-v2.0`. The catalog also offers Illustrious XL v1.0 and NoobAI-XL 1.1. |
+| R-MOD-05 | Initial image settings: 1024x1024, vertical and horizontal resolutions, batch size 1, configurable seed, steps and CFG, SDXL workflow, positive and negative prompts, stored generation metadata. A second refinement pass at 1.5 times the size is the default quality preset. |
+| R-MOD-06 | One text model and one image model are active at a time, and the text model serves every text task. Lyrveil never changes the active model by itself, and no other model is added for embeddings, summaries, translation, upscaling or detection. |
+| R-MOD-07 | Modular adapters allow changing models later. A new model in the catalog needs a profile and its verification, not new code, unless it needs a new prompt format. |
+| R-MOD-08 | The user can select the active text and image profiles in the model settings, see which catalog files are present, and register a GGUF or SDXL checkpoint already placed in `models/` as an unverified custom profile. The application never downloads models itself. |
+| R-MOD-09 | Image quality has two presets: **Alta**, a two-pass render, and **Rapida**, a single pass. The user can choose the default and override it per request. |
 
 ## 5. Language
 
@@ -78,7 +80,7 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-LNG-03 | Characters avoid artificial expressions, repetitive wording and literal translations from English. |
 | R-LNG-04 | Each character can have a different communication register. |
 | R-LNG-05 | The language is configurable per character or per conversation. |
-| R-LNG-06 | Image requests can be written in Italian. When Illustrious XL works better with English prompts, Rocinante prepares them automatically before leaving the GPU. No external translation service is used. |
+| R-LNG-06 | Image requests can be written in Italian. When the image model works better with English prompts, the active text model prepares them automatically before leaving the GPU. No external translation service is used. |
 | R-LNG-07 | Italian quality is verified with sufficiently long conversations. |
 
 ## 6. Messaging
@@ -107,9 +109,9 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-CHR-04 | Communication fields: formality, average message length, question frequency, punctuation use, colloquial style, expressiveness, initiative frequency, message examples, recurring expressions. |
 | R-CHR-05 | Characters are not reduced to numbers. Descriptive fields take priority. |
 | R-CHR-06 | Visual profile fields: face, hair, eyes, body, clothing, accessories, distinctive marks, art style, avatar, reference images, persistent prompt. |
-| R-CHR-07 | The user can describe a character in natural language. Rocinante generates a structured sheet that is validated by a Pydantic schema and shown in the Creator. |
+| R-CHR-07 | The user can describe a character in natural language. The active text model generates a structured sheet that is validated by a Pydantic schema and shown in the Creator. |
 | R-CHR-08 | The user can edit any generated field before saving. |
-| R-CHR-09 | Avatars: upload a local image, generate with Illustrious XL, regenerate, choose a crop, save several variants, set a primary image. |
+| R-CHR-09 | Avatars: upload a local image, generate with the active image model, regenerate, choose a crop, save several variants, set a primary image. |
 | R-CHR-10 | The Creator uses the same image infrastructure as conversations. |
 | R-CHR-11 | Import and export use a documented, versioned JSON format. The proprietary format is never a mandatory dependency. |
 | R-CHR-12 | Character Card V2 compatibility is evaluated later ([ADR 0021](decisions/0021-character-format-and-card-v2.md)). |
@@ -127,7 +129,7 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-MEM-07 | Relationship Memory records the development of the relationship in one conversation: familiarity, trust, confidence, tensions, important events, expectations, stated limits and preferences, and evolution. It holds mainly events and descriptions, not only scores. |
 | R-MEM-08 | Working Memory is rebuilt dynamically for each message from recent messages, current situation, current topic, relevant memories, goals and pending events. |
 | R-MEM-09 | The full history stays in the database. Structured memory holds only useful information. |
-| R-MEM-10 | Every 8 to 12 messages, or at significant events, an analysis uses the already loaded Rocinante and produces validated structured JSON. |
+| R-MEM-10 | Every 8 to 12 messages, or at significant events, an analysis uses the already loaded text model and produces validated structured JSON. |
 | R-MEM-11 | Each memory has at least ID, character ID, conversation ID or shared scope, type, content, timestamp, importance, confidence, source, status, optional expiry and version. |
 | R-MEM-12 | The system distinguishes stated facts, model inferences, fictional narrative elements, temporary information, contradicted information and memories confirmed by the user. |
 | R-MEM-13 | Inferences never become certain facts automatically. Uncertain interpretations never change canonical data. |
@@ -179,25 +181,25 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-IMG-03 | Contextual mode: a character can propose an image coherent with the conversation. It is configurable and disabled initially. Images are never generated automatically after each message. The decision is a structured event validated by the backend. |
 | R-IMG-04 | Character mode: avatars, profile images, set illustrations, contextual scenes and character variants. |
 | R-IMG-05 | A visual PromptBuilder combines the visual profile, persistent visual identity, setting, message content, art style, positive prompt, negative prompt and checkpoint parameters. |
-| R-IMG-06 | Rocinante produces the structured prompt before leaving the GPU. |
+| R-IMG-06 | The text model produces the structured prompt before leaving the GPU. |
 | R-IMG-07 | One character keeps hair, eyes, physical features, accessories, distinctive marks, graphic style and recurring clothing when relevant. |
 | R-IMG-08 | Seed, reference images and persistent prompts can be saved. The architecture is prepared for LoRA and compatible reference techniques. The documentation never promises perfect consistency from the seed alone. |
-| R-IMG-09 | Each image is stored independently of the AI runtime: original file, optional thumbnail, message ID, character ID, conversation ID, prompt, seed, parameters, generation date, model version and workflow. |
+| R-IMG-09 | Each image is stored independently of the AI runtime: original file, optional thumbnail, message ID, character ID, conversation ID, prompt, seed, parameters, generation date, model profile, checkpoint hash, quality preset and workflow. |
 | R-IMG-10 | The backend serves images even when ComfyUI is off. |
 
 ## 12. GPU orchestration: Model Lifecycle Manager
 
 | ID | Requirement |
 | --- | --- |
-| R-GPU-01 | Rocinante and Illustrious are never loaded in the GPU at the same time. Management is automatic. |
-| R-GPU-02 | Normal state: frontend, backend, orchestrator and KoboldCpp active, Rocinante loaded, ComfyUI inactive or without GPU allocations. |
+| R-GPU-01 | The text model and the image model are never loaded in the GPU at the same time. Management is automatic. |
+| R-GPU-02 | Normal state: frontend, backend, orchestrator and KoboldCpp active, the text model loaded, ComfyUI inactive or without GPU allocations. |
 | R-GPU-03 | An image request follows the 18 steps mapped in [GPU orchestration](gpu-orchestration.md#the-18-steps-of-an-image-request). |
 | R-GPU-04 | A state machine implements at least IDLE, LOADING_LLM, LLM_READY, GENERATING_TEXT, UNLOADING_LLM, LOADING_IMAGE, IMAGE_READY, GENERATING_IMAGE, UNLOADING_IMAGE, RECOVERING and ERROR, with explicit validated transitions. |
 | R-GPU-05 | Reliability: global GPU lock, persistent job queue, configurable priorities, concurrent request handling, timeouts, limited retries, job cancellation, NVML monitoring, detection of processes actually active, CUDA OOM handling, error recovery, safe shutdown and transition logs. |
 | R-GPU-06 | GPU memory verification does not rely only on total free memory, because other programs can use the card. It also checks containers and managed processes. |
 | R-GPU-07 | Processes outside Lyrveil are never terminated. |
 | R-GPU-08 | `docker compose down` is not used for model switches. Core application services stay available. |
-| R-GPU-09 | A text request during image generation is saved immediately, queued, shown with an understandable status and executed when Rocinante returns. |
+| R-GPU-09 | A text request during image generation is saved immediately, queued, shown with an understandable status and executed when the text model returns. |
 | R-GPU-10 | No second model instance starts to answer concurrently. Requests from different conversations are handled correctly. |
 
 ## 13. Proactive messages and time
@@ -247,9 +249,9 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-OPS-03 | The Docker socket is not exposed to untrusted services. The lifecycle manager controls only Lyrveil containers, through reduced authority and an explicit allowlist. Residual risks are documented. |
 | R-OPS-04 | Administrative ports are not published on the external network. |
 | R-OPS-05 | The root has `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh` and `setup.sh`. The main command is `./start.sh`. |
-| R-OPS-06 | `start.sh` verifies Docker, Compose, GPU support, persistent directories and models, runs setup if needed, starts services, verifies health checks, starts Rocinante and shows the local URL `http://localhost:4200`. |
+| R-OPS-06 | `start.sh` verifies Docker, Compose, GPU support, persistent directories and models, runs setup if needed, starts services, verifies health checks, starts the text model and shows the local URL `http://localhost:4200`. |
 | R-OPS-07 | Scripts are idempotent. Normal restarts and updates never delete persistent data. |
-| R-OPS-08 | A script downloads the two models to the right directories: only the needed files, resumable, verified for integrity and size, no re-download of valid files, network errors handled, required space shown, weights never inside Docker images. Downloads are separate from the build. |
+| R-OPS-08 | A script downloads the default models for the machine's tier, and any other catalog model on request, to the right directories: only the needed files, resumable, verified for integrity and size, no re-download of valid files, network errors handled, required space shown, weights never inside Docker images. Downloads are separate from the build. |
 
 ## 17. Publication
 
@@ -258,7 +260,7 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-PUB-01 | The project can be published as a public repository named `Lyrveil`. It holds only code, example configuration, documentation, tests and reusable original assets. |
 | R-PUB-02 | The repository excludes weights, real databases, conversations, personal memories, user images, personal references, real `.env` files, tokens, passwords, caches, logs, backups, temporary files, Docker volumes and local user data. |
 | R-PUB-03 | `.gitignore` and `.dockerignore` are configured before the first commit. |
-| R-PUB-04 | Licenses of KoboldCpp, ComfyUI, Python and Angular dependencies, Rocinante, Illustrious XL, graphic assets and fonts are verified and documented with attribution duties. Weights are never distributed. The code license is compatible with what is actually distributed. |
+| R-PUB-04 | Licenses of KoboldCpp, ComfyUI, Python and Angular dependencies, every catalog model, graphic assets and fonts are verified and documented with attribution duties. Weights are never distributed. The code license is compatible with what is actually distributed. |
 | R-PUB-05 | The public README has description, demo screenshots, features, architecture, hardware requirements, installation, configuration, start with `start.sh`, supported models, how memory works, how images work, limitations, troubleshooting, licenses and acknowledgements. |
 | R-PUB-06 | Only original demo characters and synthetic data are used. |
 | R-PUB-07 | Commits are readable and progressive. Unverified code is not pushed. |
@@ -274,7 +276,7 @@ The tiers, including the measured 16 GB reference machine, are defined in
 | R-TST-03 | Memory tests cover extraction, deduplication, retrieval, editing, deletion, contradictions, facts versus inferences, conversation isolation, progressive summaries, recovery after restart and invalidation after message edits. |
 | R-TST-04 | Consistency tests use several characters: no automatic knowledge from another character, no state leakage between independent chats, no canonical change without an authorized operation. |
 | R-TST-05 | Messaging tests cover chat creation, sending, streaming, regeneration, editing, deletion, page reload, history recovery and several simultaneous conversations. |
-| R-TST-06 | Image tests cover prompt creation, GPU alternation, ComfyUI start, real generation, saving, insertion in the chat, Rocinante recovery, persistence after restart and regeneration. |
+| R-TST-06 | Image tests cover prompt creation, GPU alternation, ComfyUI start, real generation, saving, insertion in the chat, text model recovery, persistence after restart and regeneration. |
 | R-TST-07 | Docker tests cover `start.sh`, `stop.sh`, restart, volume persistence, health checks, GPU passthrough, absence of orphan processes and CUDA error handling. |
 | R-TST-08 | Orchestration logic tests run without a GPU through simulated runtimes. Real GPU tests run when the hardware is available. Tests not executed are never declared passed. |
 
@@ -327,5 +329,5 @@ dated evidence in `docs/verification/`:
 | AC-16 | Close and reopen the application without losing data. |
 | AC-17 | Configure proactive messages. |
 | AC-18 | Use everything offline. |
-| AC-19 | Verified: the two models are never held in VRAM at the same time. |
+| AC-19 | Verified: the text model and the image model are never held in VRAM at the same time. |
 | AC-20 | Verified: the public repository is reproducible and holds no private data or model weights. |

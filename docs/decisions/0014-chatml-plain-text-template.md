@@ -1,6 +1,6 @@
 # ADR 0014: ChatML as plain text over the native generate API
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: superseded by [ADR 0025](0025-prompt-templates-per-model-family.md) on 2026-11-05. Accepted 2026-11-01. Supersedes: none.
 
 ## Context
 The requirements ask for ChatML, to be verified with the model. Upstream facts read on 2026-11-01:

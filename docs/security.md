@@ -87,6 +87,25 @@ Error responses are generic. Stack traces stay in logs.
 - Orphan cleanup only touches files matching the identifier pattern below `data/media`.
 - The backend's root filesystem is read-only, and it can write only to `/data` and `/tmp`.
 
+## Model files
+
+A model file is parsed by a runtime that runs native code, so a crafted file is a code-execution risk inside that
+runtime's container.
+
+- Catalog files are pinned by revision, size and SHA-256 ([Model catalog](models.md#catalog-file)). The catalog is
+  reviewed like code, and every URL must point to a fixed Hugging Face revision.
+- Downloads happen only in `scripts/download-models.sh`, on the host, at the user's command. No container downloads
+  models: runtimes run on an internal network and ComfyUI runs with `--offline`.
+- Custom files are registered only from `models/llm/` and `models/image/checkpoints/`. The backend accepts a file name,
+  never a path, checks it against `^[A-Za-z0-9._-]{1,128}\.(gguf|safetensors)$`, resolves it and verifies that it stays in
+  that folder.
+- Only `.gguf` and `.safetensors` are accepted. Pickle-based formats such as `.ckpt` and `.pt` are refused, because
+  loading them can execute code in Python.
+- A custom profile is labeled **non verificato** in the interface. Users should take files only from sources they
+  trust.
+- The runtime containers mount models read-only, have no route out and no access to `data/`, which limits what a
+  hostile file could reach ([Runtime isolation](#runtime-isolation)).
+
 ## Docker socket
 
 The socket is equivalent to root on the Docker VM. The orchestrator is the only service that mounts it, and it acts as the reduced-authority controller. See [ADR 0006](decisions/0006-docker-socket-confined-to-orchestrator.md).
@@ -205,6 +224,7 @@ These checks are best-effort filters over models that can produce unwanted conte
 | Python | `uv.lock` with hashes. `uv sync --frozen`. `pip-audit` before each release. |
 | npm | `package-lock.json`. `npm ci --ignore-scripts`. A package that truly needs a script is reviewed and listed. `npm audit` and `npm audit signatures` before each release. |
 | Binaries | KoboldCpp's SHA-256 verified in the Dockerfile. ComfyUI by commit. PyTorch by hashes in the lock file. |
+| Model weights | Revision, size and SHA-256 from the catalog, verified before the file is used. |
 | Base images | Exact tags, and digests from P09 on. |
 | Actions | GitHub Actions pinned by commit hash. |
 | Review | Findings are triaged by reachability. Forced fixes are not applied automatically. Deferrals carry a reason and a review date. |

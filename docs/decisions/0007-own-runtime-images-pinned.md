@@ -1,6 +1,6 @@
 # ADR 0007: Locally built runtime images from pinned versions
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: superseded by [ADR 0028](0028-koboldcpp-pin-v1-124-2.md) on 2026-11-05. Accepted 2026-11-01. Supersedes: none.
 
 ## Context
 KoboldCpp's README says that its Docker image `koboldai/koboldcpp` "is intended for experts only", primarily for cloud GPU rentals. ComfyUI's README documents no Docker image. Offline use, reproducibility and licensing all argue against moving tags and runtime updates.

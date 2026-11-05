@@ -1,6 +1,6 @@
 # Licensing
 
-Status: verified from upstream sources on 2026-11-01. This page is engineering documentation, not legal advice.
+Status: verified from upstream sources on 2026-11-01. Runtimes and models verified again on 2026-11-05. This page is engineering documentation, not legal advice.
 
 ## Lyrveil
 
@@ -10,7 +10,7 @@ Original code and documentation are licensed under the [Apache License 2.0](../L
 
 | Runtime | License | How Lyrveil uses it |
 | --- | --- | --- |
-| KoboldCpp `v1.124.1` | GNU AGPL v3.0, unless a file states otherwise. Bundled GGML, llama.cpp and stable-diffusion.cpp are MIT, and audio.cpp is Apache 2.0 | Separate process, HTTP only, unmodified |
+| KoboldCpp `v1.124.2` | GNU AGPL v3.0, unless a file states otherwise. Bundled GGML, llama.cpp and stable-diffusion.cpp are MIT, and audio.cpp is Apache 2.0 | Separate process, HTTP only, unmodified |
 | ComfyUI `v0.43.0` | GNU GPL v3.0 | Separate process, HTTP only, unmodified |
 
 Consequences:
@@ -24,39 +24,57 @@ PyTorch and the NVIDIA CUDA libraries installed in those images keep their own l
 
 ## Models
 
-Weights are never in the repository or in an image. `setup.sh` shows the following notice and asks for acceptance before downloading from the upstream repositories.
+Weights are never in the repository or in an image. `setup.sh` and `download-models.sh` show the notice of each profile
+they download and ask for acceptance first. Each profile's license is also in the [catalog](models.md).
 
-### Rocinante 12B v1.1
+| Profile | Author | License | Base model and its license |
+| --- | --- | --- | --- |
+| `gemma-4-26b-a4b`, `gemma-4-12b` | Google | Apache 2.0 | |
+| `orion-26b-a4b` | TheDrummer, GGUF by bartowski | **Not stated** on either card | Gemma 4 26B-A4B, Apache 2.0 |
+| `rocinante-x-12b` | TheDrummer, GGUF by bartowski | **Not stated** on either card | Mistral Nemo Instruct 2407, Apache 2.0 |
+| `rocinante-12b-v1.1` | TheDrummer with BeaverAI, GGUF by bartowski | Field `other`, **no terms given** | Mistral Nemo Base 2407, Apache 2.0 |
+| `illustrious-xl-v2.0` | OnomaAI Research | Card field `creativeml-openrail-m` | SDXL lineage |
+| `illustrious-xl-v1.0` | OnomaAI Research | CreativeML Open RAIL++-M, dated July 26, 2023 | SDXL Base 1.0 |
+| `noobai-xl-1.1` | Laxhar Dream Lab | Fair AI Public License 1.0-SD | Illustrious XL v0.1 |
 
-| Item | Value |
-| --- | --- |
-| Author | TheDrummer, with BeaverAI |
-| GGUF quantization | bartowski |
-| License field | `other` on both the original and the GGUF card. **Neither card gives license terms.** |
-| Base model | Mistral Nemo Base 2407, Apache 2.0 |
+### Apache 2.0 profiles
 
-The terms of this finetune are not stated. Therefore:
+Use, modification and redistribution are allowed. A redistributor keeps the license and notices. Lyrveil does not
+redistribute the files.
 
-- Lyrveil never redistributes the file. Users download it from its public upstream repository.
+### Profiles with terms not stated
+
+For `orion-26b-a4b`, `rocinante-x-12b` and `rocinante-12b-v1.1`, the finetune's own terms are not stated. Therefore:
+
+- Lyrveil never redistributes the files. Users download them from their public upstream repositories.
 - The user is responsible for deciding whether their use is acceptable.
 - Any commercial use or redistribution needs clarification from the author first.
+- They are optional. The defaults are Apache 2.0.
 
-### Illustrious XL v1.0
+### Illustrious XL
 
-| Item | Value |
-| --- | --- |
-| Author | OnomaAI Research |
-| License field | `other`, named `sdxl-license`, linking to the SDXL Base 1.0 license |
-| License | CreativeML Open RAIL++-M, dated July 26, 2023 |
-
+Version 1.0 links the SDXL Base 1.0 license, CreativeML Open RAIL++-M. The version 2.0 card names
+`creativeml-openrail-m` and gives no other text. Both licenses of that family carry the same kind of use restrictions.
 Summary in our words. Read the license itself.
 
-- **Use restrictions apply to every user.** The model and derivatives must not be used to break the law, exploit or harm minors, spread false information intended to harm others, spread harmful personal information, defame or harass, make fully automated decisions that
-  adversely affect legal rights, discriminate, exploit vulnerabilities of groups, give medical advice or interpret medical results, or produce information for justice, law-enforcement, immigration or asylum processes.
+- **Use restrictions apply to every user.** The model and derivatives must not be used to break the law, exploit or
+  harm minors, spread false information intended to harm others, spread harmful personal information, defame or
+  harass, make fully automated decisions that adversely affect legal rights, discriminate, exploit vulnerabilities of
+  groups, give medical advice or interpret medical results, or produce information for justice, law-enforcement,
+  immigration or asylum processes.
 - **Output.** The licensor claims no rights in generated images. Users are responsible for their output and its use.
-- **Distribution.** Distributing the model or derivatives, including hosting for third parties, requires passing on the restrictions, a copy of the license and modification notices. Lyrveil does not distribute it. LAN or hosted use is unsupported.
+- **Distribution.** Distributing the model or derivatives, including hosting for third parties, requires passing on
+  the restrictions, a copy of the license and modification notices. Lyrveil does not distribute it. LAN or hosted use is
+  unsupported.
 
-Lyrveil's safeguards support the restriction on minors ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)). They do not replace the user's obligations.
+### NoobAI-XL 1.1
+
+The Fair AI Public License 1.0-SD has its own list of prohibited uses, similar in kind to the one above. A modified
+model that is distributed must carry the same license and make its source available, and notices must be kept.
+Lyrveil uses the file unmodified and does not distribute it.
+
+Lyrveil's safeguards support the restrictions on minors ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)).
+They do not replace the user's obligations.
 
 ## Application dependencies
 
@@ -96,7 +114,7 @@ The OFL license text ships with the fonts in the image. P08 records package vers
 
 ## Graphic assets
 
-Icons and the logo are original, drawn for Lyrveil and licensed under Apache 2.0. No third-party icon set is used. README screenshots use only the original demo characters and synthetic data. Generated demo images follow the Illustrious license above, and P08 records their prompts.
+Icons and the logo are original, drawn for Lyrveil and licensed under Apache 2.0. No third-party icon set is used. README screenshots use only the original demo characters and synthetic data. Generated demo images use the default image profile and follow its license above. P08 records their prompts and the profile.
 
 ## Docker and NVIDIA
 
@@ -104,8 +122,8 @@ Docker Desktop and the NVIDIA driver are prerequisites that the user installs. T
 
 ## Names
 
-KoboldCpp, ComfyUI, Rocinante, Illustrious, Mistral, NVIDIA, CUDA, Docker and Angular are names of their owners, used only to describe compatibility. Lyrveil is not affiliated with them.
+KoboldCpp, ComfyUI, Gemma, Orion, Rocinante, Illustrious, NoobAI, Mistral, NVIDIA, CUDA, Docker and Angular are names of their owners, used only to describe compatibility. Lyrveil is not affiliated with them.
 
 ## Attribution
 
-The README acknowledges these projects: KoboldCpp and KoboldAI Lite, llama.cpp and GGML, ComfyUI, Rocinante by TheDrummer, the GGUF by bartowski, Mistral Nemo by Mistral AI, Illustrious XL by OnomaAI Research, Stable Diffusion XL by Stability AI, Inter, Pixelify Sans and JetBrains Mono.
+The README acknowledges these projects: KoboldCpp and KoboldAI Lite, llama.cpp and GGML, ComfyUI, Gemma 4 by Google, Orion, Rocinante X and Rocinante by TheDrummer, the GGUF files by bartowski, Mistral Nemo by Mistral AI, Illustrious XL by OnomaAI Research, NoobAI-XL by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, Inter, Pixelify Sans and JetBrains Mono.

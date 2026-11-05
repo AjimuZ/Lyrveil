@@ -145,9 +145,19 @@ tests/
 | T-IMG-08 | Images load with ComfyUI off | Integration, E2E | P05 |
 | T-IMG-09 | Regeneration adds a variant | Integration | P05 |
 | T-IMG-10 | Cancellation at each stage | Integration | P06 |
-| T-IMG-11 | Out of memory leads to tiled retry | Integration | P06 |
+| T-IMG-11 | Out of memory leads to a tiled retry of the same preset, then one **Rapida** try. The stored preset is the one that produced the file | Integration | P06 |
 | T-IMG-12 | Restart in each stage resumes without duplicates | Integration | P06 |
 | T-IMG-13 | Contextual mode off by default. A proposal needs a valid event and acceptance | Integration | P05 |
+| T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied | Unit, real GPU | P05 |
+
+### Models
+
+| ID | Test | Level | Phase |
+| --- | --- | --- | --- |
+| T-MOD-01 | `config/model-catalog.json` passes validation. Invalid identifiers, moving revisions, unknown templates or presets, and two defaults for one tier are refused | Unit | P02 |
+| T-MOD-02 | Each `PromptFormatter` family produces the golden string rendered from the official template for the same turns. No family writes BOS | Unit | P02 |
+| T-MOD-03 | A text profile change writes the launch file, stops the runtime, verifies release and loads the new file. A profile above the tier or with a missing file is refused before any mode change | Integration | P06 |
+| T-MOD-04 | Custom registration accepts only file names in the two model folders and only `.gguf` and `.safetensors`. Traversal, links out of the folder and other extensions are refused. The hash job stores the profile | Integration | P06 |
 
 ### Orchestration
 
@@ -217,11 +227,11 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | ID | Test | Phase |
 | --- | --- | --- |
 | T-GPU-01 | GPU passthrough in `lyrveil-llm` and `lyrveil-image` | P02, P05 |
-| T-GPU-02 | Rocinante loads. VRAM measured, tuning rule applied | P02 |
-| T-GPU-03 | ChatML tokenization fixture recorded | P02 |
+| T-GPU-02 | `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b` load. VRAM and RAM measured, tuning rule applied | P02 |
+| T-GPU-03 | Tokenization fixture recorded for each template family | P02 |
 | T-GPU-04 | Real streaming, token counts, abort | P02 |
 | T-GPU-05 | Structured output with grammar on the real model | P03 |
-| T-GPU-06 | ComfyUI start, real generation, checkpoint load measured | P05 |
+| T-GPU-06 | ComfyUI start, real generation with each image profile, checkpoint load measured | P05 |
 | T-GPU-07 | Ten full switches. Container state and NVML samples never show both models | P06 |
 | T-GPU-08 | Text sent during real generation is answered after the switch | P06 |
 | T-GPU-09 | External VRAM use: blocked with reason, no process touched | P06 |
@@ -229,13 +239,14 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-11 | No orphan process and full VRAM release after `stop.sh` | P06 |
 | T-GPU-12 | Everything works with the network disconnected | P06 |
 | T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
+| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS` | P02 |
 
 ### Quality
 
 | ID | Test | Phase |
 | --- | --- | --- |
 | T-QLT-01 | [Italian quality protocol](prompting.md#italian-quality-protocol) | P04, P08 |
-| T-QLT-02 | [Image default grid](image-generation.md#default-parameters) | P05 |
+| T-QLT-02 | [Image default grid](image-generation.md#default-parameters) for each image profile, with the owner's blind review | P05 |
 | T-QLT-03 | Accessibility: `axe` on ten screens, keyboard walkthrough | P08 |
 | T-QLT-04 | Responsive checks at 320, 640, 1024 and 1440 px, and 200 % zoom | P08 |
 

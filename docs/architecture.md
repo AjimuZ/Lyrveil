@@ -25,8 +25,8 @@ flowchart LR
   end
 
   subgraph runtime["lyrveil-runtime (internal)"]
-    llm["lyrveil-llm<br/>KoboldCpp + Rocinante"]
-    img["lyrveil-image<br/>ComfyUI + Illustrious"]
+    llm["lyrveil-llm<br/>KoboldCpp + text model"]
+    img["lyrveil-image<br/>ComfyUI + image model"]
   end
 
   db[("data/<br/>SQLite + media")]
@@ -55,8 +55,8 @@ flowchart LR
 | `lyrveil-frontend` | Always | Serves the built Angular app. Proxies `/api`, `/ws`, `/media`. Sets security headers. | edge, app | `127.0.0.1:4200` | None |
 | `lyrveil-backend` | Always | Domain services, REST and WebSocket APIs, job queue and scheduler, memory and consistency engines, media store. Sole SQLite writer. | app, control, runtime | None | `data/` |
 | `lyrveil-orchestrator` | Always | Model Lifecycle Manager: GPU state machine, leases, container control, NVML monitoring, recovery. | control | None | Memory only |
-| `lyrveil-llm` | On demand | KoboldCpp with Rocinante. Text generation and tokenizer. | runtime | None | None |
-| `lyrveil-image` | On demand | ComfyUI with Illustrious XL. Runs one workflow at a time. | runtime | None | Temporary files in tmpfs |
+| `lyrveil-llm` | On demand | KoboldCpp with the active [text profile](models.md#text-profiles). Text generation and tokenizer. | runtime | None | None |
+| `lyrveil-image` | On demand | ComfyUI with the active [image profile](models.md#image-profiles). Runs one workflow at a time. | runtime | None | Temporary files in tmpfs |
 
 Only `lyrveil-edge` can reach the outside. The backend and both runtimes sit on
 internal networks with no route to the Internet. This enforces offline operation

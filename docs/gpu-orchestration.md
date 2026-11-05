@@ -1,8 +1,8 @@
 # GPU orchestration: Model Lifecycle Manager
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01, P02, P05 and P06.
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: planned, phases P01, P02, P05 and P06.
 
-Rocinante and Illustrious never share the GPU. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
+The text model and the image model never share the GPU, whichever [profiles](models.md) are active. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
 job queue and asks the orchestrator for a mode and a lease
 ([ADR 0004](decisions/0004-single-sqlite-writer.md), [ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -11,7 +11,7 @@ job queue and asks the orchestrator for a mode and a lease
 | Component | State |
 | --- | --- |
 | `lyrveil-frontend`, `lyrveil-backend`, `lyrveil-orchestrator` | Running |
-| `lyrveil-llm` | Running, Rocinante loaded, state `LLM_READY` |
+| `lyrveil-llm` | Running, the active text profile loaded, state `LLM_READY` |
 | `lyrveil-image` | Created, stopped, no GPU allocation |
 
 When the queue is empty, the desired mode is always `llm`.
@@ -54,7 +54,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | `IDLE` | No model in the GPU, verified | Both stopped |
 | `LOADING_LLM` | KoboldCpp starting | LLM starting |
-| `LLM_READY` | Rocinante loaded, no lease | LLM healthy |
+| `LLM_READY` | Text model loaded, no lease | LLM healthy |
 | `GENERATING_TEXT` | A text lease is active | LLM healthy |
 | `UNLOADING_LLM` | Stopping and verifying release | LLM stopping |
 | `LOADING_IMAGE` | ComfyUI starting | Image starting |
@@ -79,26 +79,33 @@ A property test with Hypothesis drives random sequences of events through the ta
 | --- | --- | --- | --- |
 | 1 | Receive the request | `POST .../images` or the detector | `LLM_READY` |
 | 2 | Create a persistent job | `generation_jobs`, same transaction as the user message | `LLM_READY` |
-| 3 | Prepare the visual prompt with Rocinante | Stage `prompt`, under a text lease | `GENERATING_TEXT` |
+| 3 | Prepare the visual prompt with the text model | Stage `prompt`, under a text lease | `GENERATING_TEXT` |
 | 4 | Save context and chat state | Already durable: each message and the stage result are committed | `LLM_READY` |
 | 5 | Finish running LLM work | The scheduler runs nothing else. Foreground work finishes, background work is aborted and requeued | `LLM_READY` |
 | 6 | Stop the KoboldCpp container | `PUT /v1/desired-mode image`, then `POST .../stop?t=20` | `UNLOADING_LLM` |
 | 7 | Wait for GPU memory release | [Release verification](#verifying-gpu-release) | `UNLOADING_LLM` to `IDLE` |
 | 8 | Start the ComfyUI container | Allowlisted start, after the VRAM check | `LOADING_IMAGE` |
 | 9 | Wait until it is ready | Docker health check on `/system_stats` | `LOADING_IMAGE` to `IMAGE_READY` |
-| 10 | Load Illustrious | First workflow node. ComfyUI loads the checkpoint on demand | `GENERATING_IMAGE`, phase `loading` |
+| 10 | Load the image checkpoint | First workflow node. ComfyUI loads the active profile's checkpoint on demand | `GENERATING_IMAGE`, phase `loading` |
 | 11 | Run the workflow | Image lease, `POST /prompt`, WebSocket progress | `GENERATING_IMAGE` |
 | 12 | Save the image to the persistent store | Fetch to staging. Stage `persist` moves it to `data/media` | `IMAGE_READY` |
 | 13 | Update the message | One transaction with `generated_images` | `IMAGE_READY` or later |
 | 14 | Stop ComfyUI | Desired mode returns to `llm`, then `POST .../stop?t=30` | `UNLOADING_IMAGE` |
 | 15 | Verify GPU release | Same procedure | `UNLOADING_IMAGE` to `IDLE` |
 | 16 | Restart KoboldCpp | Allowlisted start | `LOADING_LLM` |
-| 17 | Reload Rocinante | KoboldCpp loads the model before serving, so health implies loaded. `GET /api/v1/model` confirms the name | `LOADING_LLM` to `LLM_READY` |
+| 17 | Reload the text model | KoboldCpp loads the model before serving, so health implies loaded. `GET /api/v1/model` confirms the file of the active profile | `LOADING_LLM` to `LLM_READY` |
 | 18 | Resume queued conversation work | Scheduler selects queued text jobs in order | `GENERATING_TEXT` |
 
 Steps 12 and 13 may finish after step 14, because `persist` needs no GPU and uses the staged file.
 
-Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it.
+Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it with the default profiles.
+
+With 32 GB of RAM, the page cache usually still holds the text model's file when it reloads, so step 17 reads from memory
+rather than from disk. The mixture-of-experts profiles load more data than the 12B profiles, and P06 records both.
+
+A change of the active text profile uses the same states: the desired mode goes to `none`, the runtime stops and its
+release is verified, then the desired mode returns to `llm` and the runtime starts with the new launch file. See
+[Selecting a profile](models.md#selecting-a-profile).
 
 ## Leases and the global lock
 
@@ -166,7 +173,7 @@ An `image_request` in stage `prompt` counts as a foreground text job. In stage `
 Consequences:
 
 - Soft and background work never causes a mode change.
-- A text message during image generation is saved at once, queued, shown as queued and handled when Rocinante returns.
+- A text message during image generation is saved at once, queued, shown as queued and handled when the text model returns.
 - Replies from different conversations run one at a time, oldest first within a priority.
 - No second instance of a model ever starts.
 
@@ -201,45 +208,55 @@ Before any load:
 
 | Check | LLM | Image |
 | --- | --- | --- |
-| Hard requirement, free VRAM | `vram.required_llm_mib` = 6000 | `vram.required_image_mib` = 6500 |
-| Preferred | `vram.preferred_llm_mib` = 9000. Below it the app warns of slower replies, because autofit offloads fewer layers | Not applicable |
+| Hard requirement, free VRAM | `vram_required_mib` of the active text profile. Planning value 7000 for the 26B-A4B profiles and 6000 for the others | `vram.required_image_mib` = 6500 |
+| Preferred | `vram_preferred_mib` of the profile. Planning value 10000 for the 26B-A4B profiles and 9000 for the others. Below it the app warns of slower replies, because autofit keeps fewer weights on the GPU | Not applicable |
 
 When free VRAM is below the requirement, the state stays `IDLE` with `blocked_reason = GPU_INSUFFICIENT_VRAM`. The check repeats every 5 s for `vram.wait_seconds` (120). Then the waiting job fails with a message
 that names the numbers, and the next job can try. **External processes are never terminated.** The interface suggests closing other programs that use the card.
 
-The defaults are planning values. After measuring, P02 and P05 set each requirement to the measured peak plus 5 %, and record the result.
+The defaults are planning values. After measuring, P02 and P05 set each requirement to the measured peak plus 5 %, and record the result in the catalog.
 
-## Load failures and fallback profiles
+## Load failures and launch levels
 
 The launch settings are in `data/runtime/llm-launch.env` and `image-launch.env`. The backend writes them, and the containers read them at start. See
 [Configuration](configuration.md#launch-files). No container needs to be recreated to change them.
 
-| Profile | Context | Batch | GPU layers |
-| --- | --- | --- | --- |
-| A, default | 8192 | 512 | Autofit |
-| B | 6144 | 512 | Autofit |
-| C | 4096 | 256 | Autofit |
+These launch levels are separate from model profiles. Each level derives from the active profile's context size:
+
+| Level | Context | Batch | GPU layers | Gemma 4 profiles | Mistral Nemo profiles |
+| --- | --- | --- | --- | --- | --- |
+| A, default | Profile value | 512 | Autofit | 16384 | 8192 |
+| B | Three quarters | 512 | Autofit | 12288 | 6144 |
+| C | Half | 256 | Autofit | 8192 | 4096 |
 
 | Event | Action |
 | --- | --- |
-| LLM exits with status 3, or logs match the allocation failure patterns | `LLM_LOAD_FAILED` with `oom = true`. The backend moves to the next profile. |
+| LLM exits with status 3, or logs match the allocation failure patterns | `LLM_LOAD_FAILED` with `oom = true`. The backend moves to the next level. |
 | `LLM_OOM` during generation | Same. The job retries. |
-| LLM fails without an allocation error | Same profile. Retries after 5 s and 20 s. |
+| LLM fails without an allocation error | Same level. Retries after 5 s and 20 s. |
 | Three failures in a row | `ERROR`. Retries every 300 s, at most 3 times per hour, or on the user's action. |
-| Profile below A in use | The interface shows it in the settings. `GET /api/extra/true_max_context_length` sizes the budgets. The user can return to A. |
-| `IMAGE_OOM` | One retry with tiled decode, after a runtime restart. |
+| Level below A in use | The interface shows it in the settings. `GET /api/extra/true_max_context_length` sizes the budgets. The user can return to A. |
+| `IMAGE_OOM` | One retry with the tiled workflow of the same preset, after a runtime restart. Then **Rapida** once. See [Image failures](image-generation.md#failures). |
+| Model file missing or with the wrong size | `MODEL_FILE_MISSING` before any mode change. Nothing is stopped. The settings screen shows the download command. |
 | `IMAGE_LOAD_FAILED` | Retry after 5 s and 20 s. Then the job fails, and the mode returns to text. |
 
 ### Measuring and tuning
 
-The P02 procedure, with the result in `docs/verification/`:
+The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4-26b-a4b`, `gemma-4-12b` and
+`rocinante-x-12b`, and the other profiles reuse the result of the profile with the same architecture:
 
 1. Close other GPU programs and record the baseline.
-2. Load profile A. Record used VRAM after load, and the peak during 20 generations.
+2. Load level A. Record used VRAM after load, RAM used by the container, and the peak VRAM during 20 generations.
 3. `margin = total - peak`.
-4. If the margin is at least 1024 MiB, keep 8192. Moving to 12288 adds about 640 MiB, and is allowed only if the margin after the increase stays at least 1024 MiB. The default for all users stays 8192.
-5. If the margin is under 512 MiB, make profile B the default.
+4. If the margin is under 512 MiB, make level B the default for that profile.
+5. If the margin is at least 1024 MiB, the profile's context may grow by one step, only if the margin after the
+   increase stays at least 1024 MiB. Gemma 4 grows to 24576, Mistral Nemo to 12288.
 6. Compare batch 256, 512 and 1024 on prompt processing speed. Keep 512 unless another value gains at least 20 %.
+7. **Speed rule for the mixture-of-experts default.** Over 20 replies of at least 200 tokens, the median generation
+   speed must be at least 15 tokens per second. The first token of a new 6000-token prompt must arrive within 20 s.
+   Compare AutoFit with `MOE_CPU_LAYERS` values 8, 12 and 16, and keep the fastest setting that meets the margin rule.
+   If no setting meets the speed rule, `gemma-4-12b` becomes the default on every tier
+   ([Model catalog](models.md#defaults-and-how-they-can-change)).
 
 ## Timeouts
 

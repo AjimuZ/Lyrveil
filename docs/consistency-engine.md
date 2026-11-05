@@ -110,7 +110,7 @@ language under `prompts/<language>/`.
 | ID | Check | Action |
 | --- | --- | --- |
 | V1 | Empty or whitespace reply | One retry |
-| V2 | ChatML marker in the text | Stop sequences cut it during streaming. If any remains, remove it and record the event |
+| V2 | Control text of the active template family in the text, such as `<turn|>`, `[INST]` or `<|im_end|>` | Stop sequences cut it during streaming. If any remains, remove it and record the event |
 | V3 | The reply writes the user's turn, such as a line starting with the user's name and `:` | Stop sequence, then cut at that point. An empty remainder counts as V1 |
 | V4 | Content guard ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)) | Checked every sentence during streaming. Aborts and replaces the text with a notice |
 

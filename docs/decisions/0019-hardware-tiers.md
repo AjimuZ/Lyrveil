@@ -1,6 +1,6 @@
 # ADR 0019: Target and reduced hardware tiers
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: superseded by [ADR 0027](0027-hardware-tiers-after-ram-upgrade.md) on 2026-11-05. Accepted 2026-11-01. Supersedes: none.
 
 ## Context
 The brief targets 32 GB of RAM. The reference machine measured on 2026-11-01 has one 16 GB module (15.8 GiB visible), and with no `.wslconfig`, Docker sees 7.64 GiB. ComfyUI reads a 6.94 GB checkpoint while it holds Python and PyTorch in memory, and the planning estimate for its peak is 10 to 11 GiB. Fully offloaded KoboldCpp needs much less system RAM, but it also reads a 7.48 GB file. Only one of the two runs at a time.

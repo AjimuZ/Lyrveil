@@ -1,7 +1,7 @@
 # Technology choices
 
 Status: accepted (2026-11-01). Versions were read from the official registries on
-that date. Lock files pin exact versions and hashes when each component is built.
+that date. AI runtimes and models were read again on 2026-11-05. Lock files pin exact versions and hashes when each component is built.
 
 ## Version policy
 
@@ -15,18 +15,20 @@ that date. Lock files pin exact versions and hashes when each component is built
 
 | Component | Pinned version | Source | Integrity |
 | --- | --- | --- | --- |
-| KoboldCpp | `v1.124.1`, asset `koboldcpp-linux-x64` (628,696,680 bytes) | `LostRuins/koboldcpp` | SHA-256 `46740ff67194962d50c564ab3d01a41d83e2cb3f29073915f83ebac21399e8e5` |
+| KoboldCpp | `v1.124.2`, commit `6d2fedf8624e5f05926af3191f9efdcb13c4133c`, asset `koboldcpp-linux-x64` (628,981,944 bytes) | `LostRuins/koboldcpp` | SHA-256 `c66ae0106673c7d9c41bafcc92c95bc5a6256709e9d853e5e2255bf536c1b069` |
 | ComfyUI | `v0.43.0`, commit `426f5eea52a7ece1dd599fff4cb6cd1f352ddd24` | `Comfy-Org/ComfyUI` (the `comfyanonymous/ComfyUI` URL redirects there) | Git commit hash |
 | PyTorch for ComfyUI | Build for CUDA 13.0, index `whl/cu130` | `download.pytorch.org` | Pinned with hashes in `docker/image/requirements.lock` at P05 |
-| Rocinante 12B v1.1 Q4_K_M | Revision `9d15ca24c675a428fc5821cccc537f2a6f64987d`, 7,477,203,712 bytes | `bartowski/Rocinante-12B-v1.1-GGUF`, not gated | SHA-256 `5133341741709aafcbc162c8fe638143e466288b7942ba7a0e9d9ef4e08d056f` |
-| Illustrious XL v1.0 | Revision `89d625482edf06d545b740265482f5c8fb2cadb0`, 6,938,040,736 bytes | `OnomaAIResearch/Illustrious-XL-v1.0`, not gated | SHA-256 `735cf3fefcbdc4f7817f53247e38b836ffd27c7641af6d8daa21d245242cb4bd` |
+| Text and image models | Five text profiles and three image profiles, each with a pinned revision, size and hash | Hugging Face, none gated | SHA-256 per file in [Model catalog](models.md) |
 
-Both models total 14.42 GB and need no Hugging Face account.
+The default profiles total 21.38 GB on the target tier and 13.91 GB on the reduced tier, and need no Hugging Face
+account. KoboldCpp `v1.124.1`, pinned on 2026-11-01, was withdrawn upstream
+([ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md)).
 
 KoboldCpp publishes Linux binaries with CUDA included, so its image starts from the
 pinned binary. ComfyUI's README documents no Docker image and its release has no Linux
 asset, so its image starts from the pinned source. Lyrveil builds both images itself
-([ADR 0007](decisions/0007-own-runtime-images-pinned.md)).
+([ADR 0007](decisions/0007-own-runtime-images-pinned.md), pin updated by
+[ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md)).
 
 ## Backend and orchestrator
 
@@ -104,7 +106,7 @@ single-user app.
 | Database | PostgreSQL | Excluded by the requirements. One writer on one machine does not need it. |
 | Memory search | Embeddings, vector database | Excluded by the requirements. FTS5 with stemming comes first ([ADR 0011](decisions/0011-memory-retrieval-fts5-without-embeddings.md)). |
 | Model switching | KoboldCpp `--admin`, ComfyUI `POST /free` | Weaker guarantee than stopping the process ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)). |
-| Text endpoint | `/v1/chat/completions` | The GGUF has no chat template. `/api/v1/generate` gives full control over the prompt ([ADR 0014](decisions/0014-chatml-plain-text-template.md)). |
+| Text endpoint | `/v1/chat/completions` | Each model family needs its own exact template, and one GGUF has none. `/api/v1/generate` gives full control over the prompt ([ADR 0025](decisions/0025-prompt-templates-per-model-family.md)). |
 | Forms | Reactive Forms | Signal Forms are the current recommendation for new Angular 22 forms. |
 | UI library | Angular Material, PrimeNG | Their visual language fights Obsidian Bloom. `@angular/aria` gives behavior without style. |
 | i18n | `@angular/localize`, Transloco | Compile-time locales or a dependency for a single-language 1.0. A small signal-based service suffices ([Frontend](frontend.md#text-and-translation)). |

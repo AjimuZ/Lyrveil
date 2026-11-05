@@ -19,6 +19,7 @@
 | --- | --- |
 | [Technology choices](technology.md) | Stack, exact versions, licenses and alternatives |
 | [Runtime contracts](runtime-contracts.md) | Verified flags and endpoints of KoboldCpp, ComfyUI, Docker and NVML |
+| [Model catalog](models.md) | Selectable text and image profiles, defaults per tier, custom files and memory estimates |
 | [Data model](data-model.md) | Tables, indexes, full-text search and deletion policy |
 | [APIs](api.md) | REST, event WebSocket and control API |
 | [Backend](backend.md) | Packages, services, ports and concurrency |

@@ -1,6 +1,6 @@
 # Image generation
 
-Status: accepted (2026-11-01). Implementation: planned, phase P05.
+Status: accepted (2026-11-01), revised 2026-11-05 for image profiles and two-pass rendering. Implementation: planned, phase P05.
 
 Images are normal messages. The text model prepares the prompt, ComfyUI renders it, and the backend stores the result
 independently of the runtime. The GPU hand-over is described in [GPU orchestration](gpu-orchestration.md).
@@ -11,8 +11,8 @@ independently of the runtime. The GPU hand-over is described in [GPU orchestrati
 
 The user asks for an image in two ways:
 
-1. **Explicit action.** The composer's image button opens a small form with the request, aspect and optional seed, steps and
-   CFG. It calls `POST /conversations/{id}/images`.
+1. **Explicit action.** The composer's image button opens a small form with the request, aspect, quality (**Alta** or
+   **Rapida**) and optional seed, steps and CFG. It calls `POST /conversations/{id}/images`.
 2. **Message text.** With `intent: auto`, a deterministic detector reads the message. It needs an imperative request verb and an
    image noun within 6 words. Lists are stored per language.
 
@@ -60,7 +60,7 @@ the same job and pipeline, with `purpose` set accordingly. The result is linked 
 | Stage | `required_mode` | Work | Saved at the end |
 | --- | --- | --- | --- |
 | `prompt` | `llm` | Generates `ImagePromptResult`, builds the final prompt, runs the content guard | `payload_json.final_prompt`, `payload_json.caption`, `seed` |
-| `render` | `image` | Submits the workflow, follows progress, fetches the file into staging | Staged file path |
+| `render` | `image` | Submits the workflow of the chosen preset, follows progress, fetches the file into staging | Staged file path, preset used |
 | `persist` | `none` | Validates, writes the thumbnail, moves files, updates the message | `generated_images`, the variant |
 
 The seed is chosen and saved in `prompt`, so a retried `render` reproduces the same request.
@@ -94,11 +94,19 @@ positive = quality tags, rating tag, subject tag, "adult", persistent identity t
 negative = base negative, safety negative, persistent negative, extra negative after filtering
 ```
 
-| Part | Default value |
+Quality tags, rating tag and base negative come from the image profile's preset:
+
+| Part | `illustrious` preset: `illustrious-xl-v2.0`, `illustrious-xl-v1.0`, custom | `noobai` preset: `noobai-xl-1.1` |
+| --- | --- | --- |
+| Quality tags | `masterpiece, best quality, amazing quality, absurdres` | `masterpiece, best quality, newest, absurdres, highres` |
+| Rating tag | `general` | `safe` |
+| Base negative | `worst quality, bad quality, low quality, lowres, bad anatomy, bad hands, missing fingers, extra digits, jpeg artifacts, signature, watermark, text, username` | `worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands, mammal, anthro, furry, ambiguous form, feral, semi-anthro` |
+
+The NoobAI values come from its model card. `nsfw` is removed from the card's negative because the safety negative
+always holds it.
+
+| Part | Value for every profile |
 | --- | --- |
-| Quality tags | `masterpiece, best quality, amazing quality` |
-| Rating tag | `general` |
-| Base negative | `worst quality, bad quality, low quality, lowres, bad anatomy, bad hands, missing fingers, extra digits, jpeg artifacts, signature, watermark, text, username` |
 | Safety negative | `child, loli, shota, toddler, underage, minor, nsfw, explicit, nude`. Always appended |
 
 ### Scene tag filter
@@ -127,48 +135,98 @@ Tags improve consistency but cannot guarantee it. True consistency needs referen
 
 ## Default parameters
 
-| Parameter | Default | Range | Source |
+The active [image profile](models.md#image-profiles) selects the checkpoint and its preset
+([ADR 0024](decisions/0024-selectable-model-profiles.md)). The quality preset selects one or two passes
+([ADR 0026](decisions/0026-two-pass-image-rendering.md)).
+
+### First pass
+
+| Parameter | `illustrious` | `noobai` | Range | Source |
+| --- | --- | --- | --- | --- |
+| Square | 1024 x 1024 | Same | Fixed preset | Requirements |
+| Portrait | 832 x 1216 | Same | Fixed preset | SDXL bucket, recommended by the NoobAI card |
+| Landscape | 1216 x 832 | Same | Fixed preset | SDXL bucket |
+| Batch size | 1 | Same | Fixed | Requirements |
+| Seed | Random 32-bit, stored | Same | 0 to 4294967295 | Requirements |
+| Steps | 28 | 28 | 10 to 50 | Community guidance. NoobAI card: 25 to 30 |
+| CFG | 5.5 | 5.5 | 1 to 12 | Community guidance. NoobAI card: 5 to 6 |
+| Sampler | `euler_ancestral` | `euler_ancestral` | Allowlist from ComfyUI's `KSAMPLER_NAMES` | Community guidance. NoobAI card: Euler a |
+| Scheduler | `normal` | `normal` | `normal`, `karras` | Project default |
+| CLIP skip | 2 | 2 | 1 or 2 | Community guidance. Not stated for NoobAI, so the grid tests both |
+
+No OnomaAI card gives sampler, steps or CFG. The Illustrious defaults come from third-party guides, which agree on
+Euler ancestral, 20 to 28 steps, CFG from 3 to 7 and CLIP skip 2. They are not official.
+
+### Quality presets
+
+| Preset | Passes | Final size, square / portrait / landscape | Planning time on the reference card |
 | --- | --- | --- | --- |
-| Square | 1024 x 1024 | Fixed preset | Requirements |
-| Portrait | 832 x 1216 | Fixed preset | SDXL bucket |
-| Landscape | 1216 x 832 | Fixed preset | SDXL bucket |
-| Batch size | 1 | Fixed | Requirements |
-| Seed | Random 32-bit, stored | 0 to 4294967295 | Requirements |
-| Steps | 28 | 10 to 50 | Community guidance |
-| CFG | 5.5 | 1 to 12 | Community guidance |
-| Sampler | `euler_ancestral` | Allowlist from ComfyUI's `KSAMPLER_NAMES` | Community guidance |
-| Scheduler | `normal` | `normal`, `karras` | Project default |
-| CLIP skip | 2 | 1 or 2 | Community guidance |
+| **Alta**, default | First pass, then a second pass at 1.5 times the size | 1536 x 1536 / 1248 x 1824 / 1824 x 1248 | About 20 to 30 s of rendering, plus the checkpoint load |
+| **Rapida** | First pass only | 1024 x 1024 / 832 x 1216 / 1216 x 832 | About 7 to 10 s of rendering, plus the checkpoint load |
 
-The model card gives no sampler, steps or CFG. These defaults come from third-party guides for Illustrious XL, which agree on Euler
-ancestral, 20 to 28 steps, CFG from 3 to 7 and CLIP skip 2. They are not official.
+Second pass of **Alta**:
 
-P05 renders a fixed grid of 3 characters, 2 scenes and 3 seeds with CLIP skip 1 and 2, and CFG 4.5, 5.5 and 7. The defaults stay unless
-the grid shows a visible defect. The result goes to `docs/verification/`.
+| Parameter | Default | Range | Why |
+| --- | --- | --- | --- |
+| Upscale | `lanczos`, factor 1.5 | 1.25 to 1.5 | Pixel upscale with no extra model. 1.5 reaches 1248 x 1824, a size the Illustrious card names |
+| `denoise` | 0.45 | 0.3 to 0.6 | Adds detail and keeps the composition |
+| Steps | 14 | 8 to 30 | ComfyUI runs this many steps over the last part of the schedule |
+| Sampler, scheduler | `dpmpp_2m`, `karras` | Allowlist | A non-ancestral sampler keeps the first pass's structure |
+| CFG, seed, prompts | Same as the first pass | | |
+
+Times are estimates until P05 measures them. The [preset rule](decisions/0026-two-pass-image-rendering.md) keeps
+**Alta** as the default if the 95th percentile of the render stage is at most 45 s.
+
+### Grid
+
+P05 renders a fixed grid for each image profile: 3 characters, 2 scenes and 3 seeds, with CLIP skip 1 and 2, CFG 4.5,
+5.5 and 7, and second-pass `denoise` 0.35, 0.45 and 0.55. The defaults stay unless the grid shows a visible defect. The
+owner reviews the profiles blind for the [default rule](models.md#defaults-and-how-they-can-change). The result goes to
+`docs/verification/`.
 
 ## Workflow
 
-`workflows/comfyui/sdxl_txt2img.v1.json`, in ComfyUI API format:
+Workflows live in `workflows/comfyui/`, in ComfyUI API format. Typed code sets values on the parsed JSON. It never edits
+text, so a prompt cannot change the graph.
+
+| File | Use |
+| --- | --- |
+| `sdxl_base.v2.json` | **Rapida**. One pass |
+| `sdxl_hires.v1.json` | **Alta**. Two passes |
+| `sdxl_hires_tiled.v1.json` | **Alta** retry after out of memory. Tiled decode and encode |
+| `sdxl_base_tiled.v2.json` | **Rapida** retry after out of memory. Tiled decode |
+
+`sdxl_hires.v1.json`:
 
 ```json
 {
-  "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "Illustrious-XL-v1.0.safetensors"}},
+  "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "Illustrious-XL-v2.0.safetensors"}},
   "2": {"class_type": "CLIPSetLastLayer", "inputs": {"clip": ["1", 1], "stop_at_clip_layer": -2}},
   "3": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": ""}},
   "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": ""}},
-  "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 832, "height": 1216, "batch_size": 1}},
   "6": {"class_type": "KSampler", "inputs": {
     "model": ["1", 0], "positive": ["3", 0], "negative": ["4", 0], "latent_image": ["5", 0],
     "seed": 0, "steps": 28, "cfg": 5.5, "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 1.0
   }},
   "7": {"class_type": "VAEDecode", "inputs": {"samples": ["6", 0], "vae": ["1", 2]}},
-  "8": {"class_type": "SaveImage", "inputs": {"images": ["7", 0], "filename_prefix": "lyrveil"}}
+  "9": {"class_type": "ImageScaleBy", "inputs": {"image": ["7", 0], "upscale_method": "lanczos", "scale_by": 1.5}},
+  "10": {"class_type": "VAEEncode", "inputs": {"pixels": ["9", 0], "vae": ["1", 2]}},
+  "11": {"class_type": "KSampler", "inputs": {
+    "model": ["1", 0], "positive": ["3", 0], "negative": ["4", 0], "latent_image": ["10", 0],
+    "seed": 0, "steps": 14, "cfg": 5.5, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 0.45
+  }},
+  "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["1", 2]}},
+  "8": {"class_type": "SaveImage", "inputs": {"images": ["12", 0], "filename_prefix": "lyrveil"}}
 }
 ```
 
-- Typed code sets values on the parsed JSON. It never edits text, so a prompt cannot change the graph.
-- `sdxl_txt2img_tiled.v1.json` replaces node 7 with `VAEDecodeTiled` (`tile_size` 512, `overlap` 64, `temporal_size` 64,
-  `temporal_overlap` 8). It is the out-of-memory retry.
+- `sdxl_base.v2.json` is nodes 1 to 8 of the same graph, with node 8 saving node 7. Version 1 had the same nodes with
+  `ckpt_name` fixed to v1.0. Version 2 takes `ckpt_name` from the profile.
+- `ckpt_name` always comes from the catalog or from a registered custom profile, never from user text.
+- The tiled files replace `VAEDecode` with `VAEDecodeTiled` and `VAEEncode` with `VAEEncodeTiled` (`tile_size` 512,
+  `overlap` 64, `temporal_size` 64, `temporal_overlap` 8).
+- Both passes share the seed. Final width and height are the first-pass size times 1.5, rounded to a multiple of 8.
 - Lyrveil only submits its own files. The API offers no way to send a custom workflow.
 - `/system_stats` is read at readiness and `comfyui_version` is stored with each image.
 
@@ -179,7 +237,8 @@ the grid shows a visible defect. The result goes to `docs/verification/`.
 | `prompt` | Job stage | Sta preparando l'immagine… |
 | `waiting` | Lifecycle state | In attesa della scheda video… |
 | `loading` | `executing` with node `1` | Sta preparando i pennelli… |
-| `sampling` | `progress` with `value` and `max` | Sta disegnando… 12/28 |
+| `sampling` | `progress` of node `6`, with `value` and `max` | Sta disegnando… 12/28 |
+| `refining` | `progress` of node `11`, **Alta** only | Sta rifinendo i dettagli… 6/14 |
 | `saving` | Job stage | Quasi fatto… |
 
 Percentages come only from real `progress` values. Other phases show an indeterminate indicator.
@@ -189,7 +248,7 @@ Percentages come only from real `progress` values. Other phases show an indeterm
 ```text
 data/media/
   .staging/<job_id>/...              Removed at startup when unfinished
-  images/YYYY/MM/<image_id>.png      Original
+  images/YYYY/MM/<image_id>.png      Original. About 2 to 3 MB for Rapida, 4 to 6 MB for Alta
   thumbs/YYYY/MM/<image_id>.webp     Longest side 512 px
   assets/<character_id>/<asset_id>.<ext>
 ```
@@ -223,8 +282,9 @@ The gallery's advanced dialog can edit positive and negative prompts. The safety
 
 | Failure | Handling |
 | --- | --- |
+| Checkpoint file missing or with the wrong size | The job fails with `MODEL_FILE_MISSING` before the mode change. The message names the profile and the download command |
 | Model returns invalid JSON | Repair attempt, then a fallback prompt built from the persistent tags and the request's words filtered by the guard, without a caption |
-| `IMAGE_OOM` | Lease ends with `oom`. Runtime restarts. One retry with tiled decode |
+| `IMAGE_OOM` | Lease ends with `oom`. Runtime restarts. One retry with the tiled file of the same preset. If **Alta** fails again, one last try with **Rapida**. The message says which preset produced the image |
 | Stalled, no progress for 120 s | `POST /interrupt`, retry once |
 | Total time over 300 s | Same |
 | `GPU_INSUFFICIENT_VRAM` | The job fails after the wait. The message shows a clear reason and a retry action |
@@ -241,6 +301,8 @@ Not active in 1.0:
 | --- | --- |
 | LoRA | `character_visual_profiles.loras_json` and a workflow template slot. The model card states that modules trained on Illustrious v0.1 work with v1.0 |
 | Reference images, IP-Adapter, ControlNet | `reference_asset_ids_json`, stored assets. ComfyUI's `POST /upload/image` enters [Runtime contracts](runtime-contracts.md) only when needed |
-| Other checkpoints | `LYRVEIL_IMAGE_CHECKPOINT`, `ImageRuntime` adapter |
+| Face and hand detailer | Needs a detection model and custom nodes. See [ADR 0026](decisions/0026-two-pass-image-rendering.md) |
+| v-prediction checkpoints | `prediction` in the catalog. 1.0 accepts only `epsilon` |
 
-Custom nodes needed for any of these would require an ADR, because `--disable-all-custom-nodes` is part of the security model.
+Other checkpoints are already selectable through [image profiles](models.md#image-profiles). Custom nodes needed for
+any extension would require an ADR, because `--disable-all-custom-nodes` is part of the security model.

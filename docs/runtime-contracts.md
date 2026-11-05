@@ -1,15 +1,19 @@
 # Runtime contracts
 
 Status: verified at the pinned upstream tags on 2026-11-01 by reading the official
-source and API documents. Nothing here has run against a loaded model yet. Exit
+source and API documents. KoboldCpp was verified again at `v1.124.2` on 2026-11-05, with
+the facts for the model catalog. Nothing here has run against a loaded model yet. Exit
 checks in P02, P05 and P06 confirm these contracts at runtime.
 
 Lyrveil calls only what this page lists. To use anything else, verify it at the
 pinned tag and add it here in the same commit.
 
-## KoboldCpp v1.124.1
+## KoboldCpp v1.124.2
 
-Sources: `koboldcpp.py` and `embd_res/kcpp_docs.embd` at tag `v1.124.1`.
+Sources: `koboldcpp.py` and `embd_res/kcpp_docs.embd` at tag `v1.124.1` on 2026-11-01.
+`koboldcpp.py` and `kcpp_src/gpttype_adapter.cpp` at tag `v1.124.2` on 2026-11-05: every
+flag and endpoint below is still present. The pin moved because the `v1.124.1` release was
+withdrawn ([ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md)).
 
 ### Flags
 
@@ -18,10 +22,11 @@ time with `--unpack`, so each start skips self-extraction.
 
 | Flag | Value | Purpose |
 | --- | --- | --- |
-| `--model` | `/models/llm/Rocinante-12B-v1.1-Q4_K_M.gguf` | Model file. |
+| `--model` | `/models/llm/<MODEL_FILE>` | File of the active [profile](models.md#text-profiles). |
 | `--usecuda` | No argument | CUDA acceleration. |
-| `--contextsize` | `8192` | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-fallback-profiles). |
-| `--gpulayers` | `-1` | Autofit, the upstream default. It adapts when other programs hold VRAM. |
+| `--contextsize` | From the profile, 16384 for Gemma 4 and 8192 for Mistral Nemo | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-launch-levels). |
+| `--gpulayers` | `-1` | Autofit, the upstream default. It adapts when other programs hold VRAM. Without `--moecpu`, the launcher also enables AutoFit with 1024 MB of padding, which places mixture-of-experts weights between GPU and RAM. |
+| `--moecpu` | Only when `MOE_CPU_LAYERS` is above 0 | Keeps the expert weights of the first N layers in RAM. It disables AutoFit. Fallback for the mixture-of-experts profiles, see [Memory estimates](models.md#memory-estimates). |
 | `--batchsize` | `512` | Logical batch size, the upstream default. |
 | `--host` | `0.0.0.0` | Listens on the internal network only, because no port is published. |
 | `--port` | `5001` | Upstream default port. |
@@ -33,11 +38,17 @@ Flash attention is on by default and needs no flag. These flags are never used:
 `--hordekey`, `--savedatafile`, `--preloadstory`, `--password`. Port isolation makes a
 password unnecessary, and a shared secret would add a value to manage.
 
+`--mmproj` is never passed, so the vision encoders of Gemma 4 are not loaded.
+
 Source facts used by the design:
 
 - Text model load happens before the HTTP API starts, so a reachable API implies a
   loaded model.
 - A failed text model load exits with status 3 and the message `Could not load text model`.
+- The prompt text is tokenized with `common_tokenize(ctx, text, add_bos, true)`. The last
+  argument parses special tokens, so control tokens written in the prompt, such as
+  `<|turn>` or `[INST]`, become the real tokens. BOS is added by the runtime, so prompts
+  never contain it.
 
 ### Endpoints
 
@@ -69,7 +80,34 @@ Source facts used by the design:
 `sampler_order` is left unset, so the upstream default applies. `json_schema` is not
 part of `GenerationInput`. Lyrveil uses `grammar`.
 
-## Rocinante 12B v1.1
+## Text model facts
+
+Read on 2026-11-05 unless stated. Memory and speed figures per profile are in
+[Model catalog](models.md#memory-estimates).
+
+### Gemma 4: `gemma-4-26b-a4b`, `gemma-4-12b`, `orion-26b-a4b`
+
+| Fact | Value | Source |
+| --- | --- | --- |
+| Architecture | 26B-A4B: 30 layers, 128 experts, 8 active per token. 12B: 48 dense layers. Sliding window of 1024 tokens with periodic global layers | `config.json` of `google/gemma-4-26B-A4B-it` and `google/gemma-4-12B-it` |
+| Chat template | `<\|turn>system\n…<turn\|>\n<\|turn>user\n…<turn\|>\n<\|turn>model\n`. With thinking off, the generation prompt ends with `<\|channel>thought\n<channel\|>` | Official `chat_template.jinja`, rendered in a sandbox. The GGUF templates of the 12B file and of Orion render the same text |
+| Control tokens | `<\|turn>` 105, `<turn\|>` 106, `<\|channel>` 100, `<channel\|>` 101, `<\|think\|>` 98, all special | `tokenizer.json` |
+| BOS, end tokens | `<bos>`. `generation_config.json` lists 1, 106 and 50 as end tokens | `tokenizer_config.json`, `generation_config.json` |
+| Sampling advice | `temperature` 1.0, `top_p` 0.95, `top_k` 64 for all uses | Model card |
+| Languages | More than 35 supported, more than 140 in pre-training. Italian is not named | Model card |
+| Orion's template | "Gemma 4 31B template, thinking or non-thinking" | Orion card |
+
+### Mistral v3 Tekken: `rocinante-x-12b`
+
+| Fact | Value | Source |
+| --- | --- | --- |
+| Base | Mistral Nemo Instruct 2407, 40 layers, 8 key-value heads of size 128 | Model card, GGUF metadata |
+| Template | `[INST]U1[/INST]A1</s>[INST]SYS\n\nU2[/INST]`. The system text joins the last user turn. No `[SYSTEM_PROMPT]` | Card, and the template in the GGUF rendered in a sandbox |
+| Control tokens | `<s>` 1, `</s>` 2, `[INST]` 3, `[/INST]` 4, all special | `tokenizer_config.json` |
+
+### ChatML: `rocinante-12b-v1.1`
+
+Read on 2026-11-01.
 
 | Fact | Value | Source |
 | --- | --- | --- |
@@ -81,23 +119,9 @@ part of `GenerationInput`. Lyrveil uses `grammar`.
 | Author's sampler advice | Use DRY. Temperature 0.7 is calmer, 1.2 is more intense | Original model card |
 | Italian | Listed for the base model. Not stated for this finetune | Model cards |
 
-Consequence: ChatML markers are ordinary text in this model. Lyrveil writes them into
-the prompt and stops on them with text-level stop sequences
-([ADR 0014](decisions/0014-chatml-plain-text-template.md)).
-
-### VRAM estimate
-
-Planning figures, not measurements. P02 measures the real values.
-
-| Part | Estimate |
-| --- | --- |
-| Weights, 7,477,203,712 bytes | 7131 MiB |
-| KV cache: 8192 tokens × (1024 + 1024) × 2 bytes × 40 layers | 1280 MiB |
-| Compute and output buffers | About 300 to 600 MiB |
-| **Total** | **About 8700 to 9000 MiB** |
-
-Measured free VRAM on the idle reference machine is 10522 MiB of 12282 MiB, which
-leaves an expected margin of about 1500 MiB.
+ChatML markers are ordinary text in this model. Lyrveil writes them into the prompt and
+stops on them with text-level stop sequences
+([ADR 0025](decisions/0025-prompt-templates-per-model-family.md)).
 
 ## ComfyUI v0.43.0
 
@@ -156,17 +180,25 @@ WebSocket messages used:
 | `KSampler` | `model`, `positive`, `negative`, `latent_image`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `denoise` |
 | `VAEDecode` | `samples`, `vae` |
 | `VAEDecodeTiled` | `samples`, `vae`, `tile_size`, `overlap`, `temporal_size`, `temporal_overlap` |
+| `ImageScaleBy` | `image`, `upscale_method` (`lanczos`), `scale_by` |
+| `VAEEncode` | `pixels`, `vae` |
+| `VAEEncodeTiled` | `pixels`, `vae`, `tile_size`, `overlap`, `temporal_size`, `temporal_overlap` |
 | `SaveImage` | `images`, `filename_prefix` |
 
-## Illustrious XL v1.0
+The three added nodes were checked in `nodes.py` at `v0.43.0` on 2026-11-05. They are core
+nodes, so `--disable-all-custom-nodes` does not affect them.
+
+## Image model facts
 
 | Fact | Value | Source |
 | --- | --- | --- |
-| Native resolution | 1536x1536. Handles 512x512 to 1536x1536 and sizes like 1248x1824 | Model card |
-| Prompt style | Natural language, Danbooru-style tags, or both | Model card |
-| Recommended sampler, steps, CFG | Not stated by the model card | Model card |
-| Community guidance | Euler a, 20 to 28 steps, CFG 3 to 7, CLIP skip 2. Not official | Third-party guides, see [Image generation](image-generation.md#default-parameters) |
-| LoRA and ControlNet | Modules trained on Illustrious v0.1 are stated to work | Model card |
+| Illustrious XL v1.0 resolution | Native 1536x1536. Handles 512x512 to 1536x1536 and sizes like 1248x1824 | Model card |
+| Illustrious prompt style | Natural language, Danbooru-style tags, or both | Model card |
+| Illustrious XL v2.0 | Uploaded as "v2.0-STABLE", the more stable checkpoint of the last annealing phase. License field `creativeml-openrail-m`. No recommended settings | Model card, read 2026-11-05 |
+| Illustrious sampler, steps, CFG | Not stated by any OnomaAI card or by the official user guide page | Model cards, `illustrious-xl.ai/updates/21` |
+| Community guidance for Illustrious | Euler a, 20 to 28 steps, CFG 3 to 7, CLIP skip 2. Not official | Third-party guides, see [Image generation](image-generation.md#default-parameters) |
+| NoobAI-XL 1.1 settings | CFG 5 to 6, 25 to 30 steps, Euler a. Total area about 1024x1024, for example 832x1216. Positive starts with `masterpiece, best quality, newest, absurdres, highres, safe` | Model card |
+| LoRA and ControlNet | Modules trained on Illustrious v0.1 are stated to work with v1.0 | Model card |
 
 ## Docker Engine API
 

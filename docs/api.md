@@ -44,6 +44,7 @@ Errors use `application/problem+json`:
 | `IMPORT_INVALID` | 422 | Character file invalid or of an unsupported version. |
 | `FORBIDDEN_ORIGIN` | 403 | Host or Origin not allowed. |
 | `ORCHESTRATOR_UNAVAILABLE` | 503 | The control API does not answer. |
+| `MODEL_PROFILE_UNAVAILABLE` | 409 | The profile does not exist, needs a larger hardware tier, or its file is missing. `detail` names the download command. |
 | `INTERNAL` | 500 | Unexpected failure. Details stay in the logs. |
 
 Job errors, reported through `job.updated`:
@@ -52,6 +53,7 @@ Job errors, reported through `job.updated`:
 | --- | --- |
 | `GPU_INSUFFICIENT_VRAM` | Other programs hold too much VRAM. |
 | `LLM_LOAD_FAILED`, `IMAGE_LOAD_FAILED` | A runtime did not reach readiness. |
+| `MODEL_FILE_MISSING` | The active profile's file is absent or has the wrong size. Checked before any mode change. |
 | `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. |
 | `GENERATION_TIMEOUT`, `GENERATION_STALLED` | Over the total time, or no progress. |
 | `STRUCTURED_OUTPUT_INVALID` | JSON failed validation after all attempts. |
@@ -179,7 +181,7 @@ Content-Type: application/json
 
 | Method and path | Purpose |
 | --- | --- |
-| `POST /conversations/{id}/images` | Explicit request. Body `{"request": "...", "aspect": "portrait", "seed": null, "steps": null, "cfg": null}`. |
+| `POST /conversations/{id}/images` | Explicit request. Body `{"request": "...", "aspect": "portrait", "quality": null, "seed": null, "steps": null, "cfg": null}`. `quality` is `alta`, `rapida` or null for the setting `images.quality`. |
 | `GET /images?character_id=&conversation_id=&purpose=&cursor=` | Gallery. |
 | `GET /images/{id}` | Metadata. |
 | `POST /images/{id}/regenerate` | Same prompt. New seed unless `keep_seed` is true. |
@@ -228,7 +230,11 @@ Media is looked up by identifier. A request path never becomes a file path.
 | `GET`, `POST /scheduled-events`, `PATCH`, `DELETE /scheduled-events/{id}` | Planned messages. |
 | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | In-app notifications. |
 | `GET`, `PATCH /settings` | Application settings. |
-| `GET`, `PATCH /settings/models` | Text and image runtime settings. Applied at the next load. |
+| `GET /settings/models` | Catalog profiles and registered custom profiles, each with tier, license, size and local state (`verified`, `size_mismatch`, `missing`), the active profiles, the quality preset and the launch values. |
+| `PATCH /settings/models` | Changes the active profiles, the quality preset and runtime values. A text profile change is applied at the next load, or at once through `/settings/models/apply`. Refused with `MODEL_PROFILE_UNAVAILABLE`. |
+| `POST /settings/models/apply` | Reloads the text model with the current launch file. Waits for the running reply. Returns `202` with the job identifier. |
+| `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "gemma4"}`. The file must already be in its models folder. Starts the hash job and returns `202`. |
+| `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
 | `POST /backups`, `GET /backups` | Create and list. Restore is `scripts/restore.sh`, because it stops services. |
 
 ## Event WebSocket

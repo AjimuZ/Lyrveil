@@ -105,7 +105,7 @@ a picker: choose a character, an optional scenario and a language. The list has 
 - Bubble actions, on hover or long press: edit, regenerate (latest reply), alternatives `< 2/3 >` (latest reply), delete, "Ricorda questo", copy.
 - Images: thumbnail in the bubble. A lightbox shows the original full screen, with metadata in a collapsible section and regenerate. Arrow keys move between images.
 - Placeholders: typing indicator, queued state, image progress with phase text and cancel.
-- Composer: multi-line text, Enter sends, Shift+Enter adds a line, image button. Character counter near the 8000 limit.
+- Composer: multi-line text, Enter sends, Shift+Enter adds a line, image button. The image form has request, aspect, **Alta** or **Rapida**, and optional seed, steps and CFG. Character counter near the 8000 limit.
 - Search: a bar with next and previous match, using `GET /conversations/{id}/search`.
 - Editing an older message warns: "I ricordi collegati verranno rivalutati."
 - Context panel: profile summary, relationship in words, recent events, images, scenario, proactive settings and a link to the Memory Studio. Diagnostic mode adds a link per reply, and only when it is on.
@@ -148,8 +148,18 @@ Display name, time zone view, interface language (`it` in 1.0), default language
 
 ### 9. Model settings
 
-Text: model file (read-only), context, GPU layers, batch, temperature and other sampler values, reply length, DRY. Image: checkpoint (read-only), default steps, CFG, sampler, scheduler, CLIP skip, resolutions and seed policy default. Each field shows its default, and **Ripristina
-predefiniti** restores them. A note marks values applied at the next load. Licenses of both models are linked.
+Two lists, **Modello di testo** and **Modello per immagini**, show every [profile](models.md) with its short purpose,
+size, license, tier and state: **Verificato**, **Dimensione errata** or **Da scaricare**. A missing profile shows the
+exact download command with a copy button. Profiles above the machine's tier are listed but disabled, with the memory
+they need. Choosing a text profile shows **Applica ora**, which reloads the model after the running reply.
+
+Below the lists: **Qualità immagini** (**Alta** or **Rapida**), and **Aggiungi file locale** for a custom profile,
+marked **non verificato**.
+
+Advanced values, per active profile: context, GPU layers, batch, experts in RAM (`MOE_CPU_LAYERS`, for
+mixture-of-experts profiles only), temperature and other sampler values, reply length, DRY. Image: default steps, CFG,
+sampler, scheduler, CLIP skip, second-pass scale, `denoise` and steps, and seed policy default. Each field shows its
+default, and **Ripristina predefiniti** restores them. A note marks values applied at the next load.
 
 ### 10. AI resources
 
