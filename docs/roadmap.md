@@ -29,6 +29,8 @@ Through P03, the project delivers the complete working path from character creat
 - [x] P00.6 Check links, placeholders, requirement coverage and secrets.
 - [x] P00.7 Revise for the 32 GB RAM upgrade: selectable model profiles, prompt templates per model family, two-pass
   image rendering, new hardware tiers and the KoboldCpp `v1.124.2` pin (ADRs 0024 to 0028).
+- [x] P00.8 Revise for operation from Windows on `C:` with Docker volumes, after measuring storage speed, and record the
+  KoboldCpp efficiency levers that P02 measures (ADRs 0029 and 0030).
 
 Exit: every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.
 
@@ -39,16 +41,16 @@ Evidence: [environment](verification/2026-11-01-environment.md), [documentation 
 
 **Depends on:** P00. **Areas:** repository, Docker, backend, orchestrator, frontend.
 
-- [ ] P01.1 Move development to a clone inside Ubuntu on WSL2. Apply the `.wslconfig` for the machine's tier: on the reference machine, the 32 GB values, so Docker sees at least 20 GiB.
-- [ ] P01.2 Create the repository structure, `.env.example`, `models/.gitkeep`, `data/.gitkeep` and `compose.yaml` with the three core services.
+- [ ] P01.1 Apply the `.wslconfig` for the machine's tier. On the reference machine the 32 GB values were applied on 2026-11-05, and Docker sees 23.47 GiB ([evidence](verification/2026-11-05-environment.md#after-the-changes)). The P01 exit check confirms it.
+- [ ] P01.2 Create the repository structure, `.env.example`, the `.gitattributes` rules for `.cmd` and `.ps1`, and `compose.yaml` with the three core services and the external volumes.
 - [ ] P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes.
 - [ ] P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight.
 - [ ] P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client.
-- [ ] P01.6 Scripts: `setup.sh`, `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh`, `scripts/download-models.sh` driven by the model catalog, `scripts/test.sh`.
+- [ ] P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`.
 - [ ] P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers.
 - [ ] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
 
-Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11 pass. `./start.sh` opens an empty app at `http://localhost:4200`, and `status.sh` reports it. FTS5 and WAL are verified in the real image.
+Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11, T-DCK-13 pass. `.\start.cmd` opens an empty app at `http://localhost:4200`, and `status.cmd` reports it. FTS5 and WAL are verified in the real image.
 
 ## P02: Working chat
 
@@ -61,7 +63,7 @@ Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-
 - [ ] P02.4 Job queue with persistence and retries.
 - [ ] P02.5 Conversations, messages, variants, streaming over WebSocket, search.
 - [ ] P02.6 Chat list and conversation screens with a built-in minimal character form.
-- [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule. Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
+- [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
 
 Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01 and T-MOD-02 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.
 
@@ -121,7 +123,7 @@ Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13, 
 - [ ] P06.5 Safe shutdown, drain and event persistence.
 - [ ] P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration.
 
-Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.
+Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.
 
 ## P07: Advanced messaging
 

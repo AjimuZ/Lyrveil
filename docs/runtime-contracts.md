@@ -27,7 +27,9 @@ time with `--unpack`, so each start skips self-extraction.
 | `--contextsize` | From the profile, 16384 for Gemma 4 and 8192 for Mistral Nemo | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-launch-levels). |
 | `--gpulayers` | `-1` | Autofit, the upstream default. It adapts when other programs hold VRAM. Without `--moecpu`, the launcher also enables AutoFit with 1024 MB of padding, which places mixture-of-experts weights between GPU and RAM. |
 | `--moecpu` | Only when `MOE_CPU_LAYERS` is above 0 | Keeps the expert weights of the first N layers in RAM. It disables AutoFit. Fallback for the mixture-of-experts profiles, see [Memory estimates](models.md#memory-estimates). |
-| `--batchsize` | `512` | Logical batch size, the upstream default. |
+| `--batchsize` | `BATCH_SIZE`, default `512` | Logical batch size, the upstream default. Accepts -1 and powers of two from 16 to 4096. P02 compares up to 2048. |
+| `--quantkv` | `KV_QUANT`, default `f16` | KV cache type. Accepts `f16`, `bf16`, `q8_0`, `q5_1`, `q4_0`. Full effect needs Flash Attention, which is on by default at `v1.124.2`. |
+| `--usemmap` | Only when `USE_MMAP` is 1 | Loads the model with mmap. Off by default upstream. |
 | `--host` | `0.0.0.0` | Listens on the internal network only, because no port is published. |
 | `--port` | `5001` | Upstream default port. |
 | `--skiplauncher` | No argument | Never opens the GUI launcher. |
@@ -38,7 +40,8 @@ Flash attention is on by default and needs no flag. These flags are never used:
 `--hordekey`, `--savedatafile`, `--preloadstory`, `--password`. Port isolation makes a
 password unnecessary, and a shared secret would add a value to manage.
 
-`--mmproj` is never passed, so the vision encoders of Gemma 4 are not loaded.
+`--mmproj` is never passed, so the vision encoders of Gemma 4 are not loaded. `--moe-cache-mib` is not passed,
+because the source marks it experimental. The three levers above are measured in P02 ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
 Source facts used by the design:
 

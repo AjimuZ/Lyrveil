@@ -218,7 +218,7 @@ The defaults are planning values. After measuring, P02 and P05 set each requirem
 
 ## Load failures and launch levels
 
-The launch settings are in `data/runtime/llm-launch.env` and `image-launch.env`. The backend writes them, and the containers read them at start. See
+The launch settings are in `runtime/llm-launch.env` and `runtime/image-launch.env` in the data volume. The backend writes them, and the containers read them at start. See
 [Configuration](configuration.md#launch-files). No container needs to be recreated to change them.
 
 These launch levels are separate from model profiles. Each level derives from the active profile's context size:
@@ -251,12 +251,19 @@ The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4
 4. If the margin is under 512 MiB, make level B the default for that profile.
 5. If the margin is at least 1024 MiB, the profile's context may grow by one step, only if the margin after the
    increase stays at least 1024 MiB. Gemma 4 grows to 24576, Mistral Nemo to 12288.
-6. Compare batch 256, 512 and 1024 on prompt processing speed. Keep 512 unless another value gains at least 20 %.
+6. Compare batch 256, 512, 1024 and 2048 on prompt processing speed. Keep 512 unless another value gains at least
+   20 % and the margin rule still holds. With experts in RAM, a larger batch may move fewer weights per token.
 7. **Speed rule for the mixture-of-experts default.** Over 20 replies of at least 200 tokens, the median generation
    speed must be at least 15 tokens per second. The first token of a new 6000-token prompt must arrive within 20 s.
    Compare AutoFit with `MOE_CPU_LAYERS` values 8, 12 and 16, and keep the fastest setting that meets the margin rule.
    If no setting meets the speed rule, `gemma-4-12b` becomes the default on every tier
    ([Model catalog](models.md#defaults-and-how-they-can-change)).
+8. **Memory mapping.** Load with `USE_MMAP` 0 and 1. Record RAM used by the container, reload time after an image
+   job, and generation speed. Keep 1 for the profile if it saves at least 2 GiB of RAM or 20 % of reload time, and
+   costs at most 5 % of speed.
+9. **KV cache type.** Load with `KV_QUANT` `f16` and `q8_0`. Record VRAM and speed. `q8_0` becomes the profile's
+   value only if it frees at least 256 MiB or allows the next context step, costs at most 5 % of speed, and the P04
+   Italian protocol scores no lower. Until P04, `f16` stays ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
 ## Timeouts
 
@@ -285,12 +292,12 @@ The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4
 | Unhealthy | Any | Stop it, verify release, then `IDLE` |
 | Any | Unhealthy | Same |
 | Stopped | Stopped | `IDLE` |
-| Container missing | Any | `ERROR` with `RUNTIME_CONTAINER_MISSING`. The message says to run `./setup.sh` |
+| Container missing | Any | `ERROR` with `RUNTIME_CONTAINER_MISSING`. The message says to run `.\setup.cmd` |
 | Docker unreachable | Docker unreachable | `ERROR` with `DOCKER_UNAVAILABLE`, automatic retry |
 
 ## Safe shutdown
 
-`stop.sh` follows this order:
+`stop.cmd` follows this order:
 
 1. Backend pauses the queue and lets a running reply finish, for up to 60 s.
 2. `POST /v1/drain`: the orchestrator stops the runtime and verifies release.

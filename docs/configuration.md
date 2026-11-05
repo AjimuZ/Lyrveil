@@ -1,33 +1,32 @@
 # Configuration
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: planned, phase P01 onward.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: planned, phase P01 onward.
 
 Configuration has three levels:
 
 | Level | Where | Changed by | Applied |
 | --- | --- | --- | --- |
-| Deployment | `.env` | Editing the file, then `./restart.sh` | At container start |
-| Runtime launch | `data/runtime/*.env` | Model settings screen | At next runtime load |
+| Deployment | `.env` | Editing the file, then `.\restart.cmd` | At container start |
+| Runtime launch | `runtime/*.env` in the data volume | Model settings screen | At next runtime load |
 | Application | `application_settings` table | Settings screens or API | At once, unless stated |
 
 ## Deployment settings
 
-`setup.sh` creates `.env` from `.env.example` with mode 600 and fills the generated values. It never overwrites an existing `.env`.
+`setup.cmd` creates `.env` from `.env.example`, limits its access to the current Windows user, and fills the generated values. It never overwrites an existing `.env`.
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LYRVEIL_BIND_ADDRESS` | `127.0.0.1` | Address of the published port. LAN exposure is unsupported, because the API has no authentication. |
 | `LYRVEIL_HTTP_PORT` | `4200` | Published port. |
-| `LYRVEIL_DATA_DIR` | `./data` | Persistent data. Must be on a Linux filesystem. `start.sh` refuses `/mnt/*`. |
-| `LYRVEIL_MODELS_DIR` | `./models` | Weights. A path under `/mnt/*` only causes a warning. |
-| `LYRVEIL_UID`, `LYRVEIL_GID` | Set by `setup.sh` from `id -u`, `id -g` | Containers run as this user, so data files stay accessible on the host. |
-| `LYRVEIL_CONTROL_TOKEN` | Random 32 bytes, hex, set by `setup.sh` | Bearer token of the control API. |
+| `LYRVEIL_BACKUP_DIR` | Empty, meaning `%USERPROFILE%\Documents\Lyrveil\backups` | Windows folder for exported backups. Read by the scripts only. |
+| `LYRVEIL_CONTROL_TOKEN` | Random 32 bytes, hex, set by `setup.cmd` | Bearer token of the control API. |
 | `LYRVEIL_TZ` | `Europe/Rome` | Time zone of time context and scheduling. |
 | `LYRVEIL_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `LYRVEIL_ALLOW_LOW_MEMORY` | `false` | Turns the memory failure in preflight into a warning. Unsupported. |
-| `LYRVEIL_MODEL_LICENSES_ACCEPTED` | `false` | Set by `setup.sh` after the user accepts the model licenses. |
+| `LYRVEIL_MODEL_LICENSES_ACCEPTED` | `false` | Set by `setup.cmd` after the user accepts the model licenses. |
 
-Changing `LYRVEIL_UID` or the data directory does not move or change existing files.
+Changing `LYRVEIL_BACKUP_DIR` does not move existing backups. Live data and models are in the Docker volumes
+`lyrveil-data` and `lyrveil-models`, which have no setting ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)).
 
 Model files are not deployment settings. The active profiles are application settings, and the text model's file reaches
 its container through the launch file ([Model catalog](models.md#selecting-a-profile)).
@@ -38,7 +37,7 @@ The backend writes these two files from the model settings. They are mounted rea
 
 Only known keys with validated values are read. The entrypoint does not `source` the file, because that would execute content. It reads `KEY=VALUE` lines and checks each value against a pattern. Unknown keys or invalid values make the container exit with status 78, which the orchestrator reports as a configuration error.
 
-`data/runtime/llm-launch.env`:
+`runtime/llm-launch.env` in the data volume:
 
 | Key | Default | Allowed |
 | --- | --- | --- |
@@ -46,11 +45,13 @@ Only known keys with validated values are read. The entrypoint does not `source`
 | `MODEL_FILE` | File of that profile | `^[A-Za-z0-9._-]{1,128}\.gguf$`. The file must exist under `/models/llm/` |
 | `CONTEXT_SIZE` | From the profile: `16384` for Gemma 4, `8192` for Mistral Nemo | `4096`, `6144`, `8192`, `12288`, `16384`, `24576` |
 | `GPU_LAYERS` | `-1` | `-1` to `99` |
-| `BATCH_SIZE` | `512` | `128`, `256`, `512`, `1024` |
+| `BATCH_SIZE` | `512` | `128`, `256`, `512`, `1024`, `2048` |
 | `MOE_CPU_LAYERS` | `0`, meaning AutoFit decides | `0` to `99`. Above 0 adds `--moecpu` |
+| `USE_MMAP` | `0` | `0`, `1`. `1` adds `--usemmap`. P02 decides per profile ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)) |
+| `KV_QUANT` | `f16` | `f16`, `q8_0`. Passed as `--quantkv` |
 | `LEVEL` | `A` | `A`, `B`, `C`, `CUSTOM`. See [launch levels](gpu-orchestration.md#load-failures-and-launch-levels) |
 
-`data/runtime/image-launch.env`:
+`runtime/image-launch.env` in the data volume:
 
 | Key | Default | Allowed |
 | --- | --- | --- |
@@ -74,7 +75,7 @@ Values are validated against a Pydantic model. `PATCH /settings` rejects unknown
 
 | Key | Default | Range |
 | --- | --- | --- |
-| `llm.profile_id` | `gemma-4-26b-a4b` on the target tier, `gemma-4-12b` on the reduced tier. Set by `setup.sh` | A text profile allowed on the machine's tier |
+| `llm.profile_id` | `gemma-4-26b-a4b` on the target tier, `gemma-4-12b` on the reduced tier. Set by `setup.cmd` | A text profile allowed on the machine's tier |
 | `images.profile_id` | `illustrious-xl-v2.0` | An image profile |
 | `images.quality` | `alta` | `alta`, `rapida` |
 | `models.custom` | Empty list | Registered [custom profiles](models.md#custom-profiles): identifier, kind, file, size, SHA-256, template family |
@@ -145,10 +146,7 @@ Listed in [Scheduler](scheduler.md#per-conversation-settings).
 ```dotenv
 LYRVEIL_BIND_ADDRESS=127.0.0.1
 LYRVEIL_HTTP_PORT=4200
-LYRVEIL_DATA_DIR=./data
-LYRVEIL_MODELS_DIR=./models
-LYRVEIL_UID=1000
-LYRVEIL_GID=1000
+LYRVEIL_BACKUP_DIR=
 LYRVEIL_CONTROL_TOKEN=generated-by-setup
 LYRVEIL_TZ=Europe/Rome
 LYRVEIL_LOG_LEVEL=INFO

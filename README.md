@@ -46,27 +46,30 @@ Three services are always on. The two AI runtimes never run together. Details ar
 | GPU | NVIDIA RTX 4070, 12 GB | Same |
 | RAM | 32 GB, with [`.wslconfig`](docs/operations.md#wsl2-memory) | 16 GB, with `.wslconfig` and swap |
 | Disk | 50 GB free for setup | 40 GB |
-| Software | Docker Desktop with WSL2 backend, Ubuntu on WSL2, Git | Same |
+| Software | Docker Desktop with WSL2 backend, Git for Windows | Same |
 
 See the [full requirements](docs/operations.md#requirements).
 
 ## Installation
 
-Planned for P01. Run these in Ubuntu on WSL2, not on `/mnt/c`:
+Planned for P01. Everything runs from Windows, in PowerShell or with a double click. Docker Desktop runs the containers
+in its own virtual machine, which you never open.
 
-```bash
-git clone https://github.com/AjimuZ/Lyrveil.git lyrveil
+```powershell
+git clone https://github.com/AjimuZ/Lyrveil.git $env:USERPROFILE\Desktop\projects\lyrveil
 ```
 
-```bash
-cd lyrveil
+```powershell
+cd $env:USERPROFILE\Desktop\projects\lyrveil
 ```
 
-```bash
-./setup.sh
+```powershell
+.\setup.cmd
 ```
 
-`setup.sh` checks the system, shows the model licenses for your acceptance, downloads the default text and image models of your hardware tier with verification, and builds the images.
+`setup.cmd` checks the system, shows the model licenses for your acceptance, downloads the default text and image models of your hardware tier with verification, and builds the images.
+Conversations and models are kept in Docker volumes for speed, and a daily backup is copied to
+`Documents\Lyrveil\backups`.
 
 ## Configuration
 
@@ -74,11 +77,11 @@ Settings live in `.env`, in the launch files and in the application's settings s
 
 ## Starting
 
-```bash
-./start.sh
+```powershell
+.\start.cmd
 ```
 
-Then open `http://localhost:4200`. The other commands are `./stop.sh`, `./restart.sh`, `./status.sh` and `./logs.sh`.
+Then open `http://localhost:4200`. The other commands are `.\stop.cmd`, `.\restart.cmd`, `.\status.cmd` and `.\logs.cmd`.
 
 ## Supported models
 
@@ -119,6 +122,7 @@ These are expected in version 1.0:
 - The 26B text profiles keep part of their weights in system RAM. They need 32 GB and start a new long conversation more slowly than the 12B profiles.
 - Characters must be adults, and the safeguards are best-effort filters.
 - Data is not encrypted by Lyrveil. Use disk encryption.
+- Conversations and models are stored in Docker volumes, not in visible folders. Resetting or uninstalling Docker Desktop deletes them. The daily backup copied to Windows limits the loss to one day.
 - All characters are simulated by AI models. They can be wrong, and are not a source of advice.
 
 ## Troubleshooting

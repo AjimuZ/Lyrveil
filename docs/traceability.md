@@ -5,14 +5,14 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. A
 | Requirements | Topic | Design | Phase | Tests |
 | --- | --- | --- | --- | --- |
 | R-PRD-01 to R-PRD-06 | Product | [Architecture](architecture.md), [Frontend](frontend.md) | P01 to P09 | AC-01 to AC-20 |
-| R-HW-01 to R-HW-05 | Hardware | [Operations](operations.md#requirements), [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md), [ADR 0008](decisions/0008-persistence-on-wsl2-ext4-bind-mounts.md) | P01 | T-DCK-07, T-DCK-08, T-GPU-12 |
+| R-HW-01 to R-HW-05 | Hardware | [Operations](operations.md#requirements), [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md), [ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md) | P01 | T-DCK-04, T-DCK-07, T-DCK-08, T-DCK-13, T-GPU-12 |
 | R-STK-01 | Frontend stack | [Frontend](frontend.md), [Technology](technology.md#frontend), [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md) | P01 | Frontend unit tests, T-QLT-04 |
 | R-STK-02 | Backend stack | [Backend](backend.md), [Technology](technology.md#backend-and-orchestrator), [ADR 0009](decisions/0009-synchronous-sqlalchemy.md) | P01 | Backend unit and integration tests |
 | R-STK-03 to R-STK-05 | Infrastructure, runtimes | [Operations](operations.md#reference-compose-file), [ADR 0003](decisions/0003-service-topology-and-networks.md), [ADR 0007](decisions/0007-own-runtime-images-pinned.md), [ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md) | P01, P02, P05 | T-DCK-01 to T-DCK-05 |
-| R-MOD-01 to R-MOD-03 | Text model | [Model catalog](models.md), [Runtime contracts](runtime-contracts.md), [Tuning](gpu-orchestration.md#measuring-and-tuning), [ADR 0024](decisions/0024-selectable-model-profiles.md), [ADR 0025](decisions/0025-prompt-templates-per-model-family.md) | P02 | T-MOD-01, T-MOD-02, T-GPU-02 to T-GPU-04, T-GPU-14 |
+| R-MOD-01 to R-MOD-03 | Text model | [Model catalog](models.md), [Runtime contracts](runtime-contracts.md), [Tuning](gpu-orchestration.md#measuring-and-tuning), [ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md), [ADR 0024](decisions/0024-selectable-model-profiles.md), [ADR 0025](decisions/0025-prompt-templates-per-model-family.md) | P02 | T-MOD-01, T-MOD-02, T-GPU-02 to T-GPU-04, T-GPU-14 |
 | R-MOD-04, R-MOD-05 | Image model | [Model catalog](models.md#image-profiles), [Image generation](image-generation.md#default-parameters) | P05 | T-GPU-06, T-IMG-14, T-QLT-02 |
 | R-MOD-06, R-MOD-07 | One active model per kind, adapters | [Backend ports](backend.md#ports), [Model catalog](models.md), [Risks](risks.md) | P02, P05 | Dependency review, T-DCK-10, T-MOD-01 |
-| R-MOD-08 | Profile selection and custom files | [Model catalog](models.md#selecting-a-profile), [Security](security.md#model-files), [Frontend](frontend.md#9-model-settings), [API](api.md#jobs-scheduling-notifications-settings-data) | P06 | T-MOD-03, T-MOD-04 |
+| R-MOD-08 | Profile selection and custom files | [Model catalog](models.md#selecting-a-profile), [Security](security.md#model-files), [Frontend](frontend.md#9-model-settings), [API](api.md#jobs-scheduling-notifications-settings-data) | P06 | T-MOD-03, T-MOD-04, T-DCK-14 |
 | R-MOD-09 | Quality presets | [Image generation](image-generation.md#default-parameters), [ADR 0026](decisions/0026-two-pass-image-rendering.md) | P05, P06 | T-IMG-11, T-IMG-14 |
 | R-LNG-01 to R-LNG-05 | Italian | [Prompting](prompting.md), [Design text](design-system.md#interface-text), [Frontend](frontend.md#text-and-translation) | P02, P04, P08 | T-QLT-01 |
 | R-LNG-06 | Italian image requests | [Image generation](image-generation.md#visual-promptbuilder) | P05 | T-IMG-01, T-IMG-03, T-GPU-06 |
@@ -58,8 +58,8 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. A
 | R-BE-07 | Backup, export, restore | [Backup](operations.md#backup-and-restore) | P03 | T-DCK-12, T-CHR-05 |
 | R-OPS-01, R-OPS-02 | Services | [Components](architecture.md#components), [Compose](operations.md#reference-compose-file) | P01 | T-DCK-05 |
 | R-OPS-03, R-OPS-04 | Docker security | [Docker socket](security.md#docker-socket), [ADR 0006](decisions/0006-docker-socket-confined-to-orchestrator.md) | P01 | T-ORC-07, T-ORC-10, T-DCK-09 |
-| R-OPS-05 to R-OPS-07 | Scripts | [Scripts](operations.md#scripts), [ADR 0022](decisions/0022-root-scripts-and-repository-layout.md) | P01 | T-DCK-01 to T-DCK-07 |
-| R-OPS-08 | Model download | [Download](operations.md#scriptsdownload-modelssh) | P01 | T-DCK-11 |
+| R-OPS-05 to R-OPS-07 | Scripts | [Scripts](operations.md#scripts), [ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md) | P01 | T-DCK-01 to T-DCK-07, T-DCK-13 |
+| R-OPS-08 | Model download | [Download](operations.md#model-downloads) | P01 | T-DCK-11 |
 | R-PUB-01 to R-PUB-03, R-PUB-09 | Repository | [Publishing](publishing.md#never-commit), `.gitignore`, `.dockerignore` | P00, P09 | [Documentation checks](verification/2026-11-01-documentation.md), audit |
 | R-PUB-04 | Licenses | [Licensing](licensing.md), [ADR 0002](decisions/0002-license-apache-2.md) | P00, P09 | Audit |
 | R-PUB-05, R-PUB-06 | README, demo data | [README](../README.md), [Demo characters](character-system.md#demo-characters) | P00, P08 | Audit |

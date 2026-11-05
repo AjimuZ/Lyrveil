@@ -41,7 +41,7 @@ receives generated messages and images.
 | R-HW-01 | The system is optimized for Windows 11, NVIDIA RTX 4070 with 12 GB of VRAM, 32 GB of RAM, Docker Desktop, WSL2 and CUDA. |
 | R-HW-02 | The application works offline after the first configuration. |
 | R-HW-03 | No commercial API, cloud service or subscription is mandatory. |
-| R-HW-04 | Sources, models and persistent data live preferably on the Linux filesystem of WSL2. |
+| R-HW-04 | Sources live in a Windows folder. Persistent data and models live in Docker volumes, which Docker Desktop keeps on the Linux filesystem of its WSL2 machine, and backups are exported to a Windows folder. Revised on 2026-11-05 at the owner's request ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). |
 | R-HW-05 | Automatic checks cover CUDA compatibility, GPU availability, VRAM, RAM and disk space. |
 
 The tiers are defined in [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md). The
@@ -53,7 +53,7 @@ reference machine was measured at 32 GB on 2026-11-05.
 | --- | --- |
 | R-STK-01 | Frontend: Angular 19 or a later compatible version, TypeScript, standalone components, signals, SCSS, Angular Router, reusable components, modular architecture, WebSocket events, responsive desktop and mobile layouts, zoneless when stable. |
 | R-STK-02 | Backend: Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic, SQLite in WAL mode, SQLite FTS5, WebSocket, typed REST APIs, persistent background jobs, asynchronous operations. |
-| R-STK-03 | Infrastructure: Docker, Docker Compose, WSL2, NVIDIA CUDA, persistent volumes, health checks, structured logging, Bash management scripts. |
+| R-STK-03 | Infrastructure: Docker, Docker Compose, WSL2, NVIDIA CUDA, persistent volumes, health checks, structured logging, Windows management scripts: PowerShell with `.cmd` entry points, revised from Bash on 2026-11-05 at the owner's request. |
 | R-STK-04 | AI runtimes: KoboldCpp for text and ComfyUI for images. |
 | R-STK-05 | No Redis, PostgreSQL, vector database or other infrastructure service without a concrete technical need. The architecture allows adding one later. |
 
@@ -248,8 +248,8 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-OPS-02 | The first three stay active. AI services run only when needed. |
 | R-OPS-03 | The Docker socket is not exposed to untrusted services. The lifecycle manager controls only Lyrveil containers, through reduced authority and an explicit allowlist. Residual risks are documented. |
 | R-OPS-04 | Administrative ports are not published on the external network. |
-| R-OPS-05 | The root has `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh` and `setup.sh`. The main command is `./start.sh`. |
-| R-OPS-06 | `start.sh` verifies Docker, Compose, GPU support, persistent directories and models, runs setup if needed, starts services, verifies health checks, starts the text model and shows the local URL `http://localhost:4200`. |
+| R-OPS-05 | The root has `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd` and `setup.cmd`. The main command is `.\start.cmd`. The brief's `.sh` names were replaced on 2026-11-05 at the owner's request. |
+| R-OPS-06 | `start.cmd` verifies Docker, Compose, GPU support, persistent volumes and models, runs setup if needed, starts services, verifies health checks, starts the text model and shows the local URL `http://localhost:4200`. |
 | R-OPS-07 | Scripts are idempotent. Normal restarts and updates never delete persistent data. |
 | R-OPS-08 | A script downloads the default models for the machine's tier, and any other catalog model on request, to the right directories: only the needed files, resumable, verified for integrity and size, no re-download of valid files, network errors handled, required space shown, weights never inside Docker images. Downloads are separate from the build. |
 
@@ -261,7 +261,7 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-PUB-02 | The repository excludes weights, real databases, conversations, personal memories, user images, personal references, real `.env` files, tokens, passwords, caches, logs, backups, temporary files, Docker volumes and local user data. |
 | R-PUB-03 | `.gitignore` and `.dockerignore` are configured before the first commit. |
 | R-PUB-04 | Licenses of KoboldCpp, ComfyUI, Python and Angular dependencies, every catalog model, graphic assets and fonts are verified and documented with attribution duties. Weights are never distributed. The code license is compatible with what is actually distributed. |
-| R-PUB-05 | The public README has description, demo screenshots, features, architecture, hardware requirements, installation, configuration, start with `start.sh`, supported models, how memory works, how images work, limitations, troubleshooting, licenses and acknowledgements. |
+| R-PUB-05 | The public README has description, demo screenshots, features, architecture, hardware requirements, installation, configuration, start with `start.cmd`, supported models, how memory works, how images work, limitations, troubleshooting, licenses and acknowledgements. |
 | R-PUB-06 | Only original demo characters and synthetic data are used. |
 | R-PUB-07 | Commits are readable and progressive. Unverified code is not pushed. |
 | R-PUB-08 | Before publication: tests, dependency check, secret scan, large-file check, personal-data check, history check, license check, clean build, then publication with the GitHub CLI when authenticated. Otherwise the local repository stays ready and the necessary steps are documented. |
@@ -277,7 +277,7 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-TST-04 | Consistency tests use several characters: no automatic knowledge from another character, no state leakage between independent chats, no canonical change without an authorized operation. |
 | R-TST-05 | Messaging tests cover chat creation, sending, streaming, regeneration, editing, deletion, page reload, history recovery and several simultaneous conversations. |
 | R-TST-06 | Image tests cover prompt creation, GPU alternation, ComfyUI start, real generation, saving, insertion in the chat, text model recovery, persistence after restart and regeneration. |
-| R-TST-07 | Docker tests cover `start.sh`, `stop.sh`, restart, volume persistence, health checks, GPU passthrough, absence of orphan processes and CUDA error handling. |
+| R-TST-07 | Docker tests cover `start.cmd`, `stop.cmd`, restart, volume persistence, health checks, GPU passthrough, absence of orphan processes and CUDA error handling. |
 | R-TST-08 | Orchestration logic tests run without a GPU through simulated runtimes. Real GPU tests run when the hardware is available. Tests not executed are never declared passed. |
 
 ## 19. Delivery and engineering rules
@@ -313,7 +313,7 @@ dated evidence in `docs/verification/`:
 | --- | --- |
 | AC-01 | Clone the repository. |
 | AC-02 | Install the required models through setup. |
-| AC-03 | Start the application with `./start.sh`. |
+| AC-03 | Start the application with `.\start.cmd`. |
 | AC-04 | Open Lyrveil in the browser. |
 | AC-05 | Create a character. |
 | AC-06 | Define its look and personality. |

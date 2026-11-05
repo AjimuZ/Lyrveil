@@ -43,13 +43,13 @@ name what remains. Never document an unexecuted check as passed.
 
 ## Checks
 
-```bash
-./scripts/test.sh unit
-./scripts/test.sh integration
-./scripts/test.sh e2e
+```powershell
+.\scripts\lyrveil.cmd test unit
+.\scripts\lyrveil.cmd test integration
+.\scripts\lyrveil.cmd test e2e
 ```
 
-Run `./scripts/test.sh gpu` when the change touches the runtimes, the orchestration
+Run `.\scripts\lyrveil.cmd test gpu` when the change touches the runtimes, the orchestration
 or the image pipeline and the hardware is available. See
 [docs/testing.md](docs/testing.md).
 
@@ -65,7 +65,11 @@ or the image pipeline and the hardware is available. See
   inside `async def`.
 - TypeScript: strict mode, standalone components, signals, zoneless. See
   [docs/frontend.md](docs/frontend.md).
-- Shell: `set -euo pipefail`, idempotent, checked with `shellcheck`.
+- Windows scripts: compatible with Windows PowerShell 5.1, `Set-StrictMode -Version Latest`, idempotent, checked
+  with PSScriptAnalyzer and tested with Pester.
+- Shell scripts inside images: `set -euo pipefail`, checked with `shellcheck`.
+- Never bind-mount source code or `node_modules` into a container. Builds read the Windows folder directly, while a
+  bind mount from `C:` is slow ([ADR 0029](docs/decisions/0029-windows-operation-with-docker-volumes.md)).
 - Never log message content, prompts or memory text at any default log level.
 
 ## Documentation

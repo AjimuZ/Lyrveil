@@ -63,7 +63,7 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
 
 ## Catalog file
 
-`config/model-catalog.json` is part of the repository and is reviewed like code. The backend validates it at startup with a Pydantic model and refuses to start on an error. `scripts/download-models.sh` reads it with the Python standard library. One text entry and one image entry:
+`config/model-catalog.json` is part of the repository and is reviewed like code. The backend validates it at startup with a Pydantic model and refuses to start on an error. `scripts\lyrveil.cmd models` reads it with the Python standard library. One text entry and one image entry:
 
 ```json
 {
@@ -84,7 +84,10 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
       "moe": true,
       "vram_required_mib": 7000,
       "vram_preferred_mib": 10000,
-      "sampler": "gemma4"
+      "sampler": "gemma4",
+      "use_mmap": false,
+      "kv_quant": "f16",
+      "batch_size": 512
     }
   ],
   "image": [
@@ -115,11 +118,11 @@ Rules checked by the validator:
 
 ## Selecting a profile
 
-**Impostazioni > Modelli** lists each profile with its state: present and verified, present with a size mismatch, or missing. A missing file shows its size and the exact command, for example `./scripts/download-models.sh --model orion-26b-a4b`. Profiles above the machine's tier are listed but cannot be selected.
+**Impostazioni > Modelli** lists each profile with its state: present and verified, present with a size mismatch, or missing. A missing file shows its size and the exact command, for example `.\scripts\lyrveil.cmd models -Model orion-26b-a4b`. Profiles above the machine's tier are listed but cannot be selected.
 
 | Change | Effect |
 | --- | --- |
-| Text profile | The backend writes `MODEL_PROFILE`, `MODEL_FILE`, `CONTEXT_SIZE` and `MOE_CPU_LAYERS` to `data/runtime/llm-launch.env`. **Applica ora** waits for the running reply, sets the desired mode to `none` and then to `llm`, so the runtime stops, the release is verified and the new file loads. Queued work continues with the new model |
+| Text profile | The backend writes `MODEL_PROFILE`, `MODEL_FILE`, `CONTEXT_SIZE`, `MOE_CPU_LAYERS`, `USE_MMAP` and `KV_QUANT` to `runtime/llm-launch.env` in the data volume. **Applica ora** waits for the running reply, sets the desired mode to `none` and then to `llm`, so the runtime stops, the release is verified and the new file loads. Queued work continues with the new model |
 | Image profile | Stored in `images.profile_id`. The next image job uses it. ComfyUI loads checkpoints on demand, so no restart is needed |
 | Quality preset | `images.quality` sets the default. The image form can override it per request |
 
@@ -131,9 +134,9 @@ A text profile change also:
 
 ## Custom profiles
 
-A user can register a file already placed in `models/llm/` or `models/image/checkpoints/`:
+A user can register a file imported into the models volume with `.\scripts\lyrveil.cmd import-model <file>`:
 
-1. **Aggiungi file locale** lists unregistered `.gguf` and `.safetensors` files in those two folders. Paths outside them cannot be chosen.
+1. **Aggiungi file locale** lists unregistered `.gguf` and `.safetensors` files in `llm/` and `image/checkpoints/` of the volume. Paths outside them cannot be chosen.
 2. For a GGUF file the user picks the template family. For a checkpoint, only SDXL with epsilon prediction is offered.
 3. The backend computes the SHA-256 in a background job and stores the profile in the setting `models.custom` as `custom-<first 12 hex characters of the hash>`.
 4. The profile is marked **non verificato**. It uses the reduced-tier VRAM thresholds of its family and the generic sampler preset. A size change makes it invalid until it is registered again.
@@ -160,5 +163,9 @@ How the KV figures were computed, with 16-bit cache entries:
 The large Gemma vocabulary of 262,144 tokens makes the output buffer bigger than Mistral Nemo's.
 
 For the mixture-of-experts profiles, KoboldCpp's AutoFit decides which expert weights stay in RAM. With `--gpulayers -1` and no `--moecpu`, the launcher enables AutoFit with 1,024 MB of padding (`koboldcpp.py` at `v1.124.2`). `MOE_CPU_LAYERS` sets `--moecpu` explicitly, which disables AutoFit. P02 uses it only if AutoFit fails or is slower.
+
+Weights kept in RAM are copied into the runtime's memory by default, while the file also fills the page cache.
+`USE_MMAP=1` maps them from the page cache instead, which can save their size in RAM and keep both default files
+cached within the 24 GB given to Docker. P02 decides per profile ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
 Expected speed, also an estimate: each token reads about 0.8 GB of active expert weights. With about 40 to 45 % of them in RAM, dual-channel DDR5-5600 allows well over 15 tokens per second. Processing a new long prompt is slower than with a dense model that fits on the GPU, because expert weights move over PCIe for each batch.

@@ -157,7 +157,7 @@ written, its status becomes `interrupted` and the interface offers regeneration.
 ### Shutdown sequence
 
 On SIGTERM: stop accepting jobs, flush the running reply, release the lease, close
-WebSockets and exit. The `stop.sh` drain runs earlier, so this is normally quick.
+WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quick.
 
 ## Job handlers
 

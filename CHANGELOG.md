@@ -17,7 +17,7 @@ No application exists yet. This section records the design documentation.
   Lifecycle Manager, image generation, proactive messages and the Character Creator.
 - The Obsidian Bloom design system and the specification of the ten screens.
 - Operations, security, licensing, testing and publication guides, a phased
-  roadmap with exit checks, a risk register and 28 architecture decision records.
+  roadmap with exit checks, a risk register and 30 architecture decision records.
 - Repository hygiene files that keep model weights, user data and secrets out of
   Git and Docker images.
 - A model catalog: the user chooses the active text and image models from verified
@@ -34,3 +34,6 @@ No application exists yet. This section records the design documentation.
 - Prompts follow the official template of each model family.
 - The 32 GB machine is the target tier, and KoboldCpp is pinned to `v1.124.2`
   because `v1.124.1` was withdrawn upstream.
+- Lyrveil is installed and run from Windows: `.cmd` entry points replace the Bash
+  scripts, live data and models live in Docker volumes, and a daily backup is
+  copied to a Windows folder. No Linux distribution is needed.

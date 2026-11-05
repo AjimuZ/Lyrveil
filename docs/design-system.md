@@ -57,7 +57,7 @@ Other shades derive from the tokens. No other literal color appears in the code.
 }
 ```
 
-A check in `scripts/test.sh` fails when a color literal appears outside the token file.
+A check in `scripts\lyrveil.cmd test` fails when a color literal appears outside the token file.
 
 ### Contrast
 

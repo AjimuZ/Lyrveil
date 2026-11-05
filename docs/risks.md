@@ -8,13 +8,9 @@ None. Every question raised during design has an accepted decision in [the ADRs]
 
 ## Real blockers
 
-None for implementation. Two conditions must be met on the reference machine first, and both are one-time setup.
-Measured on 2026-11-05 ([verification](verification/2026-11-05-environment.md)):
-
-| Condition | Measured | Action |
-| --- | --- | --- |
-| Docker needs at least 20 GiB for the target tier | 15.50 GiB with 32 GB installed, no `.wslconfig` | Apply the 32 GB [`.wslconfig`](operations.md#wsl2-memory) |
-| A Linux distribution is required for the scripts | Only `docker-desktop` | `wsl --install -d Ubuntu-24.04`, then clone inside it |
+None. Since 2026-11-05 the reference machine meets the setup conditions: Docker sees 23.47 GiB after the 32 GB
+`.wslconfig`, and no Linux distribution is needed, because Lyrveil runs from Windows
+([verification](verification/2026-11-05-environment.md#after-the-changes)).
 
 ## Assumptions
 
@@ -32,6 +28,7 @@ Each assumption is verified by a named check. A failure triggers the stated deci
 | A-08 | FTS5 with Snowball stemming reaches recall at 8 of 80 % | T-MEM-22 | Tune weights and stop words. Record the result. Embeddings need a new ADR |
 | A-09 | GBNF grammar gives valid JSON with acceptable speed | T-GPU-05 | Generic JSON grammar plus validation and repair |
 | A-10 | Group 0 lets a non-root user use the Docker socket on Docker Desktop | P01.4. The socket's mode was measured | Run that one container as user 0, with all capabilities dropped |
+| A-14 | Compose volume subpaths work with external volumes on Docker Desktop for Windows | T-DCK-04, T-DCK-13 | Mount whole volumes and keep launch files in a third small volume |
 | A-11 | Docker `internal: true` networks work with `--gpus` on Docker Desktop | T-DCK-08, T-GPU-01 | Keep the network and add an egress check. Never publish a runtime port |
 | A-12 | `gemma-4-26b-a4b` with experts partly in RAM meets the speed rule: median at least 15 tokens per second, first token of a 6000-token prompt within 20 s | T-GPU-14 | `gemma-4-12b` becomes the default on every tier. The 26B profiles stay selectable with a speed note |
 | A-13 | The **Alta** render stage stays at most 45 s at the 95th percentile | T-IMG-14 | **Rapida** becomes the default. **Alta** stays selectable |
@@ -56,7 +53,7 @@ Owner for all rows: the project maintainer.
 | R-12 | The product encourages unhealthy attachment | Low | High | Clear simulation notice, proactive off by default, no guilt, leaving fiction on danger | Reinforce the rules in templates |
 | R-13 | Private data enters Git | Low | Critical | Ignore rules first, synthetic fixtures, audit | [Publishing](publishing.md#never-commit) procedure |
 | R-14 | Docker Desktop updates change GPU behavior | Medium | Medium | Preflight on each start | Record the working versions in verification notes |
-| R-15 | User loses data by removing the WSL distribution | Low | High | Backups, documented data location | Restore from backup |
+| R-15 | User loses data by resetting Docker Desktop's data or uninstalling it, which deletes the volumes | Low | High | External volumes, daily backups copied to a Windows folder, a README warning | Run setup, then restore the newest backup |
 | R-16 | Memory extraction stores wrong facts | Medium | Medium | Provenance, labels, Memory Studio, tombstones | The user corrects. Quality tests add the case |
 | R-17 | SQLite corruption or a disk failure | Low | High | WAL with `synchronous=FULL`, Linux filesystem only, backups | Restore from backup |
 | R-18 | Characters drift in long chats | Medium | Medium | Identity block never cut, canonical protection, validators | Tune templates, add examples |

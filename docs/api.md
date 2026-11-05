@@ -67,7 +67,7 @@ Operational codes, reported in logs, in `last_error` of the state document and i
 | --- | --- |
 | `DB_CAPABILITY_MISSING` | Startup check of FTS5 or WAL failed. |
 | `EXCLUSIVITY_VIOLATION` | Reconciliation found both runtimes running. |
-| `RUNTIME_CONTAINER_MISSING` | A runtime container does not exist. Run `./setup.sh`. |
+| `RUNTIME_CONTAINER_MISSING` | A runtime container does not exist. Run `.\setup.cmd`. |
 | `RUNTIME_CONFIG_INVALID` | A runtime exited with status 78 because of its launch file. |
 | `DOCKER_UNAVAILABLE` | The Docker Engine does not answer. |
 
@@ -85,7 +85,7 @@ All paths are under `/api/v1`.
 | `GET /system/resources` | VRAM, memory seen by Docker, disk, tokens per second. Real values only. |
 | `GET /system/lifecycle-events?cursor=` | Transition log. |
 | `POST /system/recover` | Asks the orchestrator to leave `ERROR`. |
-| `GET /system/preflight` | The same checks as `start.sh`, for the settings screen. |
+| `GET /system/preflight` | The same checks as `start.cmd`, for the settings screen. |
 
 ### Characters
 
@@ -235,7 +235,7 @@ Media is looked up by identifier. A request path never becomes a file path.
 | `POST /settings/models/apply` | Reloads the text model with the current launch file. Waits for the running reply. Returns `202` with the job identifier. |
 | `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "gemma4"}`. The file must already be in its models folder. Starts the hash job and returns `202`. |
 | `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
-| `POST /backups`, `GET /backups` | Create and list. Restore is `scripts/restore.sh`, because it stops services. |
+| `POST /backups`, `GET /backups` | Create and list. Restore is `scripts\lyrveil.cmd restore`, because it stops services. |
 
 ## Event WebSocket
 

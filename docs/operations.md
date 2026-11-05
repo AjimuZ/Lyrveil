@@ -1,6 +1,7 @@
 # Operations
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and the 32 GB reference machine. The scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles, the 32 GB reference machine and operation from
+Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). The scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification.
 
 ## Requirements
 
@@ -11,8 +12,8 @@ Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and the 32 
 | Windows RAM | 32 GB | 16 GB | Under 16 GB |
 | WSL2 `memory` | `24GB` | `12GB` | Docker sees under 11 GiB |
 | WSL2 `swap` | `8GB` | `16GB` | |
-| Free disk | 50 GB for setup with the default profiles | 40 GB | |
-| Software | Docker Desktop with WSL2 backend, an Ubuntu WSL distribution, Git | Same | |
+| Free disk | 50 GB on the drive that holds Docker Desktop's data, usually `C:` | 40 GB | |
+| Software | Docker Desktop with WSL2 backend, Git for Windows. No Linux distribution is needed | Same | |
 | NVIDIA driver | CUDA driver version at least 13.0, Windows driver only | Same | A Linux NVIDIA driver inside WSL2 |
 
 In the reduced tier, close other heavy programs during image generation. See [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md).
@@ -30,19 +31,22 @@ Each tier has its own default text profile ([Model catalog](models.md#defaults-a
 | ComfyUI image with PyTorch and CUDA | About 8 to 12 GB |
 | Frontend, backend and orchestrator images | Under 1 GB |
 | Application data | Grows with use. About 2 to 3 MB per **Rapida** image and 4 to 6 MB per **Alta** image |
+| Exported backups | One file per day in the Windows backup folder, never pruned by Lyrveil |
+
+Images and volumes live in Docker Desktop's disk image under `%LOCALAPPDATA%\Docker\wsl`. Space freed inside it, for
+example by deleting a model, may not return to Windows until Docker Desktop shrinks the image.
 
 ## First installation
 
-### 1. Prepare WSL2 and Docker
+Everything runs from Windows. Docker Desktop runs the containers in its own WSL2 virtual machine, which you never open.
 
-From PowerShell:
+### 1. Prepare Docker Desktop
+
+Install Docker Desktop with the WSL2 backend, then update WSL from PowerShell:
 
 ```powershell
 wsl --update
-wsl --install -d Ubuntu-24.04
 ```
-
-In Docker Desktop, open **Settings > Resources > WSL integration** and enable the Ubuntu distribution.
 
 ### WSL2 memory
 
@@ -64,7 +68,7 @@ memory=12GB
 swap=16GB
 ```
 
-Then apply it from PowerShell. This stops all running WSL distributions and Docker Desktop containers:
+Then apply it from PowerShell, and start Docker Desktop again. This stops all running containers:
 
 ```powershell
 wsl --shutdown
@@ -72,34 +76,44 @@ wsl --shutdown
 
 Lyrveil's scripts never change this file. Preflight prints the right values when memory is too low.
 
-### 2. Clone inside Ubuntu
+### 2. Clone
 
-Keep the repository on the Linux filesystem. SQLite in WAL mode is unreliable on `/mnt/c`, and `start.sh` refuses it.
+Any folder on a local drive works. Live data never lives in this folder, so its speed does not matter
+([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)).
 
-```bash
-mkdir -p ~/projects
-cd ~/projects
-git clone https://github.com/AjimuZ/Lyrveil.git lyrveil
-cd lyrveil
+```powershell
+git clone https://github.com/AjimuZ/Lyrveil.git $env:USERPROFILE\Desktop\projects\lyrveil
+```
+
+```powershell
+cd $env:USERPROFILE\Desktop\projects\lyrveil
 ```
 
 ### 3. Run setup
 
-```bash
-./setup.sh
+```powershell
+.\setup.cmd
 ```
+
+A double click on `setup.cmd` in Explorer works too.
 
 ### 4. Start
 
-```bash
-./start.sh
+```powershell
+.\start.cmd
 ```
 
 Open `http://localhost:4200`.
 
 ## Scripts
 
-The root scripts are thin entry points to `scripts/*.sh`. All use `set -euo pipefail`, are idempotent, and never delete persistent data.
+The root holds six one-line entry points: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd` and
+`logs.cmd`. Each runs `scripts\lyrveil.ps1` with Windows PowerShell 5.1, `-NoProfile -ExecutionPolicy Bypass`, and
+passes its arguments. The bypass applies to that process only. `scripts\lyrveil.cmd <command>` runs the other commands:
+`models`, `import-model`, `backup`, `restore` and `test`.
+
+All scripts set `$ErrorActionPreference = 'Stop'` and `Set-StrictMode -Version Latest`, check `$LASTEXITCODE` after
+every native command, are idempotent, and never delete persistent data.
 
 | Exit status | Meaning |
 | --- | --- |
@@ -110,103 +124,123 @@ The root scripts are thin entry points to `scripts/*.sh`. All use `set -euo pipe
 | 4 | Model file missing or invalid |
 | 5 | The user declined |
 
-### `setup.sh`
+### `setup.cmd`
 
-Options: `--accept-model-licenses`, `--verify-models`, `--rebuild`, `--skip-models`.
+Options: `-AcceptModelLicenses`, `-VerifyModels`, `-Rebuild`, `-SkipModels`.
 
-1. Check Git, Docker, Compose and Docker's memory, and show the required space.
-2. Refuse to continue from `/mnt/*`.
-3. Create `.env` if missing, with a new token, UID and GID.
-4. Create `data/` and `models/` subdirectories.
+1. Check Git, Docker, Compose, the memory Docker sees, and free space on the drive that holds Docker Desktop's data.
+2. Create `.env` if missing, with a new token, and limit its access to the current Windows user with `icacls`.
+3. Create the volumes `lyrveil-data` and `lyrveil-models` if missing, with the label `io.lyrveil.volume`. Set their
+   owner to UID and GID 10001 once, with a container that has no network and only `CAP_CHOWN`.
+4. Build images: `docker compose --profile ai --profile tools build`. The Docker CLI reads the build context directly
+   from the Windows folder.
 5. Pick the default text profile from the memory Docker sees ([ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md)).
    Show the licenses of the default profiles and ask for acceptance. See [Licensing](licensing.md#models).
-6. Download and verify the default profiles with `scripts/download-models.sh`.
-7. Write default launch files if missing, with the default text profile.
-8. Build images: `docker compose --profile ai build`.
-9. Create the runtime containers without starting them: `docker compose --profile ai create lyrveil-llm lyrveil-image`.
+6. Download and verify the default profiles, as in [Model downloads](#model-downloads).
+7. Write default launch files into the data volume if missing, with the default text profile.
+8. Create the runtime containers without starting them: `docker compose --profile ai create lyrveil-llm lyrveil-image`.
 
 Running it again repeats only what is missing.
 
-### `scripts/download-models.sh`
+### Model downloads
 
-URLs, sizes and hashes come from `config/model-catalog.json` ([Model catalog](models.md#catalog-file)). Text files go
-to `models/llm/`, image checkpoints to `models/image/checkpoints/`.
+`scripts\lyrveil.cmd models` runs the one-shot `lyrveil-models` service of the `tools` profile. It is the only
+container with a route out, and it mounts only the models volume. URLs, sizes and hashes come from
+`config/model-catalog.json`, which is part of the backend image ([Model catalog](models.md#catalog-file)). Text files go
+to `llm/` in the volume, image checkpoints to `image/checkpoints/`.
 
 | Option | Downloads |
 | --- | --- |
 | None | The default text and image profiles of the machine's tier: 21.38 GB on the target tier, 13.91 GB on the reduced tier |
-| `--model <id>` | One profile from the catalog. Repeatable. Asks for license acceptance unless `--accept-model-licenses` is given |
-| `--all` | Every profile allowed on the machine's tier |
-| `--list` | Prints the catalog with sizes, licenses and local state. Downloads nothing |
+| `-Model <id>` | One profile from the catalog. Repeatable. Asks for license acceptance unless `-AcceptModelLicenses` is given |
+| `-All` | Every profile allowed on the machine's tier |
+| `-List` | Prints the catalog with sizes, licenses and local state. Downloads nothing |
+| `-Verify` | Recomputes the hash of every present file. Downloads nothing |
+| `-Remove <id>` | Deletes the file of a profile that is not active. Asks for confirmation |
 
-Behavior:
+Behavior, in Python with the standard library only:
 
 1. Show the required space for the chosen files and compare it with free space. Stop if insufficient.
-2. Skip a file when `models/.verified.json` records the same size and modification time and a matching hash.
-3. Download to `<file>.part` with `curl --fail --location --continue-at - --retry 5 --retry-delay 5`. Revisions are pinned, so a resume cannot mix two versions.
+2. Skip a file when `/models/.verified.json` records the same size and modification time and a matching hash.
+3. Download to `<file>.part` with HTTP range requests, TLS verification, redirects only to HTTPS, and 5 retries 5 s
+   apart. Revisions are pinned, so a resume cannot mix two versions.
 4. Check the size, then compute the SHA-256.
 5. On a mismatch, keep nothing: delete the `.part` file and exit 4.
-6. Move to the final name atomically and update `models/.verified.json`.
+6. Move to the final name atomically and update `/models/.verified.json`.
 
-No account or token is needed, because every catalog repository is public and not gated. Downloads are independent of image builds, and weights never enter an image.
+No account or token is needed, because every catalog repository is public and not gated. Downloads are independent of
+image builds, and weights never enter an image.
 
-### `start.sh`
+### `scripts\lyrveil.cmd import-model`
 
-1. Verify Docker. Exit 2 with instructions if the daemon is off.
-2. Verify Compose at least v2.30, and Engine API at least 1.44.
-3. Verify GPU support with `docker compose run --rm --no-deps lyrveil-orchestrator python -m lyrveil_orchestrator.preflight`, which reads NVML and Docker facts. On a first run the image does not exist yet, so step 6 runs first and this check follows it.
-4. Check persistent directories: exist, writable, not under `/mnt/*`.
-5. Check the files of the active profiles: presence and exact size. A full hash only runs through `setup.sh --verify-models`.
-6. Run setup if `.env`, images or runtime containers are missing.
+`scripts\lyrveil.cmd import-model <file>` copies a model file from Windows into the models volume, for a
+[custom profile](models.md#custom-profiles). A `.gguf` goes to `llm/`, a `.safetensors` to `image/checkpoints/`. The
+copy runs in a container with no network and the file's folder mounted read-only. Other extensions, names outside
+`^[A-Za-z0-9._-]{1,128}\.(gguf|safetensors)$` and names already present are refused. The file is then registered in
+**Impostazioni > Modelli**.
+
+### `start.cmd`
+
+1. Verify Docker. Exit 2 with instructions if Docker Desktop is not running.
+2. Verify Compose at least v2.30, and Engine API at least 1.45, which adds volume subpaths.
+3. Verify GPU support with `docker compose run --rm --no-deps lyrveil-orchestrator python -m lyrveil_orchestrator.preflight`, which reads NVML and Docker facts. On a first run the image does not exist yet, so step 5 runs first and this check follows it.
+4. Check that both volumes exist and carry the label.
+5. Run setup if `.env`, volumes, images or runtime containers are missing.
+6. Check the files of the active profiles, presence and exact size, with `docker compose run --rm --no-deps lyrveil-backend python -m lyrveil.cli preflight`. A full hash only runs through `.\setup.cmd -VerifyModels`.
 7. Start core services: `docker compose up -d --no-build lyrveil-backend lyrveil-orchestrator lyrveil-frontend`.
 8. Wait up to 120 s for health checks. Exit 3 with the last logs on failure.
 9. The active text model starts automatically: the orchestrator's default mode is `llm`. Wait up to 300 s for `LLM_READY`. On timeout, print a warning and continue, because the app works for reading and editing.
-10. Show `Lyrveil è pronto: http://localhost:4200` with any warnings.
+10. Copy backups missing from the [Windows backup folder](#backup-and-restore).
+11. Show `Lyrveil è pronto: http://localhost:4200` with any warnings.
 
-### `stop.sh`
+### `stop.cmd`
 
 1. `python -m lyrveil.cli drain --timeout 60` inside the backend: pauses the queue and lets a running reply finish.
 2. `POST /v1/drain` to stop the runtime and verify release.
-3. `docker compose --profile ai stop --timeout 40`.
+3. Copy backups missing from the Windows backup folder.
+4. `docker compose --profile ai stop --timeout 40`.
 
-It succeeds when services are already stopped. It never runs `down -v`.
+It succeeds when services are already stopped. It never runs `down -v`, and the volumes are external, so even that
+command would keep them.
 
-### `restart.sh`
+### `restart.cmd`
 
-`stop.sh` followed by `start.sh`.
+`stop.cmd` followed by `start.cmd`.
 
-### `status.sh`
+### `status.cmd`
 
-Prints services and health, GPU state, VRAM, queue sizes, active model, profile in use, model verification, disk use and the URL. Option `--json` gives machine-readable output.
+Prints services and health, GPU state, VRAM, queue sizes, active model, launch level, model verification, disk use and the URL. Option `-Json` gives machine-readable output.
 
-### `logs.sh`
+### `logs.cmd`
 
-```bash
-./logs.sh
-./logs.sh lyrveil-backend --follow
-./logs.sh lyrveil-orchestrator --since 10m
+```powershell
+.\logs.cmd
+.\logs.cmd lyrveil-backend -Follow
+.\logs.cmd lyrveil-orchestrator -Since 10m
 ```
 
 A thin wrapper around `docker compose logs`. Logs hold no private text.
 
 ## Preflight checks
 
-The same checks run in `start.sh` and in `GET /system/preflight`.
+The same checks run in `start.cmd` and in `GET /system/preflight`.
 
 | Check | Pass | Warning | Failure |
 | --- | --- | --- | --- |
 | Docker daemon | Reachable | | Unreachable |
 | Compose | At least v2.30 | | Older |
-| Engine API | At least 1.44 | | Older |
+| Engine API | At least 1.45, for volume subpaths | | Older |
 | GPU in container | NVML works | | NVML fails |
 | CUDA driver version | At least 13.0 | | Older |
 | Total VRAM | At least 11000 MiB | 10000 to 10999 MiB | Under 10000 MiB |
 | Free VRAM | At least 9000 MiB | Under 9000 MiB. Below 6000 MiB the model waits until memory is free, so startup continues | Never a failure, because other programs can free memory later |
 | Memory seen by Docker | At least 20 GiB | 11 to 19.9 GiB | Under 11 GiB |
 | Free disk | At least 20 GiB | 5 to 19.9 GiB | Under 5 GiB |
-| Data directory | Linux filesystem | | `/mnt/*` |
-| Models directory | Linux filesystem | `/mnt/*`, slower | Missing |
+| Data volume | `lyrveil-data` exists with the label | | Missing |
+| Models volume | `lyrveil-models` exists with the label | | Missing |
 | Model files | Exact size | | Missing or wrong size |
+
+The scripts read free disk on the Windows drive. The app reads free space inside Docker's disk image.
 
 The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That setup is unsupported, and image generation may fail.
 
@@ -252,12 +286,13 @@ services:
     image: lyrveil/backend:local
     build: {context: ., dockerfile: backend/Dockerfile}
     restart: unless-stopped
-    user: "${LYRVEIL_UID}:${LYRVEIL_GID}"
+    user: "10001:10001"
     read_only: true
     tmpfs: [/tmp]
     env_file: [.env]
     volumes:
-      - ${LYRVEIL_DATA_DIR:-./data}:/data
+      - lyrveil-data:/data
+      - lyrveil-models:/models:ro     # Lists and hashes files for custom profiles
     networks: [lyrveil-app, lyrveil-control, lyrveil-runtime]
     stop_grace_period: 30s
     healthcheck:
@@ -298,13 +333,13 @@ services:
     image: lyrveil/llm:local
     build: {context: ., dockerfile: docker/llm/Dockerfile}
     restart: "no"
-    user: "${LYRVEIL_UID}:${LYRVEIL_GID}"
+    user: "10001:10001"
     gpus: all
     read_only: true
     tmpfs: [/tmp]
     volumes:
-      - ${LYRVEIL_MODELS_DIR:-./models}/llm:/models/llm:ro
-      - ${LYRVEIL_DATA_DIR:-./data}/runtime:/run/lyrveil:ro
+      - {type: volume, source: lyrveil-models, target: /models/llm, read_only: true, volume: {subpath: llm}}
+      - {type: volume, source: lyrveil-data, target: /run/lyrveil, read_only: true, volume: {subpath: runtime}}
     networks: [lyrveil-runtime]
     stop_grace_period: 20s
     healthcheck:
@@ -322,14 +357,14 @@ services:
     image: lyrveil/image:local
     build: {context: ., dockerfile: docker/image/Dockerfile}
     restart: "no"
-    user: "${LYRVEIL_UID}:${LYRVEIL_GID}"
+    user: "10001:10001"
     gpus: all
     read_only: true
     environment:
       HOME: /tmp/comfy/home
     volumes:
-      - ${LYRVEIL_MODELS_DIR:-./models}/image/checkpoints:/opt/ComfyUI/models/checkpoints:ro
-      - ${LYRVEIL_DATA_DIR:-./data}/runtime:/run/lyrveil:ro
+      - {type: volume, source: lyrveil-models, target: /opt/ComfyUI/models/checkpoints, read_only: true, volume: {subpath: image/checkpoints}}
+      - {type: volume, source: lyrveil-data, target: /run/lyrveil, read_only: true, volume: {subpath: runtime}}
       - type: tmpfs
         target: /tmp/comfy
         tmpfs: {size: 4294967296}
@@ -343,11 +378,29 @@ services:
       start_period: 180s
       start_interval: 2s
 
+  lyrveil-models:
+    <<: *common
+    profiles: [tools]
+    image: lyrveil/backend:local
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    tmpfs: [/tmp]
+    entrypoint: ["python", "-m", "lyrveil.tools.models"]
+    volumes:
+      - lyrveil-models:/models
+    networks: [lyrveil-download]
+
 networks:
   lyrveil-edge: {driver: bridge}
   lyrveil-app: {internal: true}
   lyrveil-control: {internal: true}
   lyrveil-runtime: {internal: true}
+  lyrveil-download: {driver: bridge}   # Only the one-shot download tool joins it
+
+volumes:
+  lyrveil-data: {external: true}       # Created by setup.cmd, so down -v cannot remove it
+  lyrveil-models: {external: true}
 ```
 
 Notes:
@@ -355,6 +408,9 @@ Notes:
 - `depends_on` is not used for the runtimes, because the orchestrator starts them.
 - When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here.
 - `compose.test.yaml` replaces the runtimes with fakes and removes `gpus` for machines without a GPU.
+- No service bind-mounts a Windows folder. On the reference machine a folder on `C:` was 7 to 100 times slower than a
+  volume ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). Source code reaches containers only
+  through image builds.
 - The named container identity is verified with Compose labels. See [Security](security.md#docker-socket).
 
 ## Runtime images
@@ -374,12 +430,16 @@ moe_args=()
 if [ "${MOE_CPU_LAYERS}" -gt 0 ]; then
   moe_args=(--moecpu "${MOE_CPU_LAYERS}")
 fi
+if [ "${USE_MMAP}" = "1" ]; then
+  moe_args+=(--usemmap)
+fi
 exec /opt/koboldcpp/koboldcpp-launcher \
   --model "/models/llm/${MODEL_FILE}" \
   --usecuda \
   --contextsize "${CONTEXT_SIZE}" \
   --gpulayers "${GPU_LAYERS}" \
   --batchsize "${BATCH_SIZE}" \
+  --quantkv "${KV_QUANT}" \
   "${moe_args[@]}" \
   --host 0.0.0.0 \
   --port 5001 \
@@ -412,46 +472,56 @@ exec python main.py \
 ## Data layout
 
 ```text
-data/
+Volume lyrveil-data, mounted at /data in the backend
   db/lyrveil.sqlite3         Database, with -wal and -shm files
   media/                     Images, thumbnails, assets. See Image generation
   runtime/                   Launch files
-  backups/                   Backups
-models/
+  backups/                   The newest 7 backups
+Volume lyrveil-models, mounted read-only at /models in the backend
   llm/                       Text model files, for example gemma-4-26B_q4_0-it.gguf
   image/checkpoints/         Image checkpoints, for example Illustrious-XL-v2.0.safetensors
   .verified.json             Size, modification time and hash of each verified file
+Windows
+  <repository>\              Code, compose.yaml and .env
+  %USERPROFILE%\Documents\Lyrveil\backups\   Exported backups, set by LYRVEIL_BACKUP_DIR
 ```
 
 ## Backup and restore
 
 | Action | Command | Content |
 | --- | --- | --- |
-| Backup | `./scripts/backup.sh`, or **Impostazioni > Dati** | Consistent database copy through the SQLite backup API, media and launch files |
-| List | `ls data/backups/` | |
-| Restore | `./scripts/restore.sh data/backups/<file>` | Replaces data after checking the manifest |
+| Backup | `.\scripts\lyrveil.cmd backup`, or **Impostazioni > Dati** | Consistent database copy through the SQLite backup API, media and launch files |
+| List | `dir $env:USERPROFILE\Documents\Lyrveil\backups` | |
+| Restore | `.\scripts\lyrveil.cmd restore <file>` | Replaces data after checking the manifest |
 | Export character | Character profile | [JSON format](character-system.md#exchange-format) |
 | Export conversation | Conversation menu | JSON or Markdown |
 
-A backup is `data/backups/lyrveil-<UTC time>.tar` with `manifest.json` (schema revision, app version, SHA-256 of each file). It includes private content and is not encrypted, so store it accordingly.
+A backup is `lyrveil-<UTC time>.tar` with `manifest.json` (schema revision, app version, SHA-256 of each file). It
+includes private content and is not encrypted, so store it accordingly.
+
+The backend makes one backup a day at its first idle moment, and keeps the newest 7 in the volume. `start.cmd`,
+`stop.cmd` and the backup command copy every backup that is missing from the Windows backup folder, which Lyrveil never
+prunes. Resetting Docker Desktop's data or uninstalling it deletes the volumes, so the Windows folder is what limits the
+loss to one day.
 
 Restore steps:
 
-1. Verify the manifest and refuse a schema newer than the installed app.
-2. Run `stop.sh`.
-3. Move `data/db` and `data/media` to `data/pre-restore-<time>/`.
+1. Verify the manifest in a container with no network and the file's folder mounted read-only. Refuse a schema newer
+   than the installed app.
+2. Run `stop.cmd`.
+3. Move `db` and `media` in the data volume to `pre-restore-<time>/`.
 4. Extract and verify hashes.
-5. Run `start.sh`, which applies any pending migrations.
+5. Run `start.cmd`, which applies any pending migrations.
 
-An older-schema backup migrates forward at start. The backend also creates a backup before migrations, and keeps the newest 5.
+An older-schema backup migrates forward at start. The backend also creates a backup before migrations.
 
 ## Upgrade
 
-```bash
-./scripts/backup.sh
+```powershell
+.\scripts\lyrveil.cmd backup
 git pull
-./setup.sh --rebuild
-./restart.sh
+.\setup.cmd -Rebuild
+.\restart.cmd
 ```
 
 Data is preserved. Runtime upgrades change pinned versions in the repository and go through the GPU tests first.
@@ -460,33 +530,36 @@ Data is preserved. Runtime upgrades change pinned versions in the repository and
 
 Stop services, remove containers and images. Data stays until you delete it yourself.
 
-```bash
-./stop.sh
-docker compose --profile ai down --rmi local
+```powershell
+.\stop.cmd
+docker compose --profile ai --profile tools down --rmi local
 ```
 
-`data/` and `models/` hold your conversations, images and weights. Deleting them is permanent.
+The volumes `lyrveil-data` and `lyrveil-models` hold your conversations, images and weights, and they stay. Remove them
+only on purpose with `docker volume rm lyrveil-data lyrveil-models`. Deleting them is permanent. Exported backups stay in
+the Windows folder.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
 | --- | --- | --- |
-| `bad interpreter: ^M` | The repository was cloned on Windows with converted line endings | Clone inside Ubuntu. `.gitattributes` forces LF |
+| A container script fails with `bad interpreter: ^M` | Git converted line endings despite `.gitattributes` | Clone again with `git clone -c core.autocrlf=false` |
+| "Running scripts is disabled on this system" | A `.ps1` file was started directly | Use the `.cmd` files, which bypass the policy for their own process only |
 | `could not select device driver "nvidia"` | Docker Desktop has no GPU support | Update Windows driver and WSL with `wsl --update`, and use the WSL2 backend |
 | `nvidia-container-cli : initialization error` | Docker daemon state | Restart Docker Desktop |
 | Preflight: memory too low | `.wslconfig` absent or too small | Apply [WSL2 memory](#wsl2-memory) |
-| Preflight: `/mnt/c` refused | Repository on the Windows filesystem | Clone inside Ubuntu |
+| Preflight: volume missing | Volumes removed, or Docker Desktop's data was reset | `.\setup.cmd`, then restore the newest backup from the Windows folder |
 | Port 4200 in use | Another program | Set `LYRVEIL_HTTP_PORT` and restart |
-| Model size or hash mismatch | Interrupted or changed file | `./setup.sh --verify-models`. Invalid files are downloaded again |
+| Model size or hash mismatch | Interrupted or changed file | `.\setup.cmd -VerifyModels`. Invalid files are downloaded again |
 | "Altri programmi stanno usando la scheda video" | Games, browsers, video tools | Close them. Lyrveil retries by itself |
 | Replies are slow | Partial GPU offload, low free VRAM | **Risorse AI** shows free VRAM and speed. Close GPU programs |
 | Level B or C in use | Earlier out-of-memory | Free VRAM, then return to level A in **Impostazioni > Modelli** |
 | `MODEL_FILE_MISSING` | The active profile's file was not downloaded or was moved | Run the command shown in **Impostazioni > Modelli**, or choose another profile |
 | Replies are slow with a 26B profile | Too little free VRAM, or too many experts in RAM | **Risorse AI** shows the speed. Close GPU programs, or choose `gemma-4-12b` |
-| State `ERROR` | Repeated failures | **Riprova** in **Risorse AI**, then `./logs.sh lyrveil-orchestrator` |
-| `RUNTIME_CONTAINER_MISSING` | Runtime containers removed | `./setup.sh` |
-| Black or broken image | VAE or model file problem | Regenerate. If it repeats, run `./setup.sh --verify-models` |
+| State `ERROR` | Repeated failures | **Riprova** in **Risorse AI**, then `.\logs.cmd lyrveil-orchestrator` |
+| `RUNTIME_CONTAINER_MISSING` | Runtime containers removed | `.\setup.cmd` |
+| Black or broken image | VAE or model file problem | Regenerate. If it repeats, run `.\setup.cmd -VerifyModels` |
 | Images look wrong for a character | Prompt too generic | Edit the persistent prompt, then regenerate |
 | Character answers in English | Language setting or weak examples | Check the conversation language and add Italian examples |
 | Time looks wrong in messages | Time zone | Set `LYRVEIL_TZ` and restart |
-| Disk grows | Images and backups | Remove old backups. Review the gallery |
+| Disk grows | Images, backups and Docker's disk image | Remove old exported backups. Review the gallery. Remove unused models with `.\scripts\lyrveil.cmd models -Remove <id>` |

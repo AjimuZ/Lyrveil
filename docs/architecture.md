@@ -29,8 +29,8 @@ flowchart LR
     img["lyrveil-image<br/>ComfyUI + image model"]
   end
 
-  db[("data/<br/>SQLite + media")]
-  models[("models/<br/>read-only weights")]
+  db[("lyrveil-data volume<br/>SQLite + media")]
+  models[("lyrveil-models volume<br/>read-only weights")]
   sock["Docker Engine socket"]
   gpu["RTX 4070<br/>one model at a time"]
 
@@ -168,7 +168,7 @@ stores the file and gives the GPU back. See
 | Orchestrator restarts | Lease is lost, running job fails with `LEASE_LOST` | Reconcile, job retries without losing attempts. |
 | Backend restarts | WebSocket clients reconnect, leases expire | Orchestrator returns to ready after lease expiry. Jobs requeue. |
 | Another program takes the VRAM | Model cannot load | State stays `IDLE` with a clear reason, retries for a limited time. No external process is touched. |
-| Docker Desktop stops | All services stop | `./start.sh` restores everything. SQLite commits are durable. |
+| Docker Desktop stops | All services stop | `.\start.cmd` restores everything. SQLite commits are durable. |
 | Power loss | Current generation is lost | SQLite in WAL with `synchronous=FULL` keeps every committed message. Staged media is cleaned at startup. |
 
 ## Repository layout
@@ -185,19 +185,17 @@ lyrveil/
     image/               ComfyUI image: Dockerfile, lock file (planned, P05)
   workflows/comfyui/     API-format ComfyUI workflows (planned, P05)
   config/examples/       Example configuration (planned, P01)
-  scripts/               Implementations and helpers (planned, P01)
+  scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell module and helpers (planned, P01)
   tests/                 End-to-end, GPU, quality tests and fakes (planned, P01)
   docs/                  This documentation
-  models/.gitkeep        Weights, never committed (planned, P01)
-  data/.gitkeep          User data, never committed (planned, P01)
-  setup.sh start.sh stop.sh restart.sh status.sh logs.sh   Entry points (planned, P01)
+  setup.cmd start.cmd stop.cmd restart.cmd status.cmd logs.cmd   Entry points (planned, P01)
   compose.yaml           Service definitions (planned, P01)
   .env.example           Configuration template (planned, P01)
   README.md LICENSE NOTICE CHANGELOG.md CONTRIBUTING.md SECURITY.md
   .gitignore .dockerignore .gitattributes
 ```
 
-[ADR 0022](decisions/0022-root-scripts-and-repository-layout.md) explains the layout.
+[ADR 0022](decisions/0022-root-scripts-and-repository-layout.md) explains the layout, and [ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md) the Windows entry points and volumes that replace parts of it.
 
 ## Extension points
 

@@ -24,7 +24,7 @@ PyTorch and the NVIDIA CUDA libraries installed in those images keep their own l
 
 ## Models
 
-Weights are never in the repository or in an image. `setup.sh` and `download-models.sh` show the notice of each profile
+Weights are never in the repository or in an image. `setup.cmd` and `scripts\lyrveil.cmd models` show the notice of each profile
 they download and ask for acceptance first. Each profile's license is also in the [catalog](models.md).
 
 | Profile | Author | License | Base model and its license |
@@ -82,9 +82,9 @@ Versions and individual licenses are in [Technology choices](technology.md). All
 
 | License | Packages include |
 | --- | --- |
-| MIT | FastAPI, Pydantic, SQLAlchemy, Alembic, Angular, Pillow (MIT-CMU), structlog (dual) |
+| MIT | FastAPI, Pydantic, SQLAlchemy, Alembic, Angular, Pillow (MIT-CMU), structlog (dual), PSScriptAnalyzer (development only) |
 | BSD-3-Clause | Uvicorn, HTTPX, websockets, Jinja2, snowballstemmer, nvidia-ml-py |
-| Apache-2.0 | RxJS, TypeScript, python-multipart, tzdata |
+| Apache-2.0 | RxJS, TypeScript, python-multipart, tzdata, Pester (development only) |
 | PSF-2.0 | Python |
 | MPL-2.0 | Hypothesis and `@axe-core/playwright`, development only |
 | GPL-3.0 | shellcheck, development only, not distributed |

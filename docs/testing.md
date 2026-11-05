@@ -10,23 +10,26 @@ Status: accepted (2026-11-01). **No test has run yet, because no code exists.** 
 | Integration | pytest with SQLite and fake runtimes | Any machine | No |
 | Contract | Schemathesis on OpenAPI, recorded runtime fixtures | Any machine | No |
 | End-to-end | Playwright with `compose.test.yaml` and fakes | Any machine with Docker | No |
-| Docker | Bash and pytest against the real Compose project | Docker | Partly |
+| Docker | Pester and pytest against the real Compose project | Docker | Partly |
 | GPU | pytest with real runtimes and models | Reference machine | Yes |
 | Quality | Italian protocol and image grid, with human review | Reference machine | Yes |
 
 ## Commands
 
-Planned in `scripts/test.sh`:
+Planned in `scripts\lyrveil.cmd test`:
 
-```bash
-./scripts/test.sh unit
-./scripts/test.sh integration
-./scripts/test.sh e2e
-./scripts/test.sh docker
-./scripts/test.sh gpu
-./scripts/test.sh quality
-./scripts/test.sh all
+```powershell
+.\scripts\lyrveil.cmd test unit
+.\scripts\lyrveil.cmd test integration
+.\scripts\lyrveil.cmd test e2e
+.\scripts\lyrveil.cmd test docker
+.\scripts\lyrveil.cmd test gpu
+.\scripts\lyrveil.cmd test quality
+.\scripts\lyrveil.cmd test all
 ```
+
+Python tests run in a test stage of the backend image, so database tests use the same SQLite build as production.
+Frontend tests run with Node.js on Windows. Neither bind-mounts source code.
 
 `all` runs everything except `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
 
@@ -207,9 +210,9 @@ tests/
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
-| T-DCK-01 | `start.sh` from a clean clone | Docker | P01 |
-| T-DCK-02 | `stop.sh`, also when already stopped | Docker | P01 |
-| T-DCK-03 | `restart.sh` | Docker | P01 |
+| T-DCK-01 | `start.cmd` from a clean clone | Docker | P01 |
+| T-DCK-02 | `stop.cmd`, also when already stopped | Docker | P01 |
+| T-DCK-03 | `restart.cmd` | Docker | P01 |
 | T-DCK-04 | Data survives container recreation and upgrades | Docker | P01 |
 | T-DCK-05 | Health checks reach healthy, and report failures | Docker | P01 |
 | T-DCK-06 | Scripts run twice with the same result | Docker | P01 |
@@ -218,7 +221,9 @@ tests/
 | T-DCK-09 | Only `127.0.0.1:4200` is published | Docker | P01 |
 | T-DCK-10 | Images contain no data, weights, `.env` or fakes | Docker | P01 |
 | T-DCK-11 | Model download resumes, verifies and skips valid files, with a local test server | Docker | P01 |
-| T-DCK-12 | Backup and restore round trip | Docker | P03 |
+| T-DCK-12 | Backup and restore round trip, including the copy to the Windows backup folder | Docker | P03 |
+| T-DCK-13 | Volumes are external and survive `docker compose down -v`. Root `.cmd` files only delegate. PSScriptAnalyzer passes | Docker | P01 |
+| T-DCK-14 | `import-model` copies a valid file and refuses other extensions, invalid names and existing names | Docker | P06 |
 
 ### Real GPU
 
@@ -236,10 +241,10 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-08 | Text sent during real generation is answered after the switch | P06 |
 | T-GPU-09 | External VRAM use: blocked with reason, no process touched | P06 |
 | T-GPU-10 | Real CUDA out-of-memory handled, by reducing available VRAM on purpose | P06 |
-| T-GPU-11 | No orphan process and full VRAM release after `stop.sh` | P06 |
+| T-GPU-11 | No orphan process and full VRAM release after `stop.cmd` | P06 |
 | T-GPU-12 | Everything works with the network disconnected | P06 |
 | T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
-| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS` | P02 |
+| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS`, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md) | P02 |
 
 ### Quality
 

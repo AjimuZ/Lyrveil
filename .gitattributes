@@ -1,6 +1,10 @@
-# Text is stored and checked out with LF on every platform. Shell scripts run
-# inside WSL2 and fail with "bad interpreter" when a Windows checkout adds CRLF.
+# Text is stored and checked out with LF, because files copied into Linux images
+# fail with "bad interpreter" when a Windows checkout adds CRLF. Windows entry
+# points are the exception: cmd.exe and PowerShell 5.1 expect CRLF.
 * text=auto eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
 
 *.png binary
 *.jpg binary

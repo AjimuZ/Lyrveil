@@ -82,7 +82,7 @@ Required before the release in P09. Each result goes to `docs/verification/YYYY-
 
 | # | Check | Command |
 | --- | --- | --- |
-| 1 | Tests | `./scripts/test.sh all`, plus `gpu` and `quality` on the reference machine |
+| 1 | Tests | `.\scripts\lyrveil.cmd test all`, plus `gpu` and `quality` on the reference machine |
 | 2 | Python dependencies | `uv run pip-audit` in `backend/` and `orchestrator/` |
 | 3 | npm dependencies | `npm audit` and `npm audit signatures` in `frontend/` |
 | 4 | Secrets, whole history | `gitleaks detect --source . --log-opts="--all"` |
@@ -90,7 +90,7 @@ Required before the release in P09. Each result goes to `docs/verification/YYYY-
 | 6 | Personal data | Search the tree and history for real names, addresses, home paths and tokens. Review fixtures and screenshots |
 | 7 | History | `git log --all --stat`. Check messages, authors and each added file |
 | 8 | Licenses | Generate notices, apply the [policy](licensing.md#policy) |
-| 9 | Clean build | Fresh clone, `./setup.sh`, `./start.sh`, acceptance run |
+| 9 | Clean build | Fresh clone, `.\setup.cmd`, `.\start.cmd`, acceptance run |
 | 10 | Ignore rules | `git check-ignore` on sample paths. `git ls-files` lists no forbidden pattern |
 
 Large files in history:

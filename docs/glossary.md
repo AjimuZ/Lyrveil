@@ -38,5 +38,6 @@
 | Stage | A durable step of a job. A restart continues from the last finished one. |
 | Tombstone | Hashes left by a deleted memory that block recreating it from the same source. |
 | Variant | One version of a message: an edit, a regeneration or an alternative. |
+| Volume | A Docker named volume. Lyrveil keeps live data in `lyrveil-data` and model files in `lyrveil-models`. |
 | Window | The range of messages one extraction analyzes. |
 | Working memory | The context built for one reply. It is rebuilt each time. |

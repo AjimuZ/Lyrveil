@@ -1,6 +1,6 @@
 # ADR 0008: Bind mounts on the WSL2 Linux filesystem
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: superseded by [ADR 0029](0029-windows-operation-with-docker-volumes.md) on 2026-11-05. Accepted 2026-11-01. Supersedes: none.
 
 ## Context
 The requirements prefer the WSL2 Linux filesystem for sources, models and data, and they sketch `data/` and `models/` in the repository. SQLite in WAL mode needs shared memory and reliable locks, which network or translated filesystems such as `/mnt/c` do not guarantee. Models are 14.42 GB and must be reachable by the download script. Data must survive container and image removal.

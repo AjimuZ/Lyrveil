@@ -80,7 +80,7 @@ single-user app.
 
 | Tool | Version | License | Use |
 | --- | --- | --- | --- |
-| Docker Engine | 29.9.2 measured, API 1.44 or later required | Apache-2.0 | Containers. |
+| Docker Engine | 29.9.2 measured, API 1.45 or later required, for volume subpaths | Apache-2.0 | Containers. |
 | Docker Compose | v5.6.1 measured, v2.30 or later required | Apache-2.0 | `gpus: all` and profiles. |
 | uv | 0.13.6 | MIT or Apache-2.0 | Python lock files and installs. |
 | Ruff | 0.17.3 | MIT | Lint and format. |
@@ -92,7 +92,9 @@ single-user app.
 | Vitest | 5.0.5 | MIT | Angular unit tests. |
 | Playwright | 1.64.1 | Apache-2.0 | End-to-end tests. |
 | `@axe-core/playwright` | 4.14.0 | MPL-2.0 | Accessibility checks. Development only. |
-| shellcheck | Debian package | GPL-3.0 | Script linting. Development only, not distributed. |
+| shellcheck | Debian package | GPL-3.0 | Linting of shell scripts inside images. Development only, not distributed. |
+| PSScriptAnalyzer | Pinned at P01 | MIT | Linting of the Windows scripts. Development only. |
+| Pester | Pinned at P01 | Apache-2.0 | Tests of the Windows scripts. Development only. |
 | gitleaks | v8.30.1 | MIT | Secret scan. |
 | pip-audit | 2.10.1 | Apache-2.0 | Python advisories. |
 | pip-licenses | 5.5.5 | MIT | Python license report. |

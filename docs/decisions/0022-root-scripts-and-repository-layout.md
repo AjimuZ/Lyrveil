@@ -1,6 +1,6 @@
 # ADR 0022: Thin root scripts, implementations in `scripts/`
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: superseded by [ADR 0029](0029-windows-operation-with-docker-volumes.md) on 2026-11-05. Accepted 2026-11-01. Supersedes: none.
 
 ## Context
 The requirements say that the root must hold `start.sh`, `stop.sh`, `restart.sh`, `status.sh`, `logs.sh` and `setup.sh`. The suggested tree also lists them under `scripts/`, and allows refinement. Shared code and helper scripts need a home.
