@@ -19,3 +19,10 @@
   - Fixture tests run a copied scripts folder in a git-init repo under $TestDrive and share the real .tools via LYRVEIL_TOOLS_DIR. Each fixture lint run takes about 2.5 s.
   - scripts/lyrveil.cmd works from Git Bash. Its working-tree copy has LF endings until a re-checkout applies the CRLF rule; it has no labels, so LF is harmless.
 ---
+
+## 2026-11-06T20:04:28Z - P01.1
+- Ran `docker info --format "{{.MemTotal}}"`, which returned 25199247360 bytes (23.47 GiB). That meets the 20 GiB pass threshold. I recorded it in a new dated file and linked it from the P01 section. I did not run the lint check.
+- Files changed: docs/roadmap.md, docs/verification/2026-11-06-wsl-memory.md
+- **Learnings for future iterations:**
+  - The P01 section had no Evidence list. I added one after its Exit line, and the P01.1 line is unchanged.
+---

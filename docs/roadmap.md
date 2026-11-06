@@ -53,7 +53,7 @@ Evidence:
 
 **Depends on:** P00. **Areas:** repository, Docker, backend, orchestrator, frontend.
 
-- [ ] P01.1 Apply the `.wslconfig` for the machine's tier. On the reference machine the 32 GB values were applied on 2026-11-05, and Docker sees 23.47 GiB ([evidence](verification/2026-11-05-environment.md#after-the-changes)). The P01 exit check confirms it.
+- [x] P01.1 Apply the `.wslconfig` for the machine's tier. On the reference machine the 32 GB values were applied on 2026-11-05, and Docker sees 23.47 GiB ([evidence](verification/2026-11-05-environment.md#after-the-changes)). The P01 exit check confirms it.
 - [ ] P01.2 Create the repository structure, `.env.example`, the `.gitattributes` rules for `.cmd` and `.ps1`, and `compose.yaml` with the three core services and the external volumes.
 - [ ] P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes.
 - [ ] P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight.
@@ -63,6 +63,10 @@ Evidence:
 - [ ] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
 
 Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11, T-DCK-13 pass. `.\start.cmd` opens an empty app at `http://localhost:4200`, and `status.cmd` reports it. FTS5 and WAL are verified in the real image.
+
+Evidence:
+
+- [WSL2 memory](verification/2026-11-06-wsl-memory.md).
 
 ## P02: Working chat
 

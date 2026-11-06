@@ -217,8 +217,8 @@
         "If Docker reports less than 20 GiB, the task returns `status: blocked` for the owner and changes nothing."
       ],
       "priority": 11,
-      "passes": false,
-      "notes": "Measured at setup on 2026-11-06: `docker info --format \"{{.MemTotal}}\"` returned 25199247360 bytes (23.47 GiB). `docker info` is allowed. Record no user names or home paths. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "passes": true,
+      "notes": "Ran `docker info --format \"{{.MemTotal}}\"`, which returned 25199247360 bytes (23.47 GiB). That meets the 20 GiB pass threshold. I recorded it in a new dated file and linked it from the P01 section. I did not run the lint check.",
       "dependsOn": [
         "P01.8a"
       ],
