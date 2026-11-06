@@ -208,6 +208,18 @@ Describe 'scripts\lyrveil.cmd test' {
         $run.ExitCode | Should -Not -Be 0
     }
 
+    It 'refuses arguments for a level that does not pass them to pytest' {
+        $run = Invoke-EntryPoint $script:RepositoryRoot @('test', 'lint', '-k', 'name')
+        $run.Output | Should -Match "Test level 'lint' takes no arguments"
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'refuses pytest arguments when no Python component exists' {
+        $run = Invoke-EntryPoint (Initialize-FixtureRepository 'cli-no-python' -WithScripts) @('test', 'unit', '-k', 'name')
+        $run.Output | Should -Match "Test level 'unit' has no tests yet"
+        $run.ExitCode | Should -Not -Be 0
+    }
+
     It 'refuses to pass a level that has no tests' {
         $run = Invoke-EntryPoint (Initialize-FixtureRepository 'cli-empty' -WithScripts) @('test', 'unit')
         $run.Output | Should -Match "Test level 'unit' has no tests yet"

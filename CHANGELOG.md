@@ -41,6 +41,12 @@ No application exists yet. This section records the design documentation.
   traceability and test catalog, and analyzes every PowerShell script with a pinned
   PSScriptAnalyzer. `test unit` runs the Pester tests of the scripts. Levels that
   have no tests yet exit with an error instead of reporting a pass.
+- A backend skeleton built in Docker: typed deployment settings that stop startup
+  with a message naming any invalid variable, JSON logs that keep only allowlisted
+  fields so no message text or prompt is logged, and a locked set of dependencies.
+  `test lint` also runs ruff and `mypy --strict` on the backend, and `test unit`
+  runs its pytest unit tests; arguments after `test unit` go to pytest, so one
+  test can run alone.
 
 ### Changed
 

@@ -36,7 +36,7 @@ asset, so its image starts from the pinned source. Lyrveil builds both images it
 | --- | --- | --- | --- |
 | Python | 3.12, image `python:3.12.16-slim-trixie` | PSF-2.0 | Required. Debian trixie ships SQLite with FTS5. |
 | FastAPI | 0.162.0 | MIT | Required. Typed routes, OpenAPI, WebSocket. |
-| Uvicorn | 0.54.0 | BSD-3-Clause | ASGI server behind `fastapi run`. |
+| Uvicorn | 0.54.0 | BSD-3-Clause | ASGI server, started with one worker by `python -m lyrveil.main` ([Backend](backend.md#concurrency-model)). |
 | Pydantic | 2.14.2 | MIT | Required. Validates API data and every structured model output. |
 | pydantic-settings | 2.16.2 | MIT | Typed `.env` configuration. |
 | SQLAlchemy | 2.1.6 | MIT | Required. Synchronous ORM ([ADR 0009](decisions/0009-synchronous-sqlalchemy.md)). |

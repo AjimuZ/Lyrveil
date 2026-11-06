@@ -52,8 +52,9 @@ name what remains. Never document an unexecuted check as passed.
 
 From Git Bash, write `scripts/lyrveil.cmd test lint`. Run `lint` before every commit. It checks the documentation:
 relative links, heading anchors, unfinished-work markers, requirement and acceptance criterion traceability, and the
-test catalog against the documents and the roadmap exits. It also runs PSScriptAnalyzer on every PowerShell script.
-The command fetches its pinned tools into the Git-ignored `.tools\` folder and installs nothing machine-wide. A level
+test catalog against the documents and the roadmap exits. It also runs PSScriptAnalyzer on every PowerShell script,
+and ruff, the format check and `mypy --strict` on the backend inside its Docker test stage, so Docker must be running.
+`test unit -k name` passes the arguments to pytest and runs only the matching backend tests. The command fetches its pinned tools into the Git-ignored `.tools\` folder and installs nothing machine-wide. A level
 with no tests yet exits 1 and never reports a pass. Details are in
 [docs/testing.md](docs/testing.md#the-lint-level).
 

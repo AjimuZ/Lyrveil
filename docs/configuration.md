@@ -1,6 +1,6 @@
 # Configuration
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: planned, phase P01 onward.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: the backend's reading of the deployment settings is delivered (P01.3a); the rest is planned, phase P01 onward.
 
 Configuration has three levels:
 
@@ -24,6 +24,8 @@ Configuration has three levels:
 | `LYRVEIL_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `LYRVEIL_ALLOW_LOW_MEMORY` | `false` | Turns the memory failure in preflight into a warning. Unsupported. |
 | `LYRVEIL_MODEL_LICENSES_ACCEPTED` | `false` | Set by `setup.cmd` after the user accepts the model licenses. |
+
+The backend reads these variables once at startup, in `backend/src/lyrveil/settings.py`, and ignores `LYRVEIL_BACKUP_DIR`. `LYRVEIL_CONTROL_TOKEN` is required and must be 64 hexadecimal characters, so the placeholder of `.env.example` is refused. A missing or invalid value stops the backend with exit status 78 and a message that names the variable without its value.
 
 Changing `LYRVEIL_BACKUP_DIR` does not move existing backups. Live data and models are in the Docker volumes
 `lyrveil-data` and `lyrveil-models`, which have no setting ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)).

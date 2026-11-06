@@ -5,6 +5,10 @@
 - PowerShell scripts: ASCII only, Set-StrictMode -Version Latest, read text with Read-Utf8Text (explicit UTF-8), avoid New/Set/Remove/Start/Stop/Update verbs on private helpers unless SupportsShouldProcess is added, use $script: variables across Pester BeforeAll/It blocks to keep PSScriptAnalyzer clean.
 - Never redirect native stderr (2>&1) while $ErrorActionPreference is Stop in Windows PowerShell 5.1; lower it locally first.
 - Functions that return an exit code are cast with [int] by the caller, so stray pipeline output fails loudly instead of being read as a pass.
+- Windows PowerShell 5.1: never assign arrays through an if expression ($x = if (...) { @() } else { @('a') }); an empty array becomes $null and a one-item array becomes a scalar, which breaks .Length under StrictMode. Assign a default, then overwrite in an if statement.
+- A PowerShell entry point that forwards options to another tool must not declare parameters; read $args so tokens like -k or -v are not bound as PowerShell parameters.
+- Native command output inside a PowerShell function that returns a status must be discarded ($null = & docker build -q ...) or sent to Out-Host, or it becomes part of the return value.
+- Logging safety is enforced by an allowlist processor that runs last, not by a denylist: free text only in the constant `event`, identifiers as short tokens, numeric measures by suffix, exceptions without messages.
 
 ---
 
@@ -25,4 +29,36 @@
 - Files changed: docs/roadmap.md, docs/verification/2026-11-06-wsl-memory.md
 - **Learnings for future iterations:**
   - The P01 section had no Evidence list. I added one after its Exit line, and the P01.1 line is unchanged.
+---
+
+## 2026-11-06T20:18:07Z - P01.3a
+- I created `backend/` with `pyproject.toml`, `uv.lock` and the `lyrveil` package (`__init__`, `settings`, `logs`, `main`). The pins follow docs/technology.md, and the lock was produced with uv 0.13.6 in a container: 33 packages resolved. 
+
+- **Settings:** pydantic-settings reads the deployment settings and freezes them. A missing or invalid value stops startup before logging or the server begins. The message names each variable but never its value, and the process exits with status 78. The control token must be 64 hex characters.
+- **Logging:** structlog writes one JSON object per line. An allowlist runs last for both structlog and standard-library records. Only the documented ID fields (as short tokens) and numeric size or timing fields are kept. Exceptions keep their type and stack frames but not their message, and any other field is dropped, with its name listed. The access log is off.
+- **App factory:** `create_app` serves OpenAPI at `/api/v1/openapi.json` and turns off the pages that load scripts from a CDN.
+- **Dockerfile:** `backend/Dockerfile` has `lock`/`lockfile`, `deps` (`uv sync --locked --no-dev`), `test` and `runtime` stages (user 10001, port 8000).
+- **Test command:** a new `scripts/lib/PythonComponents.psm1` builds the test stage. `test lint` then runs `ruff check`, `ruff format --check` and `mypy --strict src tests` in network-less containers. `test unit` runs `pytest tests/unit`. Arguments after `unit` go to pytest, and then the Pester tests are skipped; other levels refuse arguments. I had to rewrite `scripts/lyrveil.ps1` to read `$args` so that options like `-k` or `-v` are not taken as PowerShell parameters.
+
+**What I ran:**
+- `test lint` failed (exit 1) on a real E501 and format violation, then passed (exit 0) after the fix.
+- `test unit tests/unit`: 31 of 31 passed. A single node ID with `-v` ran exactly one test.
+- `test lint -k x`, `test` with no level, and `test integration` each exit 1 with their message.
+- The test and runtime images both build.
+- The import-rule test passes on the package. Its own cases show it reports `domain` importing `settings`, `logs`, `services` or `persistence.models`, and the `services` and `api` rules.
+
+**Not run:**
+- The full `test unit`, including Pester and my two new Pester cases. The rules say not to run the full suite.
+- Starting the runtime image to see exit 78. I can't run containers outside the test levels, so a unit test calls `main()` in the test stage instead.
+
+Docs updated: backend.md, testing.md, configuration.md, technology.md, CONTRIBUTING, CHANGELOG, docs/README, the roadmap evidence list and a new verification file.
+- Files changed: backend/pyproject.toml, backend/uv.lock, backend/Dockerfile, backend/src/lyrveil/__init__.py, backend/src/lyrveil/settings.py, backend/src/lyrveil/logs.py, backend/src/lyrveil/main.py, backend/tests/unit/test_settings.py, backend/tests/unit/test_logs.py, backend/tests/unit/test_app.py, backend/tests/unit/test_import_rules.py, backend/tests/unit/test_locked_environment.py, .dockerignore, scripts/lyrveil.ps1, scripts/lib/TestCommand.psm1, scripts/lib/PythonComponents.psm1, tests/scripts/TestCommand.Tests.ps1, docs/backend.md, docs/testing.md, docs/configuration.md, docs/technology.md, docs/README.md, docs/roadmap.md, docs/verification/2026-11-06-backend-skeleton.md, CHANGELOG.md, CONTRIBUTING.md
+- **Learnings for future iterations:**
+  - To add the orchestrator to the gates, append 'orchestrator' to $script:Components in scripts/lib/PythonComponents.psm1; it needs orchestrator/Dockerfile with a 'test' stage whose WORKDIR holds pyproject.toml, src/ and tests/. Extra pytest args currently go to every component's pytest.
+  - Regenerate a lock with: docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend . (allowed in sessions; the local exporter writes uv.lock without deleting other files).
+  - Containers can only be run through scripts/lyrveil.cmd test levels; `scripts/lyrveil.cmd test unit <pytest args>` runs only backend pytest (no Pester), useful for fast targeted checks. Chained shell commands (`; echo`) are denied.
+  - Backend project is virtual ([tool.uv] package = false); src is on PYTHONPATH in the image and via pytest pythonpath / mypy mypy_path. mypy uses the pydantic plugin, which makes BaseSettings fields optional in __init__.
+  - .dockerignore excludes **/tests; backend/tests is re-included with !backend/tests for the test stage only. The orchestrator will need the same.
+  - Starlette 1.10 warns that its TestClient will move from httpx to httpx2; not failing now.
+  - The lint level now needs Docker running; fixture repos without backend/Dockerfile skip the Python part.
 ---

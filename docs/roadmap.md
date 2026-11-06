@@ -66,7 +66,8 @@ Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-
 
 Evidence:
 
-- [WSL2 memory](verification/2026-11-06-wsl-memory.md).
+- [WSL2 memory](verification/2026-11-06-wsl-memory.md);
+- [backend skeleton and gates](verification/2026-11-06-backend-skeleton.md).
 
 ## P02: Working chat
 

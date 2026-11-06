@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -14,6 +14,7 @@ backend/
   src/lyrveil/
     main.py              Composition root: builds adapters, services and the app
     settings.py          Typed environment settings
+    logs.py              JSON logging with the field allowlist
     cli.py               rebuild-search, drain, backup, restore-check
     api/                 Routers, request and response schemas, error mapping, WebSocket
     domain/              Entities, enums, state rules. Pure, no I/O
@@ -126,9 +127,11 @@ Adding a model means writing a new adapter or changing a model file. No service 
 
 ## Concurrency model
 
-- **One process, one event loop.** `fastapi run` with one worker. The WebSocket hub, the
-  scheduler and the job worker live in the same process, so a single worker is an
-  invariant. The container command never sets `--workers`.
+- **One process, one event loop.** The container command `python -m lyrveil.main` runs
+  Uvicorn with one worker. The WebSocket hub, the scheduler and the job worker live in the
+  same process, so a single worker is an invariant. The command never sets `--workers`.
+  `fastapi run` is not used, because the FastAPI CLI brings packages the backend does not
+  need, and starting Uvicorn from `main.py` lets settings fail before the server starts.
 - **REST handlers** that touch the database are plain `def`, so FastAPI runs them in its
   thread pool.
 - **Job handlers and streaming** are `async`. They reach the database through
@@ -197,19 +200,65 @@ Never logged at any level: message content, prompts, memory text, image prompts,
 file names, tokens. `DEBUG` adds sizes and timing, not content. A unit test sends a marker
 string through the main paths and asserts that it never reaches a log record.
 
+`logs.py` enforces this with an allowlist, the last step before rendering, for structlog and
+standard library records alike:
+
+- `event` is the only free-text field, and code passes a constant event name;
+- the identifier fields above keep a value only when it is a short token of at most 64
+  characters without spaces, otherwise `[dropped]`;
+- numeric fields whose name ends in `_ms`, `_bytes`, `_chars`, `_tokens` or `_count` are kept;
+- an exception becomes `error_type` and `traceback`, a list of file, line and function. Its
+  message is left out, because messages such as validation errors can quote user text;
+- every other field is removed, and its name is listed in `dropped_fields`.
+
+The Uvicorn access log is off, because request paths and queries can carry user text.
+
 ## Settings
 
 Environment settings are immutable and typed in `settings.py`. Runtime settings live in
 `application_settings`. See [Configuration](configuration.md).
 
+`load_settings()` reads them once at startup. A missing or invalid variable stops the process
+before logging and the server start: it prints each variable name with the reason, never the
+value, on stderr and exits with status 78.
+
 ## Quality gates
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy --strict src
-uv run pytest
+ruff check .
+ruff format --check .
+mypy --strict src tests
+pytest tests/unit
 ```
 
-An import-rule test fails when `domain` imports another layer, when `services` imports
-`persistence.models` or `runtimes`, or when `api` imports `runtimes`.
+They run in containers of the `test` stage of `backend/Dockerfile`, started by
+`scripts\lyrveil.cmd test lint` and `test unit` ([Testing](testing.md#the-lint-level)). Tool
+settings are in `backend/pyproject.toml`; mypy uses the Pydantic plugin.
+
+An import-rule test, `tests/unit/test_import_rules.py`, fails when `domain` imports another
+layer, when `services` imports `persistence.models` or `runtimes`, or when `api` imports
+`runtimes`. It reads imports with `ast`, resolves relative imports, and its own cases show
+that each rule reports a violation.
+
+### Dependencies and image
+
+`backend/uv.lock` pins every package with its hashes, for Linux and Python 3.12 only. The
+project itself is not built: `[tool.uv] package = false`, and the image puts `src` on
+`PYTHONPATH`, so no unpinned build backend is downloaded. `uv` is not installed on Windows,
+so the lock is regenerated in a container after a change to `pyproject.toml`:
+
+```powershell
+docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend .
+```
+
+The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
+
+| Stage | Content |
+| --- | --- |
+| `lock`, `lockfile` | Resolve `uv.lock` and export it |
+| `deps` | `uv sync --locked --no-dev`: fails when the lock does not match `pyproject.toml` |
+| `test` | Adds the `dev` group with `uv sync --locked`, the sources and `tests/` |
+| `runtime` | The `deps` environment and the sources only, user `10001`, port 8000. The default target |
+
+A unit test of the test stage checks that every installed distribution has the version
+`uv.lock` pins.
