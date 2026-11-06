@@ -37,6 +37,10 @@ No application exists yet. This section records the design documentation.
   vocabulary and a sanitizer for image prompts.
 - Structured image scenes, automatic portrait or landscape sizes, image captions in
   the character's voice, and measured image quality levers.
+- `scripts\lyrveil.cmd test lint` checks the documentation's links, anchors,
+  traceability and test catalog, and analyzes every PowerShell script with a pinned
+  PSScriptAnalyzer. `test unit` runs the Pester tests of the scripts. Levels that
+  have no tests yet exit with an error instead of reporting a pass.
 
 ### Changed
 

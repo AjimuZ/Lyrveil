@@ -44,10 +44,18 @@ name what remains. Never document an unexecuted check as passed.
 ## Checks
 
 ```powershell
+.\scripts\lyrveil.cmd test lint
 .\scripts\lyrveil.cmd test unit
 .\scripts\lyrveil.cmd test integration
 .\scripts\lyrveil.cmd test e2e
 ```
+
+From Git Bash, write `scripts/lyrveil.cmd test lint`. Run `lint` before every commit. It checks the documentation:
+relative links, heading anchors, unfinished-work markers, requirement and acceptance criterion traceability, and the
+test catalog against the documents and the roadmap exits. It also runs PSScriptAnalyzer on every PowerShell script.
+The command fetches its pinned tools into the Git-ignored `.tools\` folder and installs nothing machine-wide. A level
+with no tests yet exits 1 and never reports a pass. Details are in
+[docs/testing.md](docs/testing.md#the-lint-level).
 
 Run `.\scripts\lyrveil.cmd test gpu` when the change touches the runtimes, the orchestration
 or the image pipeline and the hardware is available. See

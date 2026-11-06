@@ -1,12 +1,13 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests. **No test has run yet, because no code exists.** Every test here is planned and assigned to a roadmap phase.
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests and for the delivered `lint` level. **No application code exists yet, so no catalog test has run.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, and the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)).
 
 ## Levels
 
 | Level | Tool | Runs on | GPU |
 | --- | --- | --- | --- |
-| Unit | pytest, Hypothesis, Vitest | Any machine | No |
+| Lint | Documentation checks, PSScriptAnalyzer. Later tasks add each component's gates | Any Windows machine with Git | No |
+| Unit | pytest, Hypothesis, Vitest, Pester for the scripts | Any machine | No |
 | Integration | pytest with SQLite and fake runtimes | Any machine | No |
 | Contract | Schemathesis on OpenAPI, recorded runtime fixtures | Any machine | No |
 | End-to-end | Playwright with `compose.test.yaml` and fakes | Any machine with Docker | No |
@@ -16,9 +17,10 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 
 ## Commands
 
-Planned in `scripts\lyrveil.cmd test`:
+`scripts\lyrveil.cmd test <level>`, delivered in P01.8a. From Git Bash, run `scripts/lyrveil.cmd test <level>`.
 
 ```powershell
+.\scripts\lyrveil.cmd test lint
 .\scripts\lyrveil.cmd test unit
 .\scripts\lyrveil.cmd test integration
 .\scripts\lyrveil.cmd test e2e
@@ -31,7 +33,32 @@ Planned in `scripts\lyrveil.cmd test`:
 Python tests run in a test stage of the backend image, so database tests use the same SQLite build as production.
 Frontend tests run with Node.js on Windows. Neither bind-mounts source code.
 
-`all` runs everything except `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
+`all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
+
+Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. Today `integration`, `e2e`, `docker`, `gpu` and `quality` have no tests, so they exit 1, and so does `all`.
+
+### Pinned tools
+
+The command installs nothing machine-wide. It fetches PSScriptAnalyzer 1.24.0 and Pester 5.7.1 from the PowerShell Gallery into the Git-ignored `.tools\` folder. It checks the SHA-256 of each package against [`scripts/lib/tools.psd1`](../scripts/lib/tools.psd1) before extracting it, and refuses a package that differs. The hashes were recorded at the first download on 2026-11-06. `LYRVEIL_TOOLS_DIR` overrides the folder. The inbox Pester 3.4.0 is never used.
+
+### The `lint` level
+
+`lint` runs after every change, through `cmd.exe` as `"scripts/lyrveil.cmd" test lint` or from Git Bash, so it must stay fast and pass on every commit. It runs both parts below, prints a count for every check, and exits 1 if any check fails.
+
+Documentation checks, in [`scripts/lib/DocumentationChecks.psm1`](../scripts/lib/DocumentationChecks.psm1), scan the Markdown files Git tracks. They also scan new files that `.gitignore` does not exclude, so a check before a commit sees what the commit adds. They read every file as UTF-8 and fail on:
+
+- a relative link to a file or folder that is not in the repository, or that leaves it, and an anchor that no heading of the target produces, using GitHub's anchor rules. Links in code blocks and inline code are skipped, and absolute URLs are not requested;
+- an unfinished-work marker or filler text. The list of markers is in the module;
+- a requirement or acceptance criterion of [Requirements](requirements.md) that heads no complete row of [Traceability](traceability.md), or a traced identifier that Requirements does not define;
+- a test identifier used in any document but missing from the [catalog](#catalog), and a catalog test that no `Exit:` line of the [roadmap](roadmap.md) names. Ranges such as `T-DCK-01 to T-DCK-11` count for every member;
+- an ADR without its `Status:` line, one of its four sections, or its link in the [index](decisions/README.md);
+- a `json` code block that does not parse.
+
+PSScriptAnalyzer then checks every Git-tracked `.ps1` and `.psm1` with [`scripts/PSScriptAnalyzerSettings.psd1`](../scripts/PSScriptAnalyzerSettings.psd1): the default rules at the Error and Warning severities, without `PSAvoidUsingWriteHost`, because the scripts are console commands.
+
+The other checks of the [2026-11-01 documentation checks](verification/2026-11-01-documentation.md) are not part of `lint`. Their lists of required names stayed in the temporary script, the secret scan moves to `gitleaks`, and the Mermaid parser comes with CI in P01.8.
+
+[`tests/scripts/TestCommand.Tests.ps1`](../tests/scripts/TestCommand.Tests.ps1) builds fixture repositories in Pester's temporary drive. It shows that each check fails on its own defect. It also runs a copy of `scripts\lyrveil.cmd test lint` in a fixture: the command exits 0 on a consistent fixture, and non-zero on a tracked broken link and on a PSScriptAnalyzer finding.
 
 ## Layout
 
@@ -40,6 +67,7 @@ backend/tests/{unit,integration,contract}/
 orchestrator/tests/
 frontend/src/**/*.spec.ts
 tests/
+  scripts/           Pester tests of scripts\lyrveil.ps1 and its modules
   fakes/             fake_kobold, fake_comfy, fake_docker, fake_nvml
   fixtures/          Demo characters, synthetic conversations, recorded runtime responses
   e2e/               Playwright

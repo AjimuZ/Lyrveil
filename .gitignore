@@ -39,6 +39,9 @@ tmp/
 *.tmp
 *.part
 
+# Pinned tools fetched by scripts\lyrveil.cmd test (scripts/lib/tools.psd1)
+.tools/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -112,6 +112,9 @@ The root holds six one-line entry points: `setup.cmd`, `start.cmd`, `stop.cmd`, 
 passes its arguments. The bypass applies to that process only. `scripts\lyrveil.cmd <command>` runs the other commands:
 `models`, `import-model`, `backup`, `restore` and `test`.
 
+Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)).
+The other commands and the root entry points are planned. Today, an unknown or unbuilt command exits 1 with a message.
+
 All scripts set `$ErrorActionPreference = 'Stop'` and `Set-StrictMode -Version Latest`, check `$LASTEXITCODE` after
 every native command, are idempotent, and never delete persistent data.
 

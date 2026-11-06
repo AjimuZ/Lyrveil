@@ -58,3 +58,4 @@
 | [Documentation checks, 2026-11-01](verification/2026-11-01-documentation.md) | Checks run on this documentation |
 | [Environment and upstream, 2026-11-05](verification/2026-11-05-environment.md) | RAM upgrade, model catalog sources and the Windows-only setup |
 | [Consistency and images, 2026-11-06](verification/2026-11-06-consistency-and-images.md) | Upstream facts behind ADRs 0031 to 0036, and the documentation checks |
+| [Test command and lint, 2026-11-06](verification/2026-11-06-lint.md) | First runs of `scripts\lyrveil.cmd test lint` and `test unit` |

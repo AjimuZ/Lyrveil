@@ -2,4 +2,20 @@
 
 ## Codebase Patterns
 
+- PowerShell scripts: ASCII only, Set-StrictMode -Version Latest, read text with Read-Utf8Text (explicit UTF-8), avoid New/Set/Remove/Start/Stop/Update verbs on private helpers unless SupportsShouldProcess is added, use $script: variables across Pester BeforeAll/It blocks to keep PSScriptAnalyzer clean.
+- Never redirect native stderr (2>&1) while $ErrorActionPreference is Stop in Windows PowerShell 5.1; lower it locally first.
+- Functions that return an exit code are cast with [int] by the caller, so stray pipeline output fails loudly instead of being read as a pass.
+
+---
+
+## 2026-11-06T20:03:53Z - P01.8a
+- Added scripts\lyrveil.cmd and scripts\lyrveil.ps1 with the `test` command. `lint` runs the documentation checks: relative links and GitHub-style anchors, unfinished-work markers, requirement and acceptance criterion traceability, test identifiers against the catalog, catalog tests against roadmap Exit lines, ADR structure and index, and JSON samples. It reads Markdown files Git tracks plus new files .gitignore does not exclude, and reports counts. It then runs PSScriptAnalyzer 1.24.0, fetched with a hash check into the Git-ignored .tools/, on every tracked .ps1 and .psm1. `unit` runs Pester tests of the scripts with Pester 5.7.1, fetched the same way. An unknown level, a missing level and a level with no tests yet (integration, e2e, docker, gpu, quality, and therefore all) exit 1 with a message. Observed from Git Bash: `scripts/lyrveil.cmd test lint` exits 0 (74 Markdown files, 630 links and anchors, 180/180 requirements, 20/20 acceptance criteria, 148/148 catalog tests, 36 ADRs, 8 JSON samples, 6 scripts with 0 findings). `test unit` exits 0 with 16 of 16 Pester tests passing, including fixture runs of the entry point that exit non-zero on a tracked broken link and on an analyzer finding. `test integration` exits 1 with the no-tests message. The cmd.exe form was not typed directly; the Pester tests start the .cmd from PowerShell, which goes through cmd.exe.
+- Files changed: .gitignore, CHANGELOG.md, CONTRIBUTING.md, docs/README.md, docs/operations.md, docs/testing.md, docs/verification/2026-11-06-lint.md, scripts/lyrveil.cmd, scripts/lyrveil.ps1, scripts/PSScriptAnalyzerSettings.psd1, scripts/lib/RepositoryFiles.psm1, scripts/lib/DocumentationChecks.psm1, scripts/lib/PinnedTools.psm1, scripts/lib/TestCommand.psm1, scripts/lib/tools.psd1, tests/scripts/TestCommand.Tests.ps1
+- **Learnings for future iterations:**
+  - To add a gate to a level, register a runner function in $script:Runners in scripts/lib/TestCommand.psm1. A level whose runner is $null reports 'no tests yet' and exits 1; `all` = lint, unit, integration, e2e, docker.
+  - Pinned PowerShell tools: add an entry to scripts/lib/tools.psd1 and call Install-PinnedModule -Name X -Root $Root, which returns the .psd1 path. To learn a new hash, put a placeholder: the first run fails and prints the actual SHA-256.
+  - Get-RepositoryFile returns tracked files plus untracked files not ignored, so checks see new files before the orchestrator commits. Wrap calls in @() because an empty result unrolls to $null.
+  - Docs must not contain the unfinished-work markers literally; the test catalog (docs/testing.md) and roadmap Exit lines must stay in sync; any new T-XXX-NN mentioned in docs must be in the catalog and named by an Exit line.
+  - Fixture tests run a copied scripts folder in a git-init repo under $TestDrive and share the real .tools via LYRVEIL_TOOLS_DIR. Each fixture lint run takes about 2.5 s.
+  - scripts/lyrveil.cmd works from Git Bash. Its working-tree copy has LF endings until a re-checkout applies the CRLF rule; it has no labels, so LF is harmless.
 ---
