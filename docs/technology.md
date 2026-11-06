@@ -100,6 +100,9 @@ single-user app.
 | pip-licenses | 5.5.5 | MIT | Python license report. |
 | license-checker-rseidelsohn | 5.0.1 | BSD-3-Clause | npm license report. |
 
+The orchestrator's async tests run with the pytest plugin of AnyIO, which HTTPX already brings, so its test stage
+does not install pytest-asyncio.
+
 ## Alternatives considered
 
 | Topic | Alternative | Why not |

@@ -258,6 +258,24 @@ minimum 1.40. All calls use the Unix socket.
 `{name}` is always `lyrveil-llm` or `lyrveil-image`. See
 [Security](security.md#docker-socket).
 
+`orchestrator/src/lyrveil_orchestrator/container_gate.py` implements these calls, delivered in P01.4b. Each method
+inspects the container first and checks its identity, then sends its own call. It reads the answers as follows:
+
+| Answer | Result |
+| --- | --- |
+| Inspect `200` | `State.Status`, `State.Running`, `State.Health.Status` and, for an exited or dead container, `State.ExitCode`. A missing or unknown field is refused |
+| Start or stop `204`, `304` | Started or stopped, or already in that state |
+| Top `409` | No process: Docker's answer for a container that is not running |
+| Logs | Frames of `application/vnd.docker.multiplexed-stream` joined in order, or the body of `application/vnd.docker.raw-stream`, decoded as UTF-8 with invalid bytes replaced. Another media type, a truncated frame or a stream other than stdout and stderr is refused |
+| `404` on any call | `ContainerMissingError`, which [recovery](gpu-orchestration.md#recovery) maps to `RUNTIME_CONTAINER_MISSING` |
+| Socket unreachable, broken connection, timeout | `DockerUnavailableError`, which recovery maps to `DOCKER_UNAVAILABLE` |
+| Any other status or body | `DockerResponseError` with the status code. Redirects are not followed |
+
+The client waits 10 s for an answer, 60 s for a start, and the grace period plus 30 s for a stop, which answers only
+once the container has exited. A stop accepts a grace period of 1 to 120 s. None of these readings has been measured
+against the reference engine yet, because the runtime containers do not exist before P02. The `409` of top is the
+least certain: the API reference does not list it.
+
 ## NVML and WSL2
 
 Source: NVIDIA CUDA on WSL User Guide, confirmed by a container run on 2026-11-01.

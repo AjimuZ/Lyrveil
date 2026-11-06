@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -274,6 +274,12 @@ layer, when `services` imports `persistence.models` or `runtimes`, or when `api`
 `runtimes`. It reads imports with `ast`, resolves relative imports, and its own cases show
 that each rule reports a violation.
 
+`tests/unit/test_docker_socket.py` fails when a module of `src/` or `migrations/` could open
+the Docker socket, which only the orchestrator's container gate uses
+([Security](security.md#docker-socket)). It runs the scan of the orchestrator's
+`tests/unit/test_socket_confinement.py`, described under [Orchestrator package](#orchestrator-package),
+and expects no finding. The two copies change together, since the packages share no code.
+
 ### Dependencies and image
 
 `backend/uv.lock` pins every package with its hashes, for Linux and Python 3.12 only. The
@@ -301,9 +307,11 @@ A unit test of the test stage checks that every installed distribution has the v
 
 `orchestrator/` follows the same rules: `pyproject.toml` with the same ruff, mypy and pytest
 settings, `package = false`, a Linux-only `uv.lock`, and a Dockerfile with the same `lock`,
-`lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The package
-has no runtime dependency yet; the `dev` group adds Hypothesis 6.170.14. The `runtime`
-stage comes with the control API. The lock is regenerated with:
+`lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The one
+runtime dependency so far is HTTPX 0.28.1, for the container gate; the `dev` group adds
+Hypothesis 6.170.14 and respx 0.23.1. Async tests run with the pytest plugin of AnyIO, which
+HTTPX brings, so pytest-asyncio is not needed. The `runtime` stage comes with the control
+API. The lock is regenerated with:
 
 ```powershell
 docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .
@@ -313,3 +321,16 @@ The same gates run in its test stage through `test lint` and `test unit`. It has
 integration tests yet, so `test integration` skips it. `tests/unit/test_state_machine.py`
 holds T-ORC-01 and checks that `state_machine.py` imports only `collections.abc`,
 `dataclasses`, `enum` and `types`.
+
+`container_gate.py` is the only module that talks to Docker
+([Security](security.md#docker-socket), [Runtime contracts](runtime-contracts.md#docker-engine-api)).
+`ContainerGate` has five async methods, `inspect`, `start`, `stop`, `top` and `logs`, plus
+`aclose`. Each takes a `ContainerName` member and checks the container's identity before it
+acts. `tests/unit/test_container_gate.py` holds T-ORC-07, with the Engine stubbed by respx
+and one real Unix socket. It also checks that the gate imports only HTTPX, as a module, and
+`collections.abc`, `dataclasses`, `enum`, `struct`, `types` and `typing`, and that it makes
+one HTTPX client over one transport. `tests/unit/test_socket_confinement.py` fails when
+another module of the package could open the Docker socket: it looks for socket and Docker
+client modules, Unix-socket calls, the `uds` argument, the socket's path or a `unix://` URL,
+`DOCKER_HOST`, and the `docker` command, alone or followed by an option or a subcommand. A
+message that only names Docker, such as `Docker did not answer`, is not reported.

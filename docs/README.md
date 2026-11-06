@@ -62,3 +62,4 @@
 | [Backend skeleton, 2026-11-06](verification/2026-11-06-backend-skeleton.md) | Backend lock, images, lint gates and unit tests |
 | [Backend persistence, 2026-11-06](verification/2026-11-06-backend-persistence.md) | SQLite WAL and FTS5 check, Alembic baseline, health routes and the integration level |
 | [Orchestrator state machine, 2026-11-06](verification/2026-11-06-orchestrator-state-machine.md) | Orchestrator lock, test stage, gates and the T-ORC-01 tests of the transition table |
+| [Container gate, 2026-11-06](verification/2026-11-06-container-gate.md) | HTTPX in the orchestrator lock, the T-ORC-07 tests of `ContainerGate` and the Docker socket scans of the orchestrator and the backend |

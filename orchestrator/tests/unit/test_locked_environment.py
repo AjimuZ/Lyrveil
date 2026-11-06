@@ -22,5 +22,9 @@ def test_every_installed_distribution_is_pinned_by_the_lock() -> None:
 
 
 def test_the_test_tools_have_the_documented_versions() -> None:
-    expected = {"hypothesis": "6.170.14", "mypy": "2.4.1", "pytest": "9.2.0", "ruff": "0.17.3"}
+    expected = {"hypothesis": "6.170.14", "mypy": "2.4.1", "pytest": "9.2.0", "respx": "0.23.1", "ruff": "0.17.3"}
     assert {name: metadata.version(name) for name in expected} == expected
+
+
+def test_the_runtime_dependency_has_the_documented_version() -> None:
+    assert metadata.version("httpx") == "0.28.1"

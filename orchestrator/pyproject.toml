@@ -7,14 +7,19 @@ version = "0.0.0"
 description = "Lyrveil orchestrator: GPU state machine, leases and the two runtime containers."
 license = "Apache-2.0"
 requires-python = "==3.12.*"
-# The state machine needs no third-party package. The control API, NVML access and the container gate add theirs.
-dependencies = []
+# The state machine needs no third-party package. HTTPX is the container gate's client for the Docker socket, and the
+# control API and NVML access add theirs.
+dependencies = [
+    "httpx==0.28.1",
+]
 
 [dependency-groups]
+# respx stubs the Docker Engine in unit tests. Async tests run with AnyIO's pytest plugin, which HTTPX brings.
 dev = [
     "hypothesis==6.170.14",
     "mypy==2.4.1",
     "pytest==9.2.0",
+    "respx==0.23.1",
     "ruff==0.17.3",
 ]
 

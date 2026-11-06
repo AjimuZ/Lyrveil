@@ -58,6 +58,12 @@ No application exists yet. This section records the design documentation.
   lint` and `test unit` also run the orchestrator's gates and tests. A test named
   after `test unit` runs only in the component that holds it, and `test
   integration` skips a component that has no integration tests.
+- The orchestrator's container gate, the only code that talks to Docker. It can
+  inspect, start, stop and read the logs and processes of the two runtime
+  containers and nothing else. It refuses any other container, including one
+  with the same name that the Lyrveil Compose project did not create, and it has
+  no way to create, run commands in or remove containers, or to touch images,
+  volumes or networks.
 
 ### Changed
 

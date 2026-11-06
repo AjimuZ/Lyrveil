@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: accepted (2026-11-01). Implementation: planned, across all phases. P09 audits it.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). The rest is planned, across all phases. P09 audits it.
 
 Lyrveil is a local, single-user application. It holds intimate text and images and controls Docker. The main threats are a malicious web page in the same browser, careless exposure on the network, a leak into logs or Git, and
 excessive authority in the service that controls containers.
@@ -117,10 +117,10 @@ The socket is equivalent to root on the Docker VM. The orchestrator is the only 
 
 | Control | Detail |
 | --- | --- |
-| Allowlist | `ContainerGate` has only `inspect`, `start`, `stop`, `top` and `logs`, with no generic request method. |
-| Names | The only accepted names are `lyrveil-llm` and `lyrveil-image`, as an enum. |
-| Identity | Before acting it verifies the labels `com.docker.compose.project = lyrveil` and `com.docker.compose.service`, so a foreign container with the same name is refused. |
-| Forbidden | No create, exec, attach, pull, build, image, volume, network, system or prune call exists in the code. A test scans the module. |
+| Allowlist | `ContainerGate` has only `inspect`, `start`, `stop`, `top` and `logs`, with no generic request method. One builder makes every request, and it refuses a call, or a query parameter, that [Runtime contracts](runtime-contracts.md#docker-engine-api) does not list. |
+| Names | The only accepted names are `lyrveil-llm` and `lyrveil-image`, as an enum. Anything else, including a plain string that spells one of them, is refused before a request exists. |
+| Identity | Before acting it inspects the container and verifies the name Docker reports and the labels `com.docker.compose.project = lyrveil` and `com.docker.compose.service`, which must name the matching service. A foreign container with the same name is refused, and nothing else is sent to it. |
+| Forbidden | No create, exec, attach, pull, build, image, volume, network, system or prune call exists in the code. Tests build every request the gate can build and scan the module, and a scan of the orchestrator and of the backend fails when any module other than the gate could open the socket. |
 | Surface | The control API accepts only enums, identifiers and numbers, with no user text. It is reachable only from the backend on `lyrveil-control`, with a bearer token compared in constant time. |
 | Isolation | Not attached to `lyrveil-runtime`, so a runtime cannot reach it. No published port. |
 | Hardening | Non-root user with group 0 (the socket's group), `cap_drop: ALL`, `no-new-privileges`, read-only root, tmpfs for `/tmp`. |
@@ -136,6 +136,7 @@ These remain, and are accepted for a local application:
 4. **A compromised runtime can reach the backend API** on `lyrveil-runtime`. Binaries and weights are pinned by hash, custom nodes are disabled and only fixed workflows run, so this path needs an upstream compromise.
 5. **Docker Desktop itself** is trusted.
 6. **Group 0** gives the orchestrator read access to files with that group in its own read-only image, which holds nothing sensitive.
+7. **A container swapped between the identity check and the action** goes unnoticed, because the action addresses the container by name in a second request. Only someone who already controls Docker can swap it.
 
 ## Runtime isolation
 
