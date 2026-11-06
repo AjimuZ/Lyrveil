@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). API types, the WebSocket client and every real screen are planned, phases P01 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -11,8 +11,11 @@ File names follow the Angular v20+ style without role suffixes. Interfaces keep 
 
 ```text
 frontend/
-  angular.json  package.json  package-lock.json  tsconfig*.json  Dockerfile  nginx.conf
-  tools/build-icons.mjs
+  angular.json  package.json  package-lock.json  tsconfig*.json  eslint.config.mjs  Dockerfile  nginx.conf
+  tools/build-icons.mjs       Planned
+  tools/build-strict.mjs      Production build that fails on a warning or a network reference
+  tools/check-styles.mjs      Fails on a color literal outside styles/tokens.scss
+  tools/eslint/               T-SEC-09 restrictions, their fixtures and test
   src/
     assets/icons/             ASCII icon grids
     i18n/it.json              Interface text
@@ -22,9 +25,9 @@ frontend/
       core/
         api/                  Generated types, HTTP providers, error mapping
         realtime/             events-socket.ts: WebSocket, reconnect, replay
-        i18n/                 translator.ts, translate pipe
+        i18n/                 translator.ts, translate-pipe.ts
         session/              first-start notice, display name
-        shell/                Layout, navigation, breakpoints
+        shell/                Layout, navigation, breakpoints; unavailable-screen.ts until each screen exists
       shared/
         ui/                   ob-* primitives
         pipes/                relative-time.ts, day-label.ts
@@ -59,7 +62,11 @@ All feature routes load lazily.
 | `/settings/resources` | 10. AI resource monitoring |
 | `/settings/data` | Backup, export, deleted conversations |
 
-Technical screens are reached only from `/settings`.
+Technical screens are reached only from `/settings`. Any other path redirects to `/chats`.
+
+Until a phase delivers a screen, its route loads `core/shell/unavailable-screen.ts`, which shows the screen's title from
+the route's `data.screen` key and says that the screen is not available yet. Delivering a screen replaces only the
+route's `loadComponent`.
 
 ## State
 
@@ -194,13 +201,13 @@ A help dialog under `?` lists them. Browser shortcuts stay intact when focus is 
 
 ## Text and translation
 
-`Translator` is a small signal-based service. It loads `i18n/it.json`, resolves typed keys from a generated type and formats plurals with `Intl.PluralRules`. Dates and numbers use `Intl` with locale `it-IT`. All interface strings are in the catalog. Adding a language means adding a catalog.
+`Translator` is a small signal-based service. It bundles `i18n/it.json` through a JSON import, so the text works offline and needs no request. The compiler derives the key types `TextKey` and `PluralKey` from the catalog, so an unknown key fails the build, and the `t` pipe checks keys in templates the same way. Keys are flat, such as `nav.settings`. An entry is a string or an object of plural forms by `Intl.PluralRules` category, with `other` required. `{name}` placeholders take parameters, numbers are formatted for the locale, and `{count}` receives the count of a plural. Dates and numbers use `Intl` with locale `it-IT`. All interface strings are in the catalog. Adding a language means adding a catalog.
 
 Conversation language is a separate setting and affects only the characters' text.
 
 ## Security in the browser
 
-- Messages render as text through Angular bindings. `innerHTML` and `bypassSecurityTrust*` are forbidden, and a lint rule enforces it.
+- Messages render as text through Angular bindings. `innerHTML` and `bypassSecurityTrust*` are forbidden, and a lint rule enforces it: `tools/eslint/unsafe-html.mjs` configures ESLint's `no-restricted-syntax` to report `[innerHTML]` and `[outerHTML]` bindings in templates and in host metadata, `innerHTML`, `outerHTML` and `insertAdjacentHTML` in code, and any `bypassSecurityTrust*` identifier (T-SEC-09).
 - `*emphasis*` is parsed into a node list. It produces `<em>`, with no HTML passing through.
 - All external links are absent by design. The app makes no third-party request.
 - Fonts, icons and scripts are same-origin. See the CSP in [Security](security.md#http-headers).
@@ -209,14 +216,14 @@ Conversation language is a separate setting and affects only the characters' tex
 
 Multi-stage `frontend/Dockerfile`:
 
-1. `node:24.22.2-alpine`: `npm ci --ignore-scripts`, `ng build`.
-2. `nginxinc/nginx-unprivileged:1.30.6-alpine`: copies `dist/` and `nginx.conf`, port 8080.
+1. `node:24.22.2-alpine`: `npm ci --ignore-scripts`, then `node tools/build-strict.mjs`, the same strict build as the lint level.
+2. `nginxinc/nginx-unprivileged:1.30.6-alpine`: copies `dist/lyrveil/browser` and `nginx.conf`, as `conf.d/default.conf`, port 8080.
 
-`nginx.conf` serves `index.html` for client routes, caches hashed files for a year, proxies `/api`, `/media` and `/ws` to `lyrveil-backend:8000`, passes the original `Host` and `Origin`, disables proxy buffering on `/ws`, limits bodies to 80 MB, and sets the security headers.
+`nginx.conf` serves `index.html` for client routes, caches hashed files for a year, proxies `/api`, `/media` and `/ws` to `lyrveil-backend:8000`, passes the original `Host` and `Origin`, disables proxy buffering on `/ws`, limits bodies to 80 MB, answers `GET /healthz` for the Compose health check, and sets the security headers. The image has not been built yet: see the [evidence](verification/2026-11-06-frontend-shell.md#not-executed).
 
 ## Tests
 
-- Unit and component: Vitest through `ng test`, with `TestBed` and component harnesses.
+- Unit and component: Vitest through `ng test`, with `TestBed` and component harnesses, in jsdom. `npm run test` also runs the Node tests of `tools/`, T-SEC-09 among them. `scripts\lyrveil.cmd test unit` runs both.
 - End-to-end: Playwright against the fake runtimes. See [Testing](testing.md).
 - Accessibility: `@axe-core/playwright` on all ten screens.
-- `ng build` must pass with no warnings before any commit that touches `frontend/`.
+- `ng build` must pass with no warnings before any commit that touches `frontend/`. `scripts\lyrveil.cmd test lint` runs `npm run lint` (ESLint with no warnings allowed, then the color check) and `npm run build` (`tools/build-strict.mjs`). The build fails on any line with `WARNING`, on a `url()`, `@import`, `src` or `href` that names another origin, and when a font the CSS names is missing from the output.

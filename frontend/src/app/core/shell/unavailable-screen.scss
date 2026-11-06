@@ -1,0 +1,24 @@
+:host {
+  display: block;
+  padding: var(--ob-space-5);
+}
+
+.screen {
+  max-width: 760px;
+  padding: var(--ob-space-5);
+  background: var(--ob-surface);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.title {
+  margin: 0 0 var(--ob-space-3);
+  font-family: var(--ob-font-pixel);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.note {
+  margin: 0;
+  color: var(--ob-text-muted);
+}

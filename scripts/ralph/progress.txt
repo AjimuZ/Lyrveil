@@ -21,6 +21,9 @@
 - Put authentication in middleware before routing, not in per-route dependencies. Then routes that don't exist and routes added later are covered too, and a 401 never reveals which routes exist.
 - When a direct dependency drifts a shared transitive package away from the version in docs/technology.md, pin it with `[tool.uv] constraint-dependencies` instead of adding it as a dependency.
 - Test constant-time token comparison by replacing `hmac.compare_digest` with a spy through the `hmac` module, and assert that every refusal went through it.
+- Prove a lint rule with fixture files kept in the config's `ignores`. A `node --test` file lints them through the ESLint API with `ignore: false`, using the project's real config, and asserts the exact reported lines.
+- In nginx, put security headers once at server level with `always`, and set caching with `expires` instead of `add_header`. A location's own `add_header` would stop it inheriting the server-level headers.
+- Write tool scripts as ES modules that export pure functions for unit tests and run their CLI part only when `import.meta.url` equals `pathToFileURL(process.argv[1]).href`.
 
 ---
 
@@ -156,4 +159,41 @@ Docs updated: `docs/backend.md`, `docs/gpu-orchestration.md`, `docs/testing.md`,
   - Creating `orchestrator/tests/integration/` was enough for `scripts/lyrveil.cmd test integration` to run the orchestrator. The level discovers components by that folder.
   - Starlette's TestClient prints a deprecation warning about httpx in both components. It doesn't fail the run.
   - The preflight's Docker daemon and Engine API rows are not in the orchestrator: the container gate allows no version call. start.cmd (P01.6) checks them on the host.
+---
+
+## 2026-11-06T21:45:29Z - P01.5a
+- I created `frontend/`: a standalone Angular 22.2.4 app (CLI and build 22.2.5, TypeScript 6.0.3) with zoneless change detection set explicitly. Its route table covers the 13 documented screens. `/` and unknown paths go to `/chats`. Each screen loads lazily as a placeholder that shows its title and says it is not available yet.
+
+The design tokens are in `src/styles/tokens.scss`, and the reset, typography and global stylesheets build on them. All three font families are bundled locally from the `@fontsource` packages at 5.3.0.
+
+The text catalog is `src/i18n/it.json`, imported directly into the code so it works offline. The `Translator` service derives the key types from the catalog, so a wrong key fails the build. It handles placeholders and picks plural forms with `Intl.PluralRules`, and a `t` pipe gives templates the same checked access.
+
+Lint and build checks:
+- `eslint.config.mjs` adds the T-SEC-09 rule. It reports `[innerHTML]`/`[outerHTML]` bindings in templates and host metadata, `innerHTML`/`outerHTML`/`insertAdjacentHTML` in code, and any `bypassSecurityTrust*` call. It also forbids inline component styles.
+- `tools/check-styles.mjs` fails on any color literal outside the token file.
+- `tools/build-strict.mjs` runs the production `ng build` and fails on any `WARNING` line, on any reference to another origin, or when a font the CSS names is missing from the output.
+
+`scripts/lib/FrontendComponent.psm1` connects all this to the test command. When `frontend/package.json` exists, it runs `npm ci --ignore-scripts` if `node_modules` is missing or older than the lock. `test lint` then runs `npm run lint` and `npm run build`, and `test unit` runs `npm run test` (Vitest through `ng test`, then the Node tests in `tools/`). I also wrote the two-stage `Dockerfile` and the `nginx.conf` (security headers, `/healthz`, proxying, caching).
+
+Checks I ran:
+- `npm run lint`: exit 0.
+- `npm run build`: exit 0, no warnings, no network references, 32 font files in `dist/lyrveil/browser/media`.
+- `npm run test`: exit 0. Vitest ran 2 files and 7 tests (translator and route table); the Node tests ran 7, including the T-SEC-09 fixture test, which reports exactly 3 lines in the HTML fixture and 6 in the TypeScript fixture.
+- `scripts/lyrveil.cmd test lint`, run again after the doc edits: passed, with the frontend part included.
+
+Not verified:
+- The Docker image build and nginx at runtime (no frontend image build was allowed).
+- A real build warning going through the gate; only the warning parser was tested.
+- `scripts/lyrveil.cmd test unit` as a whole; I ran the frontend tests through npm directly.
+- The app in a browser.
+- Files changed: scripts/lib/TestCommand.psm1, scripts/lib/FrontendComponent.psm1, frontend/package.json, frontend/package-lock.json, frontend/angular.json, frontend/tsconfig.json, frontend/tsconfig.app.json, frontend/tsconfig.spec.json, frontend/eslint.config.mjs, frontend/Dockerfile, frontend/nginx.conf, frontend/src/index.html, frontend/src/main.ts, frontend/src/i18n/it.json, frontend/src/styles/tokens.scss, frontend/src/styles/reset.scss, frontend/src/styles/typography.scss, frontend/src/styles/global.scss, frontend/src/app/app.ts, frontend/src/app/app.html, frontend/src/app/app.scss, frontend/src/app/app.config.ts, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/app/core/i18n/translator.ts, frontend/src/app/core/i18n/translate-pipe.ts, frontend/src/app/core/i18n/translator.spec.ts, frontend/src/app/core/shell/unavailable-screen.ts, frontend/src/app/core/shell/unavailable-screen.html, frontend/src/app/core/shell/unavailable-screen.scss, frontend/tools/build-strict.mjs, frontend/tools/check-styles.mjs, frontend/tools/tools.test.mjs, frontend/tools/eslint/unsafe-html.mjs, frontend/tools/eslint/unsafe-html.test.mjs, frontend/tools/eslint/fixtures/unsafe-html.html, frontend/tools/eslint/fixtures/unsafe-html.ts, CHANGELOG.md, docs/README.md, docs/frontend.md, docs/design-system.md, docs/testing.md, docs/technology.md, docs/verification/2026-11-06-frontend-shell.md
+- **Learnings for future iterations:**
+  - Run frontend npm commands from the repo root with `--prefix frontend` (for example `npm run test --prefix frontend`). A bare `npm test` was denied; `npm run test` is allowed. A chained command such as `node --version; npm --version` was denied as a whole.
+  - Never name an import `it` in spec files (for example `import it from '.../it.json'`): it shadows Vitest's global `it` and fails with TS2349. Name it `catalog` or `italian`.
+  - Route data binds to component inputs through `withComponentInputBinding()`. Each placeholder route has `data.screen` (a TextKey). Delivering a real screen means replacing only `loadComponent` in `app.routes.ts`. The route spec checks the exact list of paths against docs/frontend.md.
+  - Catalog keys are flat (`screen.chats`). An entry is either a string (a `TextKey`) or an object of plural forms with `other` required (a `PluralKey`). Add new interface text to `src/i18n/it.json`; the types update on their own.
+  - Component prefixes are `lyr` for app components and `ob` for design-system primitives, set in angular.json and eslint.config.mjs. Component styles must go in .scss files referenced by `styleUrl`, because ESLint forbids inline `styles` and the color check reads only .scss and .css files.
+  - `tools/build-strict.mjs` writes to `dist/lyrveil/browser`. It runs ng.js through `process.execPath`, without a shell, with NG_FORCE_TTY=false.
+  - The package-lock was generated on Windows with `--ignore-scripts`. It already lists the Linux and musl packages (`@esbuild/linux-x64`, `@parcel/watcher-linux-x64-musl`), but `docker build -f frontend/Dockerfile .` has never run.
+  - FrontendComponent.psm1 skips the frontend when `test unit` gets pytest arguments, and when `frontend/package.json` is absent (as in the Pester fixture repos).
 ---

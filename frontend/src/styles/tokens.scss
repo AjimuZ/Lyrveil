@@ -1,0 +1,43 @@
+// Obsidian Bloom tokens of docs/design-system.md. The only file allowed to hold color literals.
+:root {
+  /* Brand colors: required, never changed */
+  --ob-bg: #100d15;
+  --ob-surface: #211827;
+  --ob-elevated: #2a2032;
+  --ob-border: #493047;
+  --ob-primary: #c77dad;
+  --ob-primary-hover: #dea1c5;
+  --ob-accent: #8d70b0;
+  --ob-text: #f4d8e9;
+  --ob-text-muted: #a99aab;
+
+  /* Semantic extension, ADR 0023 */
+  --ob-danger: #e5737f;
+  --ob-warning: #e0b070;
+  --ob-success: #7fbf9a;
+
+  /* Derived colors */
+  --ob-control-border: var(--ob-accent);
+  --ob-focus: var(--ob-primary-hover);
+  --ob-bubble-user: color-mix(in srgb, var(--ob-primary) 18%, var(--ob-surface)); /* #3F2A3F */
+  --ob-selected: color-mix(in srgb, var(--ob-primary) 12%, var(--ob-surface)); /* #352437 */
+  --ob-hover: color-mix(in srgb, var(--ob-text-muted) 10%, var(--ob-surface)); /* #2F2534 */
+
+  /* Non-color tokens */
+  --ob-px: 2px; /* Pixel unit for ornaments */
+  --ob-radius-sm: 2px; /* Controls, pills */
+  --ob-radius-md: 4px; /* Windows, cards */
+  --ob-radius-bubble: 6px; /* Message bubbles */
+  --ob-space-1: 4px;
+  --ob-space-2: 8px;
+  --ob-space-3: 12px;
+  --ob-space-4: 16px;
+  --ob-space-5: 24px;
+  --ob-space-6: 32px;
+  --ob-quick: 120ms; /* Hover and focus */
+  --ob-panel: 160ms; /* Panels and dialogs */
+  --ob-shadow-overlay: 0 4px 16px color-mix(in srgb, var(--ob-bg) 70%, transparent);
+  --ob-font-ui: "Inter Variable", system-ui, "Segoe UI", sans-serif;
+  --ob-font-pixel: "Pixelify Sans", var(--ob-font-ui);
+  --ob-font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}

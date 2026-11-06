@@ -73,6 +73,14 @@ No application exists yet. This section records the design documentation.
   compared in constant time, and anything else gets `401`. `GET /v1/preflight`
   returns the GPU preflight. `test integration` now runs the orchestrator's
   integration tests too.
+- A first web interface in `frontend/`: an Italian shell with the Obsidian Bloom
+  colors, bundled fonts that need no network, a navigation bar and every
+  documented screen address, each saying that the screen is not available yet.
+  `test lint` also runs ESLint, which forbids rendering HTML from strings or
+  bypassing Angular's sanitizer, a check that styles use only the design tokens,
+  and a production build that fails on any warning or network reference. `test
+  unit` also runs the frontend's Vitest tests. The image's `Dockerfile` and
+  `nginx.conf` are written but not built yet.
 
 ### Changed
 

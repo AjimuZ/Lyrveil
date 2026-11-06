@@ -64,3 +64,4 @@
 | [Orchestrator state machine, 2026-11-06](verification/2026-11-06-orchestrator-state-machine.md) | Orchestrator lock, test stage, gates and the T-ORC-01 tests of the transition table |
 | [Container gate, 2026-11-06](verification/2026-11-06-container-gate.md) | HTTPX in the orchestrator lock, the T-ORC-07 tests of `ContainerGate` and the Docker socket scans of the orchestrator and the backend |
 | [Control API, 2026-11-06](verification/2026-11-06-control-api.md) | FastAPI and nvidia-ml-py in the orchestrator lock, the preflight thresholds and the T-ORC-10 tests of the control API token |
+| [Frontend shell, 2026-11-06](verification/2026-11-06-frontend-shell.md) | Frontend lock, strict build, lint gates with T-SEC-09, and the first Vitest runs |

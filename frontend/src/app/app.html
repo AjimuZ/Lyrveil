@@ -1,0 +1,15 @@
+<div class="shell">
+  <header class="sidebar">
+    <p class="brand">{{ 'app.brand' | t }}</p>
+    <nav class="nav" [attr.aria-label]="'nav.label' | t">
+      <a class="nav-link" routerLink="/chats" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.chats' | t }}</a>
+      <a class="nav-link" routerLink="/characters" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.characters' | t }}</a>
+      <a class="nav-link" routerLink="/gallery" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.gallery' | t }}</a>
+      <a class="nav-link" routerLink="/scenarios" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.scenarios' | t }}</a>
+      <a class="nav-link" routerLink="/settings" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.settings' | t }}</a>
+    </nav>
+  </header>
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>

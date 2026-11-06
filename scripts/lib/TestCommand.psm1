@@ -6,6 +6,7 @@ Import-Module (Join-Path $PSScriptRoot 'RepositoryFiles.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'DocumentationChecks.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PinnedTools.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
@@ -39,8 +40,9 @@ function Invoke-LintLevel {
     <#
     Runs the lint level: the documentation checks on the Git-tracked Markdown, the pinned PSScriptAnalyzer on every
     Git-tracked .ps1 and .psm1 with scripts/PSScriptAnalyzerSettings.psd1, then ruff check, ruff format --check and
-    mypy --strict in the test stage of each Python component present. Returns 0 when everything passes and 1
-    otherwise. Every part always runs, so one report shows every problem. Not exported.
+    mypy --strict in the test stage of each Python component present, then, when frontend/ is present, ESLint, the
+    token color check and the strict production ng build with Node.js on the host. Returns 0 when everything passes
+    and 1 otherwise. Every part always runs, so one report shows every problem. Not exported.
     #>
     param([string]$Root)
 
@@ -73,6 +75,7 @@ function Invoke-LintLevel {
     if ($scriptFailures.Length -gt 0) { $failed = $true }
 
     if ((Invoke-PythonLint -Root $Root) -gt 0) { $failed = $true }
+    if ((Invoke-FrontendLint -Root $Root) -gt 0) { $failed = $true }
 
     if ($failed) { return 1 }
     return 0
@@ -81,19 +84,22 @@ function Invoke-LintLevel {
 function Invoke-UnitLevel {
     <#
     Runs the unit level: the Pester tests of the scripts, tests/scripts/*.Tests.ps1, with the pinned Pester, then
-    pytest on tests/unit in the test stage of each Python component present. With Argument, only pytest runs, with
-    those arguments, so one test can run alone. Returns 0 only when every part ran tests and none failed; skipped
-    tests are reported and never count as passed. Returns 1 when there is nothing to run. Not exported.
+    pytest on tests/unit in the test stage of each Python component present, then the frontend's Vitest and Node
+    tests when frontend/ is present. With Argument, only pytest runs, with those arguments, so one test can run
+    alone. Returns 0 only when every part ran tests and none failed; skipped tests are reported and never count as
+    passed. Returns 1 when there is nothing to run. Not exported.
     #>
     param([string]$Root, [string[]]$Argument = @())
 
     $pytestArguments = [string[]]@($Argument)
     $components = @(Get-PythonComponent -Root $Root)
     $files = @()
+    $frontend = $false
     if ($pytestArguments.Length -eq 0) {
         $files = @(Get-RepositoryFile -Root $Root -Pattern @('tests/scripts/*.Tests.ps1'))
+        $frontend = Test-FrontendComponent -Root $Root
     }
-    if ($files.Length -eq 0 -and $components.Length -eq 0) {
+    if ($files.Length -eq 0 -and $components.Length -eq 0 -and -not $frontend) {
         Write-Host "Test level 'unit' has no tests yet. Nothing ran, so it cannot pass."
         return 1
     }
@@ -103,6 +109,7 @@ function Invoke-UnitLevel {
     if ($components.Length -gt 0 -and (Invoke-PythonUnitTest -Root $Root -PytestArgument $pytestArguments) -gt 0) {
         $failed = $true
     }
+    if ($frontend -and (Invoke-FrontendUnitTest -Root $Root) -ne 0) { $failed = $true }
     if ($failed) { return 1 }
     return 0
 }

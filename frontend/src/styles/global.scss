@@ -1,0 +1,19 @@
+// Global stylesheet: tokens, reset and typography, then page colors and the visible focus ring.
+@use "tokens";
+@use "reset";
+@use "typography";
+
+html {
+  background: var(--ob-bg);
+  color: var(--ob-text);
+  color-scheme: dark;
+}
+
+a {
+  color: var(--ob-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ob-focus);
+  outline-offset: 2px;
+}

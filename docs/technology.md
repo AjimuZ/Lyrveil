@@ -67,6 +67,7 @@ Starlette and provides `to_thread`.
 | `@angular/cdk` | 22.2.5 | MIT | Overlay, focus trap, virtual scrolling. |
 | TypeScript | 6.0.3 | Apache-2.0 | Angular 22 requires `>=6.0 <6.1`. The npm `latest` tag is 7.0.2 and must not be used. |
 | RxJS | 7.8.2 | Apache-2.0 | Required by Angular. Used only at HTTP and WebSocket boundaries. |
+| tslib | 2.9.1 | 0BSD | TypeScript helpers, required by Angular with `importHelpers`. |
 | `@hey-api/openapi-ts` | 0.99.0 | MIT | Generates API types from the backend OpenAPI document. `openapi-typescript` 7.13.0 is not used because its peer range stops at TypeScript 5. |
 | `@fontsource-variable/inter` | 5.3.0 | OFL-1.1 | Message and interface text, bundled for offline use. |
 | `@fontsource/pixelify-sans` | 5.3.0 | OFL-1.1 | Brand, short titles and small labels. |
@@ -90,6 +91,10 @@ single-user app.
 | respx | 0.23.1 | BSD-3-Clause | HTTP stubs in unit tests. |
 | Schemathesis | 4.33.0 | MIT | Contract tests from OpenAPI. |
 | Vitest | 5.0.5 | MIT | Angular unit tests. |
+| jsdom | 31.0.0 | MIT | DOM for Vitest through `ng test`. Development only. |
+| ESLint and `@eslint/js` | 10.14.0 and 10.0.1 | MIT | Frontend lint, with the T-SEC-09 restrictions. Development only. |
+| typescript-eslint | 8.72.1 | MIT | TypeScript rules. Its range `<6.1.0` accepts TypeScript 6.0.3. Development only. |
+| angular-eslint | 22.6.0 | MIT | Angular and template rules, and the template parser. Development only. |
 | Playwright | 1.64.1 | Apache-2.0 | End-to-end tests. |
 | `@axe-core/playwright` | 4.14.0 | MPL-2.0 | Accessibility checks. Development only. |
 | shellcheck | Debian package | GPL-3.0 | Linting of shell scripts inside images. Development only, not distributed. |

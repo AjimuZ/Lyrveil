@@ -1,12 +1,12 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)).
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)).
 
 ## Levels
 
 | Level | Tool | Runs on | GPU |
 | --- | --- | --- | --- |
-| Lint | Documentation checks, PSScriptAnalyzer, and ruff and `mypy --strict` for the backend and the orchestrator. Later tasks add the frontend's gates | Any Windows machine with Git and Docker | No |
+| Lint | Documentation checks, PSScriptAnalyzer, ruff and `mypy --strict` for the backend and the orchestrator, and ESLint, the color check and the strict `ng build` for the frontend | Any Windows machine with Git, Docker and Node.js 24 | No |
 | Unit | pytest, Hypothesis, Vitest, Pester for the scripts | Any machine | No |
 | Integration | pytest with SQLite and fake runtimes | Any machine | No |
 | Contract | Schemathesis on OpenAPI, recorded runtime fixtures | Any machine | No |
@@ -33,7 +33,9 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 Python tests run in the test stage of their component's image, `backend/Dockerfile` or `orchestrator/Dockerfile`, so database tests use the same SQLite build as production.
 Frontend tests run with Node.js on Windows. Neither bind-mounts source code.
 
-`unit` passes any arguments after the level to pytest, and then runs only pytest, not the Pester tests. A path or node ID under `tests/` replaces the default `tests/unit`, so one test runs alone. It runs only in the components whose folder holds every named path, and fails when none does:
+The frontend part of `lint` and `unit`, in [`scripts/lib/FrontendComponent.psm1`](../scripts/lib/FrontendComponent.psm1), runs when `frontend/package.json` is present. It first runs `npm ci --ignore-scripts` in `frontend/` when `node_modules` is missing or older than `package-lock.json`, so the packages always come from the lock. `lint` then runs `npm run lint` and `npm run build`, and `unit` runs `npm run test`: Vitest through `ng test --watch=false`, then `node --test` on `frontend/tools/**/*.test.mjs`. Each script prints its exit status and fails the level when it is not 0.
+
+`unit` passes any arguments after the level to pytest, and then runs only pytest, not the Pester or frontend tests. A path or node ID under `tests/` replaces the default `tests/unit`, so one test runs alone. It runs only in the components whose folder holds every named path, and fails when none does:
 
 ```powershell
 .\scripts\lyrveil.cmd test unit tests/unit/test_settings.py::test_a_missing_token_is_named
@@ -54,7 +56,7 @@ The command installs nothing machine-wide. It fetches PSScriptAnalyzer 1.24.0 an
 
 ### The `lint` level
 
-`lint` runs after every change, through `cmd.exe` as `"scripts/lyrveil.cmd" test lint` or from Git Bash, so it must stay fast and pass on every commit. It runs the three parts below, prints a line for every check, and exits 1 if any check fails.
+`lint` runs after every change, through `cmd.exe` as `"scripts/lyrveil.cmd" test lint` or from Git Bash, so it must stay fast and pass on every commit. It runs the parts below, then the frontend gates described under [Commands](#commands), prints a line for every check, and exits 1 if any check fails.
 
 Documentation checks, in [`scripts/lib/DocumentationChecks.psm1`](../scripts/lib/DocumentationChecks.psm1), scan the Markdown files Git tracks. They also scan new files that `.gitignore` does not exclude, so a check before a commit sees what the commit adds. They read every file as UTF-8 and fail on:
 
@@ -257,7 +259,7 @@ tests/
 | T-SEC-06 | Marker strings never reach logs | Integration | P02 |
 | T-SEC-07 | Content guard cases, including minors at each entry point | Unit | P03 |
 | T-SEC-08 | Delete refuses paths outside the media root | Unit | P03 |
-| T-SEC-09 | Lint rule forbids `innerHTML` and `bypassSecurityTrust` | Unit | P01 |
+| T-SEC-09 | Lint rule forbids `innerHTML` and `bypassSecurityTrust`. Delivered: `frontend/tools/eslint/unsafe-html.test.mjs` lints fixtures with the real configuration | Unit | P01 |
 
 ### Docker
 

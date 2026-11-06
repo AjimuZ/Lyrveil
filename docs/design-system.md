@@ -1,6 +1,6 @@
 # Design system: Obsidian Bloom
 
-Status: accepted (2026-11-01). Implementation: planned, phase P08, with basic tokens from P01.
+Status: accepted (2026-11-01). Implementation: partial. The color and non-color tokens, the three bundled font families and the color literal check exist since P01.5a ([evidence](verification/2026-11-06-frontend-shell.md)). Icons, primitives and the P08 checks are planned.
 
 Obsidian Bloom is 80 % modern messaging app and 20 % quiet JRPG identity. The result must feel like a real product used every day. Readability always beats retro
 fidelity. It never looks like a dashboard, a terminal or a game menu.
@@ -57,7 +57,7 @@ Other shades derive from the tokens. No other literal color appears in the code.
 }
 ```
 
-A check in `scripts\lyrveil.cmd test` fails when a color literal appears outside the token file.
+`scripts\lyrveil.cmd test lint` fails when a color literal appears outside the token file, `frontend/src/styles/tokens.scss`. The check, `frontend/tools/check-styles.mjs`, finds hex colors, color functions such as `rgb(` and `oklch(`, and CSS named colors in declaration values, in every `.scss` and `.css` file under `frontend/src/`. `color-mix(` of tokens, `transparent` and `currentColor` are allowed. ESLint forbids inline component `styles` and template style attributes, so every component style is in a file the check reads.
 
 ### Contrast
 
@@ -117,7 +117,7 @@ Depth comes from frames and layers. The one shadow belongs to floating overlays 
 | Short graphic labels, up to 2 words | Pixelify Sans | At least 14 px |
 | Identifiers, seeds, diagnostics | JetBrains Mono | 12 px |
 
-Pixel fonts never appear in messages, paragraphs, form labels or small badges. All three families are bundled locally through `@fontsource`, so the app works offline. P08 checks Pixelify Sans
+Pixel fonts never appear in messages, paragraphs, form labels or small badges. All three families are bundled locally through `@fontsource`, so the app works offline: Inter Variable upright and italic, Pixelify Sans 500 and JetBrains Mono 400, every subset of each, listed in the `styles` of `frontend/angular.json`. P08 checks Pixelify Sans
 with `àèéìòù`, and records file hashes in the license notices.
 
 ## Icons

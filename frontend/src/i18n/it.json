@@ -1,0 +1,27 @@
+{
+  "app.brand": "LYRVEIL",
+  "nav.label": "Navigazione principale",
+  "nav.chats": "Chat",
+  "nav.characters": "Personaggi",
+  "nav.gallery": "Galleria",
+  "nav.scenarios": "Scenari",
+  "nav.settings": "Impostazioni",
+  "screen.chats": "Conversazioni",
+  "screen.conversation": "Conversazione",
+  "screen.characters": "Personaggi",
+  "screen.characterNew": "Nuovo personaggio",
+  "screen.characterProfile": "Profilo del personaggio",
+  "screen.characterEdit": "Modifica personaggio",
+  "screen.characterMemory": "Memoria del personaggio",
+  "screen.gallery": "Galleria",
+  "screen.scenarios": "Scenari",
+  "screen.settings": "Impostazioni",
+  "screen.settingsModels": "Modelli",
+  "screen.settingsResources": "Risorse AI",
+  "screen.settingsData": "Dati",
+  "screen.unavailable": "Questa schermata non è ancora disponibile.",
+  "chats.unread": {
+    "one": "{count} messaggio non letto",
+    "other": "{count} messaggi non letti"
+  }
+}
