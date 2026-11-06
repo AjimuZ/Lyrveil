@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b), but this session could not run Docker, so their tests have not run ([evidence](verification/2026-11-06-fake-runtimes.md)). Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)).
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Only the catalog tests named in this paragraph have run.** The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. Every other catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)).
 
 ## Levels
 
@@ -48,7 +48,29 @@ Every other level refuses arguments.
 
 `integration` builds the test stage of each component that has a `tests/integration` folder, today the backend and the orchestrator, and runs `pytest tests/integration` in it, without network access. The backend's tests use SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in. The orchestrator's tests run the control API in process through Starlette's test client, with a fake GPU probe.
 
-Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. Today `gpu` and `quality` have no tests, so they exit 1.
+Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. See [The `docker` level](#the-docker-level). Today `gpu` and `quality` have no tests, so they exit 1.
+
+### The `docker` level
+
+Delivered with P01.8b and P01.6a ([evidence](verification/2026-11-06-setup.md)). It runs with the pinned Pester only;
+pytest joins it when a Docker test needs Python. The files:
+
+- `tests/docker/TestFakes.Tests.ps1` checks that no production image holds `tests/fakes` and that `compose.test.yaml`
+  touches nothing of an installation ([Fake runtimes](#fake-runtimes)).
+- `tests/docker/Setup.Tests.ps1` holds T-DCK-06, T-DCK-07 and T-DCK-13. It judges each failing preflight row from
+  stand-in facts, and checks that setup then prints the advice and `exit status 2` and creates no `.env`. With a
+  stand-in `docker.cmd` that always fails, it runs the real probe, and it runs `setup.cmd` with an unknown and a planned
+  option through `cmd.exe`. It runs setup twice against the project `lyrveil-setup-test` and compares `.env`, the
+  volume labels and owners and the runtime container. It checks the `.env` ACL and that both volumes survive
+  `docker compose down -v`, and runs PSScriptAnalyzer. It also checks that every root `.cmd` file holds only a comment,
+  the call to `scripts\lyrveil.ps1` with its own command and `%*`, and the exit.
+
+The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
+which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
+`:setup-test`, and adds a fake `lyrveil-llm` so setup has a runtime container to create. Every command names the
+project with `-p`, `--env-file` points at `.env.example` or at a `.env` in Pester's temporary drive, and setup refuses
+to start unless the resolved configuration names only the test volumes. The test removes the project and both volumes
+afterwards and fails if a volume is left. No test uses a backup folder.
 
 ### The `e2e` level
 
@@ -85,6 +107,8 @@ Last, [`scripts/lib/PythonComponents.psm1`](../scripts/lib/PythonComponents.psm1
 The other checks of the [2026-11-01 documentation checks](verification/2026-11-01-documentation.md) are not part of `lint`. Their lists of required names stayed in the temporary script, the secret scan moves to `gitleaks`, and the Mermaid parser comes with CI in P01.8.
 
 [`tests/scripts/TestCommand.Tests.ps1`](../tests/scripts/TestCommand.Tests.ps1) builds fixture repositories in Pester's temporary drive. It shows that each check fails on its own defect. It also runs a copy of `scripts\lyrveil.cmd test lint` in a fixture: the command exits 0 on a consistent fixture, and non-zero on a tracked broken link and on a PSScriptAnalyzer finding. Other cases check that `lint` refuses arguments and that `unit` with pytest arguments fails when no Python component exists. With a stand-in `docker.cmd` first on `PATH`, three cases check which component runs pytest: `integration` skips a component without `tests/integration`, a named test runs only in the component that holds it, and a test that no component holds fails the level.
+
+[`tests/scripts/ConsolePrompt.Tests.ps1`](../tests/scripts/ConsolePrompt.Tests.ps1) starts Windows PowerShell with `y` piped to it, and again with `-NonInteractive`, and checks that `Read-Confirmation` answers no at once both times. It is written and has not run yet.
 
 ## Layout
 

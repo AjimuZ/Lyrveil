@@ -1,0 +1,34 @@
+# Override of compose.yaml for tests/docker/Setup.Tests.ps1, which runs setup against the project "lyrveil-setup-test":
+#   docker compose -p lyrveil-setup-test -f compose.yaml -f tests/docker/compose.setup-test.yaml config
+# It keeps compose.yaml's services and external volumes, so setup meets the real file, and changes only what would
+# reach a real installation:
+#   - the two external volumes get their own names, never "lyrveil-data" or "lyrveil-models";
+#   - every image is tagged ":setup-test", so no build replaces the ":local" images of an installation;
+#   - the fake KoboldCpp of tests/fakes stands in for the runtime service "lyrveil-llm" of the "ai" profile, with no
+#     container_name, so setup's "create" step has a runtime container to create until P02 adds the real one.
+# Setup creates only runtime containers, so the container names of the core services are never used here.
+services:
+  lyrveil-frontend:
+    image: lyrveil/frontend:setup-test
+  lyrveil-backend:
+    image: lyrveil/backend:setup-test
+  lyrveil-orchestrator:
+    image: lyrveil/orchestrator:setup-test
+
+  lyrveil-llm:
+    profiles: [ai]
+    image: lyrveil/fakes:setup-test
+    build: {context: ., dockerfile: tests/fakes/Dockerfile}
+    command: ["python", "-m", "fakes.fake_kobold"]
+    init: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pull_policy: never
+    read_only: true
+    tmpfs: [/tmp]
+    restart: "no"
+    networks: [lyrveil-runtime]
+
+volumes:
+  lyrveil-data: {external: true, name: lyrveil-setup-test-data}
+  lyrveil-models: {external: true, name: lyrveil-setup-test-models}

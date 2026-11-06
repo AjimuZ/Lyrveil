@@ -26,11 +26,13 @@ BeforeAll {
     function Get-ImageFile {
         # Returns the path of every entry in the file system of Image, listed from an exported container that never runs.
         param([string]$Image)
-        $container = (Invoke-Docker @('create', $Image))[0]
+        # @() keeps the single output line an array; without it, [0] would be the first character of the ID.
+        $container = @(Invoke-Docker @('create', $Image))[0]
         $archive = Join-Path $TestDrive ("$($container.Substring(0, 12)).tar")
         try {
             $null = Invoke-Docker @('export', '--output', $archive, $container)
-            $names = @(& tar -tf $archive)
+            # Windows' own bsdtar: from Git Bash, "tar" is GNU tar, which reads "C:\..." as a remote host and fails.
+            $names = @(& (Join-Path $env:SystemRoot 'System32\tar.exe') -tf $archive)
             if ($LASTEXITCODE -ne 0) { throw "tar could not list the export of $Image" }
             return $names
         }

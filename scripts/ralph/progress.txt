@@ -34,6 +34,12 @@
 - A test level that starts containers should clear any earlier project first, run in try/finally, always remove containers, networks and volumes, and then verify by label that nothing is left. A removal that cannot be verified counts as a failure.
 - Name the Compose project with `-p` on every command of a test level, so an environment variable cannot point cleanup at a real installation.
 - Invoke external tools by bare name (`docker`, `npx.cmd`) rather than `docker.exe` so Pester stand-ins first on PATH can intercept them.
+- Windows PowerShell 5.1 drops double quotes inside native arguments: use Go templates without quotes, such as {{json .Labels}} or {{.Names}}, never {{index .Labels "x"}} or {{.Label "x"}}.
+- Wrap single-line native output in @() before indexing: a function returning @($output) with one line gives back a string, and [0] is its first character.
+- Call %SystemRoot%\System32\tar.exe explicitly: from Git Bash, tar is GNU tar and reads C:\ paths as a remote host.
+- PowerShell variable names ignore case: inside a Pester -ForEach case, a local $row overwrites the case data $Row.
+- When capturing native stderr with 2>&1, set $ErrorActionPreference = 'Continue' locally so PS 5.1 error records never throw under 'Stop'.
+- Capture Write-Host output of a function in tests with `6>&1` and separate the returned [int] from the InformationRecords.
 
 ---
 
@@ -263,4 +269,16 @@ Not verified:
   - `docker ps` has no `--quiet` flag in this setup problem space; use the label filter with `--all --quiet` only after verifying the exact command, since a mangled flag made the cleanup check fail once.
   - The new Pester cases use stand-in docker.cmd, npm.cmd and npx.cmd first on PATH, switched by FAKE_UP_EXIT and FAKE_TEST_EXIT. They have not run; the orchestrator's `test unit` run will be their first.
   - Playwright's Chromium is downloaded to the user's cache (%LOCALAPPDATA%\ms-playwright) by `npx playwright install chromium`; node_modules, playwright-report and test-results are already git-ignored.
+---
+
+## 2026-11-06T22:41:01Z - P01.6a
+- Added setup.cmd, which only delegates to `scripts\lyrveil.ps1 setup %*`, and scripts/lib/Setup.psm1. Setup steps: (1) a six-row preflight (Git, Docker daemon, Compose >= 2.30, Engine API >= 1.45, memory seen by Docker, free disk on the drive of %LOCALAPPDATA%), printed as PASS/WARNING/FAILURE with advice; any failure exits 2 before anything changes. (2) .env from .env.example with a new 64-hex token, written to a temporary file, restricted with icacls to the current user's SID with no inherited entries, then renamed. An existing .env is never read or replaced. (3) Both external volumes are created with the label io.lyrveil.volume; an unlabelled existing volume stops setup with exit 2. (4) Images are built only when one is missing, or always with -Rebuild. (5) The volume-root owner is set to 10001:10001 only when it differs, by a container with no network, a read-only root and only CAP_CHOWN, using the local backend image. (6) Runtime services that the Compose file defines are created with `compose create` and not started. Model licences, downloads and launch files are not included (P01.6c, P02); -AcceptModelLicenses and -VerifyModels exit 1. Added ConsolePrompt.psm1 (Read-Confirmation answers no at once without console input). Docker level: tests/docker/Setup.Tests.ps1 (T-DCK-06, T-DCK-07, T-DCK-13) runs against project lyrveil-setup-test, using the override tests/docker/compose.setup-test.yaml for its own volumes, :setup-test images and a fake lyrveil-llm. Fixed two defects in the never-run TestFakes.Tests.ps1. Ran `scripts/lyrveil.cmd test docker`: 39 passed, 0 failed. `test lint` passed. Not run: tests/scripts/ConsolePrompt.Tests.ps1 (unit level), and setup.cmd against the real `lyrveil` project. Finding: this session's permissions deny reading or writing `.env*` files, so .env.example (written in P01.2 by the supervising session) was used as the template but not inspected.
+- Files changed: setup.cmd, scripts/lyrveil.ps1, scripts/lib/Setup.psm1, scripts/lib/ConsolePrompt.psm1, tests/docker/Setup.Tests.ps1, tests/docker/compose.setup-test.yaml, tests/docker/TestFakes.Tests.ps1, tests/scripts/ConsolePrompt.Tests.ps1, docs/operations.md, docs/testing.md, docs/configuration.md, docs/README.md, docs/verification/2026-11-06-setup.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test docker` runs from this session's Git Bash with real Docker and takes about a minute with a warm build cache. Piping it to grep with 2>&1 is allowed and avoids truncated output.
+  - Task sessions cannot read or write `.env*` files, including .env.example. Setup reads .env.example at runtime, and tests point --env-file at it.
+  - Invoke-LyrveilSetup accepts ProjectName, ComposeFile, EnvPath, ExamplePath and PreflightFact so tests never reach the real project. P01.6b (start.cmd) can reuse Get-PreflightResult and the native-command helpers in Setup.psm1.
+  - Setup creates runtime containers only for lyrveil-llm and lyrveil-image services the Compose file defines. compose.yaml has none until P02 and P05; the test override adds a fake lyrveil-llm.
+  - The volume-owner step runs after the image build because it uses the backend image with --pull never.
+  - PSScriptAnalyzer 1.24 on PS 5.1 rejects the verb Build and flags New/Remove/Set functions without ShouldProcess, test files included.
 ---

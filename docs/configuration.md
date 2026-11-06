@@ -1,6 +1,6 @@
 # Configuration
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: the backend's reading of the deployment settings is delivered (P01.3a); the rest is planned, phase P01 onward.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: the backend's reading of the deployment settings is delivered (P01.3a), and so is the creation of `.env` by `setup.cmd` (P01.6a); the rest is planned, phase P01 onward.
 
 Configuration has three levels:
 
@@ -12,7 +12,7 @@ Configuration has three levels:
 
 ## Deployment settings
 
-`setup.cmd` creates `.env` from `.env.example`, limits its access to the current Windows user, and fills the generated values. It never overwrites an existing `.env`.
+`setup.cmd` creates `.env` from `.env.example`, limits its access to the current Windows user, and fills the generated values. It never overwrites an existing `.env`. Today the only generated value is `LYRVEIL_CONTROL_TOKEN`. The file is UTF-8 without BOM, and its ACL has no inherited entry and grants only the current user, set with `icacls` before any content is written ([`setup.cmd`](operations.md#setupcmd)).
 
 | Variable | Default | Description |
 | --- | --- | --- |

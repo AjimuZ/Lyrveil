@@ -112,8 +112,13 @@ The root holds six one-line entry points: `setup.cmd`, `start.cmd`, `stop.cmd`, 
 passes its arguments. The bypass applies to that process only. `scripts\lyrveil.cmd <command>` runs the other commands:
 `models`, `import-model`, `backup`, `restore` and `test`.
 
-Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)).
-The other commands and the root entry points are planned. Today, an unknown or unbuilt command exits 1 with a message.
+Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)),
+and `setup.cmd` with the parts listed under [`setup.cmd`](#setupcmd). The other commands and root entry points are
+planned. Today, an unknown or unbuilt command exits 1 with a message.
+
+Questions go through `Read-Confirmation` in `scripts/lib/ConsolePrompt.psm1`. When standard input is not the console,
+or PowerShell runs with `-NonInteractive`, it prints the question and answers no at once, so an unattended run never
+proceeds by default and the command exits 5. Setup asks no question yet.
 
 All scripts set `$ErrorActionPreference = 'Stop'` and `Set-StrictMode -Version Latest`, check `$LASTEXITCODE` after
 every native command, are idempotent, and never delete persistent data.
@@ -144,6 +149,25 @@ Options: `-AcceptModelLicenses`, `-VerifyModels`, `-Rebuild`, `-SkipModels`.
 8. Create the runtime containers without starting them: `docker compose --profile ai create lyrveil-llm lyrveil-image`.
 
 Running it again repeats only what is missing.
+
+Delivered in P01.6a, in `scripts/lib/Setup.psm1` ([evidence](verification/2026-11-06-setup.md)):
+
+- Step 1 runs the six rows that setup judges in [Preflight checks](#preflight-checks). Any failure prints its advice and
+  exits 2 before anything is changed.
+- Step 2 copies `.env.example` to `.env` with a new token of 32 random bytes in hex. The file is written under a
+  temporary name, `icacls` removes the inherited entries and grants only the current user's SID, then it is renamed.
+  An existing `.env` is never read or changed.
+- Step 3 creates the volumes. A volume that exists without the label stops setup with exit status 2 and is left
+  untouched, because setup did not create it.
+- Step 4 builds only when an image of the Compose file is missing, or always with `-Rebuild`.
+- The owner of step 3 is set after step 4, because the one-off containers use the local backend image and never pull.
+  A first container with no capability reads the owner of each volume root. Only when it is not `10001:10001`, a
+  second container with no network, a read-only root and only `CAP_CHOWN` changes it. Files inside are never changed.
+- Step 8 creates the runtime services that the Compose file defines. `compose.yaml` has none yet (P02, P05), so setup
+  says so and creates nothing.
+- Steps 5 to 7 are not delivered: licenses and downloads come with the models command (P01.6c), and launch files with
+  the catalog (P02). Setup prints that nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until
+  then, and `-SkipModels` is accepted.
 
 ### Model downloads
 
@@ -250,8 +274,12 @@ The orchestrator judges four rows: GPU in container, CUDA driver version, total 
 line per row, such as `WARNING  Free VRAM: 7000 MiB, under 9000 MiB: ...`, or the report of
 [`GET /v1/preflight`](api.md#control-api) with `--json`. It exits 0 when no row fails, warnings included, and 1 when a
 row fails. When NVML fails, the three other rows fail too, as not checked, because a value that was never read cannot
-pass. These rules are unit-tested with a fake probe; the command has not yet run against the real card. The other rows
-are planned for the scripts and the backend.
+pass. These rules are unit-tested with a fake probe; the command has not yet run against the real card.
+
+`setup.cmd` judges six rows in `scripts/lib/Setup.psm1` (P01.6a): Git, Docker daemon, Compose, Engine API, memory seen
+by Docker and free disk. It prints them in the same format, with the advice for each failure on the next line, such as
+the `.wslconfig` values for the machine's RAM when memory is too low. A row that needs the daemon fails as not checked
+when the daemon is unreachable. The volume and model file rows are planned for `start.cmd` and the backend.
 
 The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That setup is unsupported, and image generation may fail.
 

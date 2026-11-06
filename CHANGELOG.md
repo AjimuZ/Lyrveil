@@ -87,6 +87,16 @@ No application exists yet. This section records the design documentation.
   event WebSocket that reconnects with backoff, replays from the last event and
   reloads from the REST API when the server reports a gap. No screen uses them yet.
   `test lint` fails when the generated types are out of date.
+- `setup.cmd` prepares an installation. It checks Git, Docker, Compose, the Engine
+  API, the memory Docker sees and the free disk, and exits 2 with advice for each
+  failure, such as the `.wslconfig` values for the machine's RAM. It then creates
+  `.env` with a new control token, readable only by the current Windows user and
+  never overwritten. It creates the volumes `lyrveil-data` and `lyrveil-models`
+  with their label and owner, builds the images and creates the runtime containers
+  without starting them. A second run repeats nothing. Model downloads are not part
+  of it yet, and `-AcceptModelLicenses` and `-VerifyModels` exit 1 until they are.
+  `scripts\lyrveil.cmd test docker` runs setup twice against a separate test
+  project.
 
 ### Changed
 
