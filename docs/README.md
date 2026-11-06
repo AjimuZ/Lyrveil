@@ -67,3 +67,4 @@
 | [Frontend shell, 2026-11-06](verification/2026-11-06-frontend-shell.md) | Frontend lock, strict build, lint gates with T-SEC-09, and the first Vitest runs |
 | [API types and WebSocket client, 2026-11-06](verification/2026-11-06-api-types-and-socket.md) | Committed OpenAPI document, generated types and their lint check, error mapping and the event socket tests |
 | [Core Compose services, 2026-11-06](verification/2026-11-06-compose-core.md) | `docker compose config` and `build` of the three core services, and what has not run |
+| [Fake runtimes, 2026-11-06](verification/2026-11-06-fake-runtimes.md) | The fakes of `tests/fakes/`, `compose.test.yaml` and the Docker test of the production images, and what has not run |

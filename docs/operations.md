@@ -433,7 +433,10 @@ Notes:
 
 - `depends_on` is not used for the runtimes, because the orchestrator starts them.
 - When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here.
-- `compose.test.yaml` replaces the runtimes with fakes and removes `gpus` for machines without a GPU.
+- `compose.test.yaml` (delivered in P01.8b) replaces the runtimes with the fakes of `tests/fakes/` and has no `gpus`
+  and no Docker socket. It is a separate project, `lyrveil-test`, with its own port (`LYRVEIL_TEST_HTTP_PORT`, default
+  14200), volumes, image tags and settings, so it never touches `lyrveil-data`, `lyrveil-models` or the backup folder.
+  See [Fake runtimes](testing.md#fake-runtimes).
 - No service bind-mounts a Windows folder. On the reference machine a folder on `C:` was 7 to 100 times slower than a
   volume ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). Source code reaches containers only
   through image builds.

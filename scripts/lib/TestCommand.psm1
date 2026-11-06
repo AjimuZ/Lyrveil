@@ -14,7 +14,7 @@ $script:Runners = [ordered]@{
     unit        = 'Invoke-UnitLevel'
     integration = 'Invoke-IntegrationLevel'
     e2e         = $null
-    docker      = $null
+    docker      = 'Invoke-DockerLevel'
     gpu         = $null
     quality     = $null
 }
@@ -128,6 +128,22 @@ function Invoke-IntegrationLevel {
     }
     if ((Invoke-PythonIntegrationTest -Root $Root) -gt 0) { return 1 }
     return 0
+}
+
+function Invoke-DockerLevel {
+    <#
+    Runs the docker level: the Pester tests in tests/docker/*.Tests.ps1, which build and inspect images and Compose
+    projects with the host's Docker. Returns 0 only when at least one test ran and none failed, and 1 when the folder
+    holds no test file. Not exported.
+    #>
+    param([string]$Root)
+
+    $files = @(Get-RepositoryFile -Root $Root -Pattern @('tests/docker/*.Tests.ps1'))
+    if ($files.Length -eq 0) {
+        Write-Host "Test level 'docker' has no tests yet. Nothing ran, so it cannot pass."
+        return 1
+    }
+    return (Invoke-PesterUnitTest -Root $Root -File $files)
 }
 
 function Invoke-PesterUnitTest {

@@ -1,0 +1,112 @@
+# The core services of Lyrveil with the fake runtimes of tests/fakes in place of KoboldCpp and ComfyUI, for the end-to-end
+# and Docker tests. It never touches a real installation:
+#   - its own Compose project name, "lyrveil-test", so containers, networks and volumes are "lyrveil-test-*" and
+#     "lyrveil-test_*", and no container sets container_name, so none can collide with "lyrveil-backend" and the others;
+#   - its own port, LYRVEIL_TEST_HTTP_PORT (default 14200), bound to 127.0.0.1;
+#   - its own volumes "data" and "models", created by Compose and empty, never "lyrveil-data" or "lyrveil-models", so
+#     "docker compose -f compose.test.yaml down -v" removes only test data;
+#   - its own image tags ":test", and no .env: the settings are written below, with a token that guards only this
+#     project. It has no backup folder, since nothing in it writes outside the volumes.
+# Run it with:
+#   docker compose -f compose.test.yaml up --build --wait
+# Compose still reads a .env file in this folder for interpolation, so only variables named LYRVEIL_TEST_* are used here.
+#
+# The fake runtimes are the services "lyrveil-llm" and "lyrveil-image", so the backend reaches them by the names it uses
+# in production. The orchestrator has no Docker socket and no GPU here: ContainerGate would refuse these containers, whose
+# Compose project is not "lyrveil", and the lifecycle manager (P02) drives FakeContainerGate and FakeGpuProbe in process.
+# Until P02 adds lyrveil_orchestrator.main, its container exits at once, as in compose.yaml.
+name: lyrveil-test
+
+x-common: &common
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  pull_policy: never
+  read_only: true
+  tmpfs: [/tmp]
+  restart: "no"
+
+x-settings: &settings
+  LYRVEIL_CONTROL_TOKEN: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  LYRVEIL_TZ: Europe/Rome
+  LYRVEIL_LOG_LEVEL: DEBUG
+
+services:
+  lyrveil-frontend:
+    <<: *common
+    image: lyrveil/frontend:test
+    build: {context: ., dockerfile: frontend/Dockerfile}
+    ports: ["127.0.0.1:${LYRVEIL_TEST_HTTP_PORT:-14200}:8080"]
+    networks: [lyrveil-edge, lyrveil-app]
+    depends_on:
+      lyrveil-backend: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  lyrveil-backend:
+    <<: *common
+    image: lyrveil/backend:test
+    build: {context: ., dockerfile: backend/Dockerfile, target: runtime}
+    user: "10001:10001"
+    environment: *settings
+    volumes:
+      - data:/data
+      - models:/models:ro
+    networks: [lyrveil-app, lyrveil-control, lyrveil-runtime]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+      start_interval: 2s
+
+  lyrveil-orchestrator:
+    <<: *common
+    image: lyrveil/orchestrator:test
+    build: {context: ., dockerfile: orchestrator/Dockerfile, target: runtime}
+    user: "10001:10001"
+    environment: *settings
+    networks: [lyrveil-control]
+
+  # KoboldCpp's stand-in. FAKE_SCRIPT, a JSON object of routes to lists of steps, scripts its behavior at start.
+  lyrveil-llm:
+    <<: *common
+    image: lyrveil/fakes:test
+    build: {context: ., dockerfile: tests/fakes/Dockerfile}
+    command: ["python", "-m", "fakes.fake_kobold"]
+    networks: [lyrveil-runtime]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:5001/api/v1/model', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  # ComfyUI's stand-in, scripted the same way.
+  lyrveil-image:
+    <<: *common
+    image: lyrveil/fakes:test
+    build: {context: ., dockerfile: tests/fakes/Dockerfile}
+    command: ["python", "-m", "fakes.fake_comfy"]
+    networks: [lyrveil-runtime]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8188/system_stats', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+networks:
+  lyrveil-edge: {driver: bridge}
+  lyrveil-app: {internal: true}
+  lyrveil-control: {internal: true}
+  lyrveil-runtime: {internal: true}
+
+volumes:
+  data: {}
+  models: {}

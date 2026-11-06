@@ -35,6 +35,9 @@ FROM deps AS test
 RUN uv sync --locked
 COPY orchestrator/src ./src
 COPY orchestrator/tests ./tests
+# The fakes of tests/fakes and the contract page that their endpoint test reads. Only this test stage holds them.
+COPY tests/fakes/*.py ./fakes/
+COPY docs/runtime-contracts.md ./docs/runtime-contracts.md
 CMD ["pytest"]
 
 # The image of compose.yaml, selected there with "target: runtime". It holds no tests and no development packages.

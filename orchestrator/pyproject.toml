@@ -37,7 +37,7 @@ constraint-dependencies = ["pydantic==2.14.2"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "."]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
@@ -45,7 +45,8 @@ select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-mypy_path = "src"
+# "." makes the `fakes` package of tests/fakes importable in the test stage, where it is copied to /app/fakes.
+mypy_path = "src:."
 
 # nvidia-ml-py ships neither types nor a py.typed marker. Only gpu_monitor.py and its test import it, and the probe
 # converts every value it returns to a typed one.
@@ -54,6 +55,6 @@ module = ["pynvml"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "-p", "no:cacheprovider"]

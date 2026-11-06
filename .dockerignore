@@ -30,6 +30,9 @@ tests
 # Copied only into the test stages, never into a runtime image
 !backend/tests
 !orchestrator/tests
+# Copied only into the orchestrator test stage and the image of tests/fakes/Dockerfile, never into a runtime image
+!tests/fakes
+!docs/runtime-contracts.md
 **/*.spec.ts
 playwright-report
 test-results

@@ -29,6 +29,8 @@
 - Pass third-party generator configuration from code in a tool script shared by the generate and check commands. Do not rely on a config file the tool discovers on its own.
 - When a Dockerfile's last stage is a test stage, name the runtime stage explicitly with `target:` in Compose.
 - Use `env_file` with `required: false` where a missing `.env` should be reported by the app's own start-up check.
+- Ruff SIM113 flags a manual counter in a `for` loop; use `enumerate` and let the loop index carry the count.
+- Keep docstring lines at 120 characters or fewer; ruff E501 covers docstrings in test fakes too.
 
 ---
 
@@ -236,4 +238,14 @@ Not verified:
   - Health checks, `gpus: all`, the Docker socket mount and network isolation have not run. The container-level tests are for the test docker level.
   - The `ai` and `tools` profile services and the `lyrveil-download` network are not in compose.yaml yet (P02 and P05). The reference file in docs/operations.md is still their specification.
   - .env.example was written by the supervising session and not checked here. It should list the eight deployment variables of docs/configuration.md.
+---
+
+## 2026-11-06T22:18:16Z - P01.8b
+- The lint failure is fixed and `scripts/lyrveil.cmd test lint` now passes. The fakes, the fake-based tests and `compose.test.yaml` were already in the working tree from the first attempt. I fixed two ruff errors in `tests/fakes/`. In `scripted_server.py` I shortened a docstring line that was 121 characters. In `fake_comfy.py`, `_play` now loops with `for sent, message in enumerate(...)` instead of a manual `sent += 1`, which clears SIM113. I ran `test lint` twice and `pytest tests/unit/test_fake_comfy.py -q` once, which gave 13 passed. The other three fake test files, the Docker test `tests/docker/TestFakes.Tests.ps1`, `docker compose config` and building and starting `compose.test.yaml` were not run. I updated `docs/verification/2026-11-06-fake-runtimes.md` to list what ran and what did not.
+- Files changed: tests/fakes/__init__.py, tests/fakes/scripted_server.py, tests/fakes/fake_kobold.py, tests/fakes/fake_comfy.py, tests/fakes/fake_docker.py, tests/fakes/fake_nvml.py, tests/fakes/Dockerfile, compose.test.yaml, tests/docker/TestFakes.Tests.ps1, orchestrator/tests/unit/test_fake_kobold.py, orchestrator/tests/unit/test_fake_comfy.py, orchestrator/tests/unit/test_fake_endpoints.py, orchestrator/tests/unit/test_fake_gate_and_probe.py, orchestrator/Dockerfile, orchestrator/pyproject.toml, .dockerignore, scripts/lib/TestCommand.psm1, docs/testing.md, docs/operations.md, docs/README.md, docs/verification/2026-11-06-fake-runtimes.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test lint` and `scripts/lyrveil.cmd test unit <file> -q` run in this session's shell. Bare `ruff`, `cd ... &&` and pipes are denied. Run the lint command to see the full ruff output rather than guessing from a truncated log.
+  - The orchestrator lint covers `fakes/`, copied from tests/fakes/*.py into the test stage. The mypy check there is limited to `src tests` and reaches the fakes only through the tests that import them.
+  - The docker level (`test docker`) is wired to tests/docker/*.Tests.ps1 but was not run: the Docker image-content checks, `docker compose -f compose.test.yaml config` and a real start are still unverified.
+  - The out-of-memory reply of fake_kobold and the shapes of ComfyUI's /system_stats and /history answers are assumptions, not recorded from the real runtimes. The GPU suite should replace them with recorded responses at P02 and P05.
 ---
