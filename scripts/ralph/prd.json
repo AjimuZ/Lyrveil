@@ -1,0 +1,2797 @@
+{
+  "project": "lyrveil",
+  "branchName": "main",
+  "description": "Lyrveil 1.0 from the documented design: phases P01 to P09 of docs/roadmap.md, split into tasks of one session each, with phase exit tasks and hardware tasks kept apart.",
+  "userStories": [
+    {
+      "id": "P00.1",
+      "title": "Examine the environment and record measurements.",
+      "description": "Examine the environment and record measurements.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.1 Examine the environment and record measurements."
+      }
+    },
+    {
+      "id": "P00.2",
+      "title": "Verify runtimes, models and licenses at official sources.",
+      "description": "Verify runtimes, models and licenses at official sources.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.2 Verify runtimes, models and licenses at official sources."
+      }
+    },
+    {
+      "id": "P00.3",
+      "title": "Write requirements, design, operations and test documents.",
+      "description": "Write requirements, design, operations and test documents.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.3 Write requirements, design, operations and test documents."
+      }
+    },
+    {
+      "id": "P00.4",
+      "title": "Record decisions as ADRs. Leave no open question.",
+      "description": "Record decisions as ADRs. Leave no open question.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.4 Record decisions as ADRs. Leave no open question."
+      }
+    },
+    {
+      "id": "P00.5",
+      "title": "Configure `.gitignore`, `.dockerignore` and `.gitattributes` before the first commit.",
+      "description": "Configure `.gitignore`, `.dockerignore` and `.gitattributes` before the first commit.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.5 Configure `.gitignore`, `.dockerignore` and `.gitattributes` before the first commit."
+      }
+    },
+    {
+      "id": "P00.6",
+      "title": "Check links, placeholders, requirement coverage and secrets.",
+      "description": "Check links, placeholders, requirement coverage and secrets.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.6 Check links, placeholders, requirement coverage and secrets."
+      }
+    },
+    {
+      "id": "P00.7",
+      "title": "Revise for the 32 GB RAM upgrade: selectable model profiles, prompt templates per model family, two-pass",
+      "description": "Revise for the 32 GB RAM upgrade: selectable model profiles, prompt templates per model family, two-pass image rendering, new hardware tiers and the KoboldCpp `v1.124.2` pin (ADRs 0024 to 0028).",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.7 Revise for the 32 GB RAM upgrade: selectable model profiles, prompt templates per model family, two-pass"
+      }
+    },
+    {
+      "id": "P00.8",
+      "title": "Revise for operation from Windows on `C:` with Docker volumes, after measuring storage speed, and record the",
+      "description": "Revise for operation from Windows on `C:` with Docker volumes, after measuring storage speed, and record the KoboldCpp efficiency levers that P02 measures (ADRs 0029 and 0030).",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.8 Revise for operation from Windows on `C:` with Docker volumes, after measuring storage speed, and record the"
+      }
+    },
+    {
+      "id": "P00.9",
+      "title": "Revise for characters that stay consistent on every text profile, and for anime image quality. The revision",
+      "description": "Revise for characters that stay consistent on every text profile, and for anime image quality. The revision covers six areas (ADRs 0031 to 0036): - a stable prompt prefix with an anchor before each reply; - the reply normalizer and the identity checks; - the voice fields; - the consistency and extraction protocols; - a structured visual identity with a tag vocabulary; - structured scenes and captions in the character's voice.",
+      "acceptanceCriteria": [
+        "every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.",
+        "The described behavior works and is covered by tests",
+        "The project's checks pass"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Done per the roadmap. Checked at setup on 2026-11-06 by reading the documents and the dated evidence in docs/verification/; not re-run. P01.8a re-runs the documentation checks.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P00: Documentation",
+        "line": "P00.9 Revise for characters that stay consistent on every text profile, and for anime image quality. The revision"
+      }
+    },
+    {
+      "id": "P01.8a",
+      "title": "Test entry point with the lint level and the documentation checks",
+      "description": "Create `scripts\\lyrveil.cmd` and `scripts\\lyrveil.ps1` with the `test` command (ADR 0029, docs/operations.md Scripts, docs/testing.md Commands), and deliver its `lint` level, which the orchestrator runs after every later task: the documentation checks of P00.6 (docs/verification/2026-11-01-documentation.md) brought into the repository, and PSScriptAnalyzer on every PowerShell script. Later tasks add each component's gates to `lint` and fill the other levels. Document the `lint` level in docs/testing.md and CONTRIBUTING.md.",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test lint` exits 0 on the repository as it is, and non-zero when a tracked Markdown file has a broken relative link or heading anchor, as a test with a fixture shows.",
+        "The documentation checks scan only Git-tracked Markdown, report counts, and fail on an unfinished-work marker, a requirement or acceptance criterion with no trace in docs/traceability.md, a test ID used in the docs but missing from the catalog in docs/testing.md, or a catalog test that no roadmap exit names.",
+        "PSScriptAnalyzer, at a pinned version and with no machine-wide install, checks every tracked `.ps1` and `.psm1`, and `scripts\\lyrveil.ps1` passes it.",
+        "`scripts\\lyrveil.cmd test <level>` exits non-zero with a clear message for an unknown level and for a level that has no tests yet: no level reports a pass without running tests."
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Machine facts measured at setup on 2026-11-06: Windows 11, Windows PowerShell 5.1, Pester 3.4.0 inbox only, no PSScriptAnalyzer, Python 3.15 on Windows but no uv, ruff, gitleaks or shellcheck, Node.js 24.22.1 with npm 11.19.1, Docker 29.9.2 with Compose v5.6.1 and an RTX 4070 12 GB. Install nothing machine-wide: fetch pinned tools with a hash check into a Git-ignored folder, or run them in containers. Python code and its gates run in Docker test stages (ADR 0029). The orchestrator runs `\"scripts/lyrveil.cmd\" test lint` through cmd.exe after every task; sessions run `scripts/lyrveil.cmd test <level>` from Git Bash. Both forms must work. Windows PowerShell 5.1 reads a .ps1 without BOM as ANSI: keep scripts ASCII or save them as UTF-8 with BOM, and read text resources with explicit UTF-8. Never bind-mount source code into a container.",
+      "dependsOn": [
+        "P00.1",
+        "P00.2",
+        "P00.3",
+        "P00.4",
+        "P00.5",
+        "P00.6",
+        "P00.7",
+        "P00.8",
+        "P00.9"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams."
+      },
+      "splitFrom": "P01.8",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.1",
+      "title": "Confirm the WSL2 memory of the target tier",
+      "description": "The 32 GB `.wslconfig` (memory=24GB, swap=8GB) was applied on 2026-11-05 (docs/verification/2026-11-05-environment.md). Confirm that it is still in effect and record dated evidence. Changing it is not part of this task: it restarts WSL and belongs to the owner.",
+      "acceptanceCriteria": [
+        "A new dated file in `docs/verification/` records the exact command, the memory Docker reports, and that it meets the 20 GiB pass threshold of the preflight table in docs/operations.md.",
+        "The P01 section of the roadmap lists the evidence under an \"Evidence:\" list, and the P01.1 line is unchanged.",
+        "If Docker reports less than 20 GiB, the task returns `status: blocked` for the owner and changes nothing."
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Measured at setup on 2026-11-06: `docker info --format \"{{.MemTotal}}\"` returned 25199247360 bytes (23.47 GiB). `docker info` is allowed. Record no user names or home paths. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P01.8a"
+      ],
+      "taskType": "docs_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.1 Apply the `.wslconfig` for the machine's tier. On the reference machine the 32 GB values were applied on 2026-11-05, and Docker sees 23.47 GiB ([evidence](verification/2026-11-05-environment.md#after-the-changes)). The P01 exit check confirms it."
+      }
+    },
+    {
+      "id": "P01.3a",
+      "title": "Backend package, settings, logging and its quality gates",
+      "description": "Create `backend/` as in docs/backend.md (Package layout) with the versions of docs/technology.md: `pyproject.toml`, `uv.lock`, the `lyrveil` package with only the modules this task needs, typed settings with pydantic-settings for the deployment settings of docs/configuration.md, structured JSON logging with structlog that never logs message content, prompts or memory text, a FastAPI application factory, and a multi-stage `backend/Dockerfile` on `python:3.12.16-slim-trixie` with a test stage. Extend `test lint` and fill `test unit`.",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test lint` also runs `ruff check`, `ruff format --check` and `mypy --strict` on the backend inside its test stage, and fails on a violation.",
+        "`scripts\\lyrveil.cmd test unit` runs the backend unit tests inside the test stage, and passes extra pytest arguments through so that one test can run alone.",
+        "The import-rule test of docs/backend.md (Quality gates) passes, and fails when `domain` imports another layer.",
+        "An invalid setting stops startup with a message naming it, and the image installs exactly what `uv.lock` pins."
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.8a"
+      ],
+      "taskType": "refactor_architectural",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes."
+      },
+      "splitFrom": "P01.3",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.3b",
+      "title": "SQLite with verified WAL and FTS5, Alembic baseline and health routes",
+      "description": "Add persistence: a synchronous SQLAlchemy 2.1 engine (ADR 0009) for the single SQLite writer (ADR 0004) in the data volume, WAL and FTS5 verified at startup, an Alembic baseline migration, and `GET /health/live` and `GET /health/ready` of docs/api.md. Fill the backend part of `test integration`.",
+      "acceptanceCriteria": [
+        "At startup the backend verifies WAL mode and FTS5 and refuses to become ready otherwise; an integration test in the real backend image proves both.",
+        "`alembic upgrade head` creates the baseline on an empty database, and a migration test checks it.",
+        "`GET /health/live` answers 200, and `GET /health/ready` reports database, migrations and FTS5, with the control API reported separately.",
+        "`scripts\\lyrveil.cmd test integration` runs the backend integration tests in the test stage."
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.3a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes."
+      },
+      "splitFrom": "P01.3"
+    },
+    {
+      "id": "P01.4a",
+      "title": "Orchestrator package and the GPU state machine table",
+      "description": "Create `orchestrator/` as in docs/backend.md: `pyproject.toml`, `uv.lock`, a `Dockerfile` with a test stage, and `state_machine.py`, the pure transition table of docs/gpu-orchestration.md (State machine, Exclusivity rules). Follow the patterns the backend set for locks, images and gates.",
+      "acceptanceCriteria": [
+        "T-ORC-01 passes: every legal transition works and every other one is refused, with a Hypothesis property test over random sequences.",
+        "`scripts\\lyrveil.cmd test lint` and `test unit` include the orchestrator: ruff, the format check, `mypy --strict` and its unit tests, all in its test stage.",
+        "The state machine module performs no I/O, and the table covers every state named in docs/gpu-orchestration.md."
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.3a"
+      ],
+      "taskType": "refactor_architectural",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight."
+      },
+      "splitFrom": "P01.4",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.4b",
+      "title": "ContainerGate as the only user of the Docker socket",
+      "description": "Implement `container_gate.py` (docs/backend.md, docs/security.md Docker socket, ADR 0006): a small HTTPX client over the Docker socket that allows only the documented calls on the two runtime containers, identified by name and label, and nothing else. Unit tests use respx stubs.",
+      "acceptanceCriteria": [
+        "T-ORC-07 passes: the gate refuses any container name outside the allowlist, any container with a foreign label, and any endpoint outside the documented list.",
+        "A test proves that no request the gate can build reaches a create, exec, remove, image, volume or network endpoint.",
+        "A test fails when any module other than the gate opens the Docker socket."
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.4a"
+      ],
+      "taskType": "critical_hard_to_verify",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight."
+      },
+      "splitFrom": "P01.4"
+    },
+    {
+      "id": "P01.4c",
+      "title": "GPU monitor, preflight and the control API with its token",
+      "description": "Implement `gpu_monitor.py` (`GPUResourceMonitor` over NVML with nvidia-ml-py behind the `GpuProbe` port), `preflight.py` (the orchestrator's rows of the preflight table in docs/operations.md, runnable as `python -m lyrveil_orchestrator.preflight`), and `api.py`, the control API of docs/api.md that requires `Authorization: Bearer <LYRVEIL_CONTROL_TOKEN>` on every route except `/v1/health`.",
+      "acceptanceCriteria": [
+        "T-ORC-10 passes: a missing or wrong token gets 401 on every route except `/v1/health`, and tokens are compared in constant time.",
+        "The preflight reports NVML, CUDA driver, total and free VRAM as pass, warning or failure at the documented thresholds; unit tests cover each threshold with a fake probe.",
+        "`scripts\\lyrveil.cmd test integration` includes the orchestrator integration tests."
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.4b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight."
+      },
+      "splitFrom": "P01.4",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.5a",
+      "title": "Angular 22 zoneless shell with tokens, fonts and the text catalog",
+      "description": "Create `frontend/` as in docs/frontend.md (Structure) with the versions of docs/technology.md (Angular 22.2.4, CLI 22.2.5, TypeScript 6.0.3, never 7): a zoneless standalone app, the routes of docs/frontend.md as lazy empty screens that say they are not available yet, the Obsidian Bloom tokens of docs/design-system.md in `styles/tokens.scss`, bundled fonts, `i18n/it.json` with its translator service, and the multi-stage `Dockerfile` and `nginx.conf` of docs/frontend.md (Container).",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test lint` also runs ESLint and `ng build` on the frontend, and fails on a lint error or on any build warning.",
+        "T-SEC-09 passes: a lint rule rejects `innerHTML` bindings and `bypassSecurityTrust*` calls, shown by a fixture the rule reports.",
+        "`scripts\\lyrveil.cmd test unit` also runs the frontend unit tests with Vitest through `ng test`, including the translator and the route table.",
+        "The production build loads no font or asset from the network, and component styles use only token colors."
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "dependsOn": [
+        "P01.8a"
+      ],
+      "taskType": "refactor_architectural",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client."
+      },
+      "splitFrom": "P01.5",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.5b",
+      "title": "Generated API types, HTTP providers and the WebSocket client",
+      "description": "Generate the TypeScript API types from the backend OpenAPI document with `@hey-api/openapi-ts` 0.99.0, add the HTTP providers and error mapping in `core/api/`, and write `core/realtime/events-socket.ts`, the client of the realtime channel in docs/api.md and ADR 0016, with reconnect and replay from the last event ID.",
+      "acceptanceCriteria": [
+        "A backend test fails when the committed OpenAPI document differs from the application's, and the frontend lint fails when the generated types differ from that document.",
+        "Unit tests show the WebSocket client reconnecting with backoff, asking for replay from the last event ID, and resyncing when the server reports the gap as too old.",
+        "API errors map to typed errors with the Italian messages of the text catalog."
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "dependsOn": [
+        "P01.5a",
+        "P01.3b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client."
+      },
+      "splitFrom": "P01.5"
+    },
+    {
+      "id": "P01.2",
+      "title": "Core Compose services, external volumes and `.env.example`",
+      "description": "Write `compose.yaml` with the three core services and the external volumes `lyrveil-data` and `lyrveil-models`, on the networks of ADR 0003, following the reference Compose file of docs/operations.md; `.env.example` from docs/configuration.md (Example `.env`); and `config/examples/`. The `.gitattributes` rules for `.cmd` and `.ps1` exist since P00.8: verify them, do not duplicate them.",
+      "acceptanceCriteria": [
+        "`docker compose config --quiet` succeeds, `docker compose build` builds the three core services, and both volumes are declared `external: true`.",
+        "`compose.yaml` matches the reference Compose file for the core services, networks and volumes, and any difference is documented there in the same change.",
+        "`.env.example` lists every deployment setting the backend and the orchestrator read, with the documented defaults and no real token.",
+        "`.gitattributes` keeps CRLF for `*.cmd` and `*.ps1` and LF for the rest."
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "Sessions are denied reading or writing `.env*` files, `.env.example` included. Do not work around the denial. Finish everything else, then return `status: blocked` with the reason \"write .env.example as documented in docs/configuration.md\"; the supervising session writes it and the next attempt finishes. Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.3b",
+        "P01.4c",
+        "P01.5a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.2 Create the repository structure, `.env.example`, the `.gitattributes` rules for `.cmd` and `.ps1`, and `compose.yaml` with the three core services and the external volumes."
+      }
+    },
+    {
+      "id": "P01.8b",
+      "title": "Fake runtimes and the test Compose file",
+      "description": "Write the fakes of docs/testing.md (Fake runtimes) in `tests/fakes/`: `fake_kobold` and `fake_comfy`, HTTP servers implementing exactly the endpoints of docs/runtime-contracts.md with scripted replies, delays, invalid JSON, out-of-memory errors and crashes; `fake_docker` and `fake_nvml`, implementing `ContainerGate` and `GpuProbe` with failures and external memory use. Add `compose.test.yaml`, which puts the fakes in place of the runtimes.",
+      "acceptanceCriteria": [
+        "Tests drive every scripted behavior of each fake, and a test checks that the HTTP fakes serve exactly the endpoints listed in docs/runtime-contracts.md.",
+        "`compose.test.yaml` starts the core services with the fakes, under its own Compose project name, port and volumes.",
+        "No production image contains `tests/fakes/`, checked on the built images."
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.2"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams."
+      },
+      "splitFrom": "P01.8"
+    },
+    {
+      "id": "P01.8c",
+      "title": "End-to-end level with Playwright against the fakes",
+      "description": "Fill the `e2e` level: Playwright 1.64.1 and `@axe-core/playwright` 4.14.0 in `tests/e2e/`, run from Windows against `compose.test.yaml` (docs/testing.md).",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test e2e` builds and starts the test project, runs the suite, and always stops it and removes its containers and volumes afterwards, also on failure.",
+        "A smoke test opens the empty app and finds no axe violation.",
+        "The test project never touches a running Lyrveil or its data."
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed. Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.8b",
+        "P01.5b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams."
+      },
+      "splitFrom": "P01.8"
+    },
+    {
+      "id": "P01.6a",
+      "title": "`setup.cmd`, the preflight checks and the docker test level",
+      "description": "Write `setup.cmd` and its implementation in `scripts\\lyrveil.ps1` as in docs/operations.md (`setup.cmd`, Preflight checks), except model downloads and licence acceptance (P01.6c): checks of Git, Docker, Compose, Engine API, memory Docker sees and free disk; `.env` from `.env.example` with a new token and access limited to the current user with `icacls`; the two volumes with the label `io.lyrveil.volume` and owner 10001 set once by a container with no network and only `CAP_CHOWN`; image builds; runtime containers created, not started. Fill the `docker` level with pinned Pester and pytest against the real Compose project.",
+      "acceptanceCriteria": [
+        "T-DCK-06 and T-DCK-07 pass: setup run twice gives the same result, and each preflight failure prints the documented advice and exit status.",
+        "T-DCK-13 passes: the volumes are external and survive `docker compose down -v`, every root `.cmd` only delegates to `scripts\\lyrveil.ps1`, and PSScriptAnalyzer passes.",
+        "`.env` is created only when missing, with a new random token and an ACL for the current user only, and is never overwritten.",
+        "Every prompt fails safely when there is no console input, and the docker tests never touch a real installation."
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "Machine facts measured at setup on 2026-11-06: Windows 11, Windows PowerShell 5.1, Pester 3.4.0 inbox only, no PSScriptAnalyzer, Python 3.15 on Windows but no uv, ruff, gitleaks or shellcheck, Node.js 24.22.1 with npm 11.19.1, Docker 29.9.2 with Compose v5.6.1 and an RTX 4070 12 GB. Install nothing machine-wide: fetch pinned tools with a hash check into a Git-ignored folder, or run them in containers. Python code and its gates run in Docker test stages (ADR 0029). The orchestrator runs `\"scripts/lyrveil.cmd\" test lint` through cmd.exe after every task; sessions run `scripts/lyrveil.cmd test <level>` from Git Bash. Both forms must work. Windows PowerShell 5.1 reads a .ps1 without BOM as ANSI: keep scripts ASCII or save them as UTF-8 with BOM, and read text resources with explicit UTF-8. Never bind-mount source code into a container. Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.2"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`."
+      },
+      "splitFrom": "P01.6",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.6b",
+      "title": "`start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd` and `logs.cmd`",
+      "description": "Implement the lifecycle commands of docs/operations.md in `scripts\\lyrveil.ps1`, with the exit statuses of the Scripts table. The model catalog and the runtimes arrive in P02.",
+      "acceptanceCriteria": [
+        "T-DCK-01 to T-DCK-05 pass: start from a clean clone, stop also when already stopped, restart, data surviving container recreation and upgrade, and health checks that reach healthy and report failures.",
+        "`start.cmd` ends with `Lyrveil è pronto: http://localhost:4200` and the empty app answers there; `status.cmd` and `status.cmd -Json` report services, health and the URL.",
+        "`stop.cmd` never runs `docker compose down -v` and succeeds when the services are already stopped.",
+        "Until the catalog and the runtimes exist, `start.cmd` and `status.cmd` report them as not available with a warning and do not fail for that reason."
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.6a",
+        "P01.8c"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`."
+      },
+      "splitFrom": "P01.6",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.6c",
+      "title": "`models` command with catalog-driven, resumable, verified downloads",
+      "description": "Implement `scripts\\lyrveil.cmd models` and the one-shot `lyrveil-models` service of the `tools` profile as in docs/operations.md (Model downloads): standard-library Python, the only container with a route out, mounting only the models volume, reading URLs, sizes and hashes from the catalog format of docs/models.md. Licence acceptance comes first (docs/licensing.md). The catalog file arrives in P02.1a, so tests use a test catalog.",
+      "acceptanceCriteria": [
+        "T-DCK-11 passes with a local test server: a download resumes with range requests, a size or hash mismatch keeps nothing and exits 4, and a valid file recorded in `/models/.verified.json` is skipped.",
+        "`-List`, `-Verify` and `-Remove` behave as documented, and `-Remove` refuses the active profile and asks first.",
+        "No download starts without licence acceptance, interactive or `-AcceptModelLicenses`; with no console input and no flag the command exits 5 and downloads nothing.",
+        "Only HTTPS is used, redirects go only to HTTPS, and `.part` files are deleted on failure."
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.6a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`."
+      },
+      "splitFrom": "P01.6",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.6d",
+      "title": "`import-model`, `backup` and `restore` commands",
+      "description": "Implement `scripts\\lyrveil.cmd import-model <file>` (docs/operations.md), and `backup` and `restore` with the backend's `cli.py` commands as in docs/operations.md (Backup and restore). P03.7b completes the backup content and T-DCK-12; T-DCK-14 is verified in P06.",
+      "acceptanceCriteria": [
+        "`import-model` copies a `.gguf` to `llm/` or a `.safetensors` to `image/checkpoints/` through a container with no network and the file's folder mounted read-only, and refuses other extensions, names outside the documented pattern and existing names.",
+        "`backup` exports to the configured Windows backup folder, and `restore` runs `restore-check` first and refuses a backup that fails it.",
+        "Tests use a temporary backup folder and test volumes."
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.6b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`."
+      },
+      "splitFrom": "P01.6",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.7a",
+      "title": "Host and Origin checks and security headers",
+      "description": "Implement the local-only checks of docs/security.md and ADR 0017: the backend refuses a Host or Origin that is not the local app, on REST and on the WebSocket handshake, and the backend and `nginx.conf` set the documented security headers on every response. If no WebSocket route exists yet, add the realtime endpoint of docs/api.md with its handshake only; P02.5c adds the events.",
+      "acceptanceCriteria": [
+        "T-SEC-01 passes: a wrong Host and a wrong Origin are refused on REST and on the WebSocket handshake.",
+        "T-SEC-02 passes: an end-to-end test checks the documented headers on the app shell, assets, API answers and errors.",
+        "Allowed hosts and origins come from settings with safe defaults, and docs/security.md matches the code."
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.3b",
+        "P01.8c"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers."
+      },
+      "splitFrom": "P01.7",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.7b",
+      "title": "Internal networks, the single published port and non-root containers",
+      "description": "Apply the network and container rules of docs/security.md and ADR 0003: backend and runtimes on internal networks with no route out, only `127.0.0.1:4200` published, every service as UID and GID 10001, and images with no data, weights, `.env` or fakes.",
+      "acceptanceCriteria": [
+        "T-DCK-08 passes: the backend and the runtimes have no route to the Internet.",
+        "T-DCK-09 passes: the production Compose file publishes only `127.0.0.1:4200`.",
+        "T-DCK-10 passes: the images contain no data, weights, `.env` or fakes, and every service runs as 10001:10001."
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P01.6a",
+        "P01.8b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers."
+      },
+      "splitFrom": "P01.7",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P01.8d",
+      "title": "Continuous integration workflow",
+      "description": "Write `.github/workflows/ci.yml` (docs/testing.md Continuous integration): on every push, lint and type checks, unit, integration and contract tests, end-to-end tests with fakes, image builds of the three core services, gitleaks, and the documentation checks with a parse of every Mermaid diagram. Hosted runners have no GPU, so CI never runs or claims the GPU suite.",
+      "acceptanceCriteria": [
+        "Each CI job runs the same commands as the matching local level, on a runner that supports them (Linux containers need a Linux runner), and docs/testing.md says which job runs what.",
+        "Schemathesis contract tests on the backend OpenAPI document run in the integration level and in CI.",
+        "A Mermaid parse of every diagram in the tracked Markdown runs in CI and fails on a syntax error.",
+        "gitleaks v8.30.1 scans the pushed commits in CI."
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.8c",
+        "P01.6a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams."
+      },
+      "splitFrom": "P01.8"
+    },
+    {
+      "id": "P01.EXIT",
+      "title": "Verify the P01 exit and record the evidence",
+      "description": "Run every automated test the P01 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11 and T-DCK-13 pass; `.\\start.cmd` opens the empty app at `http://localhost:4200` and `status.cmd` reports it, through the docker level; FTS5 and WAL are verified in the real image. All of this pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The roadmap's phase table marks P01 done and the P01 section lists the evidence."
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P01.8a",
+        "P01.1",
+        "P01.3a",
+        "P01.3b",
+        "P01.4a",
+        "P01.4b",
+        "P01.4c",
+        "P01.5a",
+        "P01.5b",
+        "P01.2",
+        "P01.8b",
+        "P01.8c",
+        "P01.6a",
+        "P01.6b",
+        "P01.6c",
+        "P01.6d",
+        "P01.7a",
+        "P01.7b",
+        "P01.8d"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P01: Foundations",
+        "line": "T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11, T-DCK-13 pass. `.\\start.cmd` opens an empty app at `http://localhost:4200`, and `status.cmd` reports it. FTS5 and WAL are verified in the real image."
+      }
+    },
+    {
+      "id": "P02.1",
+      "title": "Text runtime image from the pinned KoboldCpp binary",
+      "description": "Build `docker/llm` as in docs/operations.md (`docker/llm/Dockerfile`) and docs/technology.md: the pinned `v1.124.2` asset `koboldcpp-linux-x64` (628,981,944 bytes) verified by its SHA-256 during the build, an entrypoint that reads the launch file, a read-only root, and the unpacked launcher confirmed. Add the service to `compose.yaml` under the `ai` profile.",
+      "acceptanceCriteria": [
+        "The build downloads the pinned asset, fails on a size or SHA-256 mismatch, and the image holds no model file.",
+        "A docker-level test starts the container with a read-only root and the documented tmpfs mounts and confirms that the unpacked launcher runs, with no GPU or model needed.",
+        "The service runs as 10001:10001 on internal networks only, and `docker compose --profile ai config --quiet` passes."
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.1 `docker/llm` image from the pinned binary. Confirm the unpacked launcher and read-only root."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.1a",
+      "title": "Model catalog file, its validator and the tier defaults",
+      "description": "Write `config/model-catalog.json` from docs/models.md with every profile's pinned revision, file name, size and SHA-256 exactly as documented, `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset, and its validator in the backend.",
+      "acceptanceCriteria": [
+        "T-MOD-01 passes: the catalog validates, and invalid identifiers, moving revisions, unknown templates or presets, invalid `swa_padding`, `smart_cache` or `quality_evidence`, and two defaults for one tier are refused; custom profiles get the `generic` preset.",
+        "Every revision, size and SHA-256 equals docs/models.md.",
+        "The tier defaults resolve as ADR 0027 says: Gemma 4 26B-A4B on the 32 GB tier, Gemma 4 12B on the 16 GB tier, Illustrious XL v2.0 for images."
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.1a `config/model-catalog.json`, its validator and the tier defaults, including `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P02.2",
+      "title": "Orchestrator loads and stops the text runtime, with leases",
+      "description": "Implement the text-mode part of `lifecycle.py` and `supervisor.py`: start `lyrveil-llm` through `ContainerGate`, wait for readiness, stop it and verify release, and the leases of docs/gpu-orchestration.md (Leases and the global lock). The 18-step image flow is P06.1.",
+      "acceptanceCriteria": [
+        "T-ORC-03 passes: one lease at a time, mode match, expiry and heartbeat.",
+        "With `fake_docker` and `fake_nvml`, the orchestrator starts the text runtime from the default mode `llm`, reports `LLM_READY`, and stops it on `POST /v1/drain`, along the state machine table.",
+        "The backend's `OrchestratorClient` acquires, renews and releases a lease and handles a refused or expired one."
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.1",
+        "P02.1a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.2 Orchestrator loads and stops the LLM. Leases."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.3a",
+      "title": "`KoboldCppRuntime`: stream, generate, token count and abort",
+      "description": "Implement the `TextRuntime` port and `KoboldCppRuntime` with only the endpoints and flags of docs/runtime-contracts.md, and the timeouts of docs/gpu-orchestration.md. Tests run against `fake_kobold`.",
+      "acceptanceCriteria": [
+        "Streaming yields tokens in order and ends with the final text, abort stops a running generation, and a dropped stream raises a typed error.",
+        "Token counts come from the runtime's token count endpoint, never from an estimate.",
+        "Out-of-memory, invalid JSON and crash replies map to the documented typed errors.",
+        "A test fails if the adapter calls an endpoint missing from docs/runtime-contracts.md."
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.1a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md))."
+      },
+      "splitFrom": "P02.3",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.3b",
+      "title": "`PromptFormatter` families with the stable prefix, frame and anchor",
+      "description": "Implement `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml` as in docs/prompting.md (Prompt format) and ADR 0025, with the stable prefix, the frame of the dynamic context and the anchor of ADR 0031. Golden strings come from the formats written in docs/prompting.md.",
+      "acceptanceCriteria": [
+        "T-MOD-02 passes: each family produces its golden string for the same turns, and no family writes BOS.",
+        "T-MOD-05 passes: two consecutive replies share the stable text and the history byte for byte for each family, old turns never carry the frame, frame markers in user text, memories and summaries are neutralized, and proactive and structured prompts follow their own layout."
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": "Sessions have no web access. If docs/prompting.md lacks a template detail the golden strings need, return `status: blocked` naming it; T-GPU-03 later records real tokenization fixtures.",
+      "dependsOn": [
+        "P02.1a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md))."
+      },
+      "splitFrom": "P02.3",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.4",
+      "title": "Durable job queue with retries",
+      "description": "Implement `jobs/` as in ADR 0010 and docs/backend.md (Job handlers, Retry policy): jobs stored in SQLite in the same transaction as the change that creates them, priorities, retries with backoff, and recovery after a restart. The scheduling policy across modes is completed in P06.3.",
+      "acceptanceCriteria": [
+        "A job is committed with the change that creates it and survives a restart; interrupted running jobs recover as documented.",
+        "Retries follow the documented backoff and maximum, and end in a failed state with its reason.",
+        "A job not eligible in the current mode waits instead of running."
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "taskType": "refactor_architectural",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.4 Job queue with persistence and retries."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.5a",
+      "title": "Conversations: create, list, pin, archive, delete and restore",
+      "description": "Implement conversations in persistence, services and API as in docs/data-model.md and docs/api.md (Conversations), with the minimal character P02.6a needs; the full card is P03.1a.",
+      "acceptanceCriteria": [
+        "T-MSG-01 passes at the integration level: a chat is created for a character.",
+        "T-MSG-11 passes at the integration level for pin, archive, delete and restore; search is P02.5d.",
+        "Deleted conversations follow the deletion policy of docs/data-model.md."
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.5 Conversations, messages, variants, streaming over WebSocket, search."
+      },
+      "splitFrom": "P02.5"
+    },
+    {
+      "id": "P02.5b",
+      "title": "Messages: idempotent send, edit, delete, variants and paging",
+      "description": "Implement messages as in docs/data-model.md and docs/api.md (Messages): send with an idempotency key, committed before its reply job exists, edit, delete, regeneration into variants with alternatives, and history paging.",
+      "acceptanceCriteria": [
+        "T-MSG-02 passes: send is idempotent and committed before the job exists.",
+        "T-MSG-04, T-MSG-05 and T-MSG-06 pass at the integration level: variants and alternatives, edit, delete.",
+        "T-MSG-08 passes at the integration level: history paging and recovery."
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.5a",
+        "P02.4"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.5 Conversations, messages, variants, streaming over WebSocket, search."
+      },
+      "splitFrom": "P02.5"
+    },
+    {
+      "id": "P02.5c",
+      "title": "Reply streaming over WebSocket with replay",
+      "description": "Implement `events/` with the WebSocket hub and replay buffer (ADR 0016, docs/api.md), and the reply job that streams through `KoboldCppRuntime` with the prompt of P02.3b, persists partial text every 2 s, and finishes or ends `interrupted` (docs/backend.md Streaming persistence).",
+      "acceptanceCriteria": [
+        "T-MSG-03 passes at the integration level: tokens in order, partial text persisted every 2 s, final text stored.",
+        "T-MSG-12 passes at the integration level: a reconnect gets replay from the last event ID, or a resync when the gap is too old.",
+        "T-MSG-13 and T-MSG-09 pass at the integration level: a crash during streaming leaves `interrupted`, and simultaneous conversations are served in order with no mixed text.",
+        "T-SEC-06 passes: marker strings never reach the logs."
+      ],
+      "priority": 38,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.5b",
+        "P02.3a",
+        "P02.3b",
+        "P02.2"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.5 Conversations, messages, variants, streaming over WebSocket, search."
+      },
+      "splitFrom": "P02.5",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.5d",
+      "title": "Conversation and message search",
+      "description": "Implement the search of docs/api.md over conversation titles and message text with FTS5, with user text escaped so FTS syntax is harmless.",
+      "acceptanceCriteria": [
+        "T-MSG-11 passes for search at the integration level, matching Italian accents as documented.",
+        "FTS operators, quotes and parentheses in a query never raise or change its meaning."
+      ],
+      "priority": 39,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.5b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.5 Conversations, messages, variants, streaming over WebSocket, search."
+      },
+      "splitFrom": "P02.5"
+    },
+    {
+      "id": "P02.6a",
+      "title": "Chat list screen with the minimal character form",
+      "description": "Build the conversation list (docs/frontend.md screen 1) with search, pin and archive, and a built-in minimal character form to start a chat until the Creator arrives in P03.",
+      "acceptanceCriteria": [
+        "End-to-end tests with the fakes cover the minimal character form, creating a chat (T-MSG-01), and pin, archive, delete, restore and search (T-MSG-11).",
+        "Every control on the screen works; nothing is shown that does not work yet.",
+        "All text comes from `it.json` and all colors from the tokens."
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "dependsOn": [
+        "P02.5a",
+        "P02.5d"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.6 Chat list and conversation screens with a built-in minimal character form."
+      },
+      "splitFrom": "P02.6",
+      "effort": "high"
+    },
+    {
+      "id": "P02.6b",
+      "title": "Conversation screen with streaming, variants, edit and delete",
+      "description": "Build the conversation screen (docs/frontend.md screen 2): messages with day separators, the composer, live streaming with a typing indicator, variants and alternatives, edit, delete, history paging, and recovery after a page reload during streaming.",
+      "acceptanceCriteria": [
+        "End-to-end tests with the fakes cover T-MSG-03 to T-MSG-09 and T-MSG-12, including a reload during streaming (T-MSG-07).",
+        "T-SEC-03 passes: markup in messages renders as text.",
+        "Every control works, and text and colors come from the catalog and the tokens."
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "dependsOn": [
+        "P02.6a",
+        "P02.5c"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.6 Chat list and conversation screens with a built-in minimal character form."
+      },
+      "splitFrom": "P02.6"
+    },
+    {
+      "id": "P02.EXIT",
+      "title": "Verify the automated P02 exit and record the evidence",
+      "description": "Run every automated test the P02 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P02 section lists the evidence, and the phase table shows the automated part as passed and the hardware part (P02.7, P02.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P02.1",
+        "P02.1a",
+        "P02.2",
+        "P02.3a",
+        "P02.3b",
+        "P02.4",
+        "P02.5a",
+        "P02.5b",
+        "P02.5c",
+        "P02.5d",
+        "P02.6a",
+        "P02.6b"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart."
+      }
+    },
+    {
+      "id": "P02.7",
+      "title": "Run the VRAM tuning procedure on the reference machine",
+      "description": "Run the procedure of docs/gpu-orchestration.md (Measuring and tuning) with the speed rule and the efficiency levers of ADR 0030, for `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b`.",
+      "acceptanceCriteria": [
+        "A dated file in `docs/verification/` records every command and measured number of the procedure.",
+        "T-GPU-14 passes or its result is recorded: the speed rule for the default profile, AutoFit against `MOE_CPU_LAYERS` 8, 12 and 16, and the efficiency levers.",
+        "The catalog's VRAM values are updated from the measurements, and the default rule of docs/models.md is applied and recorded."
+      ],
+      "priority": 43,
+      "passes": false,
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e scarica rocinante-x-12b; poi unblock per misurare la VRAM sul PC di riferimento.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`.",
+      "dependsOn": [
+        "P02.EXIT"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change)."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P02.EXIT-HW",
+      "title": "Verify the P02 hardware exit on the reference machine",
+      "description": "The hardware part of the P02 exit: T-GPU-01 to T-GPU-04 and T-GPU-14 on the reference machine, and a long Italian chat with the default text profile that survives a page reload and an application restart.",
+      "acceptanceCriteria": [
+        "T-GPU-01 to T-GPU-04 pass with `scripts\\lyrveil.cmd test gpu`, including a tokenization fixture recorded for each template family, and the results are in a dated file.",
+        "A long Italian chat with the default text profile survives a page reload and an application restart, recorded with its steps.",
+        "The roadmap marks P02 done and lists the evidence."
+      ],
+      "priority": 44,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P02.7"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P02: Working chat",
+        "line": "T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P03.1a",
+      "title": "Character card with voice fields, identity slots and wardrobe",
+      "description": "Implement the full card of docs/character-system.md (Card schema) in domain, migration and API: identity, traits, communication and visual fields, the voice fields of ADR 0033, and the identity slots and wardrobe of ADR 0035, with adult-only age enforced at API and database. Create the tag vocabulary file of ADR 0035 (`backend/src/lyrveil/images/vocabulary/tags.v1.json`) with categories and Italian aliases for the values the card validates; P05.3a adds the CLIP token counts.",
+      "acceptanceCriteria": [
+        "T-CHR-01 and T-CHR-07 pass: create with minimal and full fields, and the data persists after a restart.",
+        "T-CHR-02 passes at API and database: an age under 18 is refused by validation and by a database CHECK.",
+        "T-CHR-14 passes except its export round trip (P03.5): `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots checked against the vocabulary, and outfits with reserved keys refused."
+      ],
+      "priority": 45,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.EXIT"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.1 Full card, traits, communication and visual fields, versions, diff, restore and locks. The card includes the"
+      },
+      "splitFrom": "P03.1"
+    },
+    {
+      "id": "P03.1b",
+      "title": "Card versions, diff, restore and locked traits",
+      "description": "Implement card versioning as in docs/consistency-engine.md (Versioning) and docs/character-system.md.",
+      "acceptanceCriteria": [
+        "T-CHR-03 passes: an edit creates a version, and a save with no change creates none.",
+        "T-CHR-08 passes: version list, diff and restore, and restore creates a new version.",
+        "T-CHR-09 passes: a locked trait survives a draft and a proposal."
+      ],
+      "priority": 46,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.1 Full card, traits, communication and visual fields, versions, diff, restore and locks. The card includes the"
+      },
+      "splitFrom": "P03.1",
+      "effort": "high"
+    },
+    {
+      "id": "P03.2a",
+      "title": "Character Creator screens with Signal Forms",
+      "description": "Build the Character Creator (docs/frontend.md screen 3) with Signal Forms (ADR 0015): every card section of P03.1a, including voice fields, vocabulary-based identity slots and the wardrobe, with Italian validation messages.",
+      "acceptanceCriteria": [
+        "T-CHR-13 passes: the full creation flow works in the browser against the fakes.",
+        "Form validation matches the API: an age under 18, a reserved outfit key and an unknown vocabulary tag are refused with Italian messages, in unit tests.",
+        "Every control works, and text and colors come from the catalog and the tokens."
+      ],
+      "priority": 47,
+      "passes": false,
+      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "dependsOn": [
+        "P03.1a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge."
+      },
+      "splitFrom": "P03.2"
+    },
+    {
+      "id": "P03.2b",
+      "title": "Character profile, versions view, duplicate, archive and purge",
+      "description": "Build the character profile (docs/frontend.md screen 4) with version list, diff and restore, and implement duplicate, archive and purge end to end as in docs/character-system.md and the deletion policy of docs/data-model.md.",
+      "acceptanceCriteria": [
+        "T-CHR-04 passes: duplicate copies the card, not conversations or memories.",
+        "Archive hides a character and brings it back; purge deletes it with its data as the deletion policy says, after a confirmation, in integration and end-to-end tests.",
+        "The profile shows versions with diff and restore, and every control works."
+      ],
+      "priority": 48,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1b",
+        "P03.2a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge."
+      },
+      "splitFrom": "P03.2"
+    },
+    {
+      "id": "P03.3",
+      "title": "Assisted creation with grammar, validation and repair",
+      "description": "Implement assisted creation as in docs/character-system.md (Assisted creation) and ADR 0013: the text model drafts a card from an Italian description under a grammar, the result is validated, repaired once, and shown as a draft that the user edits, with locked traits respected.",
+      "acceptanceCriteria": [
+        "T-CHR-10 passes with `fake_kobold`: valid output, repaired output and repeated failure each end as documented.",
+        "The grammar is generated from the card schema, and a test fails when the two drift apart.",
+        "A draft never becomes a saved card without the user's confirmation, and runs as a job through the orchestrator's normal path."
+      ],
+      "priority": 49,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1b",
+        "P03.2a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.3 Assisted creation with grammar, validation and repair."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P03.4a",
+      "title": "Avatar upload, validation, variants and media routes",
+      "description": "Implement `media/` (MediaStore) and avatars as in docs/character-system.md (Avatars and images) and docs/security.md: Pillow validation, metadata removal, size and pixel limits, crop, variants and thumbnails, a single primary avatar, atomic moves from staging, and media routes that refuse traversal.",
+      "acceptanceCriteria": [
+        "T-CHR-11 passes: valid, wrong-bytes and too-large uploads, metadata removed, crop, a single primary avatar.",
+        "T-SEC-05 passes: decompression bombs and disguised uploads are refused.",
+        "T-SEC-04 and T-SEC-08 pass: traversal attempts on media and asset routes fail, and deletion refuses paths outside the media root."
+      ],
+      "priority": 50,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.4 Upload, crop, variants and primary avatar."
+      },
+      "splitFrom": "P03.4",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P03.4b",
+      "title": "Avatar tools in the Creator and the profile",
+      "description": "Add upload with preview, crop, variant choice and primary avatar selection to the Creator and the profile.",
+      "acceptanceCriteria": [
+        "An end-to-end test uploads an avatar, crops it and makes it primary, and the conversation list shows it.",
+        "Upload errors from the API show the Italian messages of the catalog."
+      ],
+      "priority": 51,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.4a",
+        "P03.2b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.4 Upload, crop, variants and primary avatar."
+      },
+      "splitFrom": "P03.4"
+    },
+    {
+      "id": "P03.5",
+      "title": "Character exchange format, import, export and JSON Schema",
+      "description": "Implement the exchange format of docs/character-system.md (Exchange format) and ADR 0021: export of a card with its assets and hashes, and import validated against the published JSON Schema.",
+      "acceptanceCriteria": [
+        "T-CHR-05 passes: an export and import round trip preserves the card and the asset hashes.",
+        "T-CHR-06 passes, and T-CHR-02 passes at import: newer formats, unknown fields and minors are refused.",
+        "The export and import round trip of T-CHR-14 passes for the voice and wardrobe fields, and the JSON Schema validates every exported example."
+      ],
+      "priority": 52,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1b",
+        "P03.4a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.5 Exchange format, import, export and JSON Schema."
+      }
+    },
+    {
+      "id": "P03.6a",
+      "title": "Content guard for character data",
+      "description": "Implement the content guard of docs/security.md (Content safeguards) and ADR 0018 at every character entry point: API, database, import, drafts and proposals. ADR 0018 says settings cannot disable these rules.",
+      "acceptanceCriteria": [
+        "T-SEC-07 passes: every documented guard case, including minors at each entry point.",
+        "T-CHR-02 passes at the draft entry point.",
+        "A test proves that no setting or configuration file can change the minor safeguards."
+      ],
+      "priority": 53,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.3",
+        "P03.5"
+      ],
+      "taskType": "critical_hard_to_verify",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.6 Content guard for character data. Demo characters."
+      },
+      "splitFrom": "P03.6"
+    },
+    {
+      "id": "P03.6b",
+      "title": "Original demo characters",
+      "description": "Write the demo characters of docs/character-system.md (Demo characters): original adults with Italian voices in three registers, synthetic data only, loadable on request, used by tests and screenshots.",
+      "acceptanceCriteria": [
+        "The demo characters pass the content guard and the import validation, and load on request without overwriting user characters.",
+        "They contain only original text and synthetic data: no real person, brand or existing fictional character.",
+        "They cover the three registers the Italian quality protocol of docs/prompting.md needs."
+      ],
+      "priority": 54,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.6a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.6 Content guard for character data. Demo characters."
+      },
+      "splitFrom": "P03.6"
+    },
+    {
+      "id": "P03.7a",
+      "title": "Several conversations per character, and scenarios",
+      "description": "Implement several conversations per character and the scenarios of docs/character-system.md, docs/data-model.md and docs/frontend.md (screen 7).",
+      "acceptanceCriteria": [
+        "A character can have several conversations, and the chat list shows each one, in integration and end-to-end tests.",
+        "Scenarios can be created, edited and deleted in their screen, and a new conversation can start from one.",
+        "An integration test shows that nothing from one conversation reaches another one's context; T-CON-02 follows in P04."
+      ],
+      "priority": 55,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.2b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.7 Multiple conversations per character, scenarios, backup and restore."
+      },
+      "splitFrom": "P03.7"
+    },
+    {
+      "id": "P03.7b",
+      "title": "Backup and restore of all application data",
+      "description": "Complete backup and restore (docs/operations.md Backup and restore, R-BE-07): one backup a day while idle, `start.cmd` and `stop.cmd` copy missing backups to the Windows folder, and restore replaces data only after `restore-check` passes.",
+      "acceptanceCriteria": [
+        "T-DCK-12 passes: a backup and restore round trip preserves characters, conversations, assets and settings, including the copy to the Windows backup folder.",
+        "The daily backup runs only while idle, and a backup taken during writes is consistent.",
+        "Tests use a temporary backup folder and test volumes."
+      ],
+      "priority": 56,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P03.7a",
+        "P03.4a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "P03.7 Multiple conversations per character, scenarios, backup and restore."
+      },
+      "splitFrom": "P03.7",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P03.EXIT",
+      "title": "Verify the automated P03 exit and record the evidence",
+      "description": "Run every automated test the P03 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08 and T-DCK-12 pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P03 section lists the evidence, and the phase table shows the automated part as passed and the hardware and manual part (P03.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 57,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P03.1a",
+        "P03.1b",
+        "P03.2a",
+        "P03.2b",
+        "P03.3",
+        "P03.4a",
+        "P03.4b",
+        "P03.5",
+        "P03.6a",
+        "P03.6b",
+        "P03.7a",
+        "P03.7b"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar."
+      }
+    },
+    {
+      "id": "P03.EXIT-HW",
+      "title": "Verify the P03 hardware exit and the manual acceptance run",
+      "description": "T-GPU-05 on the real model, and AC-01 to AC-06, AC-08 to AC-10 and AC-16 in a manual run with an uploaded avatar.",
+      "acceptanceCriteria": [
+        "T-GPU-05 passes: structured output with grammar on the real model.",
+        "AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run with an uploaded avatar, recorded with date and steps.",
+        "The roadmap marks P03 done and lists the evidence."
+      ],
+      "priority": 58,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P03.EXIT",
+        "P02.EXIT-HW"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P03: Characters",
+        "line": "T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar."
+      }
+    },
+    {
+      "id": "P04.1",
+      "title": "Memory tables, FTS5 index, stemming and stop words",
+      "description": "Create the memory tables of docs/data-model.md and docs/memory-engine.md (Memory layers) with the FTS5 index, stemming with snowballstemmer and stop-word lists, as in ADR 0011.",
+      "acceptanceCriteria": [
+        "T-MEM-06 passes: Italian stemming and accents match.",
+        "T-MEM-07 passes: FTS syntax in user text is harmless.",
+        "The migration creates the tables, their constraints and the FTS5 table, and a migration test upgrades from the P03 schema."
+      ],
+      "priority": 59,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.EXIT"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.1 Memory tables, FTS5, stemming and stop-word lists."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P04.2a",
+      "title": "Memory extraction: windows, grammar, validation and idempotency",
+      "description": "Implement the extraction pipeline of docs/memory-engine.md (Extraction pipeline) and docs/prompting.md (Extraction template): windows every 8 to 12 messages or at significant events, output under a grammar (ADR 0013), validation, sources for every item, a cursor, retries and idempotency.",
+      "acceptanceCriteria": [
+        "T-MEM-01 passes: extraction stores validated items with their sources.",
+        "T-MEM-02 and T-MEM-03 pass: invalid output changes nothing, keeps the cursor and retries, and the same window twice gives one result.",
+        "T-MEM-17 passes for extraction: the job is not eligible in image mode."
+      ],
+      "priority": 60,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.1"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.2 Extraction pipeline with idempotency, consistency rules and tombstones."
+      },
+      "splitFrom": "P04.2",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.2b",
+      "title": "Memory consistency rules: duplicates, updates, contradictions and limits",
+      "description": "Apply the rules of docs/memory-engine.md (Contradictions) and docs/consistency-engine.md to extracted items.",
+      "acceptanceCriteria": [
+        "T-MEM-04 and T-MEM-10 pass: deduplication by fingerprint and by similarity, and an update that supersedes, keeps history and references, with the prompt using the new fact.",
+        "T-MEM-11, T-MEM-12 and T-MEM-13 pass: contradictions stay uncertain and labeled, temporary memories expire without replacing lasting ones, and an explicit user correction wins and is confirmed.",
+        "T-MEM-14 and T-CON-05 pass: inference limits, and `identity_candidate` not applied until the user applies it."
+      ],
+      "priority": 61,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.2a"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.2 Extraction pipeline with idempotency, consistency rules and tombstones."
+      },
+      "splitFrom": "P04.2",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.2c",
+      "title": "Memory revisions and tombstones",
+      "description": "Implement memory edits with revisions and deletion with tombstones, as in docs/memory-engine.md (Deletion and tombstones) and ADR 0012.",
+      "acceptanceCriteria": [
+        "T-MEM-08 passes: editing a memory creates a revision.",
+        "T-MEM-09 passes: deletion adds a tombstone, the same source cannot recreate the memory, and a later source can."
+      ],
+      "priority": 62,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.2b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.2 Extraction pipeline with idempotency, consistency rules and tombstones."
+      },
+      "splitFrom": "P04.2",
+      "effort": "high"
+    },
+    {
+      "id": "P04.3",
+      "title": "`FtsMemoryRetriever` and scoring",
+      "description": "Implement retrieval and scoring as in docs/memory-engine.md (Retrieval, Retrieval contract) and ADR 0011.",
+      "acceptanceCriteria": [
+        "T-MEM-05 passes: ranking, token budget and maximum items.",
+        "T-MEM-15, T-CON-01 and T-CON-02 pass: conversations are isolated, a fact told to character A never reaches character B, and memory is shared only when opted in.",
+        "T-MEM-22 passes: recall at 8 is at least 80 % on a synthetic evaluation set in `tests/fixtures/`."
+      ],
+      "priority": 63,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.2c"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.3 `FtsMemoryRetriever` and scoring."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.4",
+      "title": "Progressive summaries and rollups",
+      "description": "Implement the summaries of docs/memory-engine.md (Progressive summaries).",
+      "acceptanceCriteria": [
+        "T-MEM-16 passes: ranges, versions, rollups, contiguity and no overwrite.",
+        "T-MEM-17 passes for summaries: the job is not eligible in image mode."
+      ],
+      "priority": 64,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.2a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.4 Progressive summaries and rollups."
+      }
+    },
+    {
+      "id": "P04.5",
+      "title": "Full `ContextBuilder` with runtime token counts, length bands and the anchor",
+      "description": "Implement the `ContextBuilder` of docs/memory-engine.md (Context composition) and docs/prompting.md (System blocks, Length bands), keeping the stable prefix of ADR 0031.",
+      "acceptanceCriteria": [
+        "T-MEM-21 passes: budgets at 8192 and 4096, the reduction order, mandatory blocks kept, and runtime token counts used.",
+        "T-CON-11 passes: length bands set `max_length` and the reply reserve capped by `llm.max_length`, the anchor holds the band's text, and block 3 renders examples in saved order and stops before the 500-token maximum.",
+        "T-MOD-05 still passes with the full context."
+      ],
+      "priority": 65,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.3",
+        "P04.4"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.5 Full `ContextBuilder` with runtime token counts, length bands and the anchor."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.6",
+      "title": "`CharacterStateManager` with bounded updates and replay",
+      "description": "Implement the state manager of docs/consistency-engine.md (Character state manager).",
+      "acceptanceCriteria": [
+        "T-CON-06 passes: deltas are bounded per event, run and day, and always carry a reason and sources.",
+        "T-CON-03 passes: a state change in one chat leaves another chat unchanged.",
+        "T-MEM-23 passes: random edit and delete sequences keep state equal to replaying history."
+      ],
+      "priority": 66,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.2b"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.6 `CharacterStateManager`, bounded updates, replay."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.7",
+      "title": "Invalidation and re-evaluation after message changes",
+      "description": "Implement docs/memory-engine.md (Invalidation after message changes) across memories, summaries and state.",
+      "acceptanceCriteria": [
+        "T-MEM-19 passes: a message edit or deletion invalidates derived data, and re-evaluation restores what still holds.",
+        "T-MEM-20 passes: a locked memory gets `needs_review` and does not change.",
+        "T-MEM-18 passes: after a restart, memories, cursors and interrupted runs are correct.",
+        "T-CON-04 passes: the canonical data hash is unchanged after 1000 synthetic messages, extraction and summaries."
+      ],
+      "priority": 67,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.6",
+        "P04.4"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.7 Invalidation and re-evaluation."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.8a",
+      "title": "Reply normalizer N1 to N5",
+      "description": "Implement the reply normalizer of docs/consistency-engine.md (Reply normalization) and ADR 0032.",
+      "acceptanceCriteria": [
+        "T-CON-09 passes: fixed raw replies from each template family give the same delivered text in one piece and split into stream chunks at every position.",
+        "The chat reply path normalizes every reply before storage and display through one function that later paths reuse."
+      ],
+      "priority": 68,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.5"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.8 Reply normalizer, reply checks V1 to V13 with the corrective generation, and adaptive notes ([ADR 0032](decisions/0032-model-independent-reply-normalization.md))."
+      },
+      "splitFrom": "P04.8",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.8b",
+      "title": "Reply checks V1 to V13, corrective generation and adaptive notes",
+      "description": "Implement the reply checks and the corrective generation of docs/consistency-engine.md and ADR 0032.",
+      "acceptanceCriteria": [
+        "T-CON-08 passes: checks V1 to V13 on fixed texts, including quotations that V11 must skip.",
+        "T-CON-10 passes: a V6, V10 or V11 hit aborts the stream, publishes `message.restarted` and regenerates once with the note in the anchor; a second hit is delivered and recorded; adaptive notes start, last 3 replies and stay at most two."
+      ],
+      "priority": 69,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.8a"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.8 Reply normalizer, reply checks V1 to V13 with the corrective generation, and adaptive notes ([ADR 0032](decisions/0032-model-independent-reply-normalization.md))."
+      },
+      "splitFrom": "P04.8",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P04.9a",
+      "title": "Memory Studio: memories, events, relationship and summaries",
+      "description": "Build the Memory Studio (docs/frontend.md screen 5) on the memory API of docs/api.md.",
+      "acceptanceCriteria": [
+        "End-to-end tests with the fakes list, filter, edit, lock and delete memories, with source, confidence and history shown.",
+        "Events, relationship state and summaries are shown with their sources, as documented.",
+        "Through the Studio, an edit shows a new revision (T-MEM-08) and an unresolved contradiction is labeled (T-MEM-11)."
+      ],
+      "priority": 70,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.7",
+        "P04.2c"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.9 Memory Studio, including diagnostic mode."
+      },
+      "splitFrom": "P04.9"
+    },
+    {
+      "id": "P04.9b",
+      "title": "Memory Studio diagnostic mode",
+      "description": "Add the diagnostic mode of docs/frontend.md (screen 5) over the stored prompt assemblies of docs/data-model.md.",
+      "acceptanceCriteria": [
+        "For a chosen reply, diagnostic mode shows the stored prompt assembly: blocks, budgets, token counts and the retrieved memories, in an end-to-end test.",
+        "Diagnostics follow the documented default, and no message content reaches the logs."
+      ],
+      "priority": 71,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.9a",
+        "P04.5"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.9 Memory Studio, including diagnostic mode."
+      },
+      "splitFrom": "P04.9"
+    },
+    {
+      "id": "P04.EXIT",
+      "title": "Verify the automated P04 exit and record the evidence",
+      "description": "Run every automated test the P04 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06 and T-CON-08 to T-CON-11, with AC-11 and AC-12 through their tests (T-MEM-18, T-CON-02, T-MEM-08 to T-MEM-13), pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P04 section lists the evidence, and the phase table shows the automated part as passed and the quality part (P04.10) as pending, so the phase is not marked done."
+      ],
+      "priority": 72,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P04.1",
+        "P04.2a",
+        "P04.2b",
+        "P04.2c",
+        "P04.3",
+        "P04.4",
+        "P04.5",
+        "P04.6",
+        "P04.7",
+        "P04.8a",
+        "P04.8b",
+        "P04.9a",
+        "P04.9b"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 to T-CON-11 pass. T-QLT-01 meets its targets or records the tuning and repeat. T-QLT-05 and T-QLT-06 meet their hard targets on every profile that stays in the catalog. AC-11 and AC-12 hold."
+      }
+    },
+    {
+      "id": "P04.10",
+      "title": "Run the quality, consistency and extraction protocols on the catalog profiles",
+      "description": "Run the Italian quality protocol of docs/prompting.md, the consistency protocol and the extraction evaluation of docs/consistency-engine.md, with the SWA padding and SmartCache measurements of docs/gpu-orchestration.md, and apply the verified-profile rule of ADR 0034.",
+      "acceptanceCriteria": [
+        "T-QLT-01 meets its targets on the default profile, `orion-26b-a4b` and `rocinante-x-12b`, or the tuning and repeat are recorded, including the owner's ratings and blind test.",
+        "T-QLT-05 and T-QLT-06 meet their hard targets on every profile that stays in the catalog.",
+        "The verified-profile rule is applied and `quality_evidence` is recorded in the catalog, with the evidence in a dated file. The P04 section of the roadmap marks the phase done."
+      ],
+      "priority": 73,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`.",
+      "dependsOn": [
+        "P04.EXIT",
+        "P02.EXIT-HW"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P04: Memory",
+        "line": "P04.10 Run the Italian quality protocol, the consistency protocol and the extraction evaluation on the catalog"
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.1",
+      "title": "Image runtime image from the pinned ComfyUI commit, with a lock file",
+      "description": "Build `docker/image` as in docs/operations.md (`docker/image/Dockerfile`) and docs/technology.md: ComfyUI `v0.43.0` at commit `426f5eea52a7ece1dd599fff4cb6cd1f352ddd24`, with PyTorch for CUDA 13.0 from `docker/image/requirements.lock` installed with hashes. Add the service under the `ai` profile.",
+      "acceptanceCriteria": [
+        "The image installs only what `docker/image/requirements.lock` pins, with hashes, and contains no model file.",
+        "It runs as 10001:10001 with a read-only root as documented, on internal networks only, and `docker compose --profile ai config --quiet` passes.",
+        "A docker-level test starts the container in CPU mode and gets an answer from an endpoint listed in docs/runtime-contracts.md."
+      ],
+      "priority": 74,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P04.EXIT"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.1 `docker/image` from the pinned commit, with a lock file."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.2a",
+      "title": "`ComfyUiRuntime` with queueing, progress and cancellation",
+      "description": "Implement the `ImageRuntime` port and `ComfyUiRuntime` with only the endpoints of docs/runtime-contracts.md. Tests run against `fake_comfy`.",
+      "acceptanceCriteria": [
+        "T-IMG-05 passes: ComfyUI messages map to progress for both passes.",
+        "Against `fake_comfy`, the runtime queues a workflow, follows it, downloads the result, interrupts a running job, and maps out-of-memory and crash replies to typed errors.",
+        "A test fails if the adapter calls an endpoint missing from docs/runtime-contracts.md."
+      ],
+      "priority": 75,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes."
+      },
+      "splitFrom": "P05.2",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.2b",
+      "title": "Workflow templates for Alta and Rapida with tiled variants",
+      "description": "Write the API-format workflows in `workflows/comfyui/` and their builder, as in docs/image-generation.md and ADR 0026.",
+      "acceptanceCriteria": [
+        "T-IMG-14 passes at the unit level: Alta and Rapida build the documented graphs, with node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, and the tiled variants.",
+        "Templates are versioned, and a test loads every one."
+      ],
+      "priority": 76,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.2a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes."
+      },
+      "splitFrom": "P05.2"
+    },
+    {
+      "id": "P05.3a",
+      "title": "Vocabulary token counts and the sanitizer",
+      "description": "Add the CLIP token counts to the tag vocabulary of ADR 0035 using the tokenizer of the pinned ComfyUI image, and implement the sanitizer of docs/image-generation.md (Sanitizer).",
+      "acceptanceCriteria": [
+        "T-IMG-16 passes: weights, escapes, `embedding:`, brackets and commas in tags are neutralized; every vocabulary entry passes the sanitizer unchanged and its token count matches ComfyUI's tokenizer; the API of the advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5.",
+        "Every vocabulary entry carries its token count."
+      ],
+      "priority": 77,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.3 `VisualConsistencyService`, the tag vocabulary with token counts, the sanitizer, structured profile translation and the scene filter ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md))."
+      },
+      "splitFrom": "P05.3",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.3b",
+      "title": "`VisualConsistencyService`, profile translation and the scene filter",
+      "description": "Implement docs/image-generation.md (Visual PromptBuilder, Visual consistency, Final prompt) and ADR 0035.",
+      "acceptanceCriteria": [
+        "T-IMG-01 passes: prompt composition is deterministic, and the safety negative is always present.",
+        "T-IMG-02 and T-CON-07 pass: the scene filter steps run in the documented order, and conflicting visual tags are removed.",
+        "T-IMG-15 passes: the identity segment is byte-identical for scenes from every template family, in the fixed order with the age band and caps.",
+        "`visual_profile_translate` returns `VisualIdentityResult` under a grammar built from the vocabulary's closed values."
+      ],
+      "priority": 78,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.3a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.3 `VisualConsistencyService`, the tag vocabulary with token counts, the sanitizer, structured profile translation and the scene filter ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md))."
+      },
+      "splitFrom": "P05.3",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.4a",
+      "title": "`ImageScene` with aspect `auto`, and the caption in the character's voice",
+      "description": "Implement the structured scene and the caption of ADR 0036 and docs/image-generation.md (Caption).",
+      "acceptanceCriteria": [
+        "T-IMG-17 passes: the grammar limits `outfit` to the wardrobe and drops `scene` when `clothing` is locked; `auto` maps each framing to its size; Alta sizes are multiples of 8; invalid output leads to the fallback scene.",
+        "T-IMG-18 passes: the caption goes through the chat path before the scene, with the normalizer and checks, and a failed caption sends the image without text."
+      ],
+      "priority": 79,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.3b",
+        "P05.2b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.4 `image_request` job with `ImageScene`, the caption in the character's voice and aspect `auto`, persistence, thumbnails and message integration ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md))."
+      },
+      "splitFrom": "P05.4",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.4b",
+      "title": "`image_request` job, persistence, thumbnails and image messages",
+      "description": "Implement the image job and its persistence as in docs/image-generation.md (Persistence).",
+      "acceptanceCriteria": [
+        "T-IMG-06 passes: persistence is atomic and idempotent.",
+        "T-IMG-07 and T-IMG-08 pass at integration and end-to-end level: the image appears as a message with metadata, and images load with ComfyUI off.",
+        "T-IMG-09 passes: regeneration adds a variant."
+      ],
+      "priority": 80,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.4a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.4 `image_request` job with `ImageScene`, the caption in the character's voice and aspect `auto`, persistence, thumbnails and message integration ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md))."
+      },
+      "splitFrom": "P05.4"
+    },
+    {
+      "id": "P05.5a",
+      "title": "Image modes and the request detector",
+      "description": "Implement the modes of docs/image-generation.md (Modes): manual, the detector, contextual mode switched off by default, and character mode.",
+      "acceptanceCriteria": [
+        "T-IMG-03 passes: the request detector on at least 100 phrases.",
+        "T-IMG-13 passes: contextual mode is off by default, and a proposal needs a valid event and acceptance.",
+        "Manual and character modes create `image_request` jobs as documented."
+      ],
+      "priority": 81,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.4b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation."
+      },
+      "splitFrom": "P05.5",
+      "effort": "high"
+    },
+    {
+      "id": "P05.5b",
+      "title": "Image requests in the conversation and avatar generation",
+      "description": "Add image requests with progress to the conversation screen, the advanced dialog, and avatar generation.",
+      "acceptanceCriteria": [
+        "T-CHR-12 passes: avatar generation goes through the shared image job.",
+        "End-to-end tests with the fakes cover a manual request with progress for both passes, the advanced dialog's limits, and a generated avatar set as primary."
+      ],
+      "priority": 82,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.5a",
+        "P03.4b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation."
+      },
+      "splitFrom": "P05.5"
+    },
+    {
+      "id": "P05.6",
+      "title": "Gallery",
+      "description": "Build the gallery (docs/frontend.md screen 6).",
+      "acceptanceCriteria": [
+        "End-to-end tests with the fakes list a character's images with paging, open them in the lightbox and delete them.",
+        "Lists use thumbnails, and images load with ComfyUI off."
+      ],
+      "priority": 83,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.4b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.6 Gallery."
+      }
+    },
+    {
+      "id": "P05.7",
+      "title": "Mode switching through the orchestrator's normal path, with exclusivity",
+      "description": "Route image jobs through the orchestrator's mode switch (docs/gpu-orchestration.md), with exclusivity enforced. Full automation and recovery follow in P06.",
+      "acceptanceCriteria": [
+        "An image job switches from `llm` to image mode and back along the state machine, never with both runtimes running, in integration tests with `fake_docker` and `fake_nvml`.",
+        "A test proves that one runtime never starts while the other is running or its memory is not released."
+      ],
+      "priority": 84,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.4b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.7 Mode switching through the orchestrator's normal path, with exclusivity enforced. Full automation and recovery follow in P06."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.EXIT",
+      "title": "Verify the automated P05 exit and record the evidence",
+      "description": "Run every automated test the P05 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09 and T-IMG-13 to T-IMG-18 (the unit part of T-IMG-14) pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P05 section lists the evidence, and the phase table shows the automated part as passed and the hardware part (P05.8, P05.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 85,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P05.1",
+        "P05.2a",
+        "P05.2b",
+        "P05.3a",
+        "P05.3b",
+        "P05.4a",
+        "P05.4b",
+        "P05.5a",
+        "P05.5b",
+        "P05.6",
+        "P05.7"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 to T-IMG-18 pass. T-GPU-01, T-GPU-06, T-QLT-02 and T-QLT-07 pass. AC-07, AC-13 and AC-14 hold."
+      }
+    },
+    {
+      "id": "P05.8",
+      "title": "Measure the image presets and run the image protocols",
+      "description": "Measure image VRAM and time per preset, update the defaults, run the parameter grid for each image profile, the image identity protocol and the measured levers (PAG, identity weight, tall and wide sizes) of docs/image-generation.md, and apply the preset rule and the default rule.",
+      "acceptanceCriteria": [
+        "The real-GPU part of T-IMG-14 records render time and peak VRAM per preset for each image profile, and the preset rule is applied.",
+        "T-QLT-02 passes: the default grid for each image profile, with the owner's blind review.",
+        "T-QLT-07 passes with the measured levers and blind pairs reviewed by the owner; the default rule is applied, and everything is recorded in a dated file."
+      ],
+      "priority": 86,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "dependsOn": [
+        "P05.EXIT",
+        "P02.EXIT-HW"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile, the image identity protocol and the measured levers: PAG, identity weight, and the tall and wide sizes. Apply the preset rule and the default rule."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P05.EXIT-HW",
+      "title": "Verify the P05 hardware exit on the reference machine",
+      "description": "T-GPU-01 for the image runtime, T-GPU-06, and AC-07, AC-13 and AC-14.",
+      "acceptanceCriteria": [
+        "T-GPU-01 passes for `lyrveil-image`, and T-GPU-06 passes: ComfyUI starts and generates with each image profile, with checkpoint load measured.",
+        "AC-07, AC-13 and AC-14 hold, recorded with steps.",
+        "The roadmap marks P05 done and lists the evidence."
+      ],
+      "priority": 87,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P05.8"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P05: Images",
+        "line": "T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 to T-IMG-18 pass. T-GPU-01, T-GPU-06, T-QLT-02 and T-QLT-07 pass. AC-07, AC-13 and AC-14 hold."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.1",
+      "title": "The complete 18-step image flow with all states",
+      "description": "Complete docs/gpu-orchestration.md (The 18 steps of an image request, State machine) in the orchestrator and the backend.",
+      "acceptanceCriteria": [
+        "T-IMG-04 passes with fakes: GPU alternation follows the documented order.",
+        "T-ORC-02 passes: a property test shows that no event sequence runs both runtimes.",
+        "Every state of docs/gpu-orchestration.md is reached in tests, with its Italian interface label."
+      ],
+      "priority": 88,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.EXIT"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.1 Complete the 18-step flow with all states."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.2",
+      "title": "Release verification, VRAM guards and blocked states",
+      "description": "Implement docs/gpu-orchestration.md (Verifying GPU release) and the blocked states.",
+      "acceptanceCriteria": [
+        "T-ORC-04 passes: release verification with external memory use, and no external process is touched.",
+        "T-ORC-05 passes: low VRAM blocks with a reason and ends the job after the wait."
+      ],
+      "priority": 89,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.1"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.2 Release verification, VRAM guards and blocked states."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.3",
+      "title": "Scheduling rules, batching, fairness, preemption and cancellation",
+      "description": "Implement docs/gpu-orchestration.md (Scheduling rules, Selection, Preemption, Cancellation) and ADR 0010.",
+      "acceptanceCriteria": [
+        "T-ORC-12 passes: priorities, batching, fairness and preemption.",
+        "T-IMG-10 passes: cancellation at each stage.",
+        "T-ORC-13 passes at integration and end-to-end level: a text message sent during image work is saved, queued, shown and answered."
+      ],
+      "priority": 90,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.1"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.3 Scheduling rules, batching, fairness, preemption and cancellation."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.4",
+      "title": "Launch levels, out-of-memory handling and the recovery table",
+      "description": "Implement docs/gpu-orchestration.md (Load failures and launch levels, Recovery).",
+      "acceptanceCriteria": [
+        "T-ORC-06 passes: each row of the recovery table.",
+        "T-IMG-11 passes: out of memory leads to a tiled retry of the same preset, then one Rapida try, and the stored preset is the one that produced the file.",
+        "T-ORC-08 passes: fallback profiles."
+      ],
+      "priority": 91,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.2"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.4 Launch levels, out-of-memory handling and recovery table."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.5",
+      "title": "Safe shutdown, drain and event persistence",
+      "description": "Implement docs/gpu-orchestration.md (Safe shutdown) and the persistence of orchestrator events.",
+      "acceptanceCriteria": [
+        "T-ORC-09 passes: drain and shutdown.",
+        "T-ORC-11 passes: events replay without duplicates after a backend restart.",
+        "T-IMG-12 passes: a restart in each stage resumes without duplicates."
+      ],
+      "priority": 92,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.3",
+        "P06.4"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.5 Safe shutdown, drain and event persistence."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.6a",
+      "title": "Profile changes, custom model registration and `import-model`",
+      "description": "Implement profile selection and custom registration in the backend and orchestrator, as in docs/models.md (Selecting a profile, Custom profiles) and docs/security.md (Model files).",
+      "acceptanceCriteria": [
+        "T-MOD-03 passes: a text profile change writes the launch file, stops the runtime, verifies release and loads the new file; a profile above the tier or with a missing file is refused before any mode change.",
+        "T-MOD-04 passes: custom registration accepts only file names in the two model folders and only `.gguf` and `.safetensors`, refuses traversal, links out of the folder and other extensions, and its hash job stores the profile.",
+        "T-DCK-14 passes: `import-model` copies a valid file and refuses other extensions, invalid names and existing names."
+      ],
+      "priority": 93,
+      "passes": false,
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "dependsOn": [
+        "P06.5"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration."
+      },
+      "splitFrom": "P06.6",
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P06.6b",
+      "title": "AI resources screen and model settings",
+      "description": "Build the model settings (docs/frontend.md screen 9) and AI resources (screen 10) screens.",
+      "acceptanceCriteria": [
+        "End-to-end tests with the fakes list catalog profiles with tier, licence and local state, select a profile, apply it with **Applica ora**, and register a custom file.",
+        "The AI resources screen shows GPU state, VRAM, queues, active model and launch level, updated live.",
+        "Every control works, and text and colors come from the catalog and the tokens."
+      ],
+      "priority": 94,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.6a"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration."
+      },
+      "splitFrom": "P06.6"
+    },
+    {
+      "id": "P06.EXIT",
+      "title": "Verify the automated P06 exit and record the evidence",
+      "description": "Run every automated test the P06 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09 and T-ORC-11 to T-ORC-13 pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P06 section lists the evidence, and the phase table shows the automated part as passed and the hardware part (P06.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 95,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P06.1",
+        "P06.2",
+        "P06.3",
+        "P06.4",
+        "P06.5",
+        "P06.6a",
+        "P06.6b"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded."
+      }
+    },
+    {
+      "id": "P06.EXIT-HW",
+      "title": "Verify the P06 hardware exit on the reference machine",
+      "description": "T-GPU-07 to T-GPU-12, and AC-15, AC-18 and AC-19 with measured switch times.",
+      "acceptanceCriteria": [
+        "T-GPU-07 to T-GPU-12 pass with `scripts\\lyrveil.cmd test gpu`, recorded in a dated file.",
+        "AC-15, AC-18 and AC-19 hold, with the measured switch times recorded.",
+        "The roadmap marks P06 done and lists the evidence."
+      ],
+      "priority": 96,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P06.EXIT",
+        "P05.EXIT-HW"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P06: Orchestration",
+        "line": "T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P07.1",
+      "title": "Scheduled events, evaluation and limits",
+      "description": "Implement docs/scheduler.md (events, evaluation, limits) and ADR 0020.",
+      "acceptanceCriteria": [
+        "T-SCH-01 passes: proactive messages are off by default, globally and per conversation.",
+        "T-SCH-02 passes with a fake clock: quiet hours, interval, daily caps and the unanswered limit.",
+        "T-SCH-06 passes: the scheduler never causes a mode change."
+      ],
+      "priority": 97,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.EXIT"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.1 Scheduled events, evaluation and limits."
+      }
+    },
+    {
+      "id": "P07.2",
+      "title": "Decide and generate stages, with the repetition check",
+      "description": "Implement the decide and generate stages of docs/scheduler.md.",
+      "acceptanceCriteria": [
+        "T-SCH-04 passes: `send: false` creates no message.",
+        "T-SCH-05 passes: the repetition check discards similar messages.",
+        "Generated messages go through the normalizer and the reply checks of P04.8."
+      ],
+      "priority": 98,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.1"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.2 Decide and generate stages, with the repetition check."
+      }
+    },
+    {
+      "id": "P07.3",
+      "title": "Missed-event policies",
+      "description": "Implement docs/scheduler.md (Missed events).",
+      "acceptanceCriteria": [
+        "T-SCH-03 passes: each missed policy, and no backdated message.",
+        "Missed events produce one `missed_events` notification with the count and no invented content."
+      ],
+      "priority": 99,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.1"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.3 Missed-event policies."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P07.4",
+      "title": "Time context in prompts",
+      "description": "Implement docs/scheduler.md (Time context) in block 4 of docs/prompting.md.",
+      "acceptanceCriteria": [
+        "T-SCH-07 passes: time context values in Italian.",
+        "T-MOD-05 still passes with the time context in place."
+      ],
+      "priority": 100,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.1"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.4 Time context in prompts."
+      }
+    },
+    {
+      "id": "P07.5",
+      "title": "In-app notifications",
+      "description": "Implement docs/scheduler.md (Notifications) and the notification routes and events of docs/api.md: the unread badge, a brief toast and the list under the bell icon, with no browser notifications in 1.0.",
+      "acceptanceCriteria": [
+        "`GET /notifications`, `POST /notifications/{id}/read` and `POST /notifications/read-all` work, and `notification.created` reaches the client, in integration tests.",
+        "End-to-end tests with the fakes show the toast, the badge and the list, and marking read."
+      ],
+      "priority": 101,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.2",
+        "P07.3"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.5 Notifications."
+      }
+    },
+    {
+      "id": "P07.6",
+      "title": "Read state, unread counts and the last messaging details",
+      "description": "Complete read state and unread counts (docs/frontend.md screens 1 and 2, docs/api.md).",
+      "acceptanceCriteria": [
+        "T-MSG-10 passes at integration and end-to-end level: read state and unread counts.",
+        "Every remaining messaging detail of docs/frontend.md screens 1 and 2 works, with no control lacking behavior."
+      ],
+      "priority": 102,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.5"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "P07.6 Read state, unread counts and final messaging details."
+      }
+    },
+    {
+      "id": "P07.EXIT",
+      "title": "Verify the P07 exit and record the evidence",
+      "description": "Run every automated test the P07 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-MSG-10 and T-SCH-01 to T-SCH-07, with AC-17 through T-SCH-01 to T-SCH-03, pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The roadmap's phase table marks P07 done and the P07 section lists the evidence."
+      ],
+      "priority": 103,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P07.1",
+        "P07.2",
+        "P07.3",
+        "P07.4",
+        "P07.5",
+        "P07.6"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P07: Advanced messaging",
+        "line": "T-MSG-10 and T-SCH-01 to T-SCH-07 pass. AC-17 holds."
+      }
+    },
+    {
+      "id": "P08.1a",
+      "title": "Obsidian Bloom primitives and icons",
+      "description": "Complete the `ob-*` primitives and the icons of docs/design-system.md (Primitives, Icons), with `tools/build-icons.mjs` building the ASCII icon grids.",
+      "acceptanceCriteria": [
+        "Every primitive of docs/design-system.md exists with unit tests of its behavior.",
+        "The icon build is deterministic, and the lint level fails when the built icons differ from the grids.",
+        "The lint level fails on a literal color outside the token files."
+      ],
+      "priority": 104,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.EXIT"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.1 Complete Obsidian Bloom: primitives, icons, motion, empty and loading states."
+      },
+      "splitFrom": "P08.1"
+    },
+    {
+      "id": "P08.1b",
+      "title": "Motion, empty and loading states",
+      "description": "Apply docs/design-system.md (Motion) and the empty and loading states of every screen.",
+      "acceptanceCriteria": [
+        "Every screen has its documented empty and loading states, covered by end-to-end tests with the fakes.",
+        "Motion follows the documented durations and stops under `prefers-reduced-motion`."
+      ],
+      "priority": 105,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.1a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.1 Complete Obsidian Bloom: primitives, icons, motion, empty and loading states."
+      },
+      "splitFrom": "P08.1"
+    },
+    {
+      "id": "P08.2",
+      "title": "Responsive layouts for desktop, tablet and mobile",
+      "description": "Apply docs/design-system.md (Layout) to every screen.",
+      "acceptanceCriteria": [
+        "T-QLT-04 passes: checks at 320, 640, 1024 and 1440 px and at 200 % zoom, with no horizontal scroll or clipped control.",
+        "Each breakpoint shows the layout docs/design-system.md describes."
+      ],
+      "priority": 106,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.1b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.2 Responsive layouts for desktop, tablet and mobile."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P08.3",
+      "title": "Keyboard, focus and live regions",
+      "description": "Apply docs/design-system.md (Accessibility) and docs/frontend.md (Keyboard).",
+      "acceptanceCriteria": [
+        "T-QLT-03 passes: axe on the ten screens, and an automated keyboard walkthrough.",
+        "Every shortcut of docs/frontend.md works, focus is visible and managed in dialogs, and streaming and status changes are announced by live regions."
+      ],
+      "priority": 107,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.2"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.3 Keyboard, focus and live regions."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P08.4",
+      "title": "Performance with long histories, large galleries and a stable prompt prefix",
+      "description": "Make long conversations, large galleries and the prompt prefix hold up, as the design documents describe.",
+      "acceptanceCriteria": [
+        "A synthetic conversation of 10,000 messages opens and scrolls with virtual scrolling and paged loading, in an end-to-end test with recorded timings.",
+        "A gallery of 1,000 synthetic images loads thumbnails lazily, in an end-to-end test.",
+        "Across a scripted conversation the stable prompt prefix stays byte-identical between replies, and a test reports it."
+      ],
+      "priority": 108,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.3"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.4 Performance: long histories, large galleries and prompt prefix stability."
+      }
+    },
+    {
+      "id": "P08.5",
+      "title": "Demo screenshots from the demo characters and synthetic data",
+      "description": "Capture the screenshots of R-PUB-05 with a Playwright script against the fakes, using only the demo characters and synthetic data.",
+      "acceptanceCriteria": [
+        "A script regenerates every screenshot from the demo characters and synthetic data.",
+        "The screenshots show no real person, name, path or token, and are referenced from the docs."
+      ],
+      "priority": 109,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.4",
+        "P03.6b"
+      ],
+      "taskType": "ui_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.5 Demo screenshots from the demo characters and synthetic data."
+      }
+    },
+    {
+      "id": "P08.6",
+      "title": "Update all documents to match delivered behavior",
+      "description": "Reconcile every document with the delivered code: status lines, delivered against planned, commands, versions and paths.",
+      "acceptanceCriteria": [
+        "No document describes as delivered a behavior that does not exist, and none calls delivered behavior planned.",
+        "The documentation checks of the lint level pass.",
+        "The verification of this pass is recorded in a dated file."
+      ],
+      "priority": 110,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P08.5"
+      ],
+      "taskType": "docs_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "P08.6 Update all documents to match delivered behavior."
+      },
+      "effort": "high"
+    },
+    {
+      "id": "P08.EXIT",
+      "title": "Verify the automated P08 exit and record the evidence",
+      "description": "Run every automated test the P08 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-QLT-03 and T-QLT-04, the literal color check and a recorded review that no control lacks behavior pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P08 section lists the evidence, and the phase table shows the automated part as passed and the hardware and quality part (P08.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 111,
+      "passes": false,
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P08.1a",
+        "P08.1b",
+        "P08.2",
+        "P08.3",
+        "P08.4",
+        "P08.5",
+        "P08.6"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profile lacks `quality_evidence`. No literal colors outside the tokens. No control without behavior."
+      }
+    },
+    {
+      "id": "P08.EXIT-HW",
+      "title": "Verify the P08 hardware and quality exit",
+      "description": "T-QLT-01 repeated, T-QLT-05 and T-GPU-13, and quality evidence on every default profile.",
+      "acceptanceCriteria": [
+        "T-QLT-01 and T-QLT-05 pass, with the owner's ratings, and T-GPU-13 passes: a two-hour session with 20 images and 3 conversations.",
+        "No default profile lacks `quality_evidence`.",
+        "The roadmap marks P08 done and lists the evidence."
+      ],
+      "priority": 112,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "dependsOn": [
+        "P08.EXIT",
+        "P04.10",
+        "P06.EXIT-HW"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P08: Polish",
+        "line": "T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profile lacks `quality_evidence`. No literal colors outside the tokens. No control without behavior."
+      },
+      "sonnetSufficient": true
+    },
+    {
+      "id": "P09.1",
+      "title": "Run the pre-publication audit",
+      "description": "Run the audit of docs/publishing.md (Pre-publication audit) and record it in `docs/verification/YYYY-MM-DD-release.md`. Items 1 (the `gpu` and `quality` levels) and 9 (clean build and acceptance run) need the reference machine and the owner: P09.5 records them.",
+      "acceptanceCriteria": [
+        "Items 1 (without `gpu` and `quality`), 2 to 8 and 10 are recorded with their exact commands and results.",
+        "gitleaks over the whole history finds nothing, no blob over 5 MB lacks a reviewed reason, and `git ls-files` lists no forbidden pattern.",
+        "Every dependency advisory is fixed, or recorded with its reason and the owner's decision as pending."
+      ],
+      "priority": 113,
+      "passes": false,
+      "notes": "If a command the audit needs is denied, return `status: blocked` naming the exact command, so the supervising session can allow it narrowly.",
+      "dependsOn": [
+        "P08.EXIT"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.1 Run the full [pre-publication audit](publishing.md#pre-publication-audit)."
+      }
+    },
+    {
+      "id": "P09.2",
+      "title": "Generate `THIRD_PARTY_NOTICES.md`",
+      "description": "Generate the notices from pip-licenses and license-checker-rseidelsohn reports, applying the policy of docs/licensing.md.",
+      "acceptanceCriteria": [
+        "A script regenerates `THIRD_PARTY_NOTICES.md`, and running it twice gives the same file.",
+        "Every dependency in the lock files is listed with its licence, and the policy check fails on a licence the policy does not allow."
+      ],
+      "priority": 114,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P09.1"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.2 Generate `THIRD_PARTY_NOTICES.md`."
+      }
+    },
+    {
+      "id": "P09.3",
+      "title": "Pin base images by digest",
+      "description": "Pin every base image of `docker/` and `*/Dockerfile` by digest, as docs/technology.md requires from P09.",
+      "acceptanceCriteria": [
+        "Every `FROM` names its tag and its `sha256` digest, and the lint level fails on an unpinned `FROM`.",
+        "Every image still builds."
+      ],
+      "priority": 115,
+      "passes": false,
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "dependsOn": [
+        "P09.1"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.3 Pin base images by digest."
+      }
+    },
+    {
+      "id": "P09.4",
+      "title": "Update the README with screenshots and delivered status",
+      "description": "Update README.md with the P08.5 screenshots and the delivered status.",
+      "acceptanceCriteria": [
+        "The README shows the screenshots and describes 1.0 as delivered, with commands that work.",
+        "The documentation checks pass."
+      ],
+      "priority": 116,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P09.2",
+        "P09.3",
+        "P08.5"
+      ],
+      "taskType": "docs_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.4 Update the README with screenshots and delivered status."
+      },
+      "effort": "medium"
+    },
+    {
+      "id": "P09.5",
+      "title": "Clean-clone build and acceptance run of AC-01 to AC-20",
+      "description": "On the reference machine: a fresh clone, `.\\setup.cmd`, `.\\start.cmd`, the acceptance run of AC-01 to AC-20, and the `gpu` and `quality` levels (audit items 1 and 9).",
+      "acceptanceCriteria": [
+        "A fresh clone builds and starts with `.\\setup.cmd` and `.\\start.cmd`, recorded in the release verification.",
+        "Every acceptance criterion AC-01 to AC-20 has dated evidence.",
+        "The `gpu` and `quality` levels pass, and the audit is recorded as clean."
+      ],
+      "priority": 117,
+      "passes": false,
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "dependsOn": [
+        "P09.4",
+        "P02.EXIT-HW",
+        "P03.EXIT-HW",
+        "P05.EXIT-HW",
+        "P06.EXIT-HW",
+        "P08.EXIT-HW"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.5 Clean-clone build and acceptance run of AC-01 to AC-20."
+      }
+    },
+    {
+      "id": "P09.6",
+      "title": "Prepare and publish the `v1.0.0` release",
+      "description": "Follow docs/publishing.md (Release): move `Unreleased` to `1.0.0` with the date in CHANGELOG.md and write `docs/verification/release-notes-1.0.0.md`. Sessions cannot tag or publish: the owner runs the tag, push and release commands.",
+      "acceptanceCriteria": [
+        "CHANGELOG.md has a dated `1.0.0` section, and the release notes file exists and matches it.",
+        "The owner has tagged `v1.0.0` and published the release, and the roadmap marks P09 done."
+      ],
+      "priority": 118,
+      "passes": false,
+      "notes": "Set aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run.",
+      "dependsOn": [
+        "P09.5"
+      ],
+      "taskType": "docs_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.6 Tag `v1.0.0` and publish the release."
+      },
+      "effort": "medium"
+    }
+  ]
+}
