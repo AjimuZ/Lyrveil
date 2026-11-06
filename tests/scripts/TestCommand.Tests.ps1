@@ -233,6 +233,83 @@ Describe 'scripts\lyrveil.cmd test' {
     }
 }
 
+Describe 'The e2e level' {
+    # Stand-ins for docker, npm and npx, first on PATH, print the arguments of "compose" and "npx" calls. FAKE_UP_EXIT
+    # makes "compose up" fail and FAKE_TEST_EXIT makes "playwright test" exit with that status, so these cases check the
+    # order of the steps and that the project is removed whatever happens, without Docker or a browser.
+    BeforeAll {
+        $script:E2eBin = Join-Path $TestDrive 'fake-e2e-bin'
+        Write-FixtureFile $script:E2eBin 'docker.cmd' (@(
+                '@echo off',
+                'if not "%1"=="compose" exit /b 0',
+                'echo fake-docker %*',
+                'for %%a in (%*) do if "%%a"=="up" if defined FAKE_UP_EXIT exit /b %FAKE_UP_EXIT%',
+                'exit /b 0', '') -join "`r`n")
+        Write-FixtureFile $script:E2eBin 'npm.cmd' "@echo off`r`necho fake-npm %*`r`nexit /b 0`r`n"
+        Write-FixtureFile $script:E2eBin 'npx.cmd' (@(
+                '@echo off', 'echo fake-npx %*',
+                'if "%2"=="test" if defined FAKE_TEST_EXIT exit /b %FAKE_TEST_EXIT%',
+                'exit /b 0', '') -join "`r`n")
+        $script:E2eRepository = Initialize-FixtureRepository 'cli-e2e' -WithScripts
+        Write-FixtureFile $script:E2eRepository 'tests/e2e/package.json' "{}`n"
+        Write-FixtureFile $script:E2eRepository 'tests/e2e/package-lock.json' "{}`n"
+        Invoke-FixtureGit $script:E2eRepository @('add', '-A')
+        $script:SavedE2ePath = $env:PATH
+        $env:PATH = "$script:E2eBin;$env:PATH"
+    }
+
+    AfterAll {
+        $env:PATH = $script:SavedE2ePath
+        Remove-Item Env:FAKE_UP_EXIT, Env:FAKE_TEST_EXIT, Env:LYRVEIL_TEST_HTTP_PORT -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        Remove-Item Env:FAKE_UP_EXIT, Env:FAKE_TEST_EXIT, Env:LYRVEIL_TEST_HTTP_PORT -ErrorAction SilentlyContinue
+    }
+
+    It 'refuses to pass when the repository has no tests/e2e' {
+        $run = Invoke-EntryPoint (Initialize-FixtureRepository 'cli-no-e2e' -WithScripts) @('test', 'e2e')
+        $run.Output | Should -Match "Test level 'e2e' has no tests yet"
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'refuses the port of a real Lyrveil before it starts anything' {
+        $env:LYRVEIL_TEST_HTTP_PORT = '4200'
+        $run = Invoke-EntryPoint $script:E2eRepository @('test', 'e2e')
+        $run.Output | Should -Match 'LYRVEIL_TEST_HTTP_PORT is 4200'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'starts the test project, runs the suite, then removes the project and its volumes' {
+        $run = Invoke-EntryPoint $script:E2eRepository @('test', 'e2e')
+        $run.Output | Should -Match 'fake-docker compose -p lyrveil-test -f compose.test.yaml up --build --detach --wait lyrveil-frontend'
+        $run.Output | Should -Match 'fake-npx playwright test'
+        $run.Output | Should -Match 'fake-docker compose -p lyrveil-test -f compose.test.yaml down --volumes --remove-orphans'
+        $run.Output.LastIndexOf('fake-docker compose -p lyrveil-test -f compose.test.yaml down') |
+            Should -BeGreaterThan $run.Output.IndexOf('fake-npx playwright test')
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'removes the project and fails when the suite fails' {
+        $env:FAKE_TEST_EXIT = '3'
+        $run = Invoke-EntryPoint $script:E2eRepository @('test', 'e2e')
+        $run.Output | Should -Match 'FAIL\] end-to-end: playwright test \(exit 3\)'
+        $run.Output.LastIndexOf('fake-docker compose -p lyrveil-test -f compose.test.yaml down --volumes') |
+            Should -BeGreaterThan $run.Output.IndexOf('fake-npx playwright test')
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'removes the project, runs no test and fails when the project does not start' {
+        $env:FAKE_UP_EXIT = '1'
+        $run = Invoke-EntryPoint $script:E2eRepository @('test', 'e2e')
+        $run.Output | Should -Match 'the test project did not start'
+        $run.Output | Should -Not -Match 'fake-npx playwright test'
+        $run.Output | Should -Match 'fake-docker compose -p lyrveil-test -f compose.test.yaml down --volumes'
+        $run.ExitCode | Should -Not -Be 0
+    }
+}
+
 Describe 'Python component selection' {
     # A stand-in docker.cmd, first on PATH, prints its arguments and succeeds, so these cases check only which
     # component runs pytest and with what, without Docker.

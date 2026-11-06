@@ -7,13 +7,14 @@ Import-Module (Join-Path $PSScriptRoot 'DocumentationChecks.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PinnedTools.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
     lint        = 'Invoke-LintLevel'
     unit        = 'Invoke-UnitLevel'
     integration = 'Invoke-IntegrationLevel'
-    e2e         = $null
+    e2e         = 'Invoke-EndToEndLevel'
     docker      = 'Invoke-DockerLevel'
     gpu         = $null
     quality     = $null

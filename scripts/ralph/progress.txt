@@ -31,6 +31,9 @@
 - Use `env_file` with `required: false` where a missing `.env` should be reported by the app's own start-up check.
 - Ruff SIM113 flags a manual counter in a `for` loop; use `enumerate` and let the loop index carry the count.
 - Keep docstring lines at 120 characters or fewer; ruff E501 covers docstrings in test fakes too.
+- A test level that starts containers should clear any earlier project first, run in try/finally, always remove containers, networks and volumes, and then verify by label that nothing is left. A removal that cannot be verified counts as a failure.
+- Name the Compose project with `-p` on every command of a test level, so an environment variable cannot point cleanup at a real installation.
+- Invoke external tools by bare name (`docker`, `npx.cmd`) rather than `docker.exe` so Pester stand-ins first on PATH can intercept them.
 
 ---
 
@@ -248,4 +251,16 @@ Not verified:
   - The orchestrator lint covers `fakes/`, copied from tests/fakes/*.py into the test stage. The mypy check there is limited to `src tests` and reaches the fakes only through the tests that import them.
   - The docker level (`test docker`) is wired to tests/docker/*.Tests.ps1 but was not run: the Docker image-content checks, `docker compose -f compose.test.yaml config` and a real start are still unverified.
   - The out-of-memory reply of fake_kobold and the shapes of ComfyUI's /system_stats and /history answers are assumptions, not recorded from the real runtimes. The GPU suite should replace them with recorded responses at P02 and P05.
+---
+
+## 2026-11-06T22:24:04Z - P01.8c
+- `scripts\lyrveil.cmd test e2e` now works. I ran it end to end and it passed. It installs the locked Playwright 1.64.1 and `@axe-core/playwright` 4.14.0 from `tests/e2e/package-lock.json`, plus Chromium. It builds and starts the `lyrveil-test` project and runs the smoke test. The smoke test opens the empty app, checks the redirect to `/chats`, the title and the heading, and finds no axe violation. Afterwards the level always runs `down --volumes --remove-orphans` in a `finally` block. It then lists containers and volumes with the project label and fails if any remain. In the real run none remained. The first real run exposed a bug in the backend image. A fresh named volume was root-owned because the image had no `/data`, so the backend exited with a `PermissionError` creating `/data/db`. I fixed `backend/Dockerfile` to create `/data` owned by 10001:10001; the same defect would have hit `compose.yaml`. That failed first run also removed the project, which shows the cleanup after a failed start. `scripts\lyrveil.cmd test lint` passes. **Not run:** the new Pester cases "The e2e level" in `tests/scripts/TestCommand.Tests.ps1` are written but unverified, and so are the cleanup after a failed test and after Ctrl+C. The level starts only the frontend, backend and the two fakes, not the orchestrator. It exits at once until P02, and `up --wait` fails on an exited service. No running Lyrveil was present, so that the test project leaves a real installation untouched rests on its names, the `-p lyrveil-test` flag and the existing `TestFakes.Tests.ps1` checks, not on an observed coexistence.
+- Files changed: tests/e2e/package.json, tests/e2e/package-lock.json, tests/e2e/playwright.config.mjs, tests/e2e/specs/smoke.spec.mjs, scripts/lib/EndToEnd.psm1, scripts/lib/TestCommand.psm1, tests/scripts/TestCommand.Tests.ps1, backend/Dockerfile, docs/testing.md, docs/README.md, docs/verification/2026-11-06-e2e-level.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test e2e` runs in this session's shell, and Docker works there. Use a long timeout, because the first build is slow. `npm install --prefix tests/e2e` is allowed, but `npm.cmd` is denied.
+  - EndToEnd.psm1 starts only lyrveil-frontend, lyrveil-llm and lyrveil-image because the orchestrator exits at once until P02, and `up --wait` fails on an exited service. Add lyrveil-orchestrator to `$script:Services` when P02 gives it a main.
+  - The runtime image needs /data owned by 10001 before USER, or a new named volume is root-owned and the backend cannot create /data/db. Check other services that write to a volume for the same defect.
+  - `docker ps` has no `--quiet` flag in this setup problem space; use the label filter with `--all --quiet` only after verifying the exact command, since a mangled flag made the cleanup check fail once.
+  - The new Pester cases use stand-in docker.cmd, npm.cmd and npx.cmd first on PATH, switched by FAKE_UP_EXIT and FAKE_TEST_EXIT. They have not run; the orchestrator's `test unit` run will be their first.
+  - Playwright's Chromium is downloaded to the user's cache (%LOCALAPPDATA%\ms-playwright) by `npx playwright install chromium`; node_modules, playwright-report and test-results are already git-ignored.
 ---
