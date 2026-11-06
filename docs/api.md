@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, and the token check, health and preflight routes of the [control API](#control-api). The rest is planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -288,8 +288,43 @@ Client frames: `hello` and `ping`. All actions go through REST.
 ## Control API
 
 Between backend and orchestrator only. Internal network, port 8100. Every request
-except `/v1/health` needs `Authorization: Bearer <LYRVEIL_CONTROL_TOKEN>`. Requests carry
+except `GET /v1/health` needs `Authorization: Bearer <LYRVEIL_CONTROL_TOKEN>`. Requests carry
 only enums, identifiers and numbers, never user text.
+
+Implementation: partial, in `orchestrator/src/lyrveil_orchestrator/api.py` (P01.4c). The
+token check, `GET /v1/health` and `GET /v1/preflight` are delivered and tested by T-ORC-10.
+The check runs before routing, so a missing or wrong token gets the same `401` on every
+path, whether or not a route exists there: `application/problem+json` with code
+`UNAUTHORIZED` and `WWW-Authenticate: Bearer`. The scheme is case-insensitive, and the
+token is compared with `hmac.compare_digest`. The application refuses to start with a
+token that is not 64 hexadecimal characters. With the right token, a route not yet
+delivered answers `404`. No OpenAPI document is served: this table is the contract. The
+other routes come with the lifecycle manager in P02 and P06, and serving on port 8100 comes
+with the orchestrator service in Compose.
+
+`GET /v1/preflight` answers `200` with `ok`, the rows of [Preflight checks](operations.md#preflight-checks)
+that the orchestrator judges, and the facts read through NVML. A failing row is in the
+body, not in the status code. An example, with illustrative versions:
+
+```json
+{
+  "ok": true,
+  "checks": [
+    {"check": "gpu_in_container", "label": "GPU in container", "status": "pass", "detail": "NVML works: NVIDIA GeForce RTX 4070"},
+    {"check": "cuda_driver_version", "label": "CUDA driver version", "status": "pass", "detail": "CUDA 13.0, driver 596.36"},
+    {"check": "total_vram", "label": "Total VRAM", "status": "pass", "detail": "12282 MiB"},
+    {"check": "free_vram", "label": "Free VRAM", "status": "pass", "detail": "10793 MiB"}
+  ],
+  "gpu": {
+    "device_name": "NVIDIA GeForce RTX 4070",
+    "driver_version": "596.36",
+    "cuda_driver_version": "13.0",
+    "vram": {"total_mib": 12282, "used_mib": 1489, "free_mib": 10793}
+  }
+}
+```
+
+`gpu` is `null` when NVML fails. The Docker facts of this report are planned.
 
 | Method and path | Purpose | Result |
 | --- | --- | --- |

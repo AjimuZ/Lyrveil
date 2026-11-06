@@ -3,7 +3,7 @@
 # Regenerates orchestrator/uv.lock after a change to orchestrator/pyproject.toml, since uv is not installed on Windows:
 #   docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .
 # Every installed package comes from uv.lock: "uv sync --locked" refuses a lock that does not match pyproject.toml.
-# The runtime stage comes with the control API, the first part of the orchestrator that runs as a service.
+# The runtime stage comes with main.py, which will serve the control API of api.py on port 8100.
 
 FROM python:3.12.16-slim-trixie AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \

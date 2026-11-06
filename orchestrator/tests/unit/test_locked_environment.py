@@ -26,5 +26,6 @@ def test_the_test_tools_have_the_documented_versions() -> None:
     assert {name: metadata.version(name) for name in expected} == expected
 
 
-def test_the_runtime_dependency_has_the_documented_version() -> None:
-    assert metadata.version("httpx") == "0.28.1"
+def test_the_runtime_dependencies_have_the_documented_versions() -> None:
+    expected = {"fastapi": "0.162.0", "httpx": "0.28.1", "nvidia-ml-py": "13.615.71", "pydantic": "2.14.2"}
+    assert {name: metadata.version(name) for name in expected} == expected

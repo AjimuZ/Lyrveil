@@ -307,18 +307,21 @@ A unit test of the test stage checks that every installed distribution has the v
 
 `orchestrator/` follows the same rules: `pyproject.toml` with the same ruff, mypy and pytest
 settings, `package = false`, a Linux-only `uv.lock`, and a Dockerfile with the same `lock`,
-`lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The one
-runtime dependency so far is HTTPX 0.28.1, for the container gate; the `dev` group adds
-Hypothesis 6.170.14 and respx 0.23.1. Async tests run with the pytest plugin of AnyIO, which
-HTTPX brings, so pytest-asyncio is not needed. The `runtime` stage comes with the control
-API. The lock is regenerated with:
+`lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The runtime
+dependencies so far are HTTPX 0.28.1, for the container gate, FastAPI 0.162.0, for the
+control API, and nvidia-ml-py 13.615.71, for the GPU monitor. `[tool.uv]` holds Pydantic,
+which FastAPI brings, at 2.14.2 with `constraint-dependencies`, the backend's version, and
+mypy skips the untyped `pynvml` import. The `dev` group adds Hypothesis 6.170.14 and respx
+0.23.1. Async tests run with the pytest plugin of AnyIO, which HTTPX brings, so
+pytest-asyncio is not needed. The `runtime` stage, with `main.py` and Uvicorn, is planned
+for the item that adds the orchestrator service to Compose. The lock is regenerated with:
 
 ```powershell
 docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .
 ```
 
-The same gates run in its test stage through `test lint` and `test unit`. It has no
-integration tests yet, so `test integration` skips it. `tests/unit/test_state_machine.py`
+The same gates run in its test stage through `test lint`, `test unit` and
+`test integration`. `tests/unit/test_state_machine.py`
 holds T-ORC-01 and checks that `state_machine.py` imports only `collections.abc`,
 `dataclasses`, `enum` and `types`.
 
@@ -334,3 +337,14 @@ another module of the package could open the Docker socket: it looks for socket 
 client modules, Unix-socket calls, the `uds` argument, the socket's path or a `unix://` URL,
 `DOCKER_HOST`, and the `docker` command, alone or followed by an option or a subcommand. A
 message that only names Docker, such as `Docker did not answer`, is not reported.
+
+`gpu_monitor.py` reads the card through the `GpuProbe` port. `NvmlProbe` makes only the NVML
+calls of [Runtime contracts](runtime-contracts.md#nvml-and-wsl2), on device 0, and raises
+`GpuProbeError` for any NVML failure, a missing library included. `GPUResourceMonitor`
+returns `GpuFacts`, with the device name, the driver and CUDA driver versions and a
+`VramReading` in MiB, or a fresh `VramReading` alone. Release verification and the VRAM
+checks before a load come with the lifecycle manager. `preflight.py` judges the facts at the
+thresholds of [Operations](operations.md#preflight-checks), and `api.py` builds the
+[control API](api.md#control-api) with `create_app(control_token, monitor)`.
+`tests/unit/test_gpu_monitor.py` and `tests/unit/test_preflight.py` test both with fakes,
+and `tests/integration/test_control_api.py` holds T-ORC-10.

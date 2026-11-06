@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). The rest is planned, across all phases. P09 audits it.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. The rest is planned, across all phases. P09 audits it.
 
 Lyrveil is a local, single-user application. It holds intimate text and images and controls Docker. The main threats are a malicious web page in the same browser, careless exposure on the network, a leak into logs or Git, and
 excessive authority in the service that controls containers.

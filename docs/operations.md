@@ -245,6 +245,14 @@ The same checks run in `start.cmd` and in `GET /system/preflight`.
 
 The scripts read free disk on the Windows drive. The app reads free space inside Docker's disk image.
 
+The orchestrator judges four rows: GPU in container, CUDA driver version, total VRAM and free VRAM, in
+`orchestrator/src/lyrveil_orchestrator/preflight.py` (P01.4c). `python -m lyrveil_orchestrator.preflight` prints one
+line per row, such as `WARNING  Free VRAM: 7000 MiB, under 9000 MiB: ...`, or the report of
+[`GET /v1/preflight`](api.md#control-api) with `--json`. It exits 0 when no row fails, warnings included, and 1 when a
+row fails. When NVML fails, the three other rows fail too, as not checked, because a value that was never read cannot
+pass. These rules are unit-tested with a fake probe; the command has not yet run against the real card. The other rows
+are planned for the scripts and the backend.
+
 The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That setup is unsupported, and image generation may fail.
 
 ## Reference Compose file

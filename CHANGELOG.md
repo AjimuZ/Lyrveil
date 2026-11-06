@@ -64,6 +64,15 @@ No application exists yet. This section records the design documentation.
   with the same name that the Lyrveil Compose project did not create, and it has
   no way to create, run commands in or remove containers, or to touch images,
   volumes or networks.
+- The orchestrator's GPU preflight, `python -m lyrveil_orchestrator.preflight`:
+  it reads the card through NVML and reports NVML, the CUDA driver version, total
+  VRAM and free VRAM as pass, warning or failure at the documented thresholds,
+  with `--json` for scripts. It exits 1 only when a row fails.
+- The orchestrator's control API with its token: every request except
+  `GET /v1/health` needs `Authorization: Bearer` with `LYRVEIL_CONTROL_TOKEN`,
+  compared in constant time, and anything else gets `401`. `GET /v1/preflight`
+  returns the GPU preflight. `test integration` now runs the orchestrator's
+  integration tests too.
 
 ### Changed
 

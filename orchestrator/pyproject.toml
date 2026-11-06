@@ -7,10 +7,12 @@ version = "0.0.0"
 description = "Lyrveil orchestrator: GPU state machine, leases and the two runtime containers."
 license = "Apache-2.0"
 requires-python = "==3.12.*"
-# The state machine needs no third-party package. HTTPX is the container gate's client for the Docker socket, and the
-# control API and NVML access add theirs.
+# The state machine needs no third-party package. HTTPX is the container gate's client for the Docker socket, FastAPI
+# serves the control API, and nvidia-ml-py reads NVML for the GPU monitor and the preflight.
 dependencies = [
+    "fastapi==0.162.0",
     "httpx==0.28.1",
+    "nvidia-ml-py==13.615.71",
 ]
 
 [dependency-groups]
@@ -28,6 +30,9 @@ dev = [
 package = false
 # The lock serves the Linux images only.
 environments = ["sys_platform == 'linux'"]
+# FastAPI brings Pydantic. The constraint keeps the version of docs/technology.md and of the backend, without making
+# Pydantic a direct dependency.
+constraint-dependencies = ["pydantic==2.14.2"]
 
 [tool.ruff]
 line-length = 120
@@ -41,6 +46,12 @@ select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
 strict = true
 python_version = "3.12"
 mypy_path = "src"
+
+# nvidia-ml-py ships neither types nor a py.typed marker. Only gpu_monitor.py and its test import it, and the probe
+# converts every value it returns to a typed one.
+[[tool.mypy.overrides]]
+module = ["pynvml"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)).
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)).
 
 ## Levels
 
@@ -44,7 +44,7 @@ Every other level refuses arguments.
 
 `all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
 
-`integration` builds the test stage of each component that has a `tests/integration` folder, today only the backend, and runs `pytest tests/integration` in it, without network access, on SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in.
+`integration` builds the test stage of each component that has a `tests/integration` folder, today the backend and the orchestrator, and runs `pytest tests/integration` in it, without network access. The backend's tests use SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in. The orchestrator's tests run the control API in process through Starlette's test client, with a fake GPU probe.
 
 Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. Today `e2e`, `docker`, `gpu` and `quality` have no tests, so they exit 1, and so does `all`.
 
@@ -77,7 +77,7 @@ The other checks of the [2026-11-01 documentation checks](verification/2026-11-0
 
 ```text
 backend/tests/{unit,integration,contract}/    contract is planned
-orchestrator/tests/unit/
+orchestrator/tests/{unit,integration}/
 frontend/src/**/*.spec.ts
 tests/
   scripts/           Pester tests of scripts\lyrveil.ps1 and its modules
