@@ -410,7 +410,7 @@
       ],
       "priority": 19,
       "passes": false,
-      "notes": "Sessions are denied reading or writing `.env*` files, `.env.example` included. Do not work around the denial. Finish everything else, then return `status: blocked` with the reason \"write .env.example as documented in docs/configuration.md\"; the supervising session writes it and the next attempt finishes. Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "notes": "BLOCKED: write .env.example as documented in docs/configuration.md\nSessions are denied reading or writing `.env*` files, `.env.example` included. Do not work around the denial. Finish everything else, then return `status: blocked` with the reason \"write .env.example as documented in docs/configuration.md\"; the supervising session writes it and the next attempt finishes. Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
       "dependsOn": [
         "P01.3b",
         "P01.4c",
