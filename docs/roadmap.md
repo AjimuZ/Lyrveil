@@ -68,7 +68,8 @@ Evidence:
 
 - [WSL2 memory](verification/2026-11-06-wsl-memory.md);
 - [backend skeleton and gates](verification/2026-11-06-backend-skeleton.md);
-- [backend persistence and health routes](verification/2026-11-06-backend-persistence.md).
+- [backend persistence and health routes](verification/2026-11-06-backend-persistence.md);
+- [orchestrator package and state machine](verification/2026-11-06-orchestrator-state-machine.md).
 
 ## P02: Working chat
 

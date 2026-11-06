@@ -12,6 +12,9 @@
 - Verify a capability by reading the effective state back (the journal mode SQLite reports, a probe table) instead of trusting that a setting was accepted.
 - Report optional dependencies, such as the control API, in a separate field of the readiness report so they cannot turn the service not-ready.
 - Keep each refusal reachable in a unit test through scripted capability answers, and also prove the real behaviour in an integration test on real files.
+- Each Python component has <name>/Dockerfile with lock, lockfile, deps and test stages, and its own pyproject.toml with the same ruff, mypy and pytest settings. Add the name to $script:Components in scripts/lib/PythonComponents.psm1, and add a `!<name>/tests` exception to .dockerignore.
+- Tests for a documented table restate the documented data in the test, so the test fails if the code and the docs drift apart. They then check every ordered pair, not only the legal edges.
+- When ruff's naming rules conflict with a name fixed by the docs, use a targeted `# noqa: <code>` and put the reason on the line above.
 
 ---
 
@@ -91,4 +94,34 @@ Docs updated: backend.md, testing.md, configuration.md, technology.md, CONTRIBUT
   - The migrations folder and `alembic.ini` are copied into both the test and runtime stages. A new top-level backend folder needed at runtime must be added to both `COPY` blocks, and `.dockerignore` already excludes `**/tests`.
   - The compose health check path in docs/operations.md, `/api/v1/health/live`, matches the delivered route. P01.2 can use it as is.
   - Backup before migrations (startup step 3) and steps 4 to 7 of the startup sequence are still planned; `docs/backend.md` says so.
+---
+
+## 2026-11-06T20:34:27Z - P01.4a
+- I added the `orchestrator/` package with the GPU state machine as a pure transition table, and the T-ORC-01 tests pass. `test lint` and `test unit` now include the orchestrator's gates and tests.
+
+What was built:
+- **Package:** `pyproject.toml` (no runtime dependency yet; the dev group pins Hypothesis 6.170.14, mypy, pytest and ruff), plus `uv.lock`. The lock was produced in a container: 15 packages resolved.
+- **Dockerfile:** `lock`, `lockfile`, `deps` and `test` stages. There is no runtime stage yet; it comes with the control API. `.dockerignore` now lets `orchestrator/tests` into the build.
+- **`state_machine.py`:** the 11 states and the 25 moves of the diagram, the starting state (`RECOVERING`), the runtime each state allows, and `allowed_targets`, `is_legal` and `transition`. Any other move, including a state to itself, raises `IllegalTransition`. The module does no I/O; logging the refusal is left to the lifecycle manager.
+- **Tests:** all 121 ordered pairs of states are checked against an independent copy of the diagram. Other tests cover the exclusivity rules, two Hypothesis properties over random sequences, and an import check that proves the module does no I/O. A second file checks that installed versions match the lock.
+- **Test scripts:** `PythonComponents.psm1` lists the orchestrator. A component without the requested folder or test path is now skipped with a message, and the level fails if no component ran. Without this, `test integration` would fail on the orchestrator, which has no integration tests, and a named backend test would fail in the orchestrator.
+
+Checks I ran:
+- `scripts/lyrveil.cmd test lint` passed (exit 0). The first run failed `ruff format --check` on one missing blank line; I fixed it.
+- `scripts/lyrveil.cmd test unit tests/unit/test_state_machine.py tests/unit/test_locked_environment.py -q` passed: 132 tests, with the backend correctly skipped.
+
+Not run:
+- The three new Pester cases in `TestCommand.Tests.ps1`. Pester only runs inside the full `test unit`, and running it directly through PowerShell was denied. I first wrote mocks, then replaced them with a fake `docker.cmd` on PATH, because re-importing the module inside Pester could collide with the copy already loaded.
+- The full `test unit` and `test integration` levels.
+
+Docs updated: `docs/backend.md`, `docs/gpu-orchestration.md`, `docs/testing.md`, `docs/README.md`, the roadmap evidence list, `CHANGELOG.md` and a new verification file. I left the roadmap checkbox alone.
+- Files changed: orchestrator/pyproject.toml, orchestrator/uv.lock, orchestrator/Dockerfile, orchestrator/src/lyrveil_orchestrator/__init__.py, orchestrator/src/lyrveil_orchestrator/state_machine.py, orchestrator/tests/unit/test_state_machine.py, orchestrator/tests/unit/test_locked_environment.py, .dockerignore, scripts/lib/PythonComponents.psm1, tests/scripts/TestCommand.Tests.ps1, docs/backend.md, docs/gpu-orchestration.md, docs/testing.md, docs/README.md, docs/roadmap.md, docs/verification/2026-11-06-orchestrator-state-machine.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The orchestrator package is `lyrveil_orchestrator` under `orchestrator/src`. The test image is `lyrveil/orchestrator-test:local`. Its lock is regenerated with `docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .`
+  - orchestrator/Dockerfile has no runtime stage yet. The task that adds the control API (main.py, FastAPI and the other dependencies) must add it, then copy `src` into it with USER 10001.
+  - `state_machine.py` exposes GpuState, Runtime, Transition, TRANSITIONS, INITIAL_STATE (RECOVERING), STATE_RUNTIME, allowed_targets, is_legal and transition(source, target). transition raises IllegalTransition, which carries .source and .target. The caller logs refusals and holds the current state.
+  - The purity test in test_state_machine.py allows only the imports collections.abc, dataclasses, enum and types in state_machine.py. Widen it on purpose if the module needs more.
+  - Invoke-PythonTestFolder skips a component whose folder or named path is missing on the host, and fails the level when no component ran. The orchestrator joins `test integration` automatically once it has `orchestrator/tests/integration`.
+  - Running Pester or PowerShell directly is denied in sessions. Pester cases can only run through the full `scripts/lyrveil.cmd test unit`.
+  - A new Pester test that needs Docker can put a fake `docker.cmd` first on PATH and run the fixture's `scripts\lyrveil.cmd`. Re-importing PythonComponents.psm1 inside the Pester session risks colliding with the copy TestCommand.psm1 already loaded.
 ---

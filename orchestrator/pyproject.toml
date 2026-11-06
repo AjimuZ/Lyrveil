@@ -1,0 +1,43 @@
+# Lyrveil orchestrator: dependencies, tool settings and quality gates. Versions follow docs/technology.md, and uv.lock
+# pins every package with its hashes. Regenerate the lock with the "lockfile" stage of orchestrator/Dockerfile.
+
+[project]
+name = "lyrveil-orchestrator"
+version = "0.0.0"
+description = "Lyrveil orchestrator: GPU state machine, leases and the two runtime containers."
+license = "Apache-2.0"
+requires-python = "==3.12.*"
+# The state machine needs no third-party package. The control API, NVML access and the container gate add theirs.
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "hypothesis==6.170.14",
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+]
+
+[tool.uv]
+# The project is not built or installed: the image puts src/ on PYTHONPATH, so no unpinned build backend is needed.
+package = false
+# The lock serves the Linux images only.
+environments = ["sys_platform == 'linux'"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "-p", "no:cacheprovider"]

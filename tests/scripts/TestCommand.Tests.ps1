@@ -232,3 +232,47 @@ Describe 'scripts\lyrveil.cmd test' {
         $run.ExitCode | Should -Not -Be 0
     }
 }
+
+Describe 'Python component selection' {
+    # A stand-in docker.cmd, first on PATH, prints its arguments and succeeds, so these cases check only which
+    # component runs pytest and with what, without Docker.
+    BeforeAll {
+        $script:FakeBin = Join-Path $TestDrive 'fake-docker'
+        Write-FixtureFile $script:FakeBin 'docker.cmd' "@echo off`r`necho fake-docker %*`r`nexit /b 0`r`n"
+        $script:Components = Initialize-FixtureRepository 'cli-components' -WithScripts
+        Write-FixtureFile $script:Components 'backend/Dockerfile' "FROM scratch`n"
+        Write-FixtureFile $script:Components 'backend/tests/unit/test_a.py' "def test_a() -> None:`n    pass`n"
+        Write-FixtureFile $script:Components 'backend/tests/integration/test_c.py' "def test_c() -> None:`n    pass`n"
+        Write-FixtureFile $script:Components 'orchestrator/Dockerfile' "FROM scratch`n"
+        Write-FixtureFile $script:Components 'orchestrator/tests/unit/test_b.py' "def test_b() -> None:`n    pass`n"
+        Invoke-FixtureGit $script:Components @('add', '-A')
+        $script:SavedPath = $env:PATH
+        $env:PATH = "$script:FakeBin;$env:PATH"
+    }
+
+    AfterAll {
+        $env:PATH = $script:SavedPath
+    }
+
+    It 'skips a component without an integration folder' {
+        $run = Invoke-EntryPoint $script:Components @('test', 'integration')
+        $run.Output | Should -Match 'fake-docker run --rm --network none lyrveil/backend-test:local pytest tests/integration'
+        $run.Output | Should -Match "Python component 'orchestrator': skipped, it has no tests/integration"
+        $run.Output | Should -Not -Match 'orchestrator-test:local pytest'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'runs a named test only in the component that holds it' {
+        $run = Invoke-EntryPoint $script:Components @('test', 'unit', 'tests/unit/test_b.py::test_b', '-x')
+        $run.Output | Should -Match 'lyrveil/orchestrator-test:local pytest tests/unit/test_b.py::test_b -x'
+        $run.Output | Should -Match "Python component 'backend': skipped, it has no tests/unit/test_b.py"
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'fails when no component holds the named test' {
+        $run = Invoke-EntryPoint $script:Components @('test', 'unit', 'tests/unit/test_missing.py')
+        $run.Output | Should -Match 'no Python component has tests/unit/test_missing.py: nothing ran'
+        $run.Output | Should -Not -Match 'fake-docker run'
+        $run.ExitCode | Should -Not -Be 0
+    }
+}

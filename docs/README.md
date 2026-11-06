@@ -61,3 +61,4 @@
 | [Test command and lint, 2026-11-06](verification/2026-11-06-lint.md) | First runs of `scripts\lyrveil.cmd test lint` and `test unit` |
 | [Backend skeleton, 2026-11-06](verification/2026-11-06-backend-skeleton.md) | Backend lock, images, lint gates and unit tests |
 | [Backend persistence, 2026-11-06](verification/2026-11-06-backend-persistence.md) | SQLite WAL and FTS5 check, Alembic baseline, health routes and the integration level |
+| [Orchestrator state machine, 2026-11-06](verification/2026-11-06-orchestrator-state-machine.md) | Orchestrator lock, test stage, gates and the T-ORC-01 tests of the transition table |

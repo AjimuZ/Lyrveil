@@ -1,12 +1,12 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)).
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates. **No catalog test has run yet.** Every catalog test is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)).
 
 ## Levels
 
 | Level | Tool | Runs on | GPU |
 | --- | --- | --- | --- |
-| Lint | Documentation checks, PSScriptAnalyzer, and ruff and `mypy --strict` for the backend. Later tasks add the other components' gates | Any Windows machine with Git and Docker | No |
+| Lint | Documentation checks, PSScriptAnalyzer, and ruff and `mypy --strict` for the backend and the orchestrator. Later tasks add the frontend's gates | Any Windows machine with Git and Docker | No |
 | Unit | pytest, Hypothesis, Vitest, Pester for the scripts | Any machine | No |
 | Integration | pytest with SQLite and fake runtimes | Any machine | No |
 | Contract | Schemathesis on OpenAPI, recorded runtime fixtures | Any machine | No |
@@ -30,10 +30,10 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 .\scripts\lyrveil.cmd test all
 ```
 
-Python tests run in a test stage of the backend image, so database tests use the same SQLite build as production.
+Python tests run in the test stage of their component's image, `backend/Dockerfile` or `orchestrator/Dockerfile`, so database tests use the same SQLite build as production.
 Frontend tests run with Node.js on Windows. Neither bind-mounts source code.
 
-`unit` passes any arguments after the level to pytest, and then runs only pytest, not the Pester tests. A path or node ID under `tests/` replaces the default `tests/unit`, so one test runs alone:
+`unit` passes any arguments after the level to pytest, and then runs only pytest, not the Pester tests. A path or node ID under `tests/` replaces the default `tests/unit`, so one test runs alone. It runs only in the components whose folder holds every named path, and fails when none does:
 
 ```powershell
 .\scripts\lyrveil.cmd test unit tests/unit/test_settings.py::test_a_missing_token_is_named
@@ -44,7 +44,7 @@ Every other level refuses arguments.
 
 `all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
 
-`integration` builds the same backend test stage and runs `pytest tests/integration` in it, without network access, on SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in.
+`integration` builds the test stage of each component that has a `tests/integration` folder, today only the backend, and runs `pytest tests/integration` in it, without network access, on SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in.
 
 Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. Today `e2e`, `docker`, `gpu` and `quality` have no tests, so they exit 1, and so does `all`.
 
@@ -67,17 +67,17 @@ Documentation checks, in [`scripts/lib/DocumentationChecks.psm1`](../scripts/lib
 
 PSScriptAnalyzer then checks every Git-tracked `.ps1` and `.psm1` with [`scripts/PSScriptAnalyzerSettings.psd1`](../scripts/PSScriptAnalyzerSettings.psd1): the default rules at the Error and Warning severities, without `PSAvoidUsingWriteHost`, because the scripts are console commands.
 
-Last, [`scripts/lib/PythonComponents.psm1`](../scripts/lib/PythonComponents.psm1) builds the `test` stage of `backend/Dockerfile` as `lyrveil/backend-test:local`, and runs `ruff check .`, `ruff format --check .` and `mypy --strict src tests` in containers of it without network access. Each gate prints its exit status and fails the level when it is not 0. A failed image build also fails the level. A repository without `backend/Dockerfile`, such as the fixtures of the Pester tests, skips this part. The `unit` level builds the same stage and runs `pytest tests/unit` in it. The orchestrator joins both levels when it gets its own test stage.
+Last, [`scripts/lib/PythonComponents.psm1`](../scripts/lib/PythonComponents.psm1) builds the `test` stage of `backend/Dockerfile` as `lyrveil/backend-test:local` and of `orchestrator/Dockerfile` as `lyrveil/orchestrator-test:local`, and runs `ruff check .`, `ruff format --check .` and `mypy --strict src tests` in containers of each without network access. Each gate prints its exit status and fails the level when it is not 0. A failed image build also fails the level. A component without its Dockerfile is skipped, and a repository without either, such as the fixtures of the Pester tests, skips this part. The `unit` level builds the same stages and runs `pytest tests/unit` in each.
 
 The other checks of the [2026-11-01 documentation checks](verification/2026-11-01-documentation.md) are not part of `lint`. Their lists of required names stayed in the temporary script, the secret scan moves to `gitleaks`, and the Mermaid parser comes with CI in P01.8.
 
-[`tests/scripts/TestCommand.Tests.ps1`](../tests/scripts/TestCommand.Tests.ps1) builds fixture repositories in Pester's temporary drive. It shows that each check fails on its own defect. It also runs a copy of `scripts\lyrveil.cmd test lint` in a fixture: the command exits 0 on a consistent fixture, and non-zero on a tracked broken link and on a PSScriptAnalyzer finding. Other cases check that `lint` refuses arguments and that `unit` with pytest arguments fails when no Python component exists.
+[`tests/scripts/TestCommand.Tests.ps1`](../tests/scripts/TestCommand.Tests.ps1) builds fixture repositories in Pester's temporary drive. It shows that each check fails on its own defect. It also runs a copy of `scripts\lyrveil.cmd test lint` in a fixture: the command exits 0 on a consistent fixture, and non-zero on a tracked broken link and on a PSScriptAnalyzer finding. Other cases check that `lint` refuses arguments and that `unit` with pytest arguments fails when no Python component exists. With a stand-in `docker.cmd` first on `PATH`, three cases check which component runs pytest: `integration` skips a component without `tests/integration`, a named test runs only in the component that holds it, and a test that no component holds fails the level.
 
 ## Layout
 
 ```text
 backend/tests/{unit,integration,contract}/    contract is planned
-orchestrator/tests/
+orchestrator/tests/unit/
 frontend/src/**/*.spec.ts
 tests/
   scripts/           Pester tests of scripts\lyrveil.ps1 and its modules

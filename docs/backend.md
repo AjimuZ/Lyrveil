@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -296,3 +296,20 @@ The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
 
 A unit test of the test stage checks that every installed distribution has the version
 `uv.lock` pins.
+
+### Orchestrator package
+
+`orchestrator/` follows the same rules: `pyproject.toml` with the same ruff, mypy and pytest
+settings, `package = false`, a Linux-only `uv.lock`, and a Dockerfile with the same `lock`,
+`lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The package
+has no runtime dependency yet; the `dev` group adds Hypothesis 6.170.14. The `runtime`
+stage comes with the control API. The lock is regenerated with:
+
+```powershell
+docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .
+```
+
+The same gates run in its test stage through `test lint` and `test unit`. It has no
+integration tests yet, so `test integration` skips it. `tests/unit/test_state_machine.py`
+holds T-ORC-01 and checks that `state_machine.py` imports only `collections.abc`,
+`dataclasses`, `enum` and `types`.

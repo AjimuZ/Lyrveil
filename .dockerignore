@@ -27,8 +27,9 @@ docs
 *.md
 tests
 **/tests
-# Copied only into the backend test stage, never into the runtime image
+# Copied only into the test stages, never into a runtime image
 !backend/tests
+!orchestrator/tests
 **/*.spec.ts
 playwright-report
 test-results

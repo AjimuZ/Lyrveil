@@ -53,6 +53,11 @@ No application exists yet. This section records the design documentation.
   `GET /api/v1/health/ready`. The ready report lists the database, the
   migrations and FTS5, and shows the control API on its own line.
   `scripts\lyrveil.cmd test integration` runs the backend integration tests.
+- An orchestrator package with the GPU state machine as a table: only the moves
+  of the documented diagram are accepted, and every other one is refused. `test
+  lint` and `test unit` also run the orchestrator's gates and tests. A test named
+  after `test unit` runs only in the component that holds it, and `test
+  integration` skips a component that has no integration tests.
 
 ### Changed
 
