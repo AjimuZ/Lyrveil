@@ -2043,7 +2043,7 @@
       ],
       "priority": 86,
       "passes": false,
-      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai la revisione alla cieca della griglia immagini e delle coppie di identità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
       "dependsOn": [
         "P05.EXIT",
         "P02.EXIT-HW"
