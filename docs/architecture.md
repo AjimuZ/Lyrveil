@@ -184,13 +184,13 @@ lyrveil/
     llm/                 KoboldCpp image: Dockerfile, entrypoint (planned, P02)
     image/               ComfyUI image: Dockerfile, lock file (planned, P05)
   workflows/comfyui/     API-format ComfyUI workflows (planned, P05)
-  config/examples/       Example configuration (planned, P01)
+  config/examples/       Example launch files, reference only
   scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell module and helpers (planned, P01)
   tests/                 End-to-end, GPU, quality tests and fakes (planned, P01)
   docs/                  This documentation
   setup.cmd start.cmd stop.cmd restart.cmd status.cmd logs.cmd   Entry points (planned, P01)
-  compose.yaml           Service definitions (planned, P01)
-  .env.example           Configuration template (planned, P01)
+  compose.yaml           Service definitions: the three core services so far (the runtimes are planned, P02 and P05)
+  .env.example           Configuration template
   README.md LICENSE NOTICE CHANGELOG.md CONTRIBUTING.md SECURITY.md
   .gitignore .dockerignore .gitattributes
 ```

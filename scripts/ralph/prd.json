@@ -409,8 +409,8 @@
         "`.gitattributes` keeps CRLF for `*.cmd` and `*.ps1` and LF for the rest."
       ],
       "priority": 19,
-      "passes": false,
-      "notes": "BLOCKED: write .env.example as documented in docs/configuration.md\nSessions are denied reading or writing `.env*` files, `.env.example` included. Do not work around the denial. Finish everything else, then return `status: blocked` with the reason \"write .env.example as documented in docs/configuration.md\"; the supervising session writes it and the next attempt finishes. Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "passes": true,
+      "notes": "Continued from the interrupted attempt. `compose.yaml` holds the three core services, the four ADR 0003 networks they use, and the external volumes `lyrveil-data` and `lyrveil-models`. `config/examples/` holds the two launch-file examples. `orchestrator/Dockerfile` has a new `runtime` stage. The differences from the reference Compose file are documented in docs/operations.md. `.gitattributes` already had CRLF for `*.cmd`, `*.ps1` and `*.psm1` and LF for everything else, so I left it unchanged. `.env.example` was written by the supervising session; I did not read or edit it, so its content is unchecked. `docker compose config --quiet` passed when I re-ran it at the end. `docker compose build` passed during the earlier attempt and I did not re-run it. No container was started. I marked `.env.example` as delivered in docs/architecture.md and recorded the unverified items in the verification note.",
       "dependsOn": [
         "P01.3b",
         "P01.4c",

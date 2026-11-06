@@ -27,6 +27,8 @@
 - A generated artifact that is committed gets two gates: a producer-side test comparing it with the live source, and a consumer-side lint that regenerates into a temporary folder and diffs it (line ends normalized).
 - Browser APIs that tests must script, such as WebSocket, go behind an InjectionToken factory with a minimal structural interface. Tests then provide a fake and drive time with Vitest fake timers.
 - Pass third-party generator configuration from code in a tool script shared by the generate and check commands. Do not rely on a config file the tool discovers on its own.
+- When a Dockerfile's last stage is a test stage, name the runtime stage explicitly with `target:` in Compose.
+- Use `env_file` with `required: false` where a missing `.env` should be reported by the app's own start-up check.
 
 ---
 
@@ -223,4 +225,15 @@ Not verified:
   - Nothing calls `EventsSocket.connect()` yet. The shell should do it when it shows the 'Lyrveil non risponde' notice, and a store should subscribe to `resync$` to reload through REST.
   - `SocketLike.onclose` is typed `CloseEvent` because a real WebSocket's `onclose` would not assign otherwise. A test double that fires close needs `new CloseEvent('close')`, which jsdom provides.
   - Keep the API error messages in `it.json` under `error.*`. `API_ERROR_TEXT` in api-error.ts maps each code to its key, and a spec checks that every key has a text.
+---
+
+## 2026-11-06T22:01:02Z - P01.2
+- Continued from the interrupted attempt. `compose.yaml` holds the three core services, the four ADR 0003 networks they use, and the external volumes `lyrveil-data` and `lyrveil-models`. `config/examples/` holds the two launch-file examples. `orchestrator/Dockerfile` has a new `runtime` stage. The differences from the reference Compose file are documented in docs/operations.md. `.gitattributes` already had CRLF for `*.cmd`, `*.ps1` and `*.psm1` and LF for everything else, so I left it unchanged. `.env.example` was written by the supervising session; I did not read or edit it, so its content is unchecked. `docker compose config --quiet` passed when I re-ran it at the end. `docker compose build` passed during the earlier attempt and I did not re-run it. No container was started. I marked `.env.example` as delivered in docs/architecture.md and recorded the unverified items in the verification note.
+- Files changed: compose.yaml, config/examples/image-launch.env, config/examples/llm-launch.env, orchestrator/Dockerfile, docs/operations.md, docs/architecture.md, docs/README.md, docs/verification/2026-11-06-compose-core.md
+- **Learnings for future iterations:**
+  - `compose.yaml` uses `env_file: {path: .env, required: false}`, so config and build work before setup creates `.env`. Without `.env` the backend exits with 78 and names LYRVEIL_CONTROL_TOKEN.
+  - Backend and orchestrator builds select `target: runtime`. `lyrveil_orchestrator.main` does not exist until P02, so the orchestrator container exits at once until then.
+  - Health checks, `gpus: all`, the Docker socket mount and network isolation have not run. The container-level tests are for the test docker level.
+  - The `ai` and `tools` profile services and the `lyrveil-download` network are not in compose.yaml yet (P02 and P05). The reference file in docs/operations.md is still their specification.
+  - .env.example was written by the supervising session and not checked here. It should list the eight deployment variables of docs/configuration.md.
 ---

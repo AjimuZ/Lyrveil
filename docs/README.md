@@ -66,3 +66,4 @@
 | [Control API, 2026-11-06](verification/2026-11-06-control-api.md) | FastAPI and nvidia-ml-py in the orchestrator lock, the preflight thresholds and the T-ORC-10 tests of the control API token |
 | [Frontend shell, 2026-11-06](verification/2026-11-06-frontend-shell.md) | Frontend lock, strict build, lint gates with T-SEC-09, and the first Vitest runs |
 | [API types and WebSocket client, 2026-11-06](verification/2026-11-06-api-types-and-socket.md) | Committed OpenAPI document, generated types and their lint check, error mapping and the event socket tests |
+| [Core Compose services, 2026-11-06](verification/2026-11-06-compose-core.md) | `docker compose config` and `build` of the three core services, and what has not run |

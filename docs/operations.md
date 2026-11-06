@@ -1,7 +1,7 @@
 # Operations
 
 Status: accepted (2026-11-01), revised 2026-11-05 for model profiles, the 32 GB reference machine and operation from
-Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). The scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification.
+Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). Most scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification; [Reference Compose file](#reference-compose-file) says what `compose.yaml` already holds.
 
 ## Requirements
 
@@ -257,7 +257,22 @@ The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That 
 
 ## Reference Compose file
 
-`compose.yaml`, to be delivered in P01. Images are built locally, and `pull_policy: never` keeps runtime fully offline.
+`compose.yaml` holds the three core services, the four networks of [ADR 0003](decisions/0003-service-topology-and-networks.md)
+that they use, and the two external volumes (P01.2). The services of the `ai` and `tools` profiles, the network
+`lyrveil-download` and the file below are still the specification for P02 and P05: those parts are not in `compose.yaml`
+yet. Images are built locally, and `pull_policy: never` keeps runtime fully offline.
+
+`docker compose config --quiet` and `docker compose build` pass for the three core services. No container has been
+started from them yet, and the health checks, the GPU reservation and the Docker socket mount have not run.
+
+Differences between `compose.yaml` and the file below, all in the core services:
+
+- `env_file` is `{path: .env, required: false}`, so `config` and `build` work before `setup.cmd` has created `.env`.
+  Without `.env` the backend stops with exit status 78 and names `LYRVEIL_CONTROL_TOKEN`.
+- The backend and orchestrator builds name `target: runtime`, because the last stage of `orchestrator/Dockerfile` would
+  otherwise be the test stage.
+- `orchestrator/Dockerfile` has a `runtime` stage, but `lyrveil_orchestrator.main` does not exist yet (P02). The
+  image builds, and a container started from it exits at once until then.
 
 ```yaml
 name: lyrveil

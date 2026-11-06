@@ -1,0 +1,98 @@
+# The core services, networks and external volumes of Lyrveil. The runtime services of the "ai" profile and the
+# download tool of the "tools" profile come with P02 and P05. docs/operations.md (Reference Compose file) is the
+# specification of this file: change both together.
+#
+# Images are built locally from the repository root and never pulled, so the runtime works offline:
+#   docker compose build
+# The volumes are created by setup.cmd, never by Compose, so "docker compose down -v" cannot remove them.
+name: lyrveil
+
+x-common: &common
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  pull_policy: never
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}
+
+# A missing .env does not stop "config" or "build". The backend then refuses to start with exit status 78 and names
+# LYRVEIL_CONTROL_TOKEN, which is clearer than a Compose error.
+x-env-file: &env-file
+  - {path: .env, required: false}
+
+services:
+  lyrveil-frontend:
+    <<: *common
+    container_name: lyrveil-frontend
+    image: lyrveil/frontend:local
+    build: {context: ., dockerfile: frontend/Dockerfile}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    ports: ["${LYRVEIL_BIND_ADDRESS:-127.0.0.1}:${LYRVEIL_HTTP_PORT:-4200}:8080"]
+    networks: [lyrveil-edge, lyrveil-app]
+    depends_on:
+      lyrveil-backend: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  lyrveil-backend:
+    <<: *common
+    container_name: lyrveil-backend
+    image: lyrveil/backend:local
+    build: {context: ., dockerfile: backend/Dockerfile, target: runtime}
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    tmpfs: [/tmp]
+    env_file: *env-file
+    volumes:
+      - lyrveil-data:/data
+      - lyrveil-models:/models:ro     # Lists and hashes files for custom profiles
+    networks: [lyrveil-app, lyrveil-control, lyrveil-runtime]
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  lyrveil-orchestrator:
+    <<: *common
+    container_name: lyrveil-orchestrator
+    image: lyrveil/orchestrator:local
+    build: {context: ., dockerfile: orchestrator/Dockerfile, target: runtime}
+    restart: unless-stopped
+    user: "10001:10001"
+    group_add: ["0"]           # The Docker socket is root:root, mode 660, inside containers
+    read_only: true
+    tmpfs: [/tmp]
+    gpus: all                  # NVML only. No model runs here and no VRAM is allocated
+    env_file: *env-file
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [lyrveil-control]
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8100/v1/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+networks:
+  lyrveil-edge: {driver: bridge}
+  lyrveil-app: {internal: true}
+  lyrveil-control: {internal: true}
+  lyrveil-runtime: {internal: true}
+
+volumes:
+  lyrveil-data: {external: true}       # Created by setup.cmd, so down -v cannot remove it
+  lyrveil-models: {external: true}

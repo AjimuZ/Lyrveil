@@ -36,3 +36,14 @@ RUN uv sync --locked
 COPY orchestrator/src ./src
 COPY orchestrator/tests ./tests
 CMD ["pytest"]
+
+# The image of compose.yaml, selected there with "target: runtime". It holds no tests and no development packages.
+# lyrveil_orchestrator.main does not exist yet: it comes with the lifecycle manager (P02), so a container started from
+# this image exits at once until then. The preflight command already works: "python -m lyrveil_orchestrator.preflight".
+FROM base AS runtime
+COPY --from=deps /app/.venv /app/.venv
+COPY orchestrator/src ./src
+RUN python -m compileall -q src
+USER 10001:10001
+EXPOSE 8100
+CMD ["python", "-m", "lyrveil_orchestrator.main"]
