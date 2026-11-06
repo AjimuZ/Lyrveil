@@ -8,8 +8,9 @@ import { templateRestrictions, typeScriptRestrictions } from './tools/eslint/uns
 
 export default defineConfig(
   {
-    // The fixtures break the rules on purpose; tools/eslint/unsafe-html.test.mjs lints them explicitly.
-    ignores: ['dist/', 'out-tsc/', '.angular/', 'node_modules/', 'tools/eslint/fixtures/'],
+    // The fixtures break the rules on purpose; tools/eslint/unsafe-html.test.mjs lints them explicitly. The generated
+    // API types are not hand-written; tools/api-types.mjs checks them against the OpenAPI document instead.
+    ignores: ['dist/', 'out-tsc/', '.angular/', 'node_modules/', 'tools/eslint/fixtures/', 'src/app/core/api/generated/'],
   },
   {
     files: ['**/*.ts'],

@@ -81,6 +81,12 @@ No application exists yet. This section records the design documentation.
   and a production build that fails on any warning or network reference. `test
   unit` also runs the frontend's Vitest tests. The image's `Dockerfile` and
   `nginx.conf` are written but not built yet.
+- The web interface can now talk to the backend: TypeScript types generated from the
+  backend's OpenAPI document, which is committed and checked by a backend test,
+  failed requests turned into errors with Italian messages, and a client of the
+  event WebSocket that reconnects with backoff, replays from the last event and
+  reloads from the REST API when the server reports a gap. No screen uses them yet.
+  `test lint` fails when the generated types are out of date.
 
 ### Changed
 

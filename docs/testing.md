@@ -6,7 +6,7 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 
 | Level | Tool | Runs on | GPU |
 | --- | --- | --- | --- |
-| Lint | Documentation checks, PSScriptAnalyzer, ruff and `mypy --strict` for the backend and the orchestrator, and ESLint, the color check and the strict `ng build` for the frontend | Any Windows machine with Git, Docker and Node.js 24 | No |
+| Lint | Documentation checks, PSScriptAnalyzer, ruff and `mypy --strict` for the backend and the orchestrator, and ESLint, the color check, the generated API types check and the strict `ng build` for the frontend | Any Windows machine with Git, Docker and Node.js 24 | No |
 | Unit | pytest, Hypothesis, Vitest, Pester for the scripts | Any machine | No |
 | Integration | pytest with SQLite and fake runtimes | Any machine | No |
 | Contract | Schemathesis on OpenAPI, recorded runtime fixtures | Any machine | No |

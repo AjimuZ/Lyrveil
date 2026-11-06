@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). API types, the WebSocket client and every real screen are planned, phases P01 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). No screen uses them yet, and nothing starts the socket yet: the shell will call `connect()` when it shows connection state. Every real screen is planned, phases P01 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -15,6 +15,7 @@ frontend/
   tools/build-icons.mjs       Planned
   tools/build-strict.mjs      Production build that fails on a warning or a network reference
   tools/check-styles.mjs      Fails on a color literal outside styles/tokens.scss
+  tools/api-types.mjs         Generates the API types and fails when the committed ones are out of date
   tools/eslint/               T-SEC-09 restrictions, their fixtures and test
   src/
     assets/icons/             ASCII icon grids
@@ -23,7 +24,7 @@ frontend/
     app/
       app.ts  app.routes.ts  app.config.ts
       core/
-        api/                  Generated types, HTTP providers, error mapping
+        api/                  generated/ (types), api-client.ts, providers.ts (provideApi), api-error.ts
         realtime/             events-socket.ts: WebSocket, reconnect, replay
         i18n/                 translator.ts, translate-pipe.ts
         session/              first-start notice, display name
@@ -82,10 +83,24 @@ route's `loadComponent`.
 
 The server is the source of truth. A store applies events optimistically and reloads through REST after `resync.required`.
 
+### API types
+
+`@hey-api/openapi-ts` 0.99.0 generates `src/app/core/api/generated/` from `backend/openapi.json`, with the `@hey-api/typescript` plugin only: the types of the schemas and of each operation's request and responses. The HTTP calls are not generated. `ApiClient` wraps Angular's `HttpClient` under `/api/v1` and the caller names the response type from the generated ones. `provideApi()` in `app.config.ts` registers `HttpClient` on `fetch` with an interceptor that rethrows every failure as an `ApiError`.
+
+- `npm run api:generate` rewrites the generated folder from the committed document. Run it after the backend changes the document ([Backend](backend.md#database-and-health)), and commit the result.
+- `npm run lint` ends with `tools/api-types.mjs check`, which generates into a temporary folder and fails when any file differs from the committed one. The document is read from the repository, not from a running backend, so the check needs no Docker.
+- ESLint does not lint the generated folder.
+
+### API errors
+
+`toApiError` maps what a request throws to an `ApiError` with `code`, `status`, the server's `detail`, `fieldErrors` and `textKey`, the catalog key of the Italian message (`translator.t(error.textKey)`). The body's `code` wins when it is one of the REST codes of [APIs](api.md#errors). Without one, the status decides: 404, 409, 413, 415 and 422 map to their code; no response and the proxy's 502, 503 and 504 map to `NETWORK`, "Lyrveil non risponde. Controlla che sia avviato e riprova."; any other 5xx is `INTERNAL`, and the rest is `UNKNOWN`. The server's `detail` is kept for the screen to show, such as the download command of `MODEL_PROFILE_UNAVAILABLE`. The error's `message` never holds server text.
+
 ### Realtime handling
 
-1. Connect to `/ws`, then send `hello` with `last_event_id` and `boot_id`.
-2. Reconnect with backoff of 1, 2, 5 and 10 seconds.
+`EventsSocket` implements the protocol of [APIs](api.md#event-websocket). A store calls `on('message.created')` for an event type and subscribes to `resync$` to reload through REST. `state` is a signal for the connection notice.
+
+1. Connect to `/ws`, then send `hello` with `last_event_id` and `boot_id`. The `boot_id` comes from the server's `connected` frame.
+2. Reconnect with backoff of 1, 2, 5 and 10 seconds. The delay restarts at 1 second once a connection has served a frame.
 3. While disconnected, the shell shows "Lyrveil non risponde. Sto riprovando…". Sending stays available only after a REST check succeeds.
 4. `message.delta` writes to one signal per streaming message, batched per animation frame, so long replies do not render per token.
 5. `message.restarted` clears the streamed text of that message and keeps the typing indicator, so a corrected reply never shows the discarded words.
@@ -223,7 +238,7 @@ Multi-stage `frontend/Dockerfile`:
 
 ## Tests
 
-- Unit and component: Vitest through `ng test`, with `TestBed` and component harnesses, in jsdom. `npm run test` also runs the Node tests of `tools/`, T-SEC-09 among them. `scripts\lyrveil.cmd test unit` runs both.
+- Unit and component: Vitest through `ng test`, with `TestBed` and component harnesses, in jsdom. `npm run test` also runs the Node tests of `tools/`, T-SEC-09 and the API types check among them. The socket tests replace the browser's `WebSocket` through the `EVENTS_SOCKET_FACTORY` token and drive the timers with Vitest's fake timers. `scripts\lyrveil.cmd test unit` runs both.
 - End-to-end: Playwright against the fake runtimes. See [Testing](testing.md).
 - Accessibility: `@axe-core/playwright` on all ten screens.
-- `ng build` must pass with no warnings before any commit that touches `frontend/`. `scripts\lyrveil.cmd test lint` runs `npm run lint` (ESLint with no warnings allowed, then the color check) and `npm run build` (`tools/build-strict.mjs`). The build fails on any line with `WARNING`, on a `url()`, `@import`, `src` or `href` that names another origin, and when a font the CSS names is missing from the output.
+- `ng build` must pass with no warnings before any commit that touches `frontend/`. `scripts\lyrveil.cmd test lint` runs `npm run lint` (ESLint with no warnings allowed, then the color check, then the API types check) and `npm run build` (`tools/build-strict.mjs`). The build fails on any line with `WARNING`, on a `url()`, `@import`, `src` or `href` that names another origin, and when a font the CSS names is missing from the output.

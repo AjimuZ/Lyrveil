@@ -24,6 +24,9 @@
 - Prove a lint rule with fixture files kept in the config's `ignores`. A `node --test` file lints them through the ESLint API with `ignore: false`, using the project's real config, and asserts the exact reported lines.
 - In nginx, put security headers once at server level with `always`, and set caching with `expires` instead of `add_header`. A location's own `add_header` would stop it inheriting the server-level headers.
 - Write tool scripts as ES modules that export pure functions for unit tests and run their CLI part only when `import.meta.url` equals `pathToFileURL(process.argv[1]).href`.
+- A generated artifact that is committed gets two gates: a producer-side test comparing it with the live source, and a consumer-side lint that regenerates into a temporary folder and diffs it (line ends normalized).
+- Browser APIs that tests must script, such as WebSocket, go behind an InjectionToken factory with a minimal structural interface. Tests then provide a fake and drive time with Vitest fake timers.
+- Pass third-party generator configuration from code in a tool script shared by the generate and check commands. Do not rely on a config file the tool discovers on its own.
 
 ---
 
@@ -196,4 +199,28 @@ Not verified:
   - `tools/build-strict.mjs` writes to `dist/lyrveil/browser`. It runs ng.js through `process.execPath`, without a shell, with NG_FORCE_TTY=false.
   - The package-lock was generated on Windows with `--ignore-scripts`. It already lists the Linux and musl packages (`@esbuild/linux-x64`, `@parcel/watcher-linux-x64-musl`), but `docker build -f frontend/Dockerfile .` has never run.
   - FrontendComponent.psm1 skips the frontend when `test unit` gets pytest arguments, and when `frontend/package.json` is absent (as in the Pester fixture repos).
+---
+
+## 2026-11-06T21:55:47Z - P01.5b
+- The backend's OpenAPI document is now committed as backend/openapi.json, and the frontend generates its API types from it. The frontend also has HTTP providers with Italian error messages and a WebSocket client with backoff, replay and resync. I ran the full `test lint`, the full frontend tests and the new backend test file; all passed. I did not run the full backend or orchestrator unit suites, and I did not build the new `openapi` Docker stage or the frontend image.
+
+- **Backend drift test:** `test_openapi_document.py` fails when the committed document differs from `create_app(...).openapi()`, and its failure message gives the regeneration command. I wrote `backend/openapi.json` by hand, because I couldn't run Python on the host. The test passed on the first run, so it matches. The new `openapi` Dockerfile stage regenerates the file after an API change, but I never built it.
+- **Frontend drift check:** `tools/api-types.mjs check` is now the last step of `npm run lint`. It regenerates the types into a temporary folder and fails on any difference. The check reads the committed document and needs no Docker. `npm run api:generate` rewrites the committed types, and ESLint ignores that folder.
+- **API layer:** `ApiClient`, `provideApi()` and `toApiError` are in `core/api/`. `provideApi()` is wired into `app.config.ts`. The catalog (`it.json`) now has 14 Italian error messages, one for each REST error code plus network and unknown errors.
+- **WebSocket client:** `EventsSocket` reconnects after 1, 2, 5 and then every 10 seconds. It sends `hello` with the last event ID and `boot_id`, and it skips events it already delivered. It emits `resync$` when the server sends `resync.required`, when a reconnection has no event ID, or when `boot_id` changes. It also pings every 25 seconds.
+- **Protocol assumption:** the docs don't say how the client learns `boot_id`, so I assumed the server sends a first `{"v":1,"type":"connected","boot_id":...}` frame on each connection. This is written into docs/api.md and flagged as an assumption for P02, which writes the server side. Nothing calls `connect()` yet.
+- **Checks:**
+  - `test lint` passes: ruff, `mypy --strict`, ESLint, the color check, the API types check, the strict build and the documentation checks.
+  - Frontend tests pass: 28 Vitest tests and 11 Node tests.
+  - Backend: the 4 new tests passed through `scripts/lyrveil.cmd test unit tests/unit/test_openapi_document.py`.
+  - Docs: I added a verification note (`docs/verification/2026-11-06-api-types-and-socket.md`) and updated api.md, backend.md, frontend.md, testing.md, the docs index and the changelog.
+- Files changed: backend/openapi.json, backend/Dockerfile, backend/src/lyrveil/openapi_document.py, backend/tests/unit/test_openapi_document.py, frontend/package.json, frontend/package-lock.json, frontend/eslint.config.mjs, frontend/tools/api-types.mjs, frontend/tools/api-types.test.mjs, frontend/src/i18n/it.json, frontend/src/app/app.config.ts, frontend/src/app/core/api/generated/index.ts, frontend/src/app/core/api/generated/types.gen.ts, frontend/src/app/core/api/api-error.ts, frontend/src/app/core/api/api-error.spec.ts, frontend/src/app/core/api/api-client.ts, frontend/src/app/core/api/api-client.spec.ts, frontend/src/app/core/api/providers.ts, frontend/src/app/core/realtime/events-socket.ts, frontend/src/app/core/realtime/events-socket.spec.ts, CHANGELOG.md, docs/README.md, docs/api.md, docs/backend.md, docs/frontend.md, docs/testing.md, docs/verification/2026-11-06-api-types-and-socket.md
+- **Learnings for future iterations:**
+  - After any API change, run `docker build -f backend/Dockerfile --target openapi --output type=local,dest=backend .`, then `npm run api:generate --prefix frontend`, and commit both. The `openapi` Dockerfile stage was never built, so check it the first time it is used.
+  - A targeted backend test runs with `scripts/lyrveil.cmd test unit tests/unit/<file>`. The path is relative to the component, not the repo root. The orchestrator reports 'skipped' for it.
+  - The hey-api generator is driven by `frontend/tools/api-types.mjs`, which passes the config in code. There is no openapi-ts.config file, because the generator merges a config file over the arguments it is given. Only the `@hey-api/typescript` plugin runs, so `ApiClient` on HttpClient is the way to call the API.
+  - The server side of /ws (P02) must send `{v:1,type:'connected',boot_id}` as its first frame on each connection, with no `id`. If it can't, change docs/api.md and `parseFrame` in events-socket.ts together. A `resync.required` frame may carry an `id`; the client uses it as its next `last_event_id`.
+  - Nothing calls `EventsSocket.connect()` yet. The shell should do it when it shows the 'Lyrveil non risponde' notice, and a store should subscribe to `resync$` to reload through REST.
+  - `SocketLike.onclose` is typed `CloseEvent` because a real WebSocket's `onclose` would not assign otherwise. A test double that fires close needs `new CloseEvent('close')`, which jsdom provides.
+  - Keep the API error messages in `it.json` under `error.*`. `API_ERROR_TEXT` in api-error.ts maps each code to its key, and a spec checks that every key has a text.
 ---

@@ -1,0 +1,206 @@
+{
+  "components": {
+    "schemas": {
+      "Checks": {
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DatabaseCheck"
+          },
+          "fts5": {
+            "$ref": "#/components/schemas/Fts5Check"
+          },
+          "migrations": {
+            "$ref": "#/components/schemas/MigrationsCheck"
+          }
+        },
+        "required": [
+          "database",
+          "migrations",
+          "fts5"
+        ],
+        "title": "Checks",
+        "type": "object"
+      },
+      "ControlApiCheck": {
+        "properties": {
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reachable"
+        ],
+        "title": "ControlApiCheck",
+        "type": "object"
+      },
+      "DatabaseCheck": {
+        "properties": {
+          "journal_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Mode"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "journal_mode"
+        ],
+        "title": "DatabaseCheck",
+        "type": "object"
+      },
+      "Fts5Check": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "Fts5Check",
+        "type": "object"
+      },
+      "LiveReport": {
+        "properties": {
+          "status": {
+            "const": "alive",
+            "default": "alive",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "LiveReport",
+        "type": "object"
+      },
+      "MigrationsCheck": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "head": {
+            "title": "Head",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "current",
+          "head"
+        ],
+        "title": "MigrationsCheck",
+        "type": "object"
+      },
+      "ReadyReport": {
+        "description": "Readiness of the backend. `control_api` is informational: it never changes `status`.\n\nThe orchestrator may be down while the library, settings and history still work (docs/api.md, System).",
+        "properties": {
+          "checks": {
+            "$ref": "#/components/schemas/Checks"
+          },
+          "control_api": {
+            "$ref": "#/components/schemas/ControlApiCheck"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checks",
+          "control_api"
+        ],
+        "title": "ReadyReport",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Lyrveil",
+    "version": "0.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/health/live": {
+      "get": {
+        "description": "Answers 200 whenever the process serves requests. Used by the container health check.",
+        "operationId": "live_api_v1_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Process alive",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "description": "Answers 200 when the database is in WAL mode, migrated to head and has FTS5, and 503 otherwise.\n\nThe body lists every check, so a failure says which one. The control API is probed too and reported on its own.",
+        "operationId": "ready_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyReport"
+                }
+              }
+            },
+            "description": "A database check failed."
+          }
+        },
+        "summary": "Database, migrations and FTS5 are fine",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

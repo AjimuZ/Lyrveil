@@ -193,6 +193,12 @@ Health routes, under `/api/v1`:
 The checks run on every request, so the answer follows the live state of the file. A driver error is reported as a
 failed check without its message.
 
+The OpenAPI document of the application is committed as `backend/openapi.json`, the contract the frontend generates its
+types from. `lyrveil/openapi_document.py` builds and renders it, and `tests/unit/test_openapi_document.py` fails when the
+committed file differs from what the application serves, with the regeneration command in its message. After an API
+change, run `docker build -f backend/Dockerfile --target openapi --output type=local,dest=backend .`, then
+`npm run api:generate --prefix frontend`, and commit both.
+
 ### Shutdown sequence
 
 On SIGTERM: stop accepting jobs, flush the running reply, release the lease, close

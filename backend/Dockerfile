@@ -3,6 +3,8 @@
 #   docker build -f backend/Dockerfile --target test -t lyrveil/backend-test:local .
 # Regenerates backend/uv.lock after a change to backend/pyproject.toml, since uv is not installed on Windows:
 #   docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend .
+# Regenerates backend/openapi.json, the contract the frontend generates its types from, after an API change:
+#   docker build -f backend/Dockerfile --target openapi --output type=local,dest=backend .
 # Every installed package comes from uv.lock: "uv sync --locked" refuses a lock that does not match pyproject.toml.
 
 FROM python:3.12.16-slim-trixie AS base
@@ -34,10 +36,19 @@ RUN uv sync --locked --no-dev --compile-bytecode
 FROM deps AS test
 RUN uv sync --locked
 COPY backend/alembic.ini ./alembic.ini
+COPY backend/openapi.json ./openapi.json
 COPY backend/migrations ./migrations
 COPY backend/src ./src
 COPY backend/tests ./tests
 CMD ["pytest"]
+
+# Writes the OpenAPI document of the sources, not the committed one, so the output reflects the current API.
+FROM deps AS openapi-build
+COPY backend/src ./src
+RUN python -m lyrveil.openapi_document /app/openapi.json
+
+FROM scratch AS openapi
+COPY --from=openapi-build /app/openapi.json /openapi.json
 
 FROM base AS runtime
 COPY --from=deps /app/.venv /app/.venv

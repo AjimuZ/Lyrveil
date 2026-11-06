@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, and the token check, health and preflight routes of the [control API](#control-api). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), and the token check, health and preflight routes of the [control API](#control-api). The server side of `/ws` and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -12,7 +12,7 @@ only on the `lyrveil-control` network.
 | --- | --- |
 | Base path | `/api/v1` |
 | Format | JSON. Writes must send `Content-Type: application/json`, except uploads. |
-| Schema | FastAPI generates OpenAPI at `/api/v1/openapi.json`. The frontend generates its types from it. |
+| Schema | FastAPI generates OpenAPI at `/api/v1/openapi.json`. The document is committed as `backend/openapi.json`, a backend test keeps it equal to the application's, and the frontend generates its types from the committed file ([Frontend](frontend.md#api-types)). |
 | Long work | Returns `202` with a job. Progress arrives on the WebSocket. |
 | Idempotency | `POST .../messages` takes `client_message_id`. Retrying returns the original result. |
 | Pagination | Cursor based: `?cursor=&limit=`, default limit 50, maximum 200. Response `{"items": [], "next_cursor": null}`. |
@@ -259,6 +259,24 @@ in memory. A client that reconnects sends:
 The server replays the missing events, or sends `resync.required` when the gap is too
 old or the backend restarted. The client then reloads through REST. REST is always the
 source of truth, so an event can be lost without any data loss.
+
+The client learns `boot_id` from the first frame the server sends on each connection, before any replay. It is not
+an event and has no `id`:
+
+```json
+{"v": 1, "type": "connected", "boot_id": "0192f3a0-0000-7000-8000-000000000000"}
+```
+
+This frame is an assumption of the client, written in P01.5b. The server that sends it comes in P02, and this
+contract changes there if the server needs another form. Until the client has seen a `boot_id`, it sends `null`.
+
+The client in `frontend/src/app/core/realtime/events-socket.ts` follows these rules. It asks for a resync on its own
+when it cannot name a position: a reconnection when no event was delivered yet, or a `boot_id` that differs from the
+one it knew. It asks once per connection, whatever the number of causes. It delivers an event only if its `id` is above
+the last one delivered, so a replay that overlaps is harmless. A `resync.required` frame is not delivered as an event:
+it makes the client's `resync$` stream emit, and an `id` in that frame becomes the position of the next `hello`. The
+client ignores frames of another `v`, of an unknown type, or that are not JSON. It sends `ping` every 25 seconds, and
+reconnects after 1, 2, 5 and then every 10 seconds.
 
 | Type | Data | When |
 | --- | --- | --- |
