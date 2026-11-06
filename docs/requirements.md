@@ -1,6 +1,6 @@
 # Requirements
 
-Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner. Implementation: not started.
+Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner, and 2026-11-06 for consistency across models and anime image quality. Implementation: not started.
 
 This document is the normative statement of what Lyrveil must do. Each requirement
 has a stable identifier. [Traceability](traceability.md) maps every group to its
@@ -82,6 +82,7 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-LNG-05 | The language is configurable per character or per conversation. |
 | R-LNG-06 | Image requests can be written in Italian. When the image model works better with English prompts, the active text model prepares them automatically before leaving the GPU. No external translation service is used. |
 | R-LNG-07 | Italian quality is verified with sufficiently long conversations. |
+| R-LNG-08 | Italian gender agreement is explicit: each character states how it speaks of itself, and the user states how characters address them. Neither is guessed from a name. |
 
 ## 6. Messaging
 
@@ -104,11 +105,11 @@ reference machine was measured at 32 GB on 2026-11-05.
 | ID | Requirement |
 | --- | --- |
 | R-CHR-01 | The user can create, edit, duplicate, import, export and delete characters. |
-| R-CHR-02 | Identity fields: first name, optional last name, age, narrative identity, biography, occupation, interests, background, place or setting, main language. |
+| R-CHR-02 | Identity fields: first name, optional last name, age, grammatical gender, narrative identity, biography, occupation, interests, background, place or setting, main language. |
 | R-CHR-03 | Personality fields: main traits, values, motivations, preferences, flaws, fears, habits, sense of humor, temperament, way of relating to others. |
-| R-CHR-04 | Communication fields: formality, average message length, question frequency, punctuation use, colloquial style, expressiveness, initiative frequency, message examples, recurring expressions. |
+| R-CHR-04 | Communication fields: formality, average message length, question frequency, punctuation use, colloquial style, expressiveness, initiative frequency, address form (*tu* or *Lei*), narration, emoji use, message examples as exchanges, recurring expressions, phrases to avoid. |
 | R-CHR-05 | Characters are not reduced to numbers. Descriptive fields take priority. |
-| R-CHR-06 | Visual profile fields: face, hair, eyes, body, clothing, accessories, distinctive marks, art style, avatar, reference images, persistent prompt. |
+| R-CHR-06 | Visual profile fields: face, hair, eyes, body, clothing, accessories, distinctive marks, art style, avatar, reference images, persistent prompt as a structured English identity, usual outfit and named outfits. |
 | R-CHR-07 | The user can describe a character in natural language. The active text model generates a structured sheet that is validated by a Pydantic schema and shown in the Creator. |
 | R-CHR-08 | The user can edit any generated field before saving. |
 | R-CHR-09 | Avatars: upload a local image, generate with the active image model, regenerate, choose a crop, save several variants, set a primary image. |
@@ -162,6 +163,8 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-CON-08 | Values are not regenerated at random. Updates derive from identifiable events, are limited and are recorded. |
 | R-CON-09 | Numeric scores, when present, are internal support and do not replace the narrative description. |
 | R-CON-10 | Each relevant character change is historicized. The user can view versions, compare changes, restore a version, lock traits and correct information. |
+| R-CON-11 | A character keeps the same name, age, gender, address form, narration style and reply length on every verified text profile, and after a profile change in the middle of a conversation. Code enforces what can be checked, and does not rely on the model alone. |
+| R-CON-12 | Every catalog text profile passes a consistency protocol and an extraction evaluation before it is offered as verified. The evidence is recorded. |
 
 ## 10. Character Memory Studio
 
@@ -186,6 +189,9 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-IMG-08 | Seed, reference images and persistent prompts can be saved. The architecture is prepared for LoRA and compatible reference techniques. The documentation never promises perfect consistency from the seed alone. |
 | R-IMG-09 | Each image is stored independently of the AI runtime: original file, optional thumbnail, message ID, character ID, conversation ID, prompt, seed, parameters, generation date, model profile, checkpoint hash, quality preset and workflow. |
 | R-IMG-10 | The backend serves images even when ComfyUI is off. |
+| R-IMG-11 | A character's visual identity, outfit and apparent age band reach every prompt as deterministic tags, identical whichever text model is active. |
+| R-IMG-12 | Model output reaches the image prompt only through a structured scene, a tag vocabulary and a sanitizer, so it cannot change prompt weights, load embeddings or override identity. |
+| R-IMG-13 | The text that accompanies an image is written in the character's voice, with the same rules as a normal reply. |
 
 ## 12. GPU orchestration: Model Lifecycle Manager
 

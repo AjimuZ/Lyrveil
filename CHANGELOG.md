@@ -17,13 +17,26 @@ No application exists yet. This section records the design documentation.
   Lifecycle Manager, image generation, proactive messages and the Character Creator.
 - The Obsidian Bloom design system and the specification of the ten screens.
 - Operations, security, licensing, testing and publication guides, a phased
-  roadmap with exit checks, a risk register and 30 architecture decision records.
+  roadmap with exit checks, a risk register and 36 architecture decision records.
 - Repository hygiene files that keep model weights, user data and secrets out of
   Git and Docker images.
 - A model catalog: the user chooses the active text and image models from verified
   profiles, and can register local files as unverified custom profiles.
 - Two image quality presets: **Alta**, a two-pass render up to 1248 x 1824, and
   **Rapida**, a single pass.
+- A short reminder of the character before each reply, with the changing context
+  placed after the history, so long chats keep the identity and reuse the cache.
+- The same reply rules for every text model: no speaker labels or Markdown, the
+  character's narration and emoji style, length bands, and one corrected
+  regeneration when a reply gets the name, age or grammatical gender wrong.
+- Card fields for grammatical gender, `tu` or `lei`, narration, emoji, example
+  lines and phrases to avoid, and a setting for how characters address the user.
+- A consistency protocol and an extraction evaluation that every catalog text
+  profile must pass, shown as **Qualità verificata**.
+- Structured visual identity, a wardrobe of outfits, age bands, an original tag
+  vocabulary and a sanitizer for image prompts.
+- Structured image scenes, automatic portrait or landscape sizes, image captions in
+  the character's voice, and measured image quality levers.
 
 ### Changed
 
@@ -32,6 +45,8 @@ No application exists yet. This section records the design documentation.
 - The default image model is Illustrious XL v2.0 instead of v1.0, which stays
   selectable. NoobAI-XL 1.1 is also offered.
 - Prompts follow the official template of each model family.
+- Image prompts are built from a structured scene and a fixed identity, instead of
+  a free English prompt written by the text model.
 - The 32 GB machine is the target tier, and KoboldCpp is pinned to `v1.124.2`
   because `v1.124.1` was withdrawn upstream.
 - Lyrveil is installed and run from Windows: `.cmd` entry points replace the Bash

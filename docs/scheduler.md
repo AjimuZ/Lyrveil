@@ -1,6 +1,6 @@
 # Proactive messages and time
 
-Status: accepted (2026-11-01). Implementation: planned, phase P07.
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation: planned, phase P07.
 
 Characters can write first. The feature is off by default, both globally and for each conversation
 ([ADR 0020](decisions/0020-proactive-messages-default-off.md)). A message is sent only when there is a real reason drawn from the
@@ -68,17 +68,27 @@ class ProactiveDecision(BaseModel):
 
 When `send` is false, the event becomes `skipped` with the reason, and no message exists. `scheduled_message` skips this stage, because the user asked for it.
 
-**Stage `generate`.** The normal `ContextBuilder` runs with this extra instruction:
+**Stage `generate`.** The normal `ContextBuilder` runs without a current message
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). The stable system text and the history are the
+same as for a reply, so they come from the cache. The last user turn holds only the frame of the dynamic context: blocks 4,
+5 and 9, then this instruction, with no `[Messaggio di …]` line:
 
 ```jinja
-Stai scrivendo tu per primo a {{ user.display_name }}: non stai rispondendo a un messaggio.
+Sei tu a scrivere a {{ user.display_name }}: non stai rispondendo a un suo messaggio.
 Motivo: {{ reason }}
 Scrivi un messaggio breve, naturale e coerente con quello che sai.
-Non rimproverare {{ user.display_name }} per il silenzio e non farlo sentire in colpa.
+Non rimproverare {{ user.display_name }} per il silenzio e non usare frasi che mettono in colpa.
 Non inventare eventi accaduti mentre non vi sentivate che contraddicano la tua storia.
 ```
 
-**Checks.** The usual validators run. A message with similarity of at least 0.8 to one of the last 20 proactive messages is discarded and regenerated once. A second hit marks the event `skipped`.
+The wording carries no grammatical gender, so it never contradicts `grammatical_gender`. A proactive message uses the
+`brevi` [length band](prompting.md#length-bands), or the character's band when it is shorter, for both `max_length` and the
+anchor's length text, so the anchor and the instruction agree.
+
+**Checks.** The [reply normalizer](consistency-engine.md#reply-normalization) and the
+[reply checks](consistency-engine.md#reply-checks) run as for a reply, including one corrective regeneration. A message
+with similarity of at least 0.8 to one of the last 20 proactive messages is discarded and regenerated once. A second hit
+marks the event `skipped`.
 
 **Delivery.** The message appears as normal. `created_at` is the real generation time. `scheduled_event_id` links it to its event. A `notification.created` event and an unread badge follow.
 

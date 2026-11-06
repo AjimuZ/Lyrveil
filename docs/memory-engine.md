@@ -1,6 +1,6 @@
 # Lyrveil Memory Engine
 
-Status: accepted (2026-11-01). Implementation: planned, phase P04.
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: planned, phase P04.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -403,30 +403,38 @@ prompt assembly.
 
 ## Context composition
 
-`ContextBuilder` assembles the blocks in this order, from most to least stable:
+`ContextBuilder` builds the blocks below. `PromptFormatter` places them in four parts, from most to
+least stable ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
 
-| # | Block | Priority when over budget | Min | Target | Max |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Global instructions | Never reduced | 250 | 350 | 450 |
-| 2 | Canonical identity | Required fields never reduced | 250 | 700 | 900 |
-| 3 | Communication profile | Examples cut first | 80 | 350 | 500 |
-| 4 | Conversation state and time | Details reduced late | 60 | 200 | 300 |
-| 5 | Relevant memories | Lowest scores cut | 0 | 900 | 1400 |
-| 6 | Contextual summary | Older parts cut | 0 | 600 | 900 |
-| 7 | Recent messages | Oldest cut, floor 800 | 800 | Remainder | Remainder |
-| 8 | Current message | Never reduced in normal use | Actual | Actual | 2048 |
-| - | Reserved for the reply | Fixed | | 400 | |
-| - | Safety margin | Fixed | | 64 | |
+1. **Stable system text**: blocks 1, 2, 3 and 6.
+2. **History**: block 7, as plain turns.
+3. **Dynamic context**: blocks 4, 5 and 9, in a fixed frame inside the last user turn.
+4. **Current message**: block 8.
 
-With a window of 8192, the targets of blocks 1 to 6 total 3100 tokens. The reply and margin
-take 464, so about 4600 tokens remain for messages.
+| # | Block | Part | Priority when over budget | Min | Target | Max |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Global instructions | Stable | Never reduced | 250 | 350 | 450 |
+| 2 | Canonical identity | Stable | Required fields never reduced | 250 | 700 | 900 |
+| 3 | Communication profile | Stable | Examples cut first | 80 | 350 | 500 |
+| 4 | Conversation state and time | Dynamic | Details reduced late | 60 | 200 | 300 |
+| 5 | Relevant memories | Dynamic | Lowest scores cut | 0 | 900 | 1400 |
+| 6 | Contextual summary | Stable | Older parts cut | 0 | 600 | 900 |
+| 7 | Recent messages | History | Oldest cut, floor 800 | 800 | Remainder | Remainder |
+| 8 | Current message | Current | Never reduced in normal use | Actual | Actual | 2048 |
+| 9 | Anchor | Dynamic | Never reduced | 60 | 110 | 160 |
+| - | Reserved for the reply | | The band's `max_length`, see [Length bands](prompting.md#length-bands) | 60 | | 400 |
+| - | Safety margin | | Fixed | | 64 | |
+
+With a window of 8192, the targets of blocks 1 to 6 and 9 total 3210 tokens. The reply, at most
+400, and the margin take up to 464, so about 4500 tokens remain for messages.
 
 ### Algorithm
 
 ```text
 limit = true context size reported by the runtime
+reply_reserve = max_length of the character's length band
 available = limit - reply_reserve - safety_margin
-render blocks 1, 2 (required), 3 (core), 8; count tokens
+render blocks 1, 2 (required), 3 (core), 8, 9; count tokens
 allocate block 4 at target
 query memories with budget = target of block 5
 choose summaries with budget = target of block 6
@@ -443,8 +451,8 @@ Reduction order: message examples, oldest summary parts, lowest-scoring memories
 recent messages down to the floor, optional identity fields not locked (interests,
 background details), state details.
 
-Never removed: global instructions, first name, age, narrative identity, main traits, values,
-the core style description and the current message. A current message over 2048 tokens is
+Never removed: global instructions, first name, age, grammatical gender, narrative identity,
+main traits, values, the core style description, the anchor and the current message. A current message over 2048 tokens is
 truncated in the prompt only, with a visible note in the interface. The API limit of 8000
 characters keeps this rare.
 
@@ -459,13 +467,23 @@ characters keeps this rare.
 
 ### Prefix stability
 
-KoboldCpp reuses the cached part of the prompt that did not change. To keep it long:
+KoboldCpp reuses the cached part of the prompt up to the first changed token. To keep that part long:
 
+- Everything that changes on most turns (state, time, memories and the anchor) is placed after the
+  history, in the last user turn. Old turns are rendered without it, so the stable text and the history
+  stay byte-identical between replies ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
+- The summary changes only at a checkpoint, so it stays in the stable text.
 - Time context uses coarse values such as "stasera" and "tre giorni fa".
 - The bonus for `previous_ids` avoids needless memory churn.
 - State changes only after extraction.
 
-P04 measures the prompt processing time with `last_process` from `/api/extra/perf`.
+A reply therefore reprocesses the previous exchange and the new dynamic context, about 1,000 to 2,500
+tokens. Gemma 4 profiles keep a sliding-window cache, so KoboldCpp also replays up to 2,048 cached tokens
+when the reuse point lies beyond that cache. SWA padding and SmartCache are measured levers for this
+([Runtime contracts](runtime-contracts.md#flags)).
+
+P04 measures the prompt processing time with `last_process` from `/api/extra/perf`, for this layout and
+for a single system text.
 
 ## Working memory
 

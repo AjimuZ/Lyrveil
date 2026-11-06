@@ -20,10 +20,10 @@ backend/
     ports/               Protocols: TextRuntime, ImageRuntime, MemoryRetriever, Clock...
     services/            CharacterService, ConversationService, MessageService...
     memory/              MemoryManager, extraction, retrieval, consistency, summaries
-    consistency/         CharacterStateManager, reply validators, content guard
-    context/             ContextBuilder, token budgets
-    prompts/             PromptTemplateService, templates by language, structured schemas
-    images/              ImageGenerationService, VisualConsistencyService, workflow loader
+    consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
+    context/             ContextBuilder, token budgets, length bands
+    prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
+    images/              ImageGenerationService, VisualConsistencyService, tag vocabulary, sanitizer, workflow loader
     jobs/                JobScheduler, job handlers, retry policy
     scheduling/          Proactive evaluation and policies
     persistence/         SQLAlchemy models, repositories, PersistenceService
@@ -61,11 +61,12 @@ orchestrator/
 | `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
 | `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. |
-| `ContextBuilder` | `context` | Builds the prompt within the token budget. |
+| `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
+| `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
-| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream, validators, persistence. |
+| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. |
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
-| `VisualConsistencyService` | `images` | Visual PromptBuilder, identity tags, conflict filter, seed policy. |
+| `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
 | `SchedulerService` | `scheduling` | Evaluates proactive rules and creates jobs. |
 | `NotificationService` | `services` | In-app notifications and their events. |
@@ -139,8 +140,10 @@ Adding a model means writing a new adapter or changing a model file. No service 
 
 ### Streaming persistence
 
-While a reply streams, deltas go to the WebSocket at once. The variant text is written to
-the database every 2 seconds, and at the end. After a crash the reply keeps what was
+While a reply streams, deltas go to the WebSocket as soon as `ReplyNormalizer` releases them.
+It holds back only the first 40 characters and any open asterisk span. The variant text is written to
+the database every 2 seconds, and at the end. A corrected check that fires publishes `message.restarted`,
+and the second generation overwrites the same variant. After a crash the reply keeps what was
 written, its status becomes `interrupted` and the interface offers regeneration.
 
 ### Startup sequence
@@ -163,10 +166,10 @@ WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quic
 
 | Kind | Handler flow |
 | --- | --- |
-| `chat_reply`, `chat_regenerate` | Lease, `ContextBuilder`, stream, validators, commit, release, then extraction trigger. |
+| `chat_reply`, `chat_regenerate` | Lease, `ContextBuilder`, stream through `ReplyNormalizer`, reply checks, at most one corrective regeneration, commit, release, then extraction trigger. |
 | `character_draft` | Lease, structured generation, safety check, store draft in `result_json`. |
 | `image_request` | Stages in [Image generation](image-generation.md#job-stages). |
-| `visual_profile_translate` | Lease, structured generation, store English tags unless locked. |
+| `visual_profile_translate` | Lease, structured generation of `VisualIdentityResult` under a vocabulary grammar, sanitizer, store the identity slots and wardrobe tags that are not locked. |
 | `image_proposal` | Lease, structured generation, store a proposal when valid. |
 | `proactive_message` | Stages `decide` and `generate`. See [Scheduler](scheduler.md#generation-flow). |
 | `summary_checkpoint` | Lease, structured generation, store a checkpoint. |

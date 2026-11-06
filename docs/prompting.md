@@ -1,10 +1,13 @@
 # Prompting and language
 
-Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models. Implementation: planned, phases P02 to P05.
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models and 2026-11-06 for the prompt layout and the
+voice fields. Implementation: planned, phases P02 to P05.
 
 `PromptTemplateService` loads templates from `backend/src/lyrveil/prompts/<language>/`. Each
 file has a version in its name, such as `extraction.v1.j2`. Rendering uses Jinja2 with
-`StrictUndefined` and no autoescape. User and character text enters only as data values.
+`StrictUndefined` and no autoescape. User and character text enters only as data values. Enum
+values pass through a `words` filter that replaces `_` with a space, so `molto_informale` reads
+`molto informale`.
 
 Templates exist in Italian and English. Other languages use the English set plus a directive to
 write in the target language.
@@ -23,8 +26,31 @@ language. Image prompts are always English.
 The prompt format depends on the active [text profile](models.md#text-profiles)
 ([ADR 0025](decisions/0025-prompt-templates-per-model-family.md)). Lyrveil renders the text itself and
 calls `/api/extra/generate/stream`, or `/api/v1/generate` for structured tasks. `PromptFormatter`
-receives the same logical turns for every family: one system text built from blocks 1 to 6, then the
-user and character turns.
+receives the same four logical parts for every family
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
+
+| Part | Blocks | Changes when |
+| --- | --- | --- |
+| Stable system text | 1, 2, 3, 6 | The card is edited, the profile changes or a summary checkpoint is added |
+| History | 7, as plain turns | A new exchange is appended |
+| Dynamic context | 4, 5, 9, inside the frame below | Every reply |
+| Current message | 8 | Every reply |
+
+The frame of the dynamic context:
+
+```text
+[Contesto per {first_name}, non scritto da {user_display_name}]
+{block 4}
+{block 5}
+{block 9}
+[Messaggio di {user_display_name}]
+{current message}
+```
+
+Old turns never carry the frame, so the stable text and the history stay byte-identical between
+replies, and KoboldCpp reuses them from its cache. A line that starts with a frame marker inside user
+text, character text, memories or summaries has its opening `[` replaced with `(`. Validator V2
+removes markers from replies. Structured tasks keep one system text and one user turn.
 
 KoboldCpp parses control tokens written in the prompt and adds BOS itself, so no template writes BOS.
 Thinking is always off.
@@ -36,13 +62,13 @@ thinking off:
 
 ```text
 <|turn>system
-{blocks 1 to 6}<turn|>
+{stable system text}<turn|>
 <|turn>user
 {older user message}<turn|>
 <|turn>model
 {older reply}<turn|>
 <|turn>user
-{current message}<turn|>
+{frame with the dynamic context and the current message}<turn|>
 <|turn>model
 <|channel>thought
 <channel|>
@@ -53,14 +79,17 @@ end token of the model.
 
 ### `mistral_v3_tekken`
 
-Used by `rocinante-x-12b`. No spaces around the markers, and the system text joins the last user turn,
-as in the template of its GGUF:
+Used by `rocinante-x-12b`. No spaces around the markers. The system text joins the last user turn,
+as in the template of its GGUF, followed by the frame:
 
 ```text
-[INST]{older user message}[/INST]{older reply}</s>[INST]{blocks 1 to 6}
+[INST]{older user message}[/INST]{older reply}</s>[INST]{stable system text}
 
-{current message}[/INST]
+{frame with the dynamic context and the current message}[/INST]
 ```
+
+The stable text moves with the last turn, so this family reprocesses it on every reply. The history
+before it stays cached.
 
 Stop sequences: `</s>`, `[INST]`, and `\n{user_display_name}:`.
 
@@ -70,13 +99,13 @@ Used by `rocinante-12b-v1.1`. The markers are ordinary text in that tokenizer:
 
 ```text
 <|im_start|>system
-{blocks 1 to 6}<|im_end|>
+{stable system text}<|im_end|>
 <|im_start|>user
 {older user message}<|im_end|>
 <|im_start|>assistant
 {older reply}<|im_end|>
 <|im_start|>user
-{current message}<|im_end|>
+{frame with the dynamic context and the current message}<|im_end|>
 <|im_start|>assistant
 ```
 
@@ -85,7 +114,9 @@ Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}
 ### Checks
 
 - A unit test compares each formatter with the output of the model's official template for the same
-  turns.
+  turns (T-MOD-02).
+- A unit test renders two consecutive replies of one conversation and checks that they share the
+  stable text and the history byte for byte, and that no old turn carries the frame (T-MOD-05).
 - The P02 exit check tokenizes one prompt per family with the real model and stores the identifiers as
   a test fixture.
 
@@ -94,7 +125,7 @@ Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}
 Values not listed are left to upstream defaults. Each text profile names a preset. The Gemma 4 values
 start from the model card, which gives one configuration for all uses. The Mistral Nemo values start
 from the requirements and the Rocinante author's advice to use DRY. P02 and P04 tune them with the
-quality protocol.
+quality protocols.
 
 | Parameter | `gemma4` chat | `gemma4` structured | `nemo` chat | `nemo` structured |
 | --- | --- | --- | --- | --- |
@@ -109,14 +140,29 @@ quality protocol.
 | `dry_allowed_length` | 2 | Unset | 2 | Unset |
 | `dry_penalty_last_n` | 320 | Unset | 320 | Unset |
 | `dry_sequence_breakers` | `["\n", ":", "\"", "*"]` | Unset | `["\n", ":", "\"", "*"]` | Unset |
-| `max_length` | 400 | By task, see below | 400 | By task, see below |
+| `max_length` | By length band, see below | By task, see below | By length band | By task |
 | `grammar` | Unset | Generated from the schema | Unset | Generated from the schema |
 
 Structured tasks use a low temperature because the grammar already fixes the form, and the content
-should be stable. Custom profiles use the preset of their template family.
+should be stable. The `generic` preset has the `nemo` values and serves every custom profile, whatever
+its template family ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).
 
 Chat values can be changed in **Impostazioni > Modelli**. A changed value belongs to the profile that
 was active, so switching profiles restores that profile's values.
+
+### Length bands
+
+The character's `message_length` sets `max_length` and the length text of the anchor
+([ADR 0032](decisions/0032-model-independent-reply-normalization.md)). `llm.max_length`, default 400,
+caps every band. Targets are median lengths in tokens, measured by the
+[consistency protocol](consistency-engine.md#consistency-protocol).
+
+| Band | `max_length` | Target median | Length text |
+| --- | --- | --- | --- |
+| `brevissimi` | 60 | At most 30 | Rispondi con una frase sola, brevissima. |
+| `brevi` | 120 | At most 70 | Rispondi in una o due frasi brevi. |
+| `medi` | 240 | At most 160 | Rispondi in poche frasi. |
+| `lunghi` | 400 | At most 300 | Puoi scrivere un messaggio lungo, se serve. |
 
 ## System blocks
 
@@ -133,9 +179,13 @@ Come scrivi:
 - Evita i calchi dall'inglese e le formule fatte. Non aprire i messaggi con "Certamente", "Ovviamente" o "Capisco".
 - Rispondi solo come {{ character.first_name }}. Non scrivere mai le battute o le azioni di {{ user.display_name }}.
 - Non riassumere quello che ti è appena stato detto e non chiudere sempre con una domanda.
+{% if user.grammatical_gender != "non_indicato" %}- Quando ti rivolgi a {{ user.display_name }}, usa il {{ user.grammatical_gender }}.
+{% endif %}
+Come funziona questa chat:
+- Prima di ogni messaggio di {{ user.display_name }} trovi un contesto tra parentesi quadre. Non l'ha scritto {{ user.display_name }}: usalo per rispondere, ma non citarlo e non commentarlo.
 
 Cosa sai:
-- Conosci solo la tua scheda, il vostro stato, i ricordi qui sotto e i messaggi di questa chat.
+- Conosci solo la tua scheda, il vostro stato, i ricordi nel contesto e i messaggi di questa chat.
 - La tua scheda ha sempre la precedenza sui ricordi incerti.
 - [sicuro] è un fatto. [incerto] potrebbe essere sbagliato: se serve, verifica con naturalezza.
 - [storia] è successo nella vostra storia. [per ora] vale solo in questo periodo. [passato] oggi non è più vero.
@@ -154,6 +204,7 @@ These lines also remain valid when the character's card or an imported file says
 ```jinja
 Chi sei:
 {{ character.full_name }}, {{ character.age }} anni. {{ character.narrative_identity }}
+{% if character.grammatical_gender != "non_indicato" %}Parli di te al {{ character.grammatical_gender }}.{% endif %}
 {% if character.occupation %}Lavoro: {{ character.occupation }}.{% endif %}
 {% if character.setting %}Dove vivi: {{ character.setting }}.{% endif %}
 {% if character.biography %}Storia: {{ character.biography }}{% endif %}
@@ -175,15 +226,37 @@ Empty lines are omitted.
 
 ```jinja
 Come scrivi in chat:
-Registro: {{ comm.formality }}. Lunghezza: {{ comm.message_length }}. Domande: {{ comm.question_frequency }}.
-Punteggiatura: {{ comm.punctuation }}. Stile: {{ comm.colloquial_style }}. Espressività: {{ comm.expressiveness }}.
+Registro: {{ comm.formality | words }}. Lunghezza: {{ comm.message_length | words }}. Domande: {{ comm.question_frequency | words }}.
+Punteggiatura: {{ comm.punctuation }}. Stile: {{ comm.colloquial_style }}. Espressività: {{ comm.expressiveness | words }}.
+Dai del {{ comm.address_form }} a {{ user.display_name }}. {{ narration_text }} {{ emoji_text }}
 {% if comm.recurring_expressions %}Espressioni tue: {{ comm.recurring_expressions | join(", ") }}. Non usarle in ogni messaggio.{% endif %}
-{% if comm.examples %}Esempi del tuo modo di scrivere:
-{% for example in comm.examples %}- {{ example }}
+{% if comm.avoid %}Non diresti mai: {{ comm.avoid | join("; ") }}.{% endif %}
+{% if comm.examples %}Esempi di stile, non cose successe:
+{% for example in comm.examples %}{% if example.user %}{{ user.display_name }}: {{ example.user }}
+{% endif %}{{ character.first_name }}: {{ example.character }}
 {% endfor %}{% endif %}
 ```
 
+Examples are rendered in saved order. Rendering stops before the first example that would take block 3 over its maximum
+of 500 tokens, and under budget pressure examples are the first thing cut, from the last one
+([context composition](memory-engine.md#context-composition)). The editor shows how many examples reach the prompt, so
+the first examples should be the most typical ones.
+
+Fixed texts for `narration` and `emoji` ([ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md)):
+
+| Value | Text |
+| --- | --- |
+| `narration` `nessuna` | Scrivi solo le parole del messaggio, senza azioni o descrizioni tra asterischi. |
+| `narration` `leggera` | Al massimo un breve gesto tra asterischi, e non in ogni messaggio. |
+| `narration` `libera` | Puoi descrivere gesti e azioni tra asterischi. |
+| `emoji` `mai` | Non usare emoji. |
+| `emoji` `raramente` | Usa le emoji solo di rado. |
+| `emoji` `a_volte` | Ogni tanto puoi usare un'emoji. |
+| `emoji` `spesso` | Usi spesso le emoji. |
+
 ### Block 4: state and time
+
+Part of the dynamic context.
 
 ```jinja
 Il vostro rapporto: {{ state.narrative or state.bands_text }}
@@ -199,8 +272,36 @@ Adesso è {{ time.weekday }} {{ time.part_of_day }}, {{ time.date_human }}.
 
 ### Blocks 5 and 6
 
-Rendering is defined in [Memory engine](memory-engine.md#prompt-rendering). The summary block starts
-with `Riassunto di quello che è successo prima:`.
+Rendering is defined in [Memory engine](memory-engine.md#prompt-rendering). Block 5 is part of the
+dynamic context. Block 6 is part of the stable text, and it starts with
+`Riassunto di quello che è successo prima:`.
+
+### Block 9: anchor
+
+`anchor.v1.j2`, the last lines before the current message
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). It takes 60 to 160 tokens and
+is never reduced:
+
+```jinja
+Ricorda: sei {{ character.full_name }} e hai {{ character.age }} anni.{% if character.grammatical_gender != "non_indicato" %} Parli di te al {{ character.grammatical_gender }}.{% endif %}
+{% if anchor_traits %}{{ anchor_traits | join(" ") }}{% endif %}
+Dai del {{ comm.address_form }} a {{ user.display_name }}. {{ length_text }} {{ narration_text }} {{ emoji_text }}
+{% for note in notes %}{{ note }}
+{% endfor %}
+```
+
+`anchor_traits` holds the first sentence of up to two main traits, in their saved order. `notes` holds
+up to two corrective notes, chosen by the [consistency engine](consistency-engine.md#reply-checks):
+
+| Trigger | Note | Lasts |
+| --- | --- | --- |
+| V6 | Ti chiami {{ character.first_name }}. | The regenerated reply |
+| V10 | Hai {{ character.age }} anni. | The regenerated reply |
+| V11 | Parli di te al {{ character.grammatical_gender }}. | The regenerated reply |
+| V7 twice in a row | Non cominciare come nei tuoi ultimi messaggi. | 3 replies |
+| V8 | Scrivi solo in {{ language_name }}. | 3 replies |
+| V9 | Evita le frasi fatte e i calchi dall'inglese. | 3 replies |
+| V13 | Dai del {{ comm.address_form }} a {{ user.display_name }}, sempre. | 3 replies |
 
 ## Structured tasks
 
@@ -215,15 +316,22 @@ All structured tasks use the same flow ([ADR 0013](decisions/0013-structured-out
 
 Model output is untrusted: it is never executed, never placed in SQL or a path, and rendered as text.
 
+Each template holds one worked example of input and output. The example stays only if it does not
+lower the score of the [extraction evaluation](consistency-engine.md#extraction-evaluation)
+(T-QLT-06).
+
 | Task | Template | Model | `max_length` |
 | --- | --- | --- | --- |
 | Memory extraction | `extraction.v1.j2` | `ExtractionResult` | 1200 |
 | Summary checkpoint | `summary.v1.j2` | `SummaryResult` | 700 |
 | Character draft | `character_draft.v1.j2` | `CharacterDraft` | 1500 |
-| Visual profile tags | `visual_profile.v1.j2` | `VisualProfileTags` | 300 |
-| Image prompt | `image_prompt.v1.j2` | `ImagePromptResult` | 400 |
+| Visual identity | `visual_profile.v1.j2` | `VisualIdentityResult` | 600 |
+| Image scene | `image_scene.v1.j2` | `ImageScene` | 400 |
 | Image proposal | `image_proposal.v1.j2` | `ImageProposalResult` | 200 |
 | Proactive decision | `proactive_decision.v1.j2` | `ProactiveDecision` | 150 |
+
+The image caption is not a structured task. It uses the chat path with the anchor
+([Image generation](image-generation.md#caption)).
 
 ### Extraction template
 
@@ -266,9 +374,9 @@ result ([Security](security.md#model-output-and-prompt-injection)).
 
 ### Other templates
 
-`summary`, `character_draft`, `visual_profile`, `image_prompt`, `image_proposal` and `proactive_decision`
-follow the same shape: a role sentence, numbered rules, data and "Rispondi solo con il JSON richiesto". Their
-schemas and rules are in [Memory engine](memory-engine.md#progressive-summaries),
+`summary`, `character_draft`, `visual_profile`, `image_scene`, `image_proposal` and `proactive_decision`
+follow the same shape: a role sentence, numbered rules, data, the worked example and "Rispondi solo con il
+JSON richiesto". Their schemas and rules are in [Memory engine](memory-engine.md#progressive-summaries),
 [Character system](character-system.md#assisted-creation), [Image generation](image-generation.md#visual-promptbuilder)
 and [Scheduler](scheduler.md#generation-flow).
 
@@ -278,10 +386,12 @@ No profile states Italian by name. Gemma 4 states more than 35 supported languag
 Italian for the base model, and the roleplay finetunes state nothing about it. Quality is therefore a
 measured risk ([Risks](risks.md)). The levers are:
 
-- A character's example messages, which have the greatest influence on tone.
+- A character's example exchanges, which have the greatest influence on tone.
+- The anchor, the length bands and the [reply normalizer](consistency-engine.md#reply-normalization),
+  which give every profile the same surface form.
 - Global rules against calques and formula openings.
 - DRY and repetition penalty.
-- The choice of profile, compared with the protocol below.
+- The choice of profile, compared with the protocols below.
 - `banned_tokens` is not used in 1.0, because stems of common words would hurt normal text.
 
 ### Calque and artifact list
@@ -319,6 +429,8 @@ characters with different registers.
 | M6. Blind test: which character wrote each of 20 replies | At least 80 % correct |
 
 P04 runs the protocol on the default text profile, `orion-26b-a4b` and `rocinante-x-12b`, with the same scripts.
+The [consistency protocol](consistency-engine.md#consistency-protocol) (T-QLT-05) and the
+[extraction evaluation](consistency-engine.md#extraction-evaluation) (T-QLT-06) run on every catalog profile.
 
 On failure the order is fixed: improve the examples and templates, then tune the samplers, and repeat. If the default
 still misses a target, the [default rule](models.md#defaults-and-how-they-can-change) applies. The owner authorized

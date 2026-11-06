@@ -9,19 +9,20 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. A
 | R-STK-01 | Frontend stack | [Frontend](frontend.md), [Technology](technology.md#frontend), [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md) | P01 | Frontend unit tests, T-QLT-04 |
 | R-STK-02 | Backend stack | [Backend](backend.md), [Technology](technology.md#backend-and-orchestrator), [ADR 0009](decisions/0009-synchronous-sqlalchemy.md) | P01 | Backend unit and integration tests |
 | R-STK-03 to R-STK-05 | Infrastructure, runtimes | [Operations](operations.md#reference-compose-file), [ADR 0003](decisions/0003-service-topology-and-networks.md), [ADR 0007](decisions/0007-own-runtime-images-pinned.md), [ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md) | P01, P02, P05 | T-DCK-01 to T-DCK-05 |
-| R-MOD-01 to R-MOD-03 | Text model | [Model catalog](models.md), [Runtime contracts](runtime-contracts.md), [Tuning](gpu-orchestration.md#measuring-and-tuning), [ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md), [ADR 0024](decisions/0024-selectable-model-profiles.md), [ADR 0025](decisions/0025-prompt-templates-per-model-family.md) | P02 | T-MOD-01, T-MOD-02, T-GPU-02 to T-GPU-04, T-GPU-14 |
+| R-MOD-01 to R-MOD-03 | Text model | [Model catalog](models.md), [Runtime contracts](runtime-contracts.md), [Tuning](gpu-orchestration.md#measuring-and-tuning), [ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md), [ADR 0024](decisions/0024-selectable-model-profiles.md), [ADR 0025](decisions/0025-prompt-templates-per-model-family.md), [ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md) | P02 | T-MOD-01, T-MOD-02, T-MOD-05, T-GPU-02 to T-GPU-04, T-GPU-14 |
 | R-MOD-04, R-MOD-05 | Image model | [Model catalog](models.md#image-profiles), [Image generation](image-generation.md#default-parameters) | P05 | T-GPU-06, T-IMG-14, T-QLT-02 |
 | R-MOD-06, R-MOD-07 | One active model per kind, adapters | [Backend ports](backend.md#ports), [Model catalog](models.md), [Risks](risks.md) | P02, P05 | Dependency review, T-DCK-10, T-MOD-01 |
 | R-MOD-08 | Profile selection and custom files | [Model catalog](models.md#selecting-a-profile), [Security](security.md#model-files), [Frontend](frontend.md#9-model-settings), [API](api.md#jobs-scheduling-notifications-settings-data) | P06 | T-MOD-03, T-MOD-04, T-DCK-14 |
 | R-MOD-09 | Quality presets | [Image generation](image-generation.md#default-parameters), [ADR 0026](decisions/0026-two-pass-image-rendering.md) | P05, P06 | T-IMG-11, T-IMG-14 |
 | R-LNG-01 to R-LNG-05 | Italian | [Prompting](prompting.md), [Design text](design-system.md#interface-text), [Frontend](frontend.md#text-and-translation) | P02, P04, P08 | T-QLT-01 |
 | R-LNG-06 | Italian image requests | [Image generation](image-generation.md#visual-promptbuilder) | P05 | T-IMG-01, T-IMG-03, T-GPU-06 |
-| R-LNG-07 | Long conversation checks | [Quality protocol](prompting.md#italian-quality-protocol) | P04, P08 | T-QLT-01 |
+| R-LNG-07 | Long conversation checks | [Quality protocol](prompting.md#italian-quality-protocol), [Consistency protocol](consistency-engine.md#consistency-protocol) | P04, P08 | T-QLT-01, T-QLT-05 |
+| R-LNG-08 | Grammatical gender | [Card schema](character-system.md#card-schema), [Corrected checks](consistency-engine.md#corrected), [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md) | P03, P04 | T-CHR-14, T-CON-08, T-QLT-05 |
 | R-MSG-01 to R-MSG-03 | Chat list | [Frontend screen 1](frontend.md#1-conversation-list), [API](api.md#conversations) | P02, P07 | T-MSG-01, T-MSG-10, T-MSG-11 |
 | R-MSG-04 to R-MSG-07 | Conversation | [Frontend screen 2](frontend.md#2-conversation), [API](api.md#messages), [Data model](data-model.md#messages) | P02, P05, P07 | T-MSG-02 to T-MSG-09, T-MSG-13 |
 | R-MSG-08 | Images as messages | [Image persistence](image-generation.md#persistence) | P05 | T-IMG-06 to T-IMG-08 |
 | R-MSG-09 to R-MSG-11 | Independent conversations | [Data model](data-model.md#conversations), [Memory](memory-engine.md#retrieval-contract), [Consistency](consistency-engine.md) | P03, P04 | T-MSG-09, T-CON-02, T-CON-03, T-MEM-15 |
-| R-CHR-01 to R-CHR-06 | Card | [Character system](character-system.md#card-schema), [Frontend screen 3](frontend.md#3-character-creator) | P03 | T-CHR-01 to T-CHR-04, T-CHR-07, T-CHR-13 |
+| R-CHR-01 to R-CHR-06 | Card | [Character system](character-system.md#card-schema), [Frontend screen 3](frontend.md#3-character-creator), [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md), [ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md) | P03 | T-CHR-01 to T-CHR-04, T-CHR-07, T-CHR-13, T-CHR-14 |
 | R-CHR-07, R-CHR-08 | Assisted creation | [Character system](character-system.md#assisted-creation) | P03 | T-CHR-10, T-GPU-05 |
 | R-CHR-09, R-CHR-10 | Avatars | [Character system](character-system.md#avatars-and-images) | P03, P05 | T-CHR-11, T-CHR-12 |
 | R-CHR-11, R-CHR-12 | Exchange | [Format](character-system.md#exchange-format), [ADR 0021](decisions/0021-character-format-and-card-v2.md) | P03 | T-CHR-05, T-CHR-06 |
@@ -31,16 +32,18 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. A
 | R-MEM-18 to R-MEM-20 | Contradictions | [Contradictions](memory-engine.md#contradictions) | P04 | T-MEM-10 to T-MEM-13 |
 | R-MEM-21 to R-MEM-23 | Summaries | [Summaries](memory-engine.md#progressive-summaries) | P04 | T-MEM-16, T-MEM-17 |
 | R-MEM-24 to R-MEM-27 | Context | [Context composition](memory-engine.md#context-composition) | P04 | T-MEM-21 |
-| R-CON-01 to R-CON-06 | Consistency rules | [Rules](consistency-engine.md#rules-and-enforcement) | P04, P05 | T-CON-01 to T-CON-08 |
+| R-CON-01 to R-CON-06 | Consistency rules | [Rules](consistency-engine.md#rules-and-enforcement) | P04, P05 | T-CON-01 to T-CON-11 |
 | R-CON-07 to R-CON-09 | State manager | [State manager](consistency-engine.md#character-state-manager) | P04 | T-CON-03, T-CON-06, T-MEM-23 |
 | R-CON-10 | Versioning | [Versioning](consistency-engine.md#versioning) | P03 | T-CHR-03, T-CHR-08, T-CHR-09 |
+| R-CON-11, R-CON-12 | Consistency on every profile | [Prompt format](prompting.md#prompt-format), [Reply normalization](consistency-engine.md#reply-normalization), [Consistency protocol](consistency-engine.md#consistency-protocol), [Extraction evaluation](consistency-engine.md#extraction-evaluation), ADRs [0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md), [0032](decisions/0032-model-independent-reply-normalization.md) and [0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md) | P02, P04, P08 | T-MOD-05, T-CON-09 to T-CON-11, T-QLT-05, T-QLT-06 |
 | R-STU-01 | Memory Studio | [Frontend screen 5](frontend.md#5-character-memory-studio), [API](api.md#memory) | P04 | T-MEM-08, T-MEM-11 |
 | R-STU-02 | No recreation | [Tombstones](memory-engine.md#deletion-and-tombstones) | P04 | T-MEM-09 |
 | R-STU-03 | Invalidation | [Invalidation](memory-engine.md#invalidation-after-message-changes) | P04 | T-MEM-19, T-MEM-20 |
 | R-STU-04 | Diagnostics | [Data model](data-model.md#prompt_assemblies), [API](api.md#messages) | P04 | T-MEM-21 |
 | R-IMG-01 to R-IMG-04 | Modes | [Modes](image-generation.md#modes) | P05 | T-IMG-03, T-IMG-07, T-IMG-13 |
-| R-IMG-05 to R-IMG-08 | Prompt and consistency | [PromptBuilder](image-generation.md#visual-promptbuilder), [Consistency](image-generation.md#visual-consistency) | P05 | T-IMG-01, T-IMG-02, T-CON-07, T-QLT-02 |
+| R-IMG-05 to R-IMG-08 | Prompt and consistency | [PromptBuilder](image-generation.md#visual-promptbuilder), [Consistency](image-generation.md#visual-consistency) | P05 | T-IMG-01, T-IMG-02, T-IMG-15, T-CON-07, T-QLT-02, T-QLT-07 |
 | R-IMG-09, R-IMG-10 | Persistence | [Persistence](image-generation.md#persistence) | P05 | T-IMG-06, T-IMG-08 |
+| R-IMG-11 to R-IMG-13 | Identity independent of the text model | [Final prompt](image-generation.md#final-prompt), [Sanitizer](image-generation.md#sanitizer), [Caption](image-generation.md#caption), [ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md), [ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md) | P05 | T-IMG-15 to T-IMG-18, T-QLT-07 |
 | R-GPU-01 to R-GPU-04 | Exclusive GPU | [State machine](gpu-orchestration.md#state-machine), [18 steps](gpu-orchestration.md#the-18-steps-of-an-image-request), [ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md) | P01, P06 | T-ORC-01, T-ORC-02, T-IMG-04, T-GPU-07 |
 | R-GPU-05 | Reliability | [Leases](gpu-orchestration.md#leases-and-the-global-lock), [Scheduling](gpu-orchestration.md#scheduling-rules), [Recovery](gpu-orchestration.md#recovery), [ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md) | P06 | T-ORC-03 to T-ORC-12, T-GPU-10, T-GPU-11 |
 | R-GPU-06, R-GPU-07 | Release, external programs | [Verification](gpu-orchestration.md#verifying-gpu-release) | P06 | T-ORC-04, T-ORC-05, T-GPU-09 |
@@ -77,7 +80,7 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. A
 | AC-01 to AC-04 | T-DCK-01, T-DCK-11, clean-clone run |
 | AC-05, AC-06 | T-CHR-01, T-CHR-13 |
 | AC-07 | T-CHR-11, T-CHR-12 |
-| AC-08, AC-09 | T-MSG-01 to T-MSG-03, T-QLT-01 |
+| AC-08, AC-09 | T-MSG-01 to T-MSG-03, T-QLT-01, T-QLT-05 |
 | AC-10 | T-MSG-09, T-CON-01 |
 | AC-11 | T-MEM-18, T-CON-02 |
 | AC-12 | T-MEM-08 to T-MEM-13 |

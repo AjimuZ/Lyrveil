@@ -116,6 +116,13 @@ The OFL license text ships with the fonts in the image. P08 records package vers
 
 Icons and the logo are original, drawn for Lyrveil and licensed under Apache 2.0. No third-party icon set is used. README screenshots use only the original demo characters and synthetic data. Generated demo images use the default image profile and follow its license above. P08 records their prompts and the profile.
 
+## Data files
+
+The image [tag vocabulary](image-generation.md#tag-vocabulary), the Italian pattern lists under `prompts/` and the quality
+scripts' conversations are original work under Apache 2.0. The vocabulary lists common descriptive English words, such as
+`short hair`, with Lyrveil's own categories and Italian aliases. It copies no descriptions, wiki text or tag counts from
+image boards or their datasets. The token counts are computed by Lyrveil with ComfyUI's tokenizer.
+
 ## Docker and NVIDIA
 
 Docker Desktop and the NVIDIA driver are prerequisites that the user installs. They have their own terms. Docker Desktop is free for personal use, and larger organizations should check its subscription terms. Lyrveil distributes neither.

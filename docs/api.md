@@ -42,6 +42,7 @@ Errors use `application/problem+json`:
 | `UNSUPPORTED_MEDIA` | 415 | Upload is not PNG, JPEG or WebP, or its bytes disagree. |
 | `CONTENT_POLICY_BLOCKED` | 422 | A safeguard refused the data ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)). |
 | `IMPORT_INVALID` | 422 | Character file invalid or of an unsupported version. |
+| `PROMPT_SYNTAX_REFUSED` | 422 | An edited image prompt holds `embedding:` or a weight outside 0.5 to 1.5 ([Image generation](image-generation.md#sanitizer)). |
 | `FORBIDDEN_ORIGIN` | 403 | Host or Origin not allowed. |
 | `ORCHESTRATOR_UNAVAILABLE` | 503 | The control API does not answer. |
 | `MODEL_PROFILE_UNAVAILABLE` | 409 | The profile does not exist, needs a larger hardware tier, or its file is missing. `detail` names the download command. |
@@ -114,7 +115,7 @@ All paths are under `/api/v1`.
 | --- | --- |
 | `GET /characters/{id}/assets?kind=` | List. |
 | `POST /characters/{id}/assets` | Multipart upload. Kinds `avatar`, `profile`, `reference`. |
-| `POST /characters/{id}/assets/generate` | Body `{"purpose": "avatar", "scene": "", "aspect": "square", "seed": null}`. Starts `image_request`. |
+| `POST /characters/{id}/assets/generate` | Body `{"purpose": "avatar", "scene": "", "aspect": "square", "outfit": null, "seed": null}`. Starts `image_request`. `aspect` and `outfit` take the same values as a chat image request. |
 | `POST /characters/{id}/assets/{asset_id}/crop` | Body `{"x":0,"y":0,"width":512,"height":512}`. Saves a new variant. |
 | `POST /characters/{id}/assets/{asset_id}/primary` | Sets the primary avatar. |
 | `DELETE /characters/{id}/assets/{asset_id}` | Removes the file. |
@@ -181,7 +182,7 @@ Content-Type: application/json
 
 | Method and path | Purpose |
 | --- | --- |
-| `POST /conversations/{id}/images` | Explicit request. Body `{"request": "...", "aspect": "portrait", "quality": null, "seed": null, "steps": null, "cfg": null}`. `quality` is `alta`, `rapida` or null for the setting `images.quality`. |
+| `POST /conversations/{id}/images` | Explicit request. Body `{"request": "...", "aspect": "auto", "outfit": null, "quality": null, "seed": null, "steps": null, "cfg": null}`. `aspect` is `auto`, `square`, `portrait`, `landscape`, `tall` or `wide`, and `auto` follows the scene's framing. `outfit` is null to let the scene choose, `usual`, or a key of the character's wardrobe. `quality` is `alta`, `rapida` or null for the setting `images.quality`. |
 | `GET /images?character_id=&conversation_id=&purpose=&cursor=` | Gallery. |
 | `GET /images/{id}` | Metadata. |
 | `POST /images/{id}/regenerate` | Same prompt. New seed unless `keep_seed` is true. |
@@ -265,7 +266,8 @@ source of truth, so an event can be lost without any data loss.
 | `job.updated` | `job_id`, `kind`, `status`, `stage`, `queue_position`, `error_code` | Every job change. |
 | `typing.started`, `typing.stopped` | `conversation_id`, `character_id` | Real generation start and end. |
 | `message.created` | `message` | New message or placeholder. |
-| `message.delta` | `message_id`, `variant_id`, `offset`, `text` | Streaming text. |
+| `message.delta` | `message_id`, `variant_id`, `offset`, `text` | Streaming text, after the [reply normalizer](consistency-engine.md#reply-normalization). |
+| `message.restarted` | `message_id`, `variant_id`, `check` | A [corrected check](consistency-engine.md#corrected) stopped the reply. The client clears the streamed text, and new deltas start again from offset 0. |
 | `message.completed` | `message` | Reply finished. |
 | `message.failed` | `message_id`, `error_code` | Reply failed. |
 | `message.updated`, `message.deleted` | `message` or `message_id` | Edit, variant change, deletion. |

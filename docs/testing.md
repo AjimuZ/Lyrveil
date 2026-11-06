@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01). **No test has run yet, because no code exists.** Every test here is planned and assigned to a roadmap phase.
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests. **No test has run yet, because no code exists.** Every test here is planned and assigned to a roadmap phase.
 
 ## Levels
 
@@ -12,7 +12,7 @@ Status: accepted (2026-11-01). **No test has run yet, because no code exists.** 
 | End-to-end | Playwright with `compose.test.yaml` and fakes | Any machine with Docker | No |
 | Docker | Pester and pytest against the real Compose project | Docker | Partly |
 | GPU | pytest with real runtimes and models | Reference machine | Yes |
-| Quality | Italian protocol and image grid, with human review | Reference machine | Yes |
+| Quality | Italian, consistency, extraction and image identity protocols, image grid, with human review | Reference machine | Yes |
 
 ## Commands
 
@@ -46,6 +46,9 @@ tests/
   docker/
   gpu/
   quality/italian/
+  quality/consistency/
+  quality/extraction/
+  quality/images/
 ```
 
 ### Fake runtimes
@@ -74,6 +77,7 @@ tests/
 | T-CHR-11 | Upload: valid, wrong bytes, too large. Metadata removed, crop, single primary avatar | Integration | P03 |
 | T-CHR-12 | Avatar generation through the shared image job | Integration, GPU | P05 |
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
+| T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |
 
 ### Memory
 
@@ -114,7 +118,10 @@ tests/
 | T-CON-05 | `identity_candidate` is not applied until the user applies it | Integration | P04 |
 | T-CON-06 | Deltas are bounded per event, run and day, and always have a reason and sources | Unit | P04 |
 | T-CON-07 | Conflicting visual tags are removed | Unit | P05 |
-| T-CON-08 | Reply validators V1 to V9 | Unit | P04 |
+| T-CON-08 | Reply checks V1 to V13 on fixed texts, including quotations that V11 must skip | Unit | P04 |
+| T-CON-09 | Reply normalizer N1 to N5 on fixed raw replies from each template family, in one piece and split into stream chunks at every position. The delivered text is identical in both cases | Unit | P04 |
+| T-CON-10 | A V6, V10 or V11 hit aborts the stream, publishes `message.restarted` and regenerates once with the note in the anchor. A second hit is delivered and recorded. Adaptive notes start, last 3 replies and stay at most two | Integration | P04 |
+| T-CON-11 | Length bands set `max_length` and the reply reserve, capped by `llm.max_length`. The anchor holds the band's text. Block 3 renders examples in saved order and stops before the 500-token maximum | Unit | P04 |
 
 ### Messaging
 
@@ -139,7 +146,7 @@ tests/
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
 | T-IMG-01 | Prompt composition is deterministic. Safety negative always present | Unit | P05 |
-| T-IMG-02 | Scene tag filter | Unit | P05 |
+| T-IMG-02 | Scene filter: the sanitizer, then tags over 4 words, unknown tags in vocabulary lists, duplicates, blocked terms, identity categories and locked categories, in the documented order | Unit | P05 |
 | T-IMG-03 | Request detector on at least 100 phrases | Unit | P05 |
 | T-IMG-04 | GPU alternation in the right order, with fakes | Integration | P06 |
 | T-IMG-05 | ComfyUI messages map to progress | Unit | P05 |
@@ -152,15 +159,20 @@ tests/
 | T-IMG-12 | Restart in each stage resumes without duplicates | Integration | P06 |
 | T-IMG-13 | Contextual mode off by default. A proposal needs a valid event and acceptance | Integration | P05 |
 | T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied | Unit, real GPU | P05 |
+| T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps | Unit | P05 |
+| T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5 | Unit | P05 |
+| T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene | Unit | P05 |
+| T-IMG-18 | The caption is written through the chat path before the scene, with the normalizer and checks. A failed caption sends the image without text | Integration | P05 |
 
 ### Models
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
-| T-MOD-01 | `config/model-catalog.json` passes validation. Invalid identifiers, moving revisions, unknown templates or presets, and two defaults for one tier are refused | Unit | P02 |
+| T-MOD-01 | `config/model-catalog.json` passes validation. Invalid identifiers, moving revisions, unknown templates or presets, invalid `swa_padding`, `smart_cache` or `quality_evidence`, and two defaults for one tier are refused. Custom profiles get the `generic` preset | Unit | P02 |
 | T-MOD-02 | Each `PromptFormatter` family produces the golden string rendered from the official template for the same turns. No family writes BOS | Unit | P02 |
 | T-MOD-03 | A text profile change writes the launch file, stops the runtime, verifies release and loads the new file. A profile above the tier or with a missing file is refused before any mode change | Integration | P06 |
 | T-MOD-04 | Custom registration accepts only file names in the two model folders and only `.gguf` and `.safetensors`. Traversal, links out of the folder and other extensions are refused. The hash job stores the profile | Integration | P06 |
+| T-MOD-05 | Prompt layout: two consecutive replies share the stable text and the history byte for byte for each family. Old turns never carry the frame. Frame markers in user text, memories and summaries are neutralized. Proactive and structured prompts follow their own layout | Unit | P02 |
 
 ### Orchestration
 
@@ -254,6 +266,9 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-QLT-02 | [Image default grid](image-generation.md#default-parameters) for each image profile, with the owner's blind review | P05 |
 | T-QLT-03 | Accessibility: `axe` on ten screens, keyboard walkthrough | P08 |
 | T-QLT-04 | Responsive checks at 320, 640, 1024 and 1440 px, and 200 % zoom | P08 |
+| T-QLT-05 | [Consistency protocol](consistency-engine.md#consistency-protocol) on every catalog text profile, with the SWA padding and SmartCache measurements | P04, P08 |
+| T-QLT-06 | [Extraction evaluation](consistency-engine.md#extraction-evaluation) on every catalog text profile | P04 |
+| T-QLT-07 | [Image identity protocol](image-generation.md#image-identity-protocol), with the [measured levers](image-generation.md#measured-levers) | P05 |
 
 ## Acceptance
 

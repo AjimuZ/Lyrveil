@@ -31,11 +31,23 @@ Through P03, the project delivers the complete working path from character creat
   image rendering, new hardware tiers and the KoboldCpp `v1.124.2` pin (ADRs 0024 to 0028).
 - [x] P00.8 Revise for operation from Windows on `C:` with Docker volumes, after measuring storage speed, and record the
   KoboldCpp efficiency levers that P02 measures (ADRs 0029 and 0030).
+- [x] P00.9 Revise for characters that stay consistent on every text profile, and for anime image quality. The revision
+  covers six areas (ADRs 0031 to 0036):
+  - a stable prompt prefix with an anchor before each reply;
+  - the reply normalizer and the identity checks;
+  - the voice fields;
+  - the consistency and extraction protocols;
+  - a structured visual identity with a tag vocabulary;
+  - structured scenes and captions in the character's voice.
 
 Exit: every requirement maps to a design document, a phase and a test. Link and placeholder checks pass. No private data or weights in the repository.
 
-Evidence: [environment](verification/2026-11-01-environment.md), [documentation checks](verification/2026-11-01-documentation.md),
-[2026-11-05 revision](verification/2026-11-05-environment.md).
+Evidence:
+
+- [environment](verification/2026-11-01-environment.md);
+- [documentation checks](verification/2026-11-01-documentation.md);
+- [2026-11-05 revision](verification/2026-11-05-environment.md);
+- [2026-11-06 revision](verification/2026-11-06-consistency-and-images.md).
 
 ## P01: Foundations
 
@@ -57,21 +69,23 @@ Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-
 **Depends on:** P01. **Areas:** LLM runtime, messaging.
 
 - [ ] P02.1 `docker/llm` image from the pinned binary. Confirm the unpacked launcher and read-only root.
-- [ ] P02.1a `config/model-catalog.json`, its validator and the tier defaults.
+- [ ] P02.1a `config/model-catalog.json`, its validator and the tier defaults, including `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset.
 - [ ] P02.2 Orchestrator loads and stops the LLM. Leases.
-- [ ] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`.
+- [ ] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
 - [ ] P02.4 Job queue with persistence and retries.
 - [ ] P02.5 Conversations, messages, variants, streaming over WebSocket, search.
 - [ ] P02.6 Chat list and conversation screens with a built-in minimal character form.
 - [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
 
-Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01 and T-MOD-02 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.
+Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.
 
 ## P03: Characters
 
 **Depends on:** P02. **Areas:** Character Creator, profile, assets, data.
 
-- [ ] P03.1 Full card, traits, communication and visual fields, versions, diff, restore and locks.
+- [ ] P03.1 Full card, traits, communication and visual fields, versions, diff, restore and locks. The card includes the
+  voice fields of [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md), and the identity slots and wardrobe
+  of [ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md).
 - [ ] P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge.
 - [ ] P03.3 Assisted creation with grammar, validation and repair.
 - [ ] P03.4 Upload, crop, variants and primary avatar.
@@ -79,7 +93,7 @@ Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, 
 - [ ] P03.6 Content guard for character data. Demo characters.
 - [ ] P03.7 Multiple conversations per character, scenarios, backup and restore.
 
-Exit: T-CHR-01 to T-CHR-11, T-CHR-13, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar.
+Exit: T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar.
 
 ## P04: Memory
 
@@ -89,13 +103,16 @@ Exit: T-CHR-01 to T-CHR-11, T-CHR-13, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-
 - [ ] P04.2 Extraction pipeline with idempotency, consistency rules and tombstones.
 - [ ] P04.3 `FtsMemoryRetriever` and scoring.
 - [ ] P04.4 Progressive summaries and rollups.
-- [ ] P04.5 Full `ContextBuilder` with runtime token counts.
+- [ ] P04.5 Full `ContextBuilder` with runtime token counts, length bands and the anchor.
 - [ ] P04.6 `CharacterStateManager`, bounded updates, replay.
 - [ ] P04.7 Invalidation and re-evaluation.
-- [ ] P04.8 Reply validators.
+- [ ] P04.8 Reply normalizer, reply checks V1 to V13 with the corrective generation, and adaptive notes ([ADR 0032](decisions/0032-model-independent-reply-normalization.md)).
 - [ ] P04.9 Memory Studio, including diagnostic mode.
+- [ ] P04.10 Run the Italian quality protocol, the consistency protocol and the extraction evaluation on the catalog
+  profiles, with the SWA padding and SmartCache measurements. Apply the verified-profile rule and record
+  `quality_evidence` ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).
 
-Exit: T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 pass. T-QLT-01 meets its targets or records the tuning and repeat. AC-11 and AC-12 hold.
+Exit: T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 to T-CON-11 pass. T-QLT-01 meets its targets or records the tuning and repeat. T-QLT-05 and T-QLT-06 meet their hard targets on every profile that stays in the catalog. AC-11 and AC-12 hold.
 
 ## P05: Images
 
@@ -103,14 +120,14 @@ Exit: T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 pass. T-QLT-01 meets 
 
 - [ ] P05.1 `docker/image` from the pinned commit, with a lock file.
 - [ ] P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes.
-- [ ] P05.3 `VisualConsistencyService`, profile translation and scene filter.
-- [ ] P05.4 `image_request` job, persistence, thumbnails and message integration.
+- [ ] P05.3 `VisualConsistencyService`, the tag vocabulary with token counts, the sanitizer, structured profile translation and the scene filter ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md)).
+- [ ] P05.4 `image_request` job with `ImageScene`, the caption in the character's voice and aspect `auto`, persistence, thumbnails and message integration ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)).
 - [ ] P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation.
 - [ ] P05.6 Gallery.
 - [ ] P05.7 Mode switching through the orchestrator's normal path, with exclusivity enforced. Full automation and recovery follow in P06.
-- [ ] P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile. Apply the preset rule and the default rule.
+- [ ] P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile, the image identity protocol and the measured levers: PAG, identity weight, and the tall and wide sizes. Apply the preset rule and the default rule.
 
-Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13, T-IMG-14 pass. T-GPU-01, T-GPU-06 and T-QLT-02 pass. AC-07, AC-13 and AC-14 hold.
+Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 to T-IMG-18 pass. T-GPU-01, T-GPU-06, T-QLT-02 and T-QLT-07 pass. AC-07, AC-13 and AC-14 hold.
 
 ## P06: Orchestration
 
@@ -149,7 +166,7 @@ Exit: T-MSG-10 and T-SCH-01 to T-SCH-07 pass. AC-17 holds.
 - [ ] P08.5 Demo screenshots from the demo characters and synthetic data.
 - [ ] P08.6 Update all documents to match delivered behavior.
 
-Exit: T-QLT-01, T-QLT-03, T-QLT-04 and T-GPU-13 pass. No literal colors outside the tokens. No control without behavior.
+Exit: T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profile lacks `quality_evidence`. No literal colors outside the tokens. No control without behavior.
 
 ## P09: Publication
 
@@ -166,4 +183,11 @@ Exit: every acceptance criterion has dated evidence. The audit is clean.
 
 ## After 1.0
 
-Candidates, not commitments: Character Card V2 import, semantic memory search behind `MemoryRetriever`, LoRA and reference-image workflows, group conversations, an interface in other languages.
+Candidates, not commitments, in this order for images:
+
+1. img2img variations of the primary avatar with core nodes.
+2. IP-Adapter or a LoRA per character. Both need extra models, so R-MOD-06 and the non-goals must change first.
+3. A face detailer.
+
+Other candidates: Character Card V2 import, semantic memory search behind `MemoryRetriever`, group conversations, an
+interface in other languages.

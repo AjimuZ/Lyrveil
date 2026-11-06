@@ -2,8 +2,9 @@
 
 Status: verified at the pinned upstream tags on 2026-11-01 by reading the official
 source and API documents. KoboldCpp was verified again at `v1.124.2` on 2026-11-05, with
-the facts for the model catalog. Nothing here has run against a loaded model yet. Exit
-checks in P02, P05 and P06 confirm these contracts at runtime.
+the facts for the model catalog. KoboldCpp's cache flags, ComfyUI's text encoding and its
+perturbed-attention node were read on 2026-11-06. Nothing here has run against a loaded
+model yet. Exit checks in P02, P05 and P06 confirm these contracts at runtime.
 
 Lyrveil calls only what this page lists. To use anything else, verify it at the
 pinned tag and add it here in the same commit.
@@ -30,6 +31,8 @@ time with `--unpack`, so each start skips self-extraction.
 | `--batchsize` | `BATCH_SIZE`, default `512` | Logical batch size, the upstream default. Accepts -1 and powers of two from 16 to 4096. P02 compares up to 2048. |
 | `--quantkv` | `KV_QUANT`, default `f16` | KV cache type. Accepts `f16`, `bf16`, `q8_0`, `q5_1`, `q4_0`. Full effect needs Flash Attention, which is on by default at `v1.124.2`. |
 | `--usemmap` | Only when `USE_MMAP` is 1 | Loads the model with mmap. Off by default upstream. |
+| `--swapadding` | Only when `SWA_PADDING` is above 0 | Extra positions in the sliding-window cache. Upstream: it "affects the rewind limit before reprocessing is forced". Default 0. P04 compares 0, 1024 and 2048 for Gemma 4 ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
+| `--smartcache` | `SMART_CACHE` slots, only when above 0 | When the cached prompt matches a new prompt by less than 70 %, saves the cached state to RAM and restores a slot that matches by more than 70 %. A value of 2 or more sets the slot count, and no value or 1 gives 5 slots, so Lyrveil never passes 1. Requires fast forwarding, which is on by default. P04 compares 0 and 2 on the target tier. |
 | `--host` | `0.0.0.0` | Listens on the internal network only, because no port is published. |
 | `--port` | `5001` | Upstream default port. |
 | `--skiplauncher` | No argument | Never opens the GUI launcher. |
@@ -41,7 +44,13 @@ Flash attention is on by default and needs no flag. These flags are never used:
 password unnecessary, and a shared secret would add a value to manage.
 
 `--mmproj` is never passed, so the vision encoders of Gemma 4 are not loaded. `--moe-cache-mib` is not passed,
-because the source marks it experimental. The three levers above are measured in P02 ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
+because the source marks it experimental. The batch, KV and mmap levers are measured in P02
+([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)), and SWA padding and SmartCache in P04
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
+
+`--noswa`, `--nofastforward`, `--noshift` and `--smartcontext` are never passed. `--noswa` keeps a full-size
+sliding-window cache, about 2.8 GiB more VRAM for Gemma 4 26B-A4B at 16384 tokens. `--nofastforward` would
+reprocess every prompt. `--smartcontext` is described upstream as outdated.
 
 Source facts used by the design:
 
@@ -52,6 +61,14 @@ Source facts used by the design:
   argument parses special tokens, so control tokens written in the prompt, such as
   `<|turn>` or `[INST]`, become the real tokens. BOS is added by the runtime, so prompts
   never contain it.
+- Fast forwarding reuses the longest common prefix of the new prompt and the cached one.
+- SWA turns on by itself for models that support it, such as Gemma 4, and context shifting
+  is then off. The startup log says so.
+- When the reuse point lies before what the sliding-window cache still holds, the runtime
+  replays twice the window of cached tokens before that point (2,048 for Gemma 4) instead of
+  the whole prompt. The source calls this recovery approximate, and the startup message warns
+  that it can degrade recall with fast forwarding. If the cache cannot be rewound at all, the
+  full prompt is processed.
 
 ### Endpoints
 
@@ -191,6 +208,27 @@ WebSocket messages used:
 The three added nodes were checked in `nodes.py` at `v0.43.0` on 2026-11-05. They are core
 nodes, so `--disable-all-custom-nodes` does not affect them.
 
+Verified for measurement, not used unless P05 adopts it
+([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)):
+
+| Class | Inputs | Fact |
+| --- | --- | --- |
+| `PerturbedAttentionGuidance` | `model`, `scale` (default 3.0, 0 to 100) | In `comfy_extras/nodes_pag.py`, loaded by `init_builtin_extra_nodes`, so `--disable-all-custom-nodes` does not affect it. Scale 0 returns the normal result. Otherwise it adds one model evaluation per step |
+
+### Text encoding
+
+Read in `comfy/sd1_clip.py` and `comfy/sdxl_clip.py` at `v0.43.0` on 2026-11-06. These facts shape the
+[prompt builder](image-generation.md#caps-and-prompt-chunks) and its [sanitizer](image-generation.md#sanitizer).
+
+| Fact | Detail |
+| --- | --- |
+| Weights | `(text)` multiplies the weight by 1.1, and `(text:1.5)` sets it. Parentheses nest |
+| Escapes | `\(` and `\)` are literal parentheses |
+| Embeddings | A word starting with `embedding:` loads a file from the embeddings folder. A missing file logs `warning, embedding:<name> does not exist, ignoring` |
+| Chunks | Tokens are grouped in chunks of 77: start token, 75 tokens, end token. A group of 8 or more tokens can be split at the boundary. A shorter one moves whole to the next chunk |
+| Concatenation | Each chunk is encoded, and the results are concatenated along the token axis |
+| Pooled vector | Comes from the first chunk only. SDXL uses it as global conditioning |
+
 ## Image model facts
 
 | Fact | Value | Source |
@@ -200,7 +238,8 @@ nodes, so `--disable-all-custom-nodes` does not affect them.
 | Illustrious XL v2.0 | Uploaded as "v2.0-STABLE", the more stable checkpoint of the last annealing phase. License field `creativeml-openrail-m`. No recommended settings | Model card, read 2026-11-05 |
 | Illustrious sampler, steps, CFG | Not stated by any OnomaAI card or by the official user guide page | Model cards, `illustrious-xl.ai/updates/21` |
 | Community guidance for Illustrious | Euler a, 20 to 28 steps, CFG 3 to 7, CLIP skip 2. Not official | Third-party guides, see [Image generation](image-generation.md#default-parameters) |
-| NoobAI-XL 1.1 settings | CFG 5 to 6, 25 to 30 steps, Euler a. Total area about 1024x1024, for example 832x1216. Positive starts with `masterpiece, best quality, newest, absurdres, highres, safe` | Model card |
+| NoobAI-XL 1.1 settings | CFG 5 to 6, 25 to 30 steps, Euler a. Total area about 1024x1024, best chosen from 768x1344, 832x1216, 896x1152, 1024x1024, 1152x896, 1216x832 and 1344x768. Positive starts with `masterpiece, best quality, newest, absurdres, highres, safe` | Model card, sizes read again 2026-11-06 |
+| NoobAI-XL 1.1 caption order | Subject count (`1girl`, `1boy`, `1other`), character, series, artists, special tags, general tags, other tags. Quality tags by popularity percentile, date tags `old` to `newest` | Model card, read 2026-11-06 |
 | LoRA and ControlNet | Modules trained on Illustrious v0.1 are stated to work with v1.0 | Model card |
 
 ## Docker Engine API

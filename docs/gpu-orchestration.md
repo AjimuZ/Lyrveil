@@ -265,6 +265,15 @@ The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4
    value only if it frees at least 256 MiB or allows the next context step, costs at most 5 % of speed, and the P04
    Italian protocol scores no lower. Until P04, `f16` stays ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
+P04 adds two measurements with real chat prompts from the consistency protocol, because they depend on the prompt
+layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
+
+- **SWA padding** for the Gemma 4 profiles: `SWA_PADDING` 0, 1024 and 2048. Keep the smallest value whose median
+  `last_process` is within 10 % of the best, while the margin rule and the speed rule still hold.
+- **SmartCache** on the target tier: `SMART_CACHE` 0 and 2. Use 2 if the median `last_process` of the first chat
+  reply after a structured task falls by at least 50 %, and the container's peak RAM stays at least 4 GiB below the
+  memory Docker sees.
+
 ## Timeouts
 
 | Setting | Default |

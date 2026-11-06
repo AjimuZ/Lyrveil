@@ -1,6 +1,7 @@
 # Risks, assumptions and open questions
 
-Status: reviewed 2026-11-01, revised 2026-11-05 after the RAM upgrade and the model catalog.
+Status: reviewed 2026-11-01, revised 2026-11-05 after the RAM upgrade and the model catalog, and 2026-11-06 for
+consistency across text profiles and the structured image prompt.
 
 ## Open questions
 
@@ -32,6 +33,9 @@ Each assumption is verified by a named check. A failure triggers the stated deci
 | A-11 | Docker `internal: true` networks work with `--gpus` on Docker Desktop | T-DCK-08, T-GPU-01 | Keep the network and add an egress check. Never publish a runtime port |
 | A-12 | `gemma-4-26b-a4b` with experts partly in RAM meets the speed rule: median at least 15 tokens per second, first token of a 6000-token prompt within 20 s | T-GPU-14 | `gemma-4-12b` becomes the default on every tier. The 26B profiles stay selectable with a speed note |
 | A-13 | The **Alta** render stage stays at most 45 s at the 95th percentile | T-IMG-14 | **Rapida** becomes the default. **Alta** stays selectable |
+| A-15 | Models treat the bracketed dynamic context in the last user turn as context, not as the user's words, and the split layout meets at least as many hard targets as a single system text | T-QLT-05, with the layout comparison of [ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md) | Return to a single system text through a new ADR, keeping the anchor at the end |
+| A-16 | Each catalog text profile meets the hard targets of the consistency protocol and the extraction evaluation after one tuning round | T-QLT-05, T-QLT-06 | The profile leaves the catalog through a new ADR. Its file can still be registered as a custom profile |
+| A-17 | The age bands and the structured identity render as intended on the default image profile | T-QLT-07 | Change the band tags in the vocabulary and measure again. Record the limit in the README |
 
 ## Risk register
 
@@ -48,7 +52,7 @@ Owner for all rows: the project maintainer.
 | R-07 | Upstream runtime breaks an API | Medium | Medium | Pinned versions, contract document, recorded fixtures | Stay pinned until re-verified |
 | R-08 | A pinned download disappears upstream | Medium. It happened to KoboldCpp `v1.124.1` between 2026-11-01 and 2026-11-05 | High | Pinned revisions and hashes. Users keep local copies | Update the pin after verification, as in [ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md) |
 | R-09 | Mode switching feels slow | High | Medium | Batching, honest status, text queue | Measured targets and improved messages |
-| R-10 | Prompt changes reduce cache reuse and slow replies | Medium | Medium | Prefix stability, selection bonus, coarse time values | Measure `last_process`, and tune |
+| R-10 | Prompt changes reduce cache reuse and slow replies | Medium | Medium | Stable prefix with the dynamic context after the history, selection bonus, coarse time values, SWA padding and SmartCache as measured levers | Measure `last_process`, and tune |
 | R-11 | Models generate unwanted content | Medium | High | Global rules, content guard, safety negatives, license terms | Add terms to lists. Guards remain best-effort |
 | R-12 | The product encourages unhealthy attachment | Low | High | Clear simulation notice, proactive off by default, no guilt, leaving fiction on danger | Reinforce the rules in templates |
 | R-13 | Private data enters Git | Low | Critical | Ignore rules first, synthetic fixtures, audit | [Publishing](publishing.md#never-commit) procedure |
@@ -56,8 +60,10 @@ Owner for all rows: the project maintainer.
 | R-15 | User loses data by resetting Docker Desktop's data or uninstalling it, which deletes the volumes | Low | High | External volumes, daily backups copied to a Windows folder, a README warning | Run setup, then restore the newest backup |
 | R-16 | Memory extraction stores wrong facts | Medium | Medium | Provenance, labels, Memory Studio, tombstones | The user corrects. Quality tests add the case |
 | R-17 | SQLite corruption or a disk failure | Low | High | WAL with `synchronous=FULL`, Linux filesystem only, backups | Restore from backup |
-| R-18 | Characters drift in long chats | Medium | Medium | Identity block never cut, canonical protection, validators | Tune templates, add examples |
-| R-19 | Image consistency disappoints | High | Low | Persistent tags, locks, honest documentation | Prepared extensions after 1.0 |
+| R-18 | Characters drift in long chats, or differ between text profiles | Medium | Medium | Identity block never cut, the anchor before each reply, the reply normalizer, corrected checks, the consistency protocol on every profile | Tune templates and examples. A profile that still fails leaves the catalog |
+| R-19 | Image consistency disappoints | High | Low | Structured identity identical for every text profile, wardrobe, age bands, locks, honest documentation | img2img variations first after 1.0, then the other prepared extensions |
 | R-20 | Angular or dependency versions move on | High | Low | Lock files. Angular 22 is active until 2027-06 | Upgrade in a dedicated change after 1.0 |
 | R-21 | A custom model file is hostile or broken | Low | High | Only `.gguf` and `.safetensors`, folder checks, isolated runtimes, **non verificato** label ([Model files](security.md#model-files)) | Remove the registration and the file. Rebuild the runtime container |
 | R-22 | A profile change leaves stale token counts or cache | Medium | Low | `tokenizer_id` per profile, full prompt reprocessed once | Counts are recomputed on demand |
+| R-23 | The Italian gender and address-form checks fire on correct text, such as reported speech, and cost a needless regeneration | Medium | Low | Closed pattern lists, quotations skipped, V12 and V13 only recorded, one corrective generation at most | Add the case to the fixed texts of T-CON-08 and narrow the pattern |
+| R-24 | The scene schema and the vocabulary are too narrow for some requests, so images ignore part of a request | Medium | Low | Free tags for location, objects and outfit, `extra` tags on the card, the fallback scene | Add vocabulary entries in a new file version. Record the request type in the verification note |

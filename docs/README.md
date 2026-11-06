@@ -1,6 +1,6 @@
 # Documentation
 
-**Status (2026-11-01): the design is complete and no application code exists yet.** These documents describe the target system and are the specification for implementation. "Planned" means not yet built. Measured facts are marked as such.
+**Status (2026-11-06): the design is complete and no application code exists yet.** These documents describe the target system and are the specification for implementation. "Planned" means not yet built. Measured facts are marked as such.
 
 ## Start here
 
@@ -32,9 +32,9 @@
 | --- | --- |
 | [Character system](character-system.md) | Creator, card schema, avatars and exchange format |
 | [Memory engine](memory-engine.md) | Layers, extraction, retrieval, contradictions, summaries and context |
-| [Consistency engine](consistency-engine.md) | Rules, state manager, versioning and validators |
-| [Prompting and language](prompting.md) | Templates, samplers, structured output and Italian quality |
-| [Image generation](image-generation.md) | Modes, prompt building, workflow and persistence |
+| [Consistency engine](consistency-engine.md) | Rules, state manager, versioning, reply normalization, reply checks and the consistency protocol |
+| [Prompting and language](prompting.md) | Prompt layout, templates, length bands, samplers, structured output and Italian quality |
+| [Image generation](image-generation.md) | Modes, structured scenes, identity and wardrobe, tag vocabulary, workflow and persistence |
 | [GPU orchestration](gpu-orchestration.md) | State machine, leases, scheduling, recovery |
 | [Proactive messages and time](scheduler.md) | Scheduler, limits and missed events |
 
@@ -56,3 +56,5 @@
 | [Decisions](decisions/README.md) | One ADR per material decision |
 | [Environment, 2026-11-01](verification/2026-11-01-environment.md) | What was measured on the reference machine |
 | [Documentation checks, 2026-11-01](verification/2026-11-01-documentation.md) | Checks run on this documentation |
+| [Environment and upstream, 2026-11-05](verification/2026-11-05-environment.md) | RAM upgrade, model catalog sources and the Windows-only setup |
+| [Consistency and images, 2026-11-06](verification/2026-11-06-consistency-and-images.md) | Upstream facts behind ADRs 0031 to 0036, and the documentation checks |

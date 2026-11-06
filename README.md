@@ -13,9 +13,9 @@ There are none yet, because the interface does not exist. Phase P08 adds real sc
 ## Planned features
 
 - **A familiar messenger.** Contacts, unread counts, typing indicators, streaming replies, day separators, images in chat, alternatives, editing and search.
-- **Characters with depth.** Identity, personality, communication style and visual profile, described in words rather than sliders. Create them by hand, or from a natural-language description. Versioned, importable and exportable.
+- **Characters with depth.** Identity, personality, communication style and visual profile, described in words rather than sliders. Example lines show how each character writes, and a wardrobe holds their outfits. Create them by hand, or from a natural-language description. Versioned, importable and exportable.
 - **Persistent memory.** Characters remember facts, events and how your relationship has changed, across restarts and very long conversations, without any extra model.
-- **Consistency.** Characters do not change identity without a reason, and do not know what you said in another chat.
+- **Consistency with any verified model.** Characters keep their name, age, grammatical gender, `tu` or `lei`, reply length and style whichever catalog text model you choose. A short reminder before each reply and the same reply rules for every model keep them steady, and each catalog model must pass the same scripted conversations. Characters do not know what you said in another chat.
 - **Memory you can see and correct.** The Memory Studio shows what a character remembers, where it came from and how sure it is.
 - **Images as messages.** Ask in Italian and get an image in the chat. Images stay available when the image runtime is off.
 - **Automatic GPU handling.** The text and image models take turns on a single 12 GB card. Messages sent meanwhile are saved and answered afterwards.
@@ -107,7 +107,7 @@ Before each reply, SQLite FTS5 finds the relevant memories, and a builder compos
 
 ## How images work
 
-You ask for an image, in Italian if you like. The text model prepares an English prompt from the character's visual profile and your request. Then the text model stops, the image runtime starts and renders, the file is stored and appears in the chat, and the text model returns. Anything you write meanwhile is saved and answered afterwards. Read [image generation](docs/image-generation.md) and [GPU orchestration](docs/gpu-orchestration.md).
+You ask for an image, in Italian if you like. The text model describes the scene in a fixed structure: framing, expression, pose, place, lighting and outfit. Code adds the character's fixed look and builds the English prompt from an original tag vocabulary, so the character looks the same whichever text model is active. The character also writes the message that comes with the image, in its own voice. Then the text model stops, the image runtime starts and renders, the file is stored and appears in the chat, and the text model returns. Anything you write meanwhile is saved and answered afterwards. Read [image generation](docs/image-generation.md) and [GPU orchestration](docs/gpu-orchestration.md).
 
 ## Limitations
 
@@ -117,8 +117,9 @@ These are expected in version 1.0:
 - NVIDIA GPUs on Windows with WSL2 are the only tested target.
 - Switching between text and image models is expected to take up to a couple of minutes.
 - Other programs using the GPU can delay or block loading a model. Lyrveil tells you, and never closes them.
-- Keeping a character's look consistent across images is best-effort. A seed alone cannot guarantee it.
+- Keeping a character's look consistent across images is best-effort. The same structured identity is used every time, but without reference images the model can still vary the face and small details.
 - No model card names Italian among its supported languages. Quality is measured, and known limits will be recorded here.
+- Custom text models can be used, but only catalog profiles are checked for consistency.
 - The 26B text profiles keep part of their weights in system RAM. They need 32 GB and start a new long conversation more slowly than the 12B profiles.
 - Characters must be adults, and the safeguards are best-effort filters.
 - Data is not encrypted by Lyrveil. Use disk encryption.

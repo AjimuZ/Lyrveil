@@ -433,6 +433,12 @@ fi
 if [ "${USE_MMAP}" = "1" ]; then
   moe_args+=(--usemmap)
 fi
+if [ "${SWA_PADDING}" -gt 0 ]; then
+  moe_args+=(--swapadding "${SWA_PADDING}")
+fi
+if [ "${SMART_CACHE}" -gt 0 ]; then
+  moe_args+=(--smartcache "${SMART_CACHE}")
+fi
 exec /opt/koboldcpp/koboldcpp-launcher \
   --model "/models/llm/${MODEL_FILE}" \
   --usecuda \
@@ -559,7 +565,8 @@ the Windows folder.
 | State `ERROR` | Repeated failures | **Riprova** in **Risorse AI**, then `.\logs.cmd lyrveil-orchestrator` |
 | `RUNTIME_CONTAINER_MISSING` | Runtime containers removed | `.\setup.cmd` |
 | Black or broken image | VAE or model file problem | Regenerate. If it repeats, run `.\setup.cmd -VerifyModels` |
-| Images look wrong for a character | Prompt too generic | Edit the persistent prompt, then regenerate |
-| Character answers in English | Language setting or weak examples | Check the conversation language and add Italian examples |
+| Images look wrong for a character | Identity slots empty or too generic | Fill the slots in **Aspetto**, lock the right ones, then regenerate |
+| Character answers in English | Language setting or weak examples | Check the conversation language and add Italian example exchanges |
+| Character uses the wrong gender or address form | Field left on **Non indicato**, or a profile without **Qualità verificata** | Set the gender and *tu* or *Lei* on the card, and your own gender in **Impostazioni > Generali** |
 | Time looks wrong in messages | Time zone | Set `LYRVEIL_TZ` and restart |
 | Disk grows | Images, backups and Docker's disk image | Remove old exported backups. Review the gallery. Remove unused models with `.\scripts\lyrveil.cmd models -Remove <id>` |

@@ -1,6 +1,6 @@
 # Model catalog
 
-Status: accepted (2026-11-05). Implementation: planned, phases P02, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
+Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
 
 The user chooses the active text and image models from verified profiles ([ADR 0024](decisions/0024-selectable-model-profiles.md)). One text model serves every text task, and it never shares the GPU with the image model ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -57,7 +57,8 @@ Fixed rules:
 
 1. P02 measures the target default with the [speed rule](gpu-orchestration.md#measuring-and-tuning). If it fails, `gemma-4-12b` becomes the default on every tier and the 26B profiles stay selectable with a speed note.
 2. P04 runs the [Italian quality protocol](prompting.md#italian-quality-protocol) on the default, `orion-26b-a4b` and `rocinante-x-12b`. If the default misses a target and another profile meets all of them, that profile becomes the default through a new ADR. Among several passing profiles, the higher naturalness score wins.
-3. P05 runs the [image grid](image-generation.md#default-parameters) on all three image profiles. The default changes only if another profile has fewer visible defects in the owner's blind review.
+3. P04 runs the [consistency protocol](consistency-engine.md#consistency-protocol) and the [extraction evaluation](consistency-engine.md#extraction-evaluation) on every catalog text profile. After one tuning round, a profile that misses a hard target leaves the catalog through a new ADR, and its file can still be registered as a custom profile. The default must pass the Italian protocol, the consistency protocol and the extraction evaluation ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).
+4. P05 runs the [image grid](image-generation.md#default-parameters) on all three image profiles. The default changes only if another profile has fewer visible defects in the owner's blind review.
 
 Lyrveil never changes the active profile by itself, not even after a failure. A failure shows its reason and the profiles that would fit.
 
@@ -87,7 +88,10 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
       "sampler": "gemma4",
       "use_mmap": false,
       "kv_quant": "f16",
-      "batch_size": 512
+      "batch_size": 512,
+      "swa_padding": 0,
+      "smart_cache": 0,
+      "quality_evidence": null
     }
   ],
   "image": [
@@ -114,15 +118,17 @@ Rules checked by the validator:
 - Every URL is `https://huggingface.co/<repo>/resolve/<40-hex revision>/<file>`. Moving branches are refused.
 - `template` is one of `gemma4`, `mistral_v3_tekken`, `chatml`. `prediction` is `epsilon` in 1.0.
 - `sampler` and `defaults` name presets defined in code, so the catalog cannot carry arbitrary parameters.
+- `swa_padding` is 0, 1024 or 2048, and above 0 only for a `gemma4` profile. `smart_cache` is 0 or 2, and 2 only for a target-tier profile.
+- `quality_evidence` is null or a path under `docs/verification/`. The P08 release check fails while a default profile has none.
 - Exactly one default text profile per tier and one default image profile exist.
 
 ## Selecting a profile
 
-**Impostazioni > Modelli** lists each profile with its state: present and verified, present with a size mismatch, or missing. A missing file shows its size and the exact command, for example `.\scripts\lyrveil.cmd models -Model orion-26b-a4b`. Profiles above the machine's tier are listed but cannot be selected.
+**Impostazioni > Modelli** lists each profile with its state: present and verified, present with a size mismatch, or missing. A missing file shows its size and the exact command, for example `.\scripts\lyrveil.cmd models -Model orion-26b-a4b`. Profiles above the machine's tier are listed but cannot be selected. A text profile whose `quality_evidence` is set shows **Qualità verificata**, with a link to the summary of its results.
 
 | Change | Effect |
 | --- | --- |
-| Text profile | The backend writes `MODEL_PROFILE`, `MODEL_FILE`, `CONTEXT_SIZE`, `MOE_CPU_LAYERS`, `USE_MMAP` and `KV_QUANT` to `runtime/llm-launch.env` in the data volume. **Applica ora** waits for the running reply, sets the desired mode to `none` and then to `llm`, so the runtime stops, the release is verified and the new file loads. Queued work continues with the new model |
+| Text profile | The backend writes `MODEL_PROFILE`, `MODEL_FILE`, `CONTEXT_SIZE`, `MOE_CPU_LAYERS`, `USE_MMAP`, `KV_QUANT`, `SWA_PADDING` and `SMART_CACHE` to `runtime/llm-launch.env` in the data volume. **Applica ora** waits for the running reply, sets the desired mode to `none` and then to `llm`, so the runtime stops, the release is verified and the new file loads. Queued work continues with the new model |
 | Image profile | Stored in `images.profile_id`. The next image job uses it. ComfyUI loads checkpoints on demand, so no restart is needed |
 | Quality preset | `images.quality` sets the default. The image form can override it per request |
 
@@ -139,7 +145,10 @@ A user can register a file imported into the models volume with `.\scripts\lyrve
 1. **Aggiungi file locale** lists unregistered `.gguf` and `.safetensors` files in `llm/` and `image/checkpoints/` of the volume. Paths outside them cannot be chosen.
 2. For a GGUF file the user picks the template family. For a checkpoint, only SDXL with epsilon prediction is offered.
 3. The backend computes the SHA-256 in a background job and stores the profile in the setting `models.custom` as `custom-<first 12 hex characters of the hash>`.
-4. The profile is marked **non verificato**. It uses the reduced-tier VRAM thresholds of its family and the generic sampler preset. A size change makes it invalid until it is registered again.
+4. The profile is marked **non verificato**. It uses the reduced-tier VRAM thresholds of its family and the [`generic` sampler preset](prompting.md#sampler-presets). A size change makes it invalid until it is registered again.
+
+The anchor, the length bands and the reply normalizer also apply to custom profiles, but no protocol has measured them, so
+the interface never shows **Qualità verificata** for them.
 
 Lyrveil never downloads, converts or edits custom files. Loading a model file runs complex parsing code in the runtime, so custom files should come from sources the user trusts. See [Security](security.md#model-files).
 
@@ -161,6 +170,11 @@ How the KV figures were computed, with 16-bit cache entries:
 - **Mistral Nemo finetunes.** 40 layers with 8 heads of size 128.
 
 The large Gemma vocabulary of 262,144 tokens makes the output buffer bigger than Mistral Nemo's.
+
+Measured levers of [ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md), with the same arithmetic:
+
+- **SWA padding.** Each 1,024 extra positions cost about 200 MiB of VRAM for Gemma 4 26B-A4B and about 320 MiB for Gemma 4 12B.
+- **SmartCache.** Each slot holds a KV snapshot in RAM, about the size of the KV cache in the table above.
 
 For the mixture-of-experts profiles, KoboldCpp's AutoFit decides which expert weights stay in RAM. With `--gpulayers -1` and no `--moecpu`, the launcher enables AutoFit with 1,024 MB of padding (`koboldcpp.py` at `v1.124.2`). `MOE_CPU_LAYERS` sets `--moecpu` explicitly, which disables AutoFit. P02 uses it only if AutoFit fails or is slower.
 

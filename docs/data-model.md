@@ -72,6 +72,7 @@ The current canonical definition. Only `CharacterService` writes it.
 | `first_name` | TEXT | NOT NULL, 1 to 80 chars |
 | `last_name` | TEXT | NULL |
 | `age` | INTEGER | NOT NULL, `CHECK (age >= 18)` |
+| `grammatical_gender` | TEXT | NOT NULL, default `non_indicato`, `CHECK (grammatical_gender IN ('femminile', 'maschile', 'non_indicato'))` |
 | `narrative_identity`, `biography`, `background`, `setting` | TEXT | NOT NULL, default empty |
 | `occupation` | TEXT | NOT NULL, default empty |
 | `interests_json` | TEXT | List of strings |
@@ -121,7 +122,9 @@ Index: `(character_id, category, sort_order)`.
 | `character_id` | TEXT | PK, FK, RESTRICT |
 | `face`, `hair`, `eyes`, `body`, `clothing`, `accessories`, `distinctive_marks`, `art_style` | TEXT | Italian descriptions |
 | `subject_tag` | TEXT | `1girl`, `1boy`, `1other` |
-| `persistent_prompt_en` | TEXT | English tags used in every image |
+| `identity_en_json` | TEXT | `VisualIdentityEn`: the structured English identity used in every image ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md)) |
+| `usual_outfit_en_json` | TEXT | English tags of the usual outfit, up to 12 |
+| `outfits_json` | TEXT | Up to 5 named outfits: key, Italian label and description, English tags |
 | `persistent_negative_en` | TEXT | Extra negative tags |
 | `prompt_source_hash` | TEXT | Hash of the description fields. A difference triggers a new translation job. |
 | `locked_fields_json` | TEXT | Field names excluded from automatic rewriting |
@@ -221,7 +224,8 @@ Every text or image version of a message. A user edit and a regeneration each ad
 | `image_id` | TEXT | FK `generated_images`, SET NULL |
 | `source` | TEXT | `user`, `generated`, `edited` |
 | `status` | TEXT | `streaming`, `complete`, `failed`, `interrupted` |
-| `generation_params_json` | TEXT | Text profile, file SHA-256, template family and sampler values. NULL for user text |
+| `generation_params_json` | TEXT | Text profile, file SHA-256, template family, sampler values and length band. NULL for user text |
+| `checks_json` | TEXT | Normalizer rules and reply checks that fired, with counts, and the number of corrective generations. NULL for user text |
 | `prompt_assembly_id` | TEXT | FK, SET NULL |
 | `created_at` | TEXT | |
 
@@ -418,7 +422,7 @@ Diagnostic record of a reply.
 | --- | --- | --- |
 | `id` | TEXT | PK |
 | `conversation_id`, `message_id`, `variant_id` | TEXT | FKs, SET NULL except conversation |
-| `blocks_json` | TEXT | Tokens per block |
+| `blocks_json` | TEXT | Tokens per block, including the anchor, and the active corrective notes |
 | `memory_refs_json` | TEXT | Memory IDs, scores and score parts |
 | `summary_ids_json` | TEXT | Summaries used |
 | `token_total`, `context_limit` | INTEGER | |
@@ -442,6 +446,9 @@ Retention: the newest 200 per conversation.
 | `width`, `height`, `byte_size` | INTEGER | |
 | `sha256` | TEXT | Of the original file |
 | `user_request` | TEXT | Original request text |
+| `scene_json` | TEXT | The validated `ImageScene`, or the fallback scene |
+| `aspect` | TEXT | `square`, `portrait`, `landscape`, `tall`, `wide`. The size actually used, after `auto` |
+| `outfit_key` | TEXT | `usual`, a named outfit key, or `scene` |
 | `prompt_positive`, `prompt_negative` | TEXT | Final prompts |
 | `seed`, `steps` | INTEGER | |
 | `cfg` | REAL | |

@@ -49,6 +49,8 @@ Only known keys with validated values are read. The entrypoint does not `source`
 | `MOE_CPU_LAYERS` | `0`, meaning AutoFit decides | `0` to `99`. Above 0 adds `--moecpu` |
 | `USE_MMAP` | `0` | `0`, `1`. `1` adds `--usemmap`. P02 decides per profile ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)) |
 | `KV_QUANT` | `f16` | `f16`, `q8_0`. Passed as `--quantkv` |
+| `SWA_PADDING` | `0` | `0`, `1024`, `2048`. Above 0 adds `--swapadding`. Gemma 4 profiles only. P04 decides per profile ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)) |
+| `SMART_CACHE` | `0` | `0`, `2`. Above 0 adds `--smartcache`. Target tier only. P04 decides per profile |
 | `LEVEL` | `A` | `A`, `B`, `C`, `CUSTOM`. See [launch levels](gpu-orchestration.md#load-failures-and-launch-levels) |
 
 `runtime/image-launch.env` in the data volume:
@@ -66,6 +68,7 @@ Values are validated against a Pydantic model. `PATCH /settings` rejects unknown
 | Key | Default | Range |
 | --- | --- | --- |
 | `user.display_name` | `Utente` | 1 to 40 chars |
+| `user.grammatical_gender` | `non_indicato` | `femminile`, `maschile`, `non_indicato`. How characters address the user in Italian ([ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md)) |
 | `ui.language` | `it` | `it` |
 | `characters.default_language` | `it` | `it`, `en`, `fr`, `de`, `es` |
 | `app.first_start_notice_seen` | `false` | Boolean |
@@ -97,7 +100,7 @@ Defaults come from the active profile's [sampler preset](prompting.md#sampler-pr
 | `llm.dry_base` | 1.75 | 1 to 4 |
 | `llm.dry_allowed_length` | 2 | 1 to 20 |
 | `llm.dry_penalty_last_n` | 320 | 0 to 4096 |
-| `llm.max_length` | 400 | 50 to 1024. It also sets `context.reply_reserve_tokens` |
+| `llm.max_length` | 400 | 60 to 400. Ceiling of every [length band](prompting.md#length-bands). The reply reserve follows the character's band |
 
 ### Memory and context
 

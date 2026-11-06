@@ -34,3 +34,9 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0028](0028-koboldcpp-pin-v1-124-2.md) | Locally built runtime images, with KoboldCpp pinned to v1.124.2 | Accepted |
 | [0029](0029-windows-operation-with-docker-volumes.md) | Operation from Windows, with live data and models in Docker volumes | Accepted |
 | [0030](0030-koboldcpp-efficiency-levers.md) | KoboldCpp efficiency levers measured in P02 | Accepted |
+| [0031](0031-stable-prefix-dynamic-context-and-anchor.md) | Stable prompt prefix, dynamic context and a per-reply anchor | Accepted |
+| [0032](0032-model-independent-reply-normalization.md) | Reply normalization, length bands and identity checks independent of the model | Accepted |
+| [0033](0033-card-fields-for-a-model-independent-voice.md) | Card fields for a model-independent voice | Accepted |
+| [0034](0034-character-consistency-protocol-and-verified-profiles.md) | Consistency protocol and verified profiles | Accepted |
+| [0035](0035-structured-visual-identity-and-wardrobe.md) | Structured visual identity, wardrobe and tag vocabulary | Accepted |
+| [0036](0036-structured-image-scenes-and-measured-levers.md) | Structured image scenes, sizes, captions and measured image levers | Accepted |

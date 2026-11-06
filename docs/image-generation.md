@@ -1,9 +1,11 @@
 # Image generation
 
-Status: accepted (2026-11-01), revised 2026-11-05 for image profiles and two-pass rendering. Implementation: planned, phase P05.
+Status: accepted (2026-11-01), revised 2026-11-05 for image profiles and two-pass rendering, and 2026-11-06 for the
+structured identity, scenes and captions. Implementation: planned, phase P05.
 
-Images are normal messages. The text model prepares the prompt, ComfyUI renders it, and the backend stores the result
-independently of the runtime. The GPU hand-over is described in [GPU orchestration](gpu-orchestration.md).
+Images are normal messages. The text model writes a structured scene and a caption, code builds the prompt, ComfyUI
+renders it, and the backend stores the result independently of the runtime. The GPU hand-over is described in
+[GPU orchestration](gpu-orchestration.md).
 
 ## Modes
 
@@ -11,8 +13,9 @@ independently of the runtime. The GPU hand-over is described in [GPU orchestrati
 
 The user asks for an image in two ways:
 
-1. **Explicit action.** The composer's image button opens a small form with the request, aspect, quality (**Alta** or
-   **Rapida**) and optional seed, steps and CFG. It calls `POST /conversations/{id}/images`.
+1. **Explicit action.** The composer's image button opens a small form. It holds the request, the aspect (**Automatico** by
+   default), the outfit (**Abituale**, a named outfit or **Della scena**), the quality (**Alta** or **Rapida**) and an
+   optional seed, steps and CFG. It calls `POST /conversations/{id}/images`.
 2. **Message text.** With `intent: auto`, a deterministic detector reads the message. It needs an imperative request verb and an
    image noun within 6 words. Lists are stored per language.
 
@@ -59,7 +62,7 @@ the same job and pipeline, with `purpose` set accordingly. The result is linked 
 
 | Stage | `required_mode` | Work | Saved at the end |
 | --- | --- | --- | --- |
-| `prompt` | `llm` | Generates `ImagePromptResult`, builds the final prompt, runs the content guard | `payload_json.final_prompt`, `payload_json.caption`, `seed` |
+| `prompt` | `llm` | Writes the [caption](#caption), generates `ImageScene`, builds the final prompt, runs the content guard | `payload_json.final_prompt`, `payload_json.scene`, `payload_json.caption`, `seed`, size |
 | `render` | `image` | Submits the workflow of the chosen preset, follows progress, fetches the file into staging | Staged file path, preset used |
 | `persist` | `none` | Validates, writes the thumbnail, moves files, updates the message | `generated_images`, the variant |
 
@@ -67,31 +70,71 @@ The seed is chosen and saved in `prompt`, so a retried `render` reproduces the s
 
 ## Visual PromptBuilder
 
-`VisualConsistencyService` combines a deterministic part with the model's scene contribution.
+`VisualConsistencyService` joins a deterministic identity with the model's structured scene
+([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md),
+[ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)). The text model never writes identity tags,
+weights or prompt syntax, so the identity part of the prompt is identical whichever text profile is active.
 
 ### Input to the model
 
-The visual profile, setting, recent messages, the user's request and the conversation language. The output is in English except
-the caption:
+The model receives the visual profile's Italian descriptions, the wardrobe labels, the setting, recent messages, the user's request
+and the conversation language. It returns English values:
 
 ```python
-class ImagePromptResult(BaseModel):
+class ImageScene(BaseModel):
     schema_version: Literal[1]
-    scene_tags: Annotated[list[str], Field(max_length=24)]    # Setting, action, framing, lighting
-    extra_negative: Annotated[list[str], Field(max_length=8)]
-    aspect: Literal["square", "portrait", "landscape"]
-    caption: Annotated[str, StringConstraints(max_length=280)] # Short message in the character's voice
+    framing: Literal["close-up", "portrait", "upper body", "cowboy shot", "full body", "wide shot"]
+    angle: Literal["straight-on", "from side", "from behind", "from above", "from below", "pov", "dutch angle"] | None
+    expression: Annotated[list[str], Field(max_length=3)]      # Vocabulary tags
+    pose: Annotated[list[str], Field(max_length=4)]            # Vocabulary tags
+    outfit: str                                                # "usual", a named outfit key, or "scene"
+    scene_clothing: Annotated[list[str], Field(max_length=6)]  # Only when outfit is "scene"
+    location: Annotated[list[str], Field(max_length=6)]
+    time_of_day: Literal["day", "sunrise", "sunset", "twilight", "night"] | None
+    lighting: Annotated[list[str], Field(max_length=3)]        # Vocabulary tags
+    objects: Annotated[list[str], Field(max_length=4)]
+    extra_negative: Annotated[list[str], Field(max_length=6)]
 ```
 
-The caption becomes the text of the message when the image is ready, which produces a message with text and image from a single
-model call. The request is in Italian, and the prompt is prepared automatically before the GPU changes hands.
+Rules:
+
+- A grammar built for each request limits `outfit` to `usual`, the character's outfit keys and `scene`. When `clothing` is locked,
+  `scene` is not offered. When the user picks an outfit in the form, the grammar allows only that one.
+- `expression`, `pose` and `lighting` accept vocabulary tags only. The other lists accept free tags of at most 4 words.
+- The template is `image_scene.v1.j2`, with one worked example.
+
+### Caption
+
+The caption becomes the text of the message when the image is ready. It is written in the `prompt` stage, before the scene,
+because the chat prompt is still in the runtime's cache. It uses the normal reply path, with the stable text, the history,
+the dynamic context and the [anchor](prompting.md#block-9-anchor). The dynamic context gets one extra line:
+
+```jinja
+Stai per mandare a {{ user.display_name }} un'immagine: {{ request }}. Scrivi solo il messaggio che la accompagna.
+```
+
+The reply checks and the [normalizer](consistency-engine.md#reply-normalization) apply. `max_length` is the band's value, at
+most 120. If the caption fails, the image is sent without text. Both calls happen before the GPU changes hands.
 
 ### Final prompt
 
+Code assembles the prompt in a fixed order:
+
 ```text
-positive = quality tags, rating tag, subject tag, "adult", persistent identity tags,
-           scene tags after filtering, style tags
-negative = base negative, safety negative, persistent negative, extra negative after filtering
+positive = quality tags, rating tag, subject tag, "adult", age band,
+           identity: hair color, hair length, hairstyle, eye color, skin, face, body, marks,
+           outfit tags, accessories,
+           scene: expression, pose, framing, angle, location, time of day, lighting, objects,
+           style tags, extra tags
+negative = base negative, safety negative, persistent negative, extra negative after the sanitizer
+```
+
+Example for Nerea, with the usual outfit and the `illustrious` preset:
+
+```text
+masterpiece, best quality, amazing quality, absurdres, general, 1girl, adult, woman, red hair, short hair, messy hair,
+green eyes, freckles, slim, ink stains, canvas jacket, many pockets, necklace, smile, sitting, upper body, harbor,
+sunset, warm lighting, old map, table, soft colors, brass compass pendant
 ```
 
 Quality tags, rating tag and base negative come from the image profile's preset:
@@ -103,35 +146,110 @@ Quality tags, rating tag and base negative come from the image profile's preset:
 | Base negative | `worst quality, bad quality, low quality, lowres, bad anatomy, bad hands, missing fingers, extra digits, jpeg artifacts, signature, watermark, text, username` | `worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands, mammal, anthro, furry, ambiguous form, feral, semi-anthro` |
 
 The NoobAI values come from its model card. `nsfw` is removed from the card's negative because the safety negative
-always holds it.
+always holds it. The card orders caption tags as subject count, character, series, artists, special tags, general tags,
+then other tags. Lyrveil's order keeps the subject first and puts the character's identity where named characters would go.
 
 | Part | Value for every profile |
 | --- | --- |
 | Safety negative | `child, loli, shota, toddler, underage, minor, nsfw, explicit, nude`. Always appended |
 
-### Scene tag filter
+The age band always follows `adult`:
 
-Each model tag is processed in order:
+| Age | `1girl` | `1boy` | `1other` |
+| --- | --- | --- | --- |
+| 18 to 29 | `woman` | `man` | `person` |
+| 30 to 44 | `mature female` | `mature male` | `mature` |
+| 45 to 64 | `mature female, middle-aged` | `mature male, middle-aged` | `mature, middle-aged` |
+| 65 and over | `old woman, wrinkles` | `old man, wrinkles` | `old, wrinkles` |
 
-1. Lowercase, trim, replace `_` with a space, split on commas.
-2. Reject non-ASCII text, more than 6 words, duplicates and repeated identity tags.
+These are starting values. The [image identity protocol](#image-identity-protocol) checks them.
+
+### Caps and prompt chunks
+
+ComfyUI encodes the prompt in chunks of 75 tokens plus start and end tokens and concatenates them. SDXL's pooled vector
+comes from the first chunk only ([Runtime contracts](runtime-contracts.md#text-encoding)). The order above puts the subject,
+age band and identity first.
+
+| Part | Cap |
+| --- | --- |
+| Identity | 16 tags |
+| Outfit and accessories | 12 tags |
+| Scene | 18 tags |
+| Style | 4 tags |
+| Extra | 6 tags |
+
+The builder counts tokens with the vocabulary's counts, two per word for free tags, plus one per comma. It records the total
+and whether identity ends inside the first chunk. The Creator warns when it would not.
+
+### Tag vocabulary
+
+`backend/src/lyrveil/images/vocabulary/tags.v1.json` is an original list, released under Apache 2.0 with the code. It holds no
+text copied from tag wikis. Each entry has:
+
+| Field | Use |
+| --- | --- |
+| `tag` | The English tag, as written in the prompt |
+| `category` | `hair_color`, `hair_length`, `hairstyle`, `eye_color`, `skin`, `face`, `body`, `marks`, `accessories`, `style`, `expression`, `pose`, `lighting` |
+| `aliases_it` | Italian words that map to the tag, used by the fallback scene and the Creator's search |
+| `clip_tokens` | Token count, computed with ComfyUI's CLIP tokenizer when P05 builds the file |
+
+The grammar of `visual_profile_translate` takes its closed values from this file. T-IMG-16 checks that every entry passes the
+sanitizer and that its token count matches the tokenizer.
+
+### Sanitizer
+
+Every tag that comes from a model or a user passes the same function:
+
+1. Lowercase, trim, replace `_` with a space.
+2. Remove the word `embedding:` and anything joined to it.
+3. Keep only letters, digits, spaces, hyphens, apostrophes and periods. Parentheses, colons, brackets, backslashes and
+   commas inside a tag are removed, so no tag can change weights or split itself.
+4. Collapse spaces. An empty result is dropped.
+
+Vocabulary entries use only the characters the sanitizer keeps, so each one passes it unchanged and none needs an escape.
+Only the builder writes weights. In the gallery's advanced dialog, user weights are clamped to 0.5 to 1.5, a literal
+parenthesis is written `\(` or `\)`, and `embedding:` is refused with `PROMPT_SYNTAX_REFUSED`.
+
+### Scene filter
+
+Each scene tag is processed in order:
+
+1. The sanitizer.
+2. Reject tags with more than 4 words, unknown tags in vocabulary lists, duplicates, and tags already in the identity.
 3. Reject blocked terms. A hit fails the job with `CONTENT_POLICY_BLOCKED`.
-4. Remove tags about hair color, eye color and skin tone. These belong to the profile.
-5. When the `clothing`, `accessories` or `distinctive_marks` field is locked, remove tags that change it.
+4. Remove tags in an identity category: hair, eyes, skin, face, body and marks. The vocabulary's categories and aliases decide.
+5. When the `accessories` or `distinctive_marks` field is locked, remove scene tags of that category.
 
 ## Visual consistency
 
 | Aspect | Mechanism |
 | --- | --- |
-| Hair, eyes, physical features, marks, accessories, style | `persistent_prompt_en` goes into every prompt. Scene tags cannot override it |
-| Recurring clothing | Part of the persistent prompt when relevant. A scene can add clothing unless the field is locked |
-| Profile changes | A changed description starts `visual_profile_translate`. The result replaces `persistent_prompt_en` only if the user has not locked it |
+| Hair, eyes, physical features, marks, accessories, style | `identity_en` slots, rendered by code in a fixed order for every image. They are byte-identical whatever the text model is. Scene tags cannot override them |
+| Age | The age band after `adult` |
+| Recurring clothing | The usual outfit or a named outfit, chosen by the scene or by the user. A scene outfit is possible unless `clothing` is locked |
+| Profile changes | A changed description starts `visual_profile_translate`. It fills the unlocked slots with `VisualIdentityResult`, under a grammar built from the vocabulary |
 | Seed | Policy `random`, `fixed` or `base_offset`. Stored for every image |
 
 The English tags are generated once and stay editable, so each image does not need a new translation.
 
 **Limit:** the seed alone does not preserve a character. Different prompts or sizes produce different images even with the same seed.
-Tags improve consistency but cannot guarantee it. True consistency needs reference techniques, which 1.0 prepares but does not activate.
+A fixed identity prompt makes the description identical, but it cannot guarantee the same face. That needs reference techniques,
+which 1.0 prepares but does not activate.
+
+### Image identity protocol
+
+T-QLT-07 runs in P05 ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)):
+
+- the 3 demo characters and the 2 synthetic test characters, aged 52 and 70;
+- 4 scenes and 3 seeds, with the scenes written by every catalog text profile;
+- the owner checks hair color and length, eye color, age band and usual outfit on a fixed sheet.
+
+| Measure | Target |
+| --- | --- |
+| Attribute checks correct | At least 90 % |
+| Gap between any text profile and the default | At most 5 points |
+
+The result goes to `docs/verification/`. A failing age band is changed in the vocabulary and measured again.
 
 ## Default parameters
 
@@ -146,6 +264,8 @@ The active [image profile](models.md#image-profiles) selects the checkpoint and 
 | Square | 1024 x 1024 | Same | Fixed preset | Requirements |
 | Portrait | 832 x 1216 | Same | Fixed preset | SDXL bucket, recommended by the NoobAI card |
 | Landscape | 1216 x 832 | Same | Fixed preset | SDXL bucket |
+| Tall | 768 x 1344 | Same | Fixed preset | Listed by the NoobAI card |
+| Wide | 1344 x 768 | Same | Fixed preset | Listed by the NoobAI card |
 | Batch size | 1 | Same | Fixed | Requirements |
 | Seed | Random 32-bit, stored | Same | 0 to 4294967295 | Requirements |
 | Steps | 28 | 28 | 10 to 50 | Community guidance. NoobAI card: 25 to 30 |
@@ -157,12 +277,22 @@ The active [image profile](models.md#image-profiles) selects the checkpoint and 
 No OnomaAI card gives sampler, steps or CFG. The Illustrious defaults come from third-party guides, which agree on
 Euler ancestral, 20 to 28 steps, CFG from 3 to 7 and CLIP skip 2. They are not official.
 
+The aspect `auto`, the default for chat images, follows the scene's framing:
+
+| `framing` | Aspect |
+| --- | --- |
+| `close-up`, `portrait`, `upper body`, `cowboy shot` | Portrait |
+| `full body` | Tall |
+| `wide shot` | Wide |
+
+Avatars use square. The user can choose any aspect in the form.
+
 ### Quality presets
 
-| Preset | Passes | Final size, square / portrait / landscape | Planning time on the reference card |
+| Preset | Passes | Final size: square, portrait, landscape, tall, wide | Planning time on the reference card |
 | --- | --- | --- | --- |
-| **Alta**, default | First pass, then a second pass at 1.5 times the size | 1536 x 1536 / 1248 x 1824 / 1824 x 1248 | About 20 to 30 s of rendering, plus the checkpoint load |
-| **Rapida** | First pass only | 1024 x 1024 / 832 x 1216 / 1216 x 832 | About 7 to 10 s of rendering, plus the checkpoint load |
+| **Alta**, default | First pass, then a second pass at 1.5 times the size | 1536 x 1536, 1248 x 1824, 1824 x 1248, 1152 x 2016, 2016 x 1152 | About 20 to 30 s of rendering, plus the checkpoint load |
+| **Rapida** | First pass only | 1024 x 1024, 832 x 1216, 1216 x 832, 768 x 1344, 1344 x 768 | About 7 to 10 s of rendering, plus the checkpoint load |
 
 Second pass of **Alta**:
 
@@ -176,6 +306,17 @@ Second pass of **Alta**:
 
 Times are estimates until P05 measures them. The [preset rule](decisions/0026-two-pass-image-rendering.md) keeps
 **Alta** as the default if the 95th percentile of the render stage is at most 45 s.
+
+### Measured levers
+
+P05 measures three levers on the default image profile, with the scenes of the image identity protocol and blind pairs
+reviewed by the owner ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)):
+
+| Lever | Values | Adopted when |
+| --- | --- | --- |
+| `PerturbedAttentionGuidance` on the first pass | `scale` 0, 1.5 and 3 | Its images win at least 60 % of the blind pairs against 0, and the **Alta** p95 stays within 45 s. Adoption creates new workflow versions |
+| Identity weight | 1.1 on `hair_color` and `eye_color` | The protocol's attribute accuracy rises by at least 5 points, with no visible style change |
+| Tall and wide sizes | Kept or removed | Kept if their grid images show no more visible defects than portrait and landscape |
 
 ### Grid
 
@@ -227,6 +368,8 @@ text, so a prompt cannot change the graph.
 - The tiled files replace `VAEDecode` with `VAEDecodeTiled` and `VAEEncode` with `VAEEncodeTiled` (`tile_size` 512,
   `overlap` 64, `temporal_size` 64, `temporal_overlap` 8).
 - Both passes share the seed. Final width and height are the first-pass size times 1.5, rounded to a multiple of 8.
+- If PAG is adopted, new workflow versions insert `PerturbedAttentionGuidance` between node 1 and the first `KSampler`. The
+  versions in this table stay valid for stored images.
 - Lyrveil only submits its own files. The API offers no way to send a custom workflow.
 - `/system_stats` is read at readiness and `comfyui_version` is stored with each image.
 
@@ -259,7 +402,8 @@ Steps:
 2. Validate with Pillow and compute the SHA-256.
 3. Write the thumbnail.
 4. Move with `os.replace` to the final path, on the same filesystem.
-5. In one transaction: insert `generated_images`, link the variant, set the message `complete`, mark the job `completed`.
+5. In one transaction: insert `generated_images` with the scene, aspect and outfit, link the variant, set the message
+   `complete`, mark the job `completed`.
 6. Publish `image.completed`.
 
 `generated_images.job_id` is unique, so repeating step 5 cannot duplicate an image. The file name comes from the identifier and never
@@ -276,14 +420,16 @@ exports.
 `POST /images/{id}/regenerate` creates a new job with the stored prompt, skips the `prompt` stage and uses a new seed unless `keep_seed` is
 true. In a conversation the result is a new variant of the same message, with the same arrows as text alternatives.
 
-The gallery's advanced dialog can edit positive and negative prompts. The safety negative is always appended and the guard always runs.
+The gallery's advanced dialog can edit positive and negative prompts. The [sanitizer](#sanitizer) rules for user weights apply, the
+safety negative is always appended and the guard always runs.
 
 ## Failures
 
 | Failure | Handling |
 | --- | --- |
 | Checkpoint file missing or with the wrong size | The job fails with `MODEL_FILE_MISSING` before the mode change. The message names the profile and the download command |
-| Model returns invalid JSON | Repair attempt, then a fallback prompt built from the persistent tags and the request's words filtered by the guard, without a caption |
+| Model returns an invalid scene | Repair attempt, then the fallback scene: `upper body`, the usual outfit, and the words of the request that match the vocabulary |
+| Caption fails | The image is sent without text |
 | `IMAGE_OOM` | Lease ends with `oom`. Runtime restarts. One retry with the tiled file of the same preset. If **Alta** fails again, one last try with **Rapida**. The message says which preset produced the image |
 | Stalled, no progress for 120 s | `POST /interrupt`, retry once |
 | Total time over 300 s | Same |
@@ -299,8 +445,9 @@ Not active in 1.0:
 
 | Extension | Prepared by |
 | --- | --- |
+| img2img variations of the primary avatar | Core nodes only (`LoadImage`, `VAEEncode`, `KSampler` with `denoise` below 1). Needs `POST /upload/image` in [Runtime contracts](runtime-contracts.md). First candidate after 1.0 |
 | LoRA | `character_visual_profiles.loras_json` and a workflow template slot. The model card states that modules trained on Illustrious v0.1 work with v1.0 |
-| Reference images, IP-Adapter, ControlNet | `reference_asset_ids_json`, stored assets. ComfyUI's `POST /upload/image` enters [Runtime contracts](runtime-contracts.md) only when needed |
+| Reference images, IP-Adapter, ControlNet | `reference_asset_ids_json`, stored assets. They need extra models, so [R-MOD-06](requirements.md#4-models) and the non-goals must change first |
 | Face and hand detailer | Needs a detection model and custom nodes. See [ADR 0026](decisions/0026-two-pass-image-rendering.md) |
 | v-prediction checkpoints | `prediction` in the catalog. 1.0 accepts only `epsilon` |
 

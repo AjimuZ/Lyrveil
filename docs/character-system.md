@@ -1,20 +1,24 @@
 # Character system
 
-Status: accepted (2026-11-01). Implementation: planned, phase P03.
+Status: accepted (2026-11-01), revised 2026-11-06 for the voice fields and the structured visual identity. Implementation:
+planned, phase P03.
 
-The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes
-characters, and it uses the same text and image infrastructure as conversations.
+The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
+it uses the same text and image infrastructure as conversations.
 
 ## Card schema
 
 The card is one Pydantic model used by the API, the versions and the exchange format. Text is primary. Numbers
-appear only for age.
+appear only for age. The fields that keep the voice and the look independent of the active models are described in
+[ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md) and
+[ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md).
 
 ```python
 class Identity(BaseModel):
     first_name: Annotated[str, StringConstraints(min_length=1, max_length=80)]
     last_name: str | None = None
     age: Annotated[int, Field(ge=18, le=120)]
+    grammatical_gender: GrammaticalGender = "non_indicato"   # femminile, maschile, non_indicato
     narrative_identity: str = ""     # Who they are in the story
     biography: str = ""
     occupation: str = ""
@@ -31,16 +35,46 @@ class Trait(BaseModel):
     locked: bool = False
 
 
+class ExampleExchange(BaseModel):
+    user: Annotated[str, StringConstraints(max_length=300)] | None = None    # The message it answers
+    character: Annotated[str, StringConstraints(min_length=1, max_length=500)]
+
+
 class CommunicationProfile(BaseModel):
     formality: Formality = "informale"              # molto_informale, informale, neutra, formale
-    message_length: MessageLength = "brevi"         # brevissimi, brevi, medi, lunghi
+    message_length: MessageLength = "brevi"         # brevissimi, brevi, medi, lunghi. Sets the length band
     question_frequency: Frequency = "a_volte"       # raramente, a_volte, spesso
     punctuation: str = ""                           # "Poche virgole, molti puntini"
     colloquial_style: str = ""                      # "Modi di dire toscani, ironia asciutta"
     expressiveness: Expressiveness = "media"        # contenuta, media, vivace
     initiative_frequency: Frequency = "a_volte"     # Used by the proactive evaluation
-    examples: Annotated[list[str], Field(max_length=8)] = []
+    address_form: Literal["tu", "lei"] = "tu"
+    narration: Literal["nessuna", "leggera", "libera"] = "nessuna"
+    emoji: Literal["mai", "raramente", "a_volte", "spesso"] = "raramente"
+    examples: Annotated[list[ExampleExchange], Field(max_length=8)] = []
     recurring_expressions: Annotated[list[str], Field(max_length=12)] = []
+    avoid: Annotated[list[Annotated[str, StringConstraints(max_length=120)]], Field(max_length=8)] = []
+
+
+class VisualIdentityEn(BaseModel):
+    hair_color: HairColor | None = None      # Closed values from the tag vocabulary
+    hair_length: HairLength | None = None    # very short hair, short hair, medium hair, long hair, very long hair
+    eye_color: EyeColor | None = None
+    skin: Literal["pale skin", "tan", "dark skin"] | None = None
+    hairstyle: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    face: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    body: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    marks: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    accessories: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    style: Annotated[list[VocabularyTag], Field(max_length=4)] = []
+    extra: Annotated[list[FreeTag], Field(max_length=6)] = []      # Up to 4 words each
+
+
+class Outfit(BaseModel):
+    key: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,23}$")]   # Not "usual" or "scene"
+    label: Annotated[str, StringConstraints(min_length=1, max_length=40)]       # Italian, shown in the image form
+    description: Annotated[str, StringConstraints(max_length=300)] = ""          # Italian
+    tags_en: Annotated[list[FreeTag], Field(max_length=12)] = []
 
 
 class VisualProfile(BaseModel):
@@ -48,12 +82,14 @@ class VisualProfile(BaseModel):
     hair: str = ""
     eyes: str = ""
     body: str = ""
-    clothing: str = ""
+    clothing: str = ""               # The usual outfit, key "usual"
     accessories: str = ""
     distinctive_marks: str = ""
     art_style: str = ""
     subject_tag: Literal["1girl", "1boy", "1other"] = "1other"
-    persistent_prompt_en: str = ""
+    identity_en: VisualIdentityEn = VisualIdentityEn()
+    usual_outfit_en: Annotated[list[FreeTag], Field(max_length=12)] = []
+    outfits: Annotated[list[Outfit], Field(max_length=5)] = []
     persistent_negative_en: str = ""
     locked_fields: list[str] = []
     seed_policy: Literal["random", "fixed", "base_offset"] = "random"
@@ -67,8 +103,11 @@ class CharacterCard(BaseModel):
     visual: VisualProfile = VisualProfile()
 ```
 
-The Italian enum values appear in the interface as they are. They also reach prompts directly, which keeps the
-templates simple.
+`VocabularyTag` must exist in the [tag vocabulary](image-generation.md#tag-vocabulary) under the slot's category.
+`FreeTag` passes the [sanitizer](image-generation.md#sanitizer) and has at most 4 words.
+
+The Italian enum values appear in the interface as they are. They reach prompts through the `words` filter, which
+replaces `_` with a space.
 
 ## Manual creation
 
@@ -78,8 +117,16 @@ first name and age are required. The form uses Angular Signal Forms and saves a 
 Rules:
 
 - `age` is required and at least 18. The interface explains that all characters are adults.
+- **Identità** asks how the character speaks of itself: **Al femminile**, **Al maschile** or **Non indicato**. While
+  `subject_tag` is still the default, the choice also proposes the matching tag.
 - Each personality category accepts several descriptive entries.
-- **Aspetto** shows avatar actions and starts the English tag translation when saved.
+- **Comunicazione** offers *tu* or *Lei*, narration and emoji as choices. It proposes *Lei* when the register is
+  `formale`. Examples are pairs: an optional message from the user and the character's answer. They reach the prompt in
+  saved order while block 3 stays within 500 tokens, and the editor shows how many fit. **Da evitare** lists
+  up to 8 phrases the character never says.
+- **Aspetto** shows avatar actions, the identity slots, the usual outfit and up to 5 named outfits. Saving starts the
+  English tag translation for the slots that are not locked, and shows the rendered identity as **Prompt persistente**.
+  A warning appears when the identity would not fit in the first prompt chunk.
 - Saving creates version 1 and an empty visual profile if none exists.
 
 ## Assisted creation
@@ -93,11 +140,11 @@ Flow:
 
 1. `POST /characters/drafts` checks the text with the content guard and starts `character_draft`.
 2. The job holds an LLM lease and generates `CharacterDraft`, which has the same fields as `CharacterCard` without
-   locks and seeds. It uses the grammar and the repair attempt.
+   locks, seeds and English tags. It uses the grammar and the repair attempt.
 3. The result is validated. An age under 18 fails the schema, and the response explains why.
 4. The result stays in `generation_jobs.result_json`. No character exists yet.
 5. The Creator opens with every field filled in and editable. A note marks the fields the model invented.
-6. Saving goes through the normal `POST /characters`.
+6. Saving goes through the normal `POST /characters`, which starts the tag translation.
 
 If an image is being generated, the job waits, and the Creator shows the queue state.
 
@@ -142,6 +189,7 @@ private. A complete copy of the data is a [backup](operations.md#backup-and-rest
       "first_name": "Nerea",
       "last_name": "Falchi",
       "age": 27,
+      "grammatical_gender": "femminile",
       "narrative_identity": "Cartografa di una città portuale dove le strade cambiano a ogni marea.",
       "biography": "È cresciuta sopra una bottega di bussole e ha imparato a disegnare prima che a leggere.",
       "occupation": "Cartografa indipendente",
@@ -163,11 +211,15 @@ private. A complete copy of the data is a [backup](operations.md#backup-and-rest
       "colloquial_style": "Scrive di getto e si corregge da sola.",
       "expressiveness": "media",
       "initiative_frequency": "a_volte",
+      "address_form": "tu",
+      "narration": "nessuna",
+      "emoji": "raramente",
       "examples": [
-        "ok, ammetto che la mappa era al contrario. ma solo un po'",
-        "se passi dal porto portami un caffè, il mio è già finito"
+        {"user": "Allora, la mappa nuova è pronta?", "character": "ok, ammetto che era al contrario. ma solo un po'"},
+        {"user": null, "character": "se passi dal porto portami un caffè, il mio è già finito"}
       ],
-      "recurring_expressions": ["ma solo un po'"]
+      "recurring_expressions": ["ma solo un po'"],
+      "avoid": ["Che bella domanda!", "Sono qui per te"]
     },
     "visual": {
       "face": "Viso spigoloso, lentiggini sul naso.",
@@ -179,7 +231,28 @@ private. A complete copy of the data is a [backup](operations.md#backup-and-rest
       "distinctive_marks": "Macchie d'inchiostro sulle dita.",
       "art_style": "Illustrazione anime pulita, colori morbidi.",
       "subject_tag": "1girl",
-      "persistent_prompt_en": "1girl, adult, short messy red hair, dark green eyes, freckles, canvas jacket, brass compass necklace, ink stains on fingers",
+      "identity_en": {
+        "hair_color": "red hair",
+        "hair_length": "short hair",
+        "eye_color": "green eyes",
+        "skin": null,
+        "hairstyle": ["messy hair"],
+        "face": ["freckles"],
+        "body": ["slim"],
+        "marks": ["ink stains"],
+        "accessories": ["necklace"],
+        "style": ["soft colors"],
+        "extra": ["brass compass pendant"]
+      },
+      "usual_outfit_en": ["canvas jacket", "many pockets"],
+      "outfits": [
+        {
+          "key": "festa",
+          "label": "Festa del porto",
+          "description": "Abito blu scuro con nastri bianchi.",
+          "tags_en": ["dark blue dress", "white ribbons"]
+        }
+      ],
       "persistent_negative_en": "",
       "locked_fields": ["hair", "eyes"],
       "seed_policy": "random",
@@ -205,7 +278,7 @@ Nerea Falchi is an original demo character.
 - The file limit is 64 MB.
 - `format` must match. A `format_version` higher than the supported one is refused with `IMPORT_INVALID`.
 - Validation uses the same `CharacterCard` model, so an age under 18 is refused.
-- Text is checked by the content guard.
+- Text is checked by the content guard. English tags pass the sanitizer, and vocabulary slots must hold known tags.
 - Unknown fields are refused, so that a typo is not silently lost.
 - An import always creates a new character with new identifiers and version 1, actor `import`. It never overwrites.
 - Asset bytes follow the same validation as uploads, and hashes must match.
@@ -223,12 +296,15 @@ Import of Character Card V2 JSON is planned after 1.0 as a one-way adapter. See 
 ## Demo characters
 
 The P03 fixture `tests/fixtures/characters/` holds three original characters with different registers, used by tests, the quality
-protocol and README screenshots:
+protocols and README screenshots:
 
-| Name | Age | Concept | Register |
-| --- | --- | --- | --- |
-| Nerea Falchi | 27 | Cartographer in a shifting port city | Informal, dry irony |
-| Ilario Sant'Elmo | 41 | Night-train conductor and amateur astronomer | Polite, measured, long sentences |
-| Tessa Moravi | 23 | Apprentice alchemist and part-time barista | Very informal, lively, short bursts |
+| Name | Age | Concept | Register | Gender, address form | Narration, emoji |
+| --- | --- | --- | --- | --- | --- |
+| Nerea Falchi | 27 | Cartographer in a shifting port city | Informal, dry irony | `femminile`, `tu` | `nessuna`, `raramente` |
+| Ilario Sant'Elmo | 41 | Night-train conductor and amateur astronomer | Polite, measured, long sentences | `maschile`, `lei` | `leggera`, `mai` |
+| Tessa Moravi | 23 | Apprentice alchemist and part-time barista | Very informal, lively, short bursts | `femminile`, `tu` | `nessuna`, `spesso` |
 
 The first start asks whether to add them. The default answer is no, so a new installation holds no invented data.
+
+`tests/fixtures/characters/quality/` also holds two synthetic test characters, aged 52 and 70, for the
+[image identity protocol](image-generation.md#image-identity-protocol). They are never offered to users.
