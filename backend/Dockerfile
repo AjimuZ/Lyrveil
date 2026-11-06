@@ -33,12 +33,16 @@ RUN uv sync --locked --no-dev --compile-bytecode
 # Lint, type checks and tests run in containers of this stage, started by scripts\lyrveil.cmd test.
 FROM deps AS test
 RUN uv sync --locked
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/migrations ./migrations
 COPY backend/src ./src
 COPY backend/tests ./tests
 CMD ["pytest"]
 
 FROM base AS runtime
 COPY --from=deps /app/.venv /app/.venv
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/migrations ./migrations
 COPY backend/src ./src
 RUN python -m compileall -q src
 USER 10001:10001

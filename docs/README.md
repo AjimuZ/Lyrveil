@@ -60,3 +60,4 @@
 | [Consistency and images, 2026-11-06](verification/2026-11-06-consistency-and-images.md) | Upstream facts behind ADRs 0031 to 0036, and the documentation checks |
 | [Test command and lint, 2026-11-06](verification/2026-11-06-lint.md) | First runs of `scripts\lyrveil.cmd test lint` and `test unit` |
 | [Backend skeleton, 2026-11-06](verification/2026-11-06-backend-skeleton.md) | Backend lock, images, lint gates and unit tests |
+| [Backend persistence, 2026-11-06](verification/2026-11-06-backend-persistence.md) | SQLite WAL and FTS5 check, Alembic baseline, health routes and the integration level |

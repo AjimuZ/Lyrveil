@@ -80,8 +80,8 @@ All paths are under `/api/v1`.
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /health/live` | Process alive. Used by the container health check. |
-| `GET /health/ready` | Database, migrations and FTS5 are fine. Reports the control API separately. |
+| `GET /health/live` | Process alive. Used by the container health check. Answers `200` with `{"status": "alive"}`. |
+| `GET /health/ready` | Database, migrations and FTS5 are fine. Reports the control API separately. Answers `200` when ready and `503` otherwise, with `status`, `checks` and `control_api` in both ([Backend](backend.md#database-and-health)). |
 | `GET /system/status` | GPU state, queue depth, runtime status, degraded flags. |
 | `GET /system/resources` | VRAM, memory seen by Docker, disk, tokens per second. Real values only. |
 | `GET /system/lifecycle-events?cursor=` | Transition log. |

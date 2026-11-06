@@ -31,7 +31,8 @@ PRAGMA wal_autocheckpoint = 1000;
 
 At startup the backend also verifies that `journal_mode` really returned `wal` and that
 `PRAGMA compile_options` lists `ENABLE_FTS5`. A failure stops the service with
-`DB_CAPABILITY_MISSING`.
+`DB_CAPABILITY_MISSING`. Delivered in P01.3b: the check also creates a temporary `fts5` table, and the Alembic baseline
+holds only `application_settings`. The other tables of this document are planned, each in the revision of its phase.
 
 ## Relationships
 

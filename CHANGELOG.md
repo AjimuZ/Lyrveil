@@ -47,6 +47,12 @@ No application exists yet. This section records the design documentation.
   `test lint` also runs ruff and `mypy --strict` on the backend, and `test unit`
   runs its pytest unit tests; arguments after `test unit` go to pytest, so one
   test can run alone.
+- Backend persistence: a SQLite database in the data volume that the backend
+  checks at startup. It refuses to start unless WAL mode and FTS5 really work,
+  applies the Alembic migrations, and exposes `GET /api/v1/health/live` and
+  `GET /api/v1/health/ready`. The ready report lists the database, the
+  migrations and FTS5, and shows the control API on its own line.
+  `scripts\lyrveil.cmd test integration` runs the backend integration tests.
 
 ### Changed
 

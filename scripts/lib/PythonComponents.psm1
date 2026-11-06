@@ -116,11 +116,38 @@ function Invoke-PythonUnitTest {
         [string[]]$PytestArgument = @()
     )
 
+    return Invoke-PythonTestFolder -Root $Root -Folder 'tests/unit' -PytestArgument $PytestArgument
+}
+
+function Invoke-PythonIntegrationTest {
+    <#
+    Builds the test stage of every Python component and runs pytest on its tests/integration folder. The tests run
+    in the same image and on the same SQLite build as production, without network access. Returns the number of
+    components whose build or pytest run failed; pytest also fails when it collects no test.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    return Invoke-PythonTestFolder -Root $Root -Folder 'tests/integration'
+}
+
+function Invoke-PythonTestFolder {
+    # Runs pytest on Folder, or on the paths in PytestArgument when it names one under tests/, in the test stage of
+    # every Python component. Returns the number of failed components. Not exported.
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Folder,
+        [string[]]$PytestArgument = @()
+    )
+
     $arguments = @($PytestArgument)
     $hasPath = @($arguments | Where-Object { $_ -like 'tests/*' -or $_ -like 'tests\*' }).Length -gt 0
     # Assigned in two steps: an if expression would unroll a one-item array into a string.
     $targets = [string[]]@()
-    if (-not $hasPath) { $targets = [string[]]@('tests/unit') }
+    if (-not $hasPath) { $targets = [string[]]@($Folder) }
     $failed = 0
     foreach ($component in @(Get-PythonComponent -Root $Root)) {
         Write-Host "Python component '$component': pytest $(@($targets + $arguments) -join ' ')"
@@ -137,4 +164,4 @@ function Invoke-PythonUnitTest {
     return $failed
 }
 
-Export-ModuleMember -Function Get-PythonComponent, Invoke-PythonLint, Invoke-PythonUnitTest
+Export-ModuleMember -Function Get-PythonComponent, Invoke-PythonIntegrationTest, Invoke-PythonLint, Invoke-PythonUnitTest

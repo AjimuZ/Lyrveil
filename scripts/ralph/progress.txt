@@ -9,6 +9,9 @@
 - A PowerShell entry point that forwards options to another tool must not declare parameters; read $args so tokens like -k or -v are not bound as PowerShell parameters.
 - Native command output inside a PowerShell function that returns a status must be discarded ($null = & docker build -q ...) or sent to Out-Host, or it becomes part of the return value.
 - Logging safety is enforced by an allowlist processor that runs last, not by a denylist: free text only in the constant `event`, identifiers as short tokens, numeric measures by suffix, exceptions without messages.
+- Verify a capability by reading the effective state back (the journal mode SQLite reports, a probe table) instead of trusting that a setting was accepted.
+- Report optional dependencies, such as the control API, in a separate field of the readiness report so they cannot turn the service not-ready.
+- Keep each refusal reachable in a unit test through scripted capability answers, and also prove the real behaviour in an integration test on real files.
 
 ---
 
@@ -61,4 +64,31 @@ Docs updated: backend.md, testing.md, configuration.md, technology.md, CONTRIBUT
   - .dockerignore excludes **/tests; backend/tests is re-included with !backend/tests for the test stage only. The orchestrator will need the same.
   - Starlette 1.10 warns that its TestClient will move from httpx to httpx2; not failing now.
   - The lint level now needs Docker running; fixture repos without backend/Dockerfile skip the Python part.
+---
+
+## 2026-11-06T20:26:20Z - P01.3b
+- Added the SQLite persistence layer, the Alembic baseline, the health routes and the backend `test integration` level. `test integration` passed (20 tests), `test unit tests/unit` passed (39), and `test lint` passed after fixes. I did not run the Pester tests, including the one I added, and I did not start the runtime image. The new unit and integration tests run in the test stage; that stage shares the runtime's base image, but I never compared the two SQLite builds directly.
+
+- **Engine:** `persistence/database.py` builds a synchronous SQLAlchemy 2.1 engine that applies the five documented pragmas on every connection. It uses manual transactions, so a `WRITE` option gives `BEGIN IMMEDIATE`.
+- **Startup check:** `verify_capabilities` reads back the journal mode SQLite reports and creates a temporary `fts5` table. It raises `DatabaseCapabilityError` (`DB_CAPABILITY_MISSING`) when either is missing.
+- **Startup behaviour:** `main()` runs that check and then migrates. If the check fails, or the file cannot be opened or migrated, it logs the reason and returns 69 without starting the server.
+- **Migrations:** `persistence/migrations.py`, `alembic.ini` and `migrations/` with baseline `0001`, which creates `application_settings` only. `alembic -x database=<path> upgrade head` works from the command line, and `upgrade_to_head` does the same in code.
+- **Health routes:**
+  - `GET /api/v1/health/live` answers 200.
+  - `GET /api/v1/health/ready` checks the database and WAL, the migrations and FTS5 on every request. It answers 200 or 503, and reports the control API separately in `control_api.reachable`, which never changes the status.
+  - The control API is probed with `GET /v1/health` at `lyrveil-orchestrator:8100`.
+- **Dependencies and image:** `uv.lock` regenerated in a container with SQLAlchemy 2.1.6 and Alembic 1.20.1; no existing pin changed. The test and runtime stages now copy `alembic.ini` and `migrations/`.
+- **Test runner:** `test integration` builds the test stage and runs `pytest tests/integration` without network. I added a Pester case for the integration level in a fixture with no Python component.
+- **Tests:** 20 integration tests and 8 unit tests.
+- **Docs:** `backend.md`, `testing.md`, `api.md`, `data-model.md`, `docs/README.md`, the roadmap evidence list, `CHANGELOG.md` and a new verification file. The roadmap checkbox is left for the orchestrator.
+- Files changed: backend/pyproject.toml, backend/uv.lock, backend/Dockerfile, backend/alembic.ini, backend/migrations/env.py, backend/migrations/script.py.mako, backend/migrations/versions/0001_baseline.py, backend/src/lyrveil/main.py, backend/src/lyrveil/api/__init__.py, backend/src/lyrveil/api/health.py, backend/src/lyrveil/orchestration/__init__.py, backend/src/lyrveil/orchestration/health.py, backend/src/lyrveil/persistence/__init__.py, backend/src/lyrveil/persistence/database.py, backend/src/lyrveil/persistence/migrations.py, backend/tests/integration/conftest.py, backend/tests/integration/test_database.py, backend/tests/integration/test_migrations.py, backend/tests/integration/test_health_and_startup.py, backend/tests/unit/test_capabilities.py, backend/tests/unit/test_control_probe.py, scripts/lib/TestCommand.psm1, scripts/lib/PythonComponents.psm1, tests/scripts/TestCommand.Tests.ps1, docs/backend.md, docs/testing.md, docs/api.md, docs/data-model.md, docs/README.md, docs/roadmap.md, docs/verification/2026-11-06-backend-persistence.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `create_app(settings, engine=None, control_probe=probe_control_api)` keeps the database and the control probe in `app.state`; routes read them from there. Later routers should do the same and use a plain `def` for anything touching the database.
+  - `WRITE` (an execution option in `persistence/database.py`) makes a transaction begin with `BEGIN IMMEDIATE`; plain connections use `BEGIN`. Use `connection.execution_options(**WRITE)` before the first statement of a write unit of work.
+  - Migrations: add a revision file under `backend/migrations/versions/` and keep it ruff-clean, since `ruff check .` covers it (mypy does not). Tests use the real files through `PROJECT_ROOT` in `persistence/migrations.py` and the `alembic -x database=<path>` CLI.
+  - The `main()` exit codes are 78 (settings) and 69 (database). `lyrveil.main.DATABASE_PATH` can be monkeypatched in tests; replace `uvicorn.run` to run `main()` without serving.
+  - `scripts/lyrveil.cmd test integration` runs only `tests/integration` (no arguments accepted). `Invoke-PythonTestFolder` in `PythonComponents.psm1` is the shared runner for unit and integration; an e2e or contract level can reuse it.
+  - The migrations folder and `alembic.ini` are copied into both the test and runtime stages. A new top-level backend folder needed at runtime must be added to both `COPY` blocks, and `.dockerignore` already excludes `**/tests`.
+  - The compose health check path in docs/operations.md, `/api/v1/health/live`, matches the delivered route. P01.2 can use it as is.
+  - Backup before migrations (startup step 3) and steps 4 to 7 of the startup sequence are still planned; `docs/backend.md` says so.
 ---

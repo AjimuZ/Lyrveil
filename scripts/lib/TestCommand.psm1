@@ -11,7 +11,7 @@ Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
 $script:Runners = [ordered]@{
     lint        = 'Invoke-LintLevel'
     unit        = 'Invoke-UnitLevel'
-    integration = $null
+    integration = 'Invoke-IntegrationLevel'
     e2e         = $null
     docker      = $null
     gpu         = $null
@@ -104,6 +104,22 @@ function Invoke-UnitLevel {
         $failed = $true
     }
     if ($failed) { return 1 }
+    return 0
+}
+
+function Invoke-IntegrationLevel {
+    <#
+    Runs the integration level: pytest on tests/integration in the test stage of each Python component present, with
+    SQLite on the container's own file system and no network. Returns 0 only when every component ran tests and none
+    failed, and 1 when there is no Python component, so the level cannot pass without running a test. Not exported.
+    #>
+    param([string]$Root)
+
+    if (@(Get-PythonComponent -Root $Root).Length -eq 0) {
+        Write-Host "Test level 'integration' has no tests yet. Nothing ran, so it cannot pass."
+        return 1
+    }
+    if ((Invoke-PythonIntegrationTest -Root $Root) -gt 0) { return 1 }
     return 0
 }
 

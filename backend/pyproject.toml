@@ -8,9 +8,11 @@ description = "Lyrveil backend: API, services and job worker."
 license = "Apache-2.0"
 requires-python = "==3.12.*"
 dependencies = [
+    "alembic==1.20.1",
     "fastapi==0.162.0",
     "pydantic==2.14.2",
     "pydantic-settings==2.16.2",
+    "sqlalchemy==2.1.6",
     "structlog==26.1.0",
     "tzdata==2026.6",
     "uvicorn==0.54.0",

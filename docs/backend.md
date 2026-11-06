@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -160,6 +160,39 @@ written, its status becomes `interrupted` and the interface offers regeneration.
 7. Start the WebSocket hub, job worker and proactive evaluator.
 8. Report ready.
 
+Delivered so far: steps 1 and 2, and step 3 without the backup, because the backup service is planned and the
+baseline has no data to protect. Steps 4 to 7 are planned. `main()` stops with exit status 69 and the log event
+`database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with
+`database_unavailable` when the file cannot be opened or migrated, so the server never starts on a database it cannot trust.
+
+### Database and health
+
+`persistence/database.py` builds the synchronous engine for `/data/db/lyrveil.sqlite3`
+([ADR 0009](decisions/0009-synchronous-sqlalchemy.md)). Every new connection applies the pragmas of the
+[data model](data-model.md#connection-settings). The driver is put in manual transaction mode: a transaction begins
+with `BEGIN`, or with `BEGIN IMMEDIATE` when the connection has the `WRITE` execution option, so a writer takes the
+write lock at the start instead of failing on a lock upgrade.
+
+`verify_capabilities` reads the facts back instead of assuming them: the journal mode that SQLite reports after
+the `WAL` request, and a probe that creates an `fts5` virtual table in the temporary database. It raises
+`DatabaseCapabilityError` naming whatever is missing.
+
+`persistence/migrations.py` runs Alembic on the engine (`upgrade_to_head`) and reads the state (`migration_state`).
+`backend/alembic.ini` and `backend/migrations/` sit beside `src/` in the repository and in the image, so the command
+line works too: `alembic -x database=<path> upgrade head`, with `/data/db/lyrveil.sqlite3` as the default. The
+baseline revision `0001` creates `application_settings` only. Each later table arrives in the revision of the phase
+that needs it.
+
+Health routes, under `/api/v1`:
+
+| Route | Answer |
+| --- | --- |
+| `GET /health/live` | `200` with `{"status": "alive"}` whenever the process serves requests |
+| `GET /health/ready` | `200` when WAL, the migrations at head and FTS5 all hold, `503` otherwise. The body lists `checks.database` (with `journal_mode`), `checks.migrations` (`current` and `head`) and `checks.fts5`, each with `ok`. `control_api.reachable` comes from `GET /v1/health` of the orchestrator on the control network, with a one second timeout. It never changes the status |
+
+The checks run on every request, so the answer follows the live state of the file. A driver error is reported as a
+failed check without its message.
+
 ### Shutdown sequence
 
 On SIGTERM: stop accepting jobs, flush the running reply, release the lease, close
@@ -229,10 +262,11 @@ ruff check .
 ruff format --check .
 mypy --strict src tests
 pytest tests/unit
+pytest tests/integration
 ```
 
 They run in containers of the `test` stage of `backend/Dockerfile`, started by
-`scripts\lyrveil.cmd test lint` and `test unit` ([Testing](testing.md#the-lint-level)). Tool
+`scripts\lyrveil.cmd test lint`, `test unit` and `test integration` ([Testing](testing.md#the-lint-level)). Tool
 settings are in `backend/pyproject.toml`; mypy uses the Pydantic plugin.
 
 An import-rule test, `tests/unit/test_import_rules.py`, fails when `domain` imports another
@@ -257,8 +291,8 @@ The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
 | --- | --- |
 | `lock`, `lockfile` | Resolve `uv.lock` and export it |
 | `deps` | `uv sync --locked --no-dev`: fails when the lock does not match `pyproject.toml` |
-| `test` | Adds the `dev` group with `uv sync --locked`, the sources and `tests/` |
-| `runtime` | The `deps` environment and the sources only, user `10001`, port 8000. The default target |
+| `test` | Adds the `dev` group with `uv sync --locked`, `alembic.ini`, `migrations/`, the sources and `tests/` |
+| `runtime` | The `deps` environment, `alembic.ini`, `migrations/` and the sources only, user `10001`, port 8000. The default target |
 
 A unit test of the test stage checks that every installed distribution has the version
 `uv.lock` pins.

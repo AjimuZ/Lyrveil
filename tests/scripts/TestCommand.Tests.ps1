@@ -225,4 +225,10 @@ Describe 'scripts\lyrveil.cmd test' {
         $run.Output | Should -Match "Test level 'unit' has no tests yet"
         $run.ExitCode | Should -Not -Be 0
     }
+
+    It 'refuses to pass the integration level when no Python component exists' {
+        $run = Invoke-EntryPoint (Initialize-FixtureRepository 'cli-no-integration' -WithScripts) @('test', 'integration')
+        $run.Output | Should -Match "Test level 'integration' has no tests yet"
+        $run.ExitCode | Should -Not -Be 0
+    }
 }

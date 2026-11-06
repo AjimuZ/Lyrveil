@@ -1,12 +1,24 @@
-"""Composition root: loads the settings, configures logging, builds the FastAPI application and serves it."""
+"""Composition root: loads settings, opens and migrates the database, builds the FastAPI application and serves it."""
 
 import sys
+from collections.abc import Callable
 
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
+from lyrveil.api import health
 from lyrveil.logs import configure_logging, get_logger
+from lyrveil.orchestration.health import probe_control_api
+from lyrveil.persistence.database import (
+    DEFAULT_DATABASE_PATH,
+    DatabaseCapabilityError,
+    create_database_engine,
+    verify_capabilities,
+)
+from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.settings import Settings, SettingsError, load_settings
 
 API_PREFIX = "/api/v1"
@@ -14,13 +26,22 @@ LISTEN_HOST = "0.0.0.0"  # Inside the container only; Compose publishes no backe
 LISTEN_PORT = 8000
 # EX_CONFIG from sysexits.h, the status the runtime entrypoints use for a configuration error.
 EXIT_INVALID_SETTINGS = 78
+# EX_UNAVAILABLE: the database is missing WAL or FTS5, or cannot be opened or migrated.
+EXIT_DATABASE_UNAVAILABLE = 69
+DATABASE_PATH = DEFAULT_DATABASE_PATH
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(
+    settings: Settings,
+    engine: Engine | None = None,
+    control_probe: Callable[[], bool] = probe_control_api,
+) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
 
-    The OpenAPI document is served at /api/v1/openapi.json. The interactive documentation pages are disabled,
-    because they load scripts from a CDN and the application works offline.
+    `engine` is the verified and migrated database, kept in `app.state.engine`; without it `/health/ready` answers
+    503. `control_probe` tells whether the control API answers and may be replaced in tests. The OpenAPI document is
+    served at /api/v1/openapi.json. The interactive documentation pages are disabled, because they load scripts from
+    a CDN and the application works offline.
     """
     app = FastAPI(
         title="Lyrveil",
@@ -30,15 +51,21 @@ def create_app(settings: Settings) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.engine = engine
+    app.state.control_probe = control_probe
+    app.include_router(health.router, prefix=API_PREFIX)
     return app
 
 
 def main() -> int:
     """Starts the backend and returns the process exit status.
 
-    Returns 78 with a message on stderr naming each invalid setting, before logging or the server starts. Otherwise
-    serves on port 8000 with a single worker, which the in-process WebSocket hub and job worker require, until the
-    server stops, and returns 0. The access log is off, because request paths and queries can carry user text.
+    Returns 78 with a message on stderr naming each invalid setting, before logging or the server starts. Then opens
+    the database, verifies WAL and FTS5, and applies the migrations; if that fails it logs `DB_CAPABILITY_MISSING`
+    or `database_unavailable` and returns 69, so the backend never becomes ready on a database it cannot trust.
+    Otherwise serves on port 8000 with a single worker, which the in-process WebSocket hub and job worker require,
+    until the server stops, and returns 0. The access log is off, because request paths and queries can carry user
+    text.
     """
     try:
         settings = load_settings()
@@ -46,9 +73,20 @@ def main() -> int:
         print(f"lyrveil: {error}", file=sys.stderr)
         return EXIT_INVALID_SETTINGS
     configure_logging(settings.log_level)
-    get_logger(__name__).info("backend_starting")
+    logger = get_logger(__name__)
+    logger.info("backend_starting")
+    try:
+        engine = create_database_engine(DATABASE_PATH)
+        verify_capabilities(engine)
+        upgrade_to_head(engine)
+    except DatabaseCapabilityError as error:
+        logger.error("database_capability_missing", error_code=error.code)
+        return EXIT_DATABASE_UNAVAILABLE
+    except (SQLAlchemyError, OSError):
+        logger.error("database_unavailable", exc_info=True)
+        return EXIT_DATABASE_UNAVAILABLE
     uvicorn.run(
-        create_app(settings),
+        create_app(settings, engine),
         host=LISTEN_HOST,
         port=LISTEN_PORT,
         log_config=None,
