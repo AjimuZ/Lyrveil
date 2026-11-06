@@ -37,7 +37,7 @@ function Invoke-NativeCapture {
     <#
     Runs Command with Argument and returns @{ Status; Output }, where Output holds the standard output lines as text,
     and the standard error lines too with IncludeErrorStream; otherwise standard error goes to the console. Never
-    throws for a non-zero status. A command that is not on PATH returns status 127. Not exported.
+    throws for a non-zero status. A command that is not on PATH returns status 127.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -70,7 +70,7 @@ function Invoke-NativeCapture {
 
 function Invoke-NativeShown {
     # Runs Command with Argument with its output on the console, and returns its exit status, or 127 when it is not
-    # on PATH. Not exported.
+    # on PATH.
     [CmdletBinding()]
     [OutputType([int])]
     param(
@@ -126,7 +126,7 @@ function Get-PreflightFact {
     command exists and its daemon answers, the Compose and Engine API versions, the memory Docker sees, the Windows
     RAM, and the free space on the drive of %LOCALAPPDATA%, which holds Docker Desktop's data. A fact that cannot be
     read is $null, or $false for the two booleans. AllowLowMemory is true when LYRVEIL_ALLOW_LOW_MEMORY is "true" in
-    the environment or in the .env at EnvPath. Reads only. Not exported.
+    the environment or in the .env at EnvPath. Reads only.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -325,7 +325,7 @@ function Get-PreflightResult {
 }
 
 function Write-PreflightReport {
-    # Prints one line per row, as "LEVEL    Name: detail", and its advice on the next line. Not exported.
+    # Prints one line per row, as "LEVEL    Name: detail", and its advice on the next line.
     [CmdletBinding()]
     param([object[]]$Row)
 
@@ -408,7 +408,6 @@ function Initialize-EnvironmentFile {
 
 function Get-ComposeArgument {
     # Returns the leading arguments of every "docker compose" call of Context: project name, env file and files.
-    # Not exported.
     [CmdletBinding()]
     [OutputType([string[]])]
     param([Parameter(Mandatory = $true)] [hashtable]$Context)
@@ -420,7 +419,7 @@ function Get-ComposeArgument {
 
 function Get-ComposeProject {
     # Returns the resolved Compose configuration of Context with the ai and tools profiles, as an object. Throws when
-    # Compose refuses it. Not exported.
+    # Compose refuses it.
     [CmdletBinding()]
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory = $true)] [hashtable]$Context)
@@ -433,7 +432,7 @@ function Get-ComposeProject {
 
 function Get-ObjectProperty {
     # Returns the value of property Name of Object, or $null when it has none, which strict mode would otherwise
-    # refuse. Not exported.
+    # refuse.
     [CmdletBinding()]
     param($Object, [string]$Name)
 
@@ -447,7 +446,7 @@ function Get-ProjectVolume {
     <#
     Returns, for each Compose volume key of $script:Volumes, an object with Key, Name (the Docker name) and Label
     (the value of io.lyrveil.volume). Throws when the configuration lacks a key or declares it not external, because
-    Compose would then own the volume and "down -v" could remove it. Not exported.
+    Compose would then own the volume and "down -v" could remove it.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject[]])]
@@ -500,7 +499,7 @@ function Install-ProjectVolume {
 }
 
 function Get-ServiceImage {
-    # Returns the image of every service of Project that has a build section, sorted and unique. Not exported.
+    # Returns the image of every service of Project that has a build section, sorted and unique.
     [CmdletBinding()]
     [OutputType([string[]])]
     param([Parameter(Mandatory = $true)] $Project)
@@ -722,4 +721,8 @@ function Invoke-LyrveilSetup {
     return 0
 }
 
-Export-ModuleMember -Function Invoke-LyrveilSetup, Get-PreflightResult, Initialize-EnvironmentFile
+# The helpers after the first line are shared with Lifecycle.psm1, which runs start, stop, status and logs on the same
+# project, with the same Compose arguments, volumes and images as setup.
+Export-ModuleMember -Function Invoke-LyrveilSetup, Get-PreflightResult, Initialize-EnvironmentFile,
+Invoke-NativeCapture, Invoke-NativeShown, Get-PreflightFact, Write-PreflightReport, Get-ComposeArgument,
+Get-ComposeProject, Get-ObjectProperty, Get-ProjectVolume, Get-ServiceImage

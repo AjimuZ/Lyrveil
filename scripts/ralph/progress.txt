@@ -40,6 +40,10 @@
 - PowerShell variable names ignore case: inside a Pester -ForEach case, a local $row overwrites the case data $Row.
 - When capturing native stderr with 2>&1, set $ErrorActionPreference = 'Continue' locally so PS 5.1 error records never throw under 'Stop'.
 - Capture Write-Host output of a function in tests with `6>&1` and separate the returned [int] from the InformationRecords.
+- Mandatory PowerShell parameters that take a collection which may be empty need [AllowEmptyCollection()].
+- Keep .ps1/.psm1 files ASCII for Windows PowerShell 5.1: build non-ASCII output such as 'è' with [char]0x00E8.
+- Lifecycle commands return an [int] exit status and print only with Write-Host or Out-Host, so lyrveil.ps1 can `exit ([int]$status)` and tests can capture text with 6>&1.
+- Test helpers in tests/docker must avoid the verbs New/Remove/Set without ShouldProcess, because PSScriptAnalyzer runs on test files too.
 
 ---
 
@@ -281,4 +285,31 @@ Not verified:
   - Setup creates runtime containers only for lyrveil-llm and lyrveil-image services the Compose file defines. compose.yaml has none until P02 and P05; the test override adds a fake lyrveil-llm.
   - The volume-owner step runs after the image build because it uses the backend image with --pull never.
   - PSScriptAnalyzer 1.24 on PS 5.1 rejects the verb Build and flags New/Remove/Set functions without ShouldProcess, test files included.
+---
+
+## 2026-11-06T23:02:14Z - P01.6b
+- Implemented start.cmd, stop.cmd, restart.cmd, status.cmd and logs.cmd. The logic is in the new scripts/lib/Lifecycle.psm1, called from scripts/lyrveil.ps1; Setup.psm1 now exports the helpers it reuses.
+
+- **start**: runs the preflight rows except Git, and runs setup when .env, a volume, an image or a runtime container is missing. It then checks the volume labels and runs the orchestrator GPU preflight in a one-off `compose run` container. It starts only lyrveil-backend and lyrveil-frontend with `up --wait --wait-timeout 120`, and sends a GET to the published app port. It ends with `Lyrveil è pronto: <url>`, where the URL uses the port the Compose file publishes. Exit codes: 2 when a check fails, 3 with the last 50 log lines when health fails. The model files, the text model, the orchestrator and the backup copy print WARNING lines and never fail the start.
+- **stop**: runs only `compose --profile ai stop --timeout 40`, never `down`. It exits 0 when already stopped or when Docker is not running.
+- **restart**: stop, then start.
+- **status / status -Json**: services, state and health, the URL and whether it answers, whether Lyrveil is ready, free disk, and null fields with warnings for what does not exist yet.
+- **logs**: wraps `docker compose logs` with -Follow, -Since and -Tail.
+
+The orchestrator is not started until P02. I followed the e2e level here, which also leaves it out, because `lyrveil_orchestrator.main` does not exist and its container exits at once.
+
+Tests are in tests/docker/Lifecycle.Tests.ps1 and cover T-DCK-01 to T-DCK-05, status, -Json, logs, the no-Docker cases and argument refusal through each .cmd. They run against the project lyrveil-lifecycle-test, using compose.lifecycle-test.yaml. That override gives the project its own volumes and :lifecycle-test images, resets container_name and env_file, and publishes port 14210. A second override, compose.lifecycle-unhealthy.yaml, makes the backend's health check fail for the failure case. Docs updated: operations.md, testing.md, docs/README.md, CHANGELOG.md and a new verification note.
+
+Verified: `scripts/lyrveil.cmd test docker` passed, 57 tests, 0 failed, in 103.29 s. The first run had 10 failures from two defects, both fixed. `test lint` passed.
+
+Not run: the commands against the real `lyrveil` project, so the 4200 ready line has not been seen on a real installation. Also not run: the GPU preflight step (the tests skip it), the real 120 s timeout, and `logs -Follow`.
+- Files changed: start.cmd, stop.cmd, restart.cmd, status.cmd, logs.cmd, scripts/lyrveil.ps1, scripts/lib/Lifecycle.psm1, scripts/lib/Setup.psm1, tests/docker/Lifecycle.Tests.ps1, tests/docker/compose.lifecycle-test.yaml, tests/docker/compose.lifecycle-unhealthy.yaml, docs/operations.md, docs/testing.md, docs/README.md, docs/verification/2026-11-06-lifecycle.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Lifecycle.psm1 starts only lyrveil-backend and lyrveil-frontend ($script:CoreServices). When P02 adds lyrveil_orchestrator.main, move lyrveil-orchestrator from $script:DeferredServices into CoreServices and drop its warning.
+  - The not-yet-available steps are message constants at the top of Lifecycle.psm1 ($script:ModelFilesPending, TextModelPending, BackupsPending, DrainPending, ReleasePending, StatusPending). Replace each with the real step when its component lands (P01.6c models, the backup command, P02).
+  - Test projects that start containers must reset container_name (`!reset null`), reset env_file (`!reset []`) and override ports (`!override`), because compose.yaml names its containers lyrveil-* and reads the repository's .env.
+  - Invoke-LyrveilStart/Restart accept -SkipGpuPreflight and -WaitSeconds for tests; the GPU preflight via `compose run -T lyrveil-orchestrator python -m lyrveil_orchestrator.preflight` has never run.
+  - When the installation .env is missing, lifecycle commands interpolate from .env.example, so they never fail on --env-file and never read another .env.
+  - Bash commands that name .env.example directly (for example `docker compose --env-file .env.example config`) are denied in task sessions; let the Pester tests exercise them instead.
+  - The docker level now takes about 100 s with a warm cache; grep its output for '\[-\]|Tests Passed' and avoid filters on words like 'because' that also appear in WARNING lines.
 ---

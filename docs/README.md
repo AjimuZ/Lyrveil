@@ -70,3 +70,4 @@
 | [Fake runtimes, 2026-11-06](verification/2026-11-06-fake-runtimes.md) | The fakes of `tests/fakes/`, `compose.test.yaml` and the Docker test of the production images, and what has not run |
 | [End-to-end level, 2026-11-06](verification/2026-11-06-e2e-level.md) | The Playwright smoke test against `compose.test.yaml`, the cleanup of the test project, and what has not run |
 | [Setup and the docker level, 2026-11-06](verification/2026-11-06-setup.md) | `setup.cmd` run twice against a test project, the preflight advice, the `.env` ACL, T-DCK-06, T-DCK-07 and T-DCK-13 |
+| [Lifecycle commands, 2026-11-06](verification/2026-11-06-lifecycle.md) | `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd` and `logs.cmd` against a test project, T-DCK-01 to T-DCK-05, and what has not run |

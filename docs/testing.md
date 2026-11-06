@@ -52,7 +52,8 @@ Every command exits 0 only when the level ran tests and all of them passed. An u
 
 ### The `docker` level
 
-Delivered with P01.8b and P01.6a ([evidence](verification/2026-11-06-setup.md)). It runs with the pinned Pester only;
+Delivered with P01.8b, P01.6a and P01.6b ([setup evidence](verification/2026-11-06-setup.md),
+[lifecycle evidence](verification/2026-11-06-lifecycle.md)). It runs with the pinned Pester only;
 pytest joins it when a Docker test needs Python. The files:
 
 - `tests/docker/TestFakes.Tests.ps1` checks that no production image holds `tests/fakes` and that `compose.test.yaml`
@@ -64,6 +65,16 @@ pytest joins it when a Docker test needs Python. The files:
   volume labels and owners and the runtime container. It checks the `.env` ACL and that both volumes survive
   `docker compose down -v`, and runs PSScriptAnalyzer. It also checks that every root `.cmd` file holds only a comment,
   the call to `scripts\lyrveil.ps1` with its own command and `%*`, and the exit.
+- `tests/docker/Lifecycle.Tests.ps1` holds T-DCK-01 to T-DCK-05. Against the project `lyrveil-lifecycle-test`, it runs
+  start from nothing (no `.env`, volumes or containers), so start runs setup, then checks the ready line, the health of
+  the backend and the frontend, and that the empty app answers on its port. It runs status and `status -Json`, logs,
+  stop twice, restart from stopped and from running services, and checks that the containers and volumes survive stop.
+  For T-DCK-04 it writes a file into the data volume, removes the containers, starts again, then removes the images so
+  start runs setup and builds them, and checks the file and the database each time. For the failure half of T-DCK-05,
+  it adds `tests/docker/compose.lifecycle-unhealthy.yaml`, whose backend health check always fails, and expects exit
+  status 3 with the last logs. With a stand-in `docker.cmd` that always fails, it checks that stop exits 0 and that
+  start, status and logs exit 2, and it runs each root `.cmd` with an unknown argument through `cmd.exe`. The GPU rows
+  of start are skipped, so the file needs no GPU.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
@@ -71,6 +82,13 @@ which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil
 project with `-p`, `--env-file` points at `.env.example` or at a `.env` in Pester's temporary drive, and setup refuses
 to start unless the resolved configuration names only the test volumes. The test removes the project and both volumes
 afterwards and fails if a volume is left. No test uses a backup folder.
+
+The lifecycle tests use `tests/docker/compose.lifecycle-test.yaml` the same way, with the volumes
+`lyrveil-lifecycle-test-data` and `lyrveil-lifecycle-test-models` and the tag `:lifecycle-test`. Because they start
+containers, the override also resets `container_name`, so no container takes the name of an installation's; it publishes
+the app on `127.0.0.1:14210` instead of 4200; and it resets `env_file`, so no container reads the repository's `.env`.
+The file refuses to run unless the resolved configuration has the test project, the test volumes, no `container_name`
+and port 14210.
 
 ### The `e2e` level
 

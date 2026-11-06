@@ -1,0 +1,34 @@
+# Override of compose.yaml for tests/docker/Lifecycle.Tests.ps1, which runs start, stop, restart, status and logs
+# against the project "lyrveil-lifecycle-test":
+#   docker compose -p lyrveil-lifecycle-test -f compose.yaml -f tests/docker/compose.lifecycle-test.yaml config
+# It keeps compose.yaml's services, health checks and external volumes, so the commands meet the real file, and changes
+# only what would reach a real installation:
+#   - the two external volumes get their own names, never "lyrveil-data" or "lyrveil-models";
+#   - every image is tagged ":lifecycle-test", so no build replaces the ":local" images of an installation;
+#   - container_name is reset, so the containers are "lyrveil-lifecycle-test-*" and never "lyrveil-backend" and the
+#     others of an installation;
+#   - the app is published on 127.0.0.1:14210, never 4200 (an installation) or 14200 (the e2e level);
+#   - env_file is reset, so no container reads the repository's .env; the backend gets the settings below, with a
+#     token that guards only this project.
+# No test uses a backup folder: start and stop copy no backup until the backup command exists.
+services:
+  lyrveil-frontend:
+    image: lyrveil/frontend:lifecycle-test
+    container_name: !reset null
+    ports: !override ["127.0.0.1:14210:8080"]
+  lyrveil-backend:
+    image: lyrveil/backend:lifecycle-test
+    container_name: !reset null
+    env_file: !reset []
+    environment:
+      LYRVEIL_CONTROL_TOKEN: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      LYRVEIL_TZ: Europe/Rome
+      LYRVEIL_LOG_LEVEL: DEBUG
+  lyrveil-orchestrator:
+    image: lyrveil/orchestrator:lifecycle-test
+    container_name: !reset null
+    env_file: !reset []
+
+volumes:
+  lyrveil-data: {external: true, name: lyrveil-lifecycle-test-data}
+  lyrveil-models: {external: true, name: lyrveil-lifecycle-test-models}

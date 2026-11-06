@@ -113,8 +113,9 @@ passes its arguments. The bypass applies to that process only. `scripts\lyrveil.
 `models`, `import-model`, `backup`, `restore` and `test`.
 
 Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)),
-and `setup.cmd` with the parts listed under [`setup.cmd`](#setupcmd). The other commands and root entry points are
-planned. Today, an unknown or unbuilt command exits 1 with a message.
+the six root entry points, `setup.cmd` with the parts listed under [`setup.cmd`](#setupcmd), and the lifecycle commands
+in `scripts/lib/Lifecycle.psm1` with the parts listed under each of them below. `models`, `import-model`, `backup` and
+`restore` are planned. Today, an unknown or unbuilt command exits 1 with a message, and so does an unknown argument.
 
 Questions go through `Read-Confirmation` in `scripts/lib/ConsolePrompt.psm1`. When standard input is not the console,
 or PowerShell runs with `-NonInteractive`, it prints the question and answers no at once, so an unattended run never
@@ -220,6 +221,27 @@ copy runs in a container with no network and the file's folder mounted read-only
 10. Copy backups missing from the [Windows backup folder](#backup-and-restore).
 11. Show `Lyrveil è pronto: http://localhost:4200` with any warnings.
 
+Delivered in P01.6b, in `scripts/lib/Lifecycle.psm1` ([evidence](verification/2026-11-06-lifecycle.md)). It takes no
+option.
+
+- Steps 1 and 2 run the rows of [Preflight checks](#preflight-checks) that the scripts judge, except Git: Docker daemon,
+  Compose, Engine API, memory seen by Docker and free disk. A failure exits 2.
+- Step 5 runs before step 4 so that a clean installation passes: when `.env`, a volume, an image or a runtime container
+  is missing, start lists what is missing and runs setup, and returns setup's status if setup fails. Step 4 then
+  prints the data and models volume rows. A volume without the label exits 2 without running setup.
+- Step 3 runs the orchestrator's preflight in a one-off container with `docker compose run --rm --no-deps -T`. A failed
+  row, or Docker failing to run the container, exits 2. This step has not run against a real GPU yet: the tests skip it.
+- Step 7 starts only `lyrveil-backend` and `lyrveil-frontend`, with `docker compose up --detach --no-build --wait
+  --wait-timeout 120`. The orchestrator is not started until P02, because `lyrveil_orchestrator.main` does not exist
+  and its container exits at once; start prints a warning for it.
+- Step 8: a service that is unhealthy, or not healthy within 120 s, exits 3 with the last 50 log lines of both
+  services. After the health checks, start sends a GET to the published port of the frontend on `127.0.0.1` and exits 3
+  if it does not answer.
+- Steps 6, 9 and 10 are not delivered: the model catalog and the runtimes come with P02, and the backup copy with the
+  backup command. Each prints a `WARNING` line and never fails the start.
+- Step 11 prints a summary of the warnings, then the ready line as the last line. The URL uses the port that the
+  Compose file publishes, 4200 by default.
+
 ### `stop.cmd`
 
 1. `python -m lyrveil.cli drain --timeout 60` inside the backend: pauses the queue and lets a running reply finish.
@@ -230,13 +252,45 @@ copy runs in a container with no network and the file's folder mounted read-only
 It succeeds when services are already stopped. It never runs `down -v`, and the volumes are external, so even that
 command would keep them.
 
+Delivered in P01.6b: step 4, which keeps the containers. Steps 1 to 3 print a `WARNING` line, because the queue, the
+lifecycle manager and the backup command do not exist yet. Stop never runs `docker compose down` in any form. It exits
+0 when the services are stopped, also when they were stopped already or Docker is not running, and 1 when
+`docker compose stop` fails or an argument is given.
+
 ### `restart.cmd`
 
 `stop.cmd` followed by `start.cmd`.
 
+Delivered in P01.6b. It returns the status of stop when stop fails, and the status of start otherwise.
+
 ### `status.cmd`
 
 Prints services and health, GPU state, VRAM, queue sizes, active model, launch level, model verification, disk use and the URL. Option `-Json` gives machine-readable output.
+
+Delivered in P01.6b: every service of the Compose file except the one-shot tools, with its state (`missing` when it has
+no container) and health, the URL and whether it answers, whether Lyrveil is ready (backend and frontend running and
+healthy, and the URL answering), and the free space on the drive of `%LOCALAPPDATA%`. GPU state, VRAM, queue sizes,
+active model, launch level and model verification are not available yet: the text output prints a `WARNING` line for
+each, and the JSON has them as `null` with the reasons in `warnings`.
+
+```json
+{
+  "project": "lyrveil",
+  "url": "http://localhost:4200",
+  "app_answers": true,
+  "ready": true,
+  "services": [{"name": "lyrveil-backend", "state": "running", "health": "healthy", "started_by_start": true}],
+  "gpu": null,
+  "queues": null,
+  "active_model": null,
+  "model_verification": null,
+  "disk": {"drive": "C:", "free_bytes": 123456789},
+  "warnings": ["Queue sizes: not available yet, because the job queue comes with P02"]
+}
+```
+
+It exits 0 when it printed the report, whatever the state of the services, and 2 when Docker is not running; with
+`-Json` it then prints `{"docker_reachable": false}`.
 
 ### `logs.cmd`
 
@@ -247,6 +301,10 @@ Prints services and health, GPU state, VRAM, queue sizes, active model, launch l
 ```
 
 A thin wrapper around `docker compose logs`. Logs hold no private text.
+
+Delivered in P01.6b with `-Follow`, `-Since <time>` and `-Tail <lines>`, and any number of service names. It exits 0
+when Compose succeeds, 1 on an unknown argument, an option without its value or a Compose failure such as an unknown
+service, and 2 when Docker is not running.
 
 ## Preflight checks
 
@@ -279,7 +337,9 @@ pass. These rules are unit-tested with a fake probe; the command has not yet run
 `setup.cmd` judges six rows in `scripts/lib/Setup.psm1` (P01.6a): Git, Docker daemon, Compose, Engine API, memory seen
 by Docker and free disk. It prints them in the same format, with the advice for each failure on the next line, such as
 the `.wslconfig` values for the machine's RAM when memory is too low. A row that needs the daemon fails as not checked
-when the daemon is unreachable. The volume and model file rows are planned for `start.cmd` and the backend.
+when the daemon is unreachable. `start.cmd` judges the same rows except Git, then the data and models volume rows in
+`scripts/lib/Lifecycle.psm1` (P01.6b), and runs the orchestrator's four rows in a container. The model file row is
+planned for the backend, with the catalog (P02).
 
 The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That setup is unsupported, and image generation may fail.
 

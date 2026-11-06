@@ -1,0 +1,11 @@
+# Added after compose.lifecycle-test.yaml by the T-DCK-05 failure case: the backend's health check always fails at
+# once, so start.cmd must report it with exit status 3 and the last logs. Only the test project uses it.
+services:
+  lyrveil-backend:
+    healthcheck:
+      test: ["CMD", "python", "-c", "raise SystemExit(1)"]
+      interval: 1s
+      timeout: 2s
+      retries: 1
+      start_period: 0s
+      start_interval: 1s

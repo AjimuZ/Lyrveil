@@ -97,6 +97,18 @@ No application exists yet. This section records the design documentation.
   of it yet, and `-AcceptModelLicenses` and `-VerifyModels` exit 1 until they are.
   `scripts\lyrveil.cmd test docker` runs setup twice against a separate test
   project.
+- `start.cmd` runs setup when something is missing, checks Docker and the two
+  volumes, runs the GPU checks, starts the backend and the frontend, waits up to
+  120 s for their health checks and ends with `Lyrveil è pronto:
+  http://localhost:4200`. It exits 2 when a check fails and 3 with the last logs
+  when a service does not become healthy. The model catalog, the text model, the
+  orchestrator and the backup copy are not available yet: `start.cmd` warns about
+  each one and does not fail.
+- `stop.cmd` stops the services and keeps containers, volumes and data, also when
+  they are already stopped; it never runs `docker compose down`. `restart.cmd`
+  runs both. `status.cmd` shows each service, its health, the URL and the free
+  disk, and `status.cmd -Json` gives the same report as JSON. `logs.cmd` shows the
+  logs, with `-Follow`, `-Since` and `-Tail`.
 
 ### Changed
 
