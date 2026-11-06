@@ -2755,7 +2755,7 @@
       ],
       "priority": 117,
       "passes": false,
-      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "notes": "BLOCKED: waiting for a person: Sul PC di riferimento: clone pulito, setup e start, collaudo AC-01..AC-20 e i livelli gpu e quality.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
       "dependsOn": [
         "P09.4",
         "P02.EXIT-HW",
