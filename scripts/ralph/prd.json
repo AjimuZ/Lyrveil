@@ -2781,7 +2781,7 @@
       ],
       "priority": 118,
       "passes": false,
-      "notes": "Set aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run.",
+      "notes": "BLOCKED: waiting for a person: Decidi tu la pubblicazione: crea il tag v1.0.0, fai il push e pubblica la release.\nSet aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run.",
       "dependsOn": [
         "P09.5"
       ],
