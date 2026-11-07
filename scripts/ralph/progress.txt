@@ -144,6 +144,9 @@
 - With SQLAlchemy text() and an IN list, keep the SQL in a module constant and write `text(SQL).bindparams(bindparam('name', expanding=True))`. This also avoids ruff-format ambiguity around chained calls.
 - For scope isolation, check the conversation's own opt-in in SQL (EXISTS on conversations.shares_memory) as well as the caller's flag, so a wrong flag alone cannot leak data.
 - When a SQL string would land near 120 columns, run lint: ruff format may join implicit string concatenations that fit.
+- Make an append-only record immutable with a SQLite `BEFORE UPDATE OF <all columns except status>` trigger that raises ABORT, so a later version needs a new row.
+- In a background job, re-read what the job covered inside the commit transaction and compare its hash. If the data changed during generation, write nothing, report `superseded` and re-check the trigger.
+- Keep selection, chunking and rollup rules in a pure `memory/*.py` module that takes plain dataclasses, and keep the SQL in `persistence/*.py`. The rules can then be unit-tested without a database.
 
 ---
 
@@ -1172,4 +1175,16 @@ Not delivered: the call from replies and the prompt block (P04.5), the `memory.r
   - The evaluation fixture lives in `backend/tests/fixtures/` because the backend test stage copies only `backend/tests` and `tests/fakes/*.py` from the root.
   - Episodes are scored with kind 0.6, confidence 1.0 and status factor 1.0, and are rendered as `title: description` with `[episodio]`.
   - `memory.retrieval.*` weights are not yet read from user settings: pass `RetrievalWeights(...)` to the constructor.
+---
+
+## 2026-11-07T14:24:14Z - P04.4
+- Implemented progressive summaries (backend only). New migration 0011 adds `conversation_summaries`, with a trigger that refuses any UPDATE except to `status`, so a checkpoint is never overwritten. `SummaryService` runs the `summary_checkpoint` job and does one step per run, in this order: re-summarize a range named in the payload (new version, old row `superseded`), summarize the next chunk, or write a rollup. Chunks leave out the newest 30 readable messages and take 40 messages or 2400 tokens, whichever comes first. The cursor moves in the same transaction as the checkpoint. Six consecutive checkpoints of a level merge the oldest four into one checkpoint of the next level, and the merged rows stay. The commit re-reads the covered messages; if they changed it writes nothing and ends the job `superseded`. `choose_summaries` implements "Choosing summaries for a prompt", but no prompt calls it yet (P04.5). The summary trigger is queued after each stored reply (next to the extraction trigger) and after each finished run. The handler is registered in the lifespan. Tests: T-MEM-16 and both halves of T-MEM-17 pass. The new files are 31 unit tests and 8 integration tests, and the migration tests were updated. `scripts/lyrveil.cmd test lint` passed. The reply-streaming, memory-extraction and memory-index integration files also passed. The full unit, integration, e2e and docker levels were not run.
+- Files changed: backend/migrations/versions/0011_summaries.py, backend/src/lyrveil/domain/summaries.py, backend/src/lyrveil/memory/summaries.py, backend/src/lyrveil/persistence/summaries.py, backend/src/lyrveil/prompts/summary.py, backend/src/lyrveil/services/summaries.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/main.py, backend/src/lyrveil/persistence/characters.py, backend/tests/unit/test_summaries.py, backend/tests/integration/test_summaries.py, backend/tests/integration/test_migrations.py, CHANGELOG.md, docs/memory-engine.md, docs/data-model.md, docs/backend.md, docs/testing.md, docs/prompting.md
+- **Learnings for future iterations:**
+  - The ContextBuilder (P04.5) should read `persistence.summaries.checkpoints(connection, conversation_id)` and call `memory.summaries.choose_summaries(checkpoints, recent_from_seq, budget)`. It returns a `Selection`: the checkpoints oldest first, plus the `gaps` to log in the prompt assembly. It then loads the text with `stored_summaries(connection, ids)`.
+  - `scripts/lyrveil.cmd test integration` takes no arguments. To run a single integration file, pass it to the unit level: `scripts/lyrveil.cmd test unit tests/integration/test_summaries.py`.
+  - The next chunk depends on `persistence.summaries.tail_start`. It is the seq of the oldest of the newest N readable messages in the chat, or None if there are N or fewer. Anything at or after it is never summarized.
+  - Invalidating checkpoints when a covered message changes is not delivered. Use `status = 'invalidated'`, which the trigger allows. A re-summarize job is a `summary_checkpoint` job with payload `{from_seq, to_seq}` for a level-0 range. Rollups that cover a re-summarized range are not recomputed. That is the next task's to design.
+  - The summary token count comes from `runtime.count_tokens` inside the job. The chunk cost uses `estimate_tokens`, a high estimate that errs toward earlier chunks.
+  - The `summary.chunk_messages` and `summary.recent_tail_messages` settings are `SummarySettings` constructor values (carried by `Worker.summaries`) until the settings store exists.
 ---

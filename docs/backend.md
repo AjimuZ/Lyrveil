@@ -379,6 +379,13 @@ each memory item in the run's commit transaction, with the pure rules of `memory
 memories when a run starts. The lifespan passes the event hub to `MemoryExtractionService`, which publishes
 `memory.conflict` after the commit. See [Delivered in P04.2b](memory-engine.md#delivered-in-p042b).
 
+Delivered in P04.4: `summary_checkpoint`, run by `SummaryService` (`services/summaries.py`) and registered in the
+lifespan beside the others. `ChatInferenceService` checks the summary trigger beside the extraction trigger, in the same
+transaction after the reply is stored; a finished run checks it again for what is left. A run does one step: a range
+named by the payload, the next chunk, or the next rollup. `STRUCTURED_OUTPUT_INVALID` is retryable, with the kind's
+backoff. The job's `result_json` holds `status` and, for a completed run, the checkpoint id, `kind`, level, range,
+version, token count and attempts. See [Delivered in P04.4](memory-engine.md#delivered-in-p044).
+
 Delivered in P04.2c: guard 6 in `MemoryConsistencyService.apply` (an item a tombstone stops is counted in the job result
 as `blocked_items` and writes nothing), and `MemoryService` (`services/memories.py`, SQL in `persistence/memories.py`)
 with `edit` and `delete` as single write transactions. No HTTP route calls them yet (`PATCH` and `DELETE

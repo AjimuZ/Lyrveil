@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Progressive summaries, backend only. Once a chat has 40 older messages (or enough to reach about 2400 tokens) that
+  are not among the newest 30, a background job summarizes them with the loaded text model and stores the summary as a
+  checkpoint over that range of messages, with the events, decisions, relationship changes, open points and key facts.
+  When six consecutive checkpoints exist, the oldest four are merged into one longer-range checkpoint; the originals and
+  the merged checkpoints are kept. A range summarized again gets a new version and the old one is marked superseded,
+  never overwritten. The job runs only while the text model is loaded and retries after 1 and 5 minutes when the model's
+  answer is invalid. Replies do not use the summaries yet, nothing shows them, and checkpoints are not yet invalidated
+  when a message is edited or deleted.
 - Memory extraction, backend only. Once a chat has 10 messages not yet analyzed, or 2 when the user wrote a phrase
   such as "ricordati", "ho cambiato" or "ti prometto", the reply that follows queues a background job. The job reads
   up to 12 of those messages with the loaded text model and stores the facts and events worth remembering, each with

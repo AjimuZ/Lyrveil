@@ -347,7 +347,7 @@ lower the score of the [extraction evaluation](consistency-engine.md#extraction-
 | Task | Template | Model | `max_length` |
 | --- | --- | --- | --- |
 | Memory extraction | `extraction.v2.j2` | `ExtractionResult` | 1200 |
-| Summary checkpoint | `summary.v1.j2` | `SummaryResult` | 700 |
+| Summary checkpoint | `summary.v1.j2` (Python, `lyrveil/prompts/summary.py`, since P04.4) | `SummaryResult` | 700 |
 | Character draft | `character_draft.v1.j2` | `CharacterDraft` | 1500 |
 | Visual identity | `visual_profile.v1.j2` | `VisualIdentityResult` | 600 |
 | Image scene | `image_scene.v1.j2` | `ImageScene` | 400 |

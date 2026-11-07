@@ -635,8 +635,8 @@ because no stemmer exists yet and the columns hold the text as written. Soft-del
 filter them out. `rebuild-search` is not delivered.
 
 Delivered in P04.1 (revision `0010`): the tables of layers B to E of [Memory engine](memory-engine.md#memory-layers)
-exactly as in [Memory tables](#memory-tables), except `conversation_summaries` and `prompt_assemblies`, which come with the
-summary and context-builder tasks: `memories`, `memory_revisions`, `memory_sources`, `memory_tombstones`,
+exactly as in [Memory tables](#memory-tables), except `conversation_summaries` (P04.4, below) and `prompt_assemblies`
+(the context-builder task): `memories`, `memory_revisions`, `memory_sources`, `memory_tombstones`,
 `memory_extraction_runs`, `episodic_memories`, `episodic_sources`, `episode_links`, `character_state_history` and
 `relationship_states`. Details the document leaves open:
 
@@ -657,6 +657,17 @@ summary and context-builder tasks: `memories`, `memory_revisions`, `memory_sourc
   it in the transaction of the source row. The stems come from `lyrveil.memory.text`.
 - `CharacterService.purge` deletes the new tables too (`lyrveil.persistence.characters.purge`), before messages and
   conversations.
+
+Delivered in P04.4 (revision `0011`): `conversation_summaries` exactly as in [`conversation_summaries`](#conversation_summaries).
+Details the document leaves open: CHECK constraints cover `level >= 0`, `from_seq >= 1` with `to_seq >= from_seq`,
+`version >= 1`, the three statuses, `json_valid(content_json)`, `length(text)` from 1 to 1600 and `token_count >= 0`.
+The trigger `conversation_summaries_immutable` refuses an UPDATE of any column but `status`, so a checkpoint is never
+overwritten: re-summarizing a range inserts the next `version` and marks the old row `superseded`. The partial index
+`ix_conversation_summaries_active` is on `(conversation_id, level, from_seq)` for `active` rows.
+`lyrveil.persistence.summaries` writes the table and `conversations.last_summarized_seq` in one transaction per run
+([Delivered in P04.4](memory-engine.md#delivered-in-p044)); `content_json` holds `events`, `decisions`,
+`relationship_changes`, `unresolved`, `key_facts` and `source_seqs`, and `prompt_version` is `summary.v1`. `purge` deletes
+the checkpoints too. `prompt_assemblies` still belongs to the context-builder task.
 
 Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes `memory_extraction_runs`, conversation
 `memories` with `memory_sources` and `memory_fts`, `episodic_memories` with `episodic_sources`, `episode_links` and

@@ -397,6 +397,25 @@ weights, labels, Italian past-intent cues). In this change `scripts/lyrveil.cmd 
 tests/unit/test_memory_retrieval.py tests/integration/test_memory_retrieval.py` passed (20 tests) and
 `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
 
+Delivered in P04.4: `backend/tests/integration/test_summaries.py` runs the `summary_checkpoint` job through the real
+`JobScheduler` under a granted llm lease, with `SummaryService` and a scripted in-process text runtime, on a migrated
+SQLite file (chunks of 20 and a tail of 10, to keep the chats short). T-MEM-16: a chat of 30 messages stores one level-0
+checkpoint for 1 to 20 with its version, token count (from the runtime), prompt version and cited messages (one outside
+the range dropped), moves `last_summarized_seq` to 20 and keeps the newest ten messages out of the prompt; a chat of 130
+stores six contiguous checkpoints, then one level-1 rollup for 1 to 80 whose prompt holds only the oldest four, with the
+six rows left unchanged; a range summarized again takes version 2 and the first row becomes `superseded` with its text
+intact; an UPDATE of the text is refused by the table and only the status can change; a run whose messages changed
+while the model ran writes nothing and leaves the cursor; invalid output (twice) writes nothing and fails with
+`STRUCTURED_OUTPUT_INVALID`, retryable; a payload range that is not valid fails for good. T-MEM-17, scheduler half: in
+image mode and with no runtime ready the job is not picked and no lease is asked. `backend/tests/unit/test_summaries.py`
+holds the policy half of T-MEM-17 and the pure half of T-MEM-16: the chunk rules (tail, 20 or 40 messages, 2400 tokens,
+passed-over and pending messages), the rollup rules (five do not merge, six merge the oldest four, merged rows do not
+count again, a gap splits a run, superseded and invalidated rows are ignored, six rollups make level 2) and the choice
+of summaries for a prompt (budget, contiguity, gaps, rollup of up to 200 tokens, invalidated never used), plus the
+schema, grammar, worked example and prompts. In this change `scripts/lyrveil.cmd test unit tests/unit/test_summaries.py
+tests/integration/test_summaries.py tests/integration/test_migrations.py` and the reply, extraction and index tests
+passed, and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |

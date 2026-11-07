@@ -26,7 +26,8 @@ CARD = "0006"
 VERSIONS = "0007"
 ASSETS = "0008"
 SCENARIOS = "0009"
-HEAD = "0010"
+MEMORY = "0010"
+HEAD = "0011"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -54,7 +55,8 @@ MEMORY_TABLES = {
     "relationship_states",
     *fts_tables("memory_fts", "episode_fts"),
 }
-TABLES = {*TABLES_WITH_SCENARIOS, *MEMORY_TABLES}
+TABLES_WITH_MEMORY = {*TABLES_WITH_SCENARIOS, *MEMORY_TABLES}
+TABLES = {*TABLES_WITH_MEMORY, "conversation_summaries"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -87,6 +89,7 @@ def test_the_revisions_follow_one_another() -> None:
         VERSIONS,
         ASSETS,
         SCENARIOS,
+        MEMORY,
         HEAD,
     }
 
@@ -119,6 +122,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", MEMORY, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == TABLES_WITH_MEMORY
     assert alembic(database_path, "downgrade", SCENARIOS, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES_WITH_SCENARIOS
     assert alembic(database_path, "downgrade", ASSETS, cwd=tmp_path).returncode == 0

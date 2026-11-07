@@ -41,6 +41,7 @@ from lyrveil.jobs.handlers import (
 from lyrveil.jobs.queue import JOB_INTERRUPTED, Job, JobQueue
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
+from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
@@ -63,6 +64,7 @@ from lyrveil.ports.text_runtime import (
 )
 from lyrveil.prompts.formatter import FormattedPrompt, PromptFormatter, Turn, formatter_for
 from lyrveil.services.memory_extraction import queue_extraction_if_due
+from lyrveil.services.summaries import queue_summary_if_due
 
 # docs/backend.md (Streaming persistence): the streamed text reaches the database at least this often.
 FLUSH_INTERVAL_S = 2.0
@@ -157,7 +159,8 @@ class ChatInferenceService:
     pass fakes. The state a run leaves, besides the job's own:
 
     - finished: variant and message `complete` with the whole text, or `interrupted` when the runtime
-      reports the generation aborted; then `message.completed`, then a `memory_extraction` job when the chat is due;
+      reports the generation aborted; then `message.completed`, then a `memory_extraction` job when the chat is due
+      and a `summary_checkpoint` job when a summary is due;
     - failed with a retry coming (a retryable failure with attempts left, a lost lease, a preemption):
       message back to `queued` with empty text, so the next run starts clean; then `message.updated`;
     - failed for good: variant and message `failed` with the text streamed so far; then `message.failed`;
@@ -172,6 +175,7 @@ class ChatInferenceService:
         settings: ReplySettings | None = None,
         *,
         extraction: ExtractionSettings | None = None,
+        summaries: SummarySettings | None = None,
         queue: JobQueue | None = None,
         flush_interval_s: float = FLUSH_INTERVAL_S,
         monotonic: Callable[[], float] = time.monotonic,
@@ -181,6 +185,7 @@ class ChatInferenceService:
         self._events = events
         self._settings = settings or ReplySettings()
         self._extraction = extraction or ExtractionSettings()
+        self._summaries = summaries or SummarySettings()
         self._queue = queue or JobQueue()
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
@@ -235,11 +240,14 @@ class ChatInferenceService:
 
     def _queue_extraction(self, conversation_id: str) -> None:
         """The extraction trigger of docs/backend.md (Job handlers), in its own transaction after the reply's commit:
-        queues a `memory_extraction` job when the chat is due for one. Blocks: run it in a thread."""
-        write(
-            self._engine,
-            lambda connection: queue_extraction_if_due(connection, self._queue, conversation_id, self._extraction),
-        )
+        queues a `memory_extraction` job when the chat is due for one, and a `summary_checkpoint` job when a summary is
+        due. Blocks: run it in a thread."""
+
+        def work(connection: Connection) -> None:
+            queue_extraction_if_due(connection, self._queue, conversation_id, self._extraction)
+            queue_summary_if_due(connection, self._queue, conversation_id, self._summaries)
+
+        write(self._engine, work)
 
     def _claim(self, job: Job) -> _Reply | None:
         """Marks the job's reply `streaming` with empty text and returns it, or None when it is not waiting."""

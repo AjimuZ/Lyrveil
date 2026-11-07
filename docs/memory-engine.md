@@ -596,6 +596,55 @@ The budget is `context.summary_target_tokens`. The builder takes:
 `invalidated` checkpoints are never used. A gap in coverage is allowed and is logged in the
 prompt assembly.
 
+### Delivered in P04.4
+
+`SummaryService` (`services/summaries.py`) is the `summary_checkpoint` handler. The output schema is
+`lyrveil/domain/summaries.py` (`SummaryResult` as above, with `text` of 3 to 1600 characters and at most 8 entries of 3
+to 200 characters per list); the prompts are `lyrveil/prompts/summary.py`, version `summary.v1`, at temperature 0.3 and
+`max_length` 700 ([Structured tasks](prompting.md#structured-tasks)). The pure rules are `lyrveil/memory/summaries.py`,
+the SQL `lyrveil/persistence/summaries.py`, the table `conversation_summaries`
+([Data model](data-model.md#conversation_summaries)).
+
+- **Triggers.** After each reply is stored, in the transaction that also checks the extraction trigger, and after each
+  finished run. A `summary_checkpoint` job is queued when a chunk or a rollup is due and no summary job of the chat is
+  queued or running. The job needs `llm` and is background work, so it waits in image mode and with no runtime ready,
+  and never causes a mode change.
+- **Chunk.** The readable messages after `last_summarized_seq`, up to the first reply still pending, leaving out the
+  newest `summary.recent_tail_messages` (30) readable messages of the chat. A chunk takes the first
+  `summary.chunk_messages` (40) of them, or fewer when their cost reaches 2400 tokens first; with neither reached,
+  nothing is due. Cost is `estimate_tokens` of each message, a high estimate. The range runs from the cursor plus one to
+  the last message taken, so passed-over messages (deleted, failed, empty, system) fall inside it and consecutive
+  chunks are contiguous. The cursor moves to the end of the range in the transaction that stores the checkpoint.
+  Both settings are constructor values (`SummarySettings`, refused outside 20 to 100 and 10 to 100) until the settings
+  store exists.
+- **Rollup.** At each level, the active checkpoints that start after the end of the newest active checkpoint of the next
+  level form runs of contiguous ranges. The first run of at least 6 gives its oldest 4 to the model, which writes one
+  checkpoint of the next level over their whole range. The merged rows stay as they are and `active`. Six level-1
+  rollups merge into one of level 2 the same way.
+- **Versions.** A job whose payload is `{"from_seq", "to_seq"}` summarizes that level-0 range again: the new row takes the
+  next `version`, the active row of the range becomes `superseded`, and the cursor stays. A checkpoint is never
+  overwritten: a trigger of the table refuses an UPDATE of anything but `status`. Rollups over a range that is
+  summarized again are not recomputed.
+- **Idempotency.** The commit reads the covered messages (or the checkpoints to merge) again. If the cursor moved, a
+  message of the range changed (`source_hash` is the hash of message id, active variant id and content hash) or the
+  rollup due is no longer the same, nothing is written and the job ends `superseded`, after the trigger is checked again.
+  Invalid output refused twice fails the job with `STRUCTURED_OUTPUT_INVALID`, retried after 1 and 5 minutes
+  ([Retry policy](backend.md#retry-policy)); a runtime failure goes through for the scheduler to retry. Neither writes
+  anything or touches the cursor.
+- **Stored.** `text`, the lists of `SummaryResult` and `source_seqs` (the cited messages inside the range, ascending;
+  others are dropped) in `content_json`, `source_hash`, `prompt_version` and `token_count`, counted by the runtime
+  tokenizer.
+- **Choosing summaries.** `choose_summaries` implements the three steps above: the newest level-0 checkpoint before the
+  recent messages, earlier ones while each ends right before the one after and fits the budget, then the active
+  rollup of the highest level that ends before all of them and costs at most 200 tokens. It returns the gaps in
+  coverage for the prompt assembly to log. No prompt calls it yet (P04.5).
+- **Not delivered.** The invalidation of checkpoints when a covered message is edited or deleted, and the
+  re-summarization it queues ([Invalidation](#invalidation-after-message-changes)); the `summary.*` settings as user settings; re-evaluation.
+  Rollups are built from the checkpoints' text and lists, not the original messages.
+
+`tests/integration/test_summaries.py` holds T-MEM-16 and the scheduler half of T-MEM-17; `tests/unit/test_summaries.py`
+the policy half of T-MEM-17 and the pure rules ([Testing](testing.md#memory)).
+
 ## Context composition
 
 `ContextBuilder` builds the blocks below. `PromptFormatter` places them in four parts, from most to
