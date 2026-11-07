@@ -2,7 +2,8 @@
 # pins the ComfyUI commit of docs/technology.md, requirements.lock pins every package with hashes and PyTorch for CUDA
 # 13.0, the image runs as 10001:10001 and holds no model or launch file, ComfyUI starts in CPU mode on a read-only root
 # with only the tmpfs /tmp/comfy of compose.yaml and no network, and answers GET /system_stats of
-# docs/runtime-contracts.md, and the entrypoint turns a launch file into the documented command or exits 78. No test
+# docs/runtime-contracts.md, the entrypoint turns a launch file into the documented command or exits 78, and the
+# clip_tokens of the tag vocabulary match the tokenizer of the pinned tree (T-IMG-16). No test
 # needs a GPU or a model. The image is tagged "lyrveil/image:test", so the ":local" image of an installation is never
 # replaced. The first run downloads ComfyUI and about 4 GB of wheels; later runs reuse Docker's build cache.
 
@@ -188,6 +189,21 @@ Describe 'ComfyUI in CPU mode on a read-only root' {
         $state.Type | Should -Be 'tmpfs'
         $state.Options | Should -Match '^rw(,|$)'
         @($mounts | Where-Object Target -EQ '/tmp') | Should -BeNullOrEmpty -Because '/tmp itself stays read-only'
+    }
+}
+
+Describe 'The tag vocabulary on the tokenizer of the pinned tree' {
+    It 'records the CLIP token count ComfyUI gives every entry (T-IMG-16)' {
+        # The build stage reuses the environment of the image; "cacheonly" skips exporting its 4 GB of layers.
+        Push-Location $script:RepositoryRoot
+        try {
+            $run = Invoke-DockerCapture @('build', '--quiet', '--file', $script:Dockerfile, '--target', 'clip-tokens-check',
+                '--output', 'type=cacheonly', '.')
+        }
+        finally {
+            Pop-Location
+        }
+        $run.Status | Should -Be 0 -Because $run.Text
     }
 }
 

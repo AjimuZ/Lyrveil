@@ -175,6 +175,7 @@
 - Use a TypeGuard[int] helper that excludes bool when narrowing JSON integers under mypy strict.
 - Fill workflow templates by node id and check each node's class_type before setting an input. Prompt text goes in as data only, so it cannot change the graph.
 - Keep one file per template version, registered in a table. A test compares the folder with the table and loads every file.
+- Values derived from a pinned upstream tool (token counts, hashes) are produced by a build-only Dockerfile stage that writes the file via --output type=local, paired with a check stage run in the docker tests with --output type=cacheonly.
 
 ---
 
@@ -1537,4 +1538,15 @@ What changed:
   - workflows_dir() looks in <repo>/workflows/comfyui and /app/workflows/comfyui. The backend Dockerfile test and runtime stages now copy the folder, and .dockerignore does not exclude it.
   - The sampler is checked for shape only. A real ComfyUI 400 for an unknown sampler name would arrive as WorkflowRejectedError.
   - Still open for later P05 tasks: the image job calling build_workflow, the OOM retry chain using the tiled flag, and measuring time and VRAM per preset on a real GPU (the other half of T-IMG-14).
+---
+
+## 2026-11-07T18:19:56Z - P05.3a
+- Every tag vocabulary entry now carries clip_tokens. docker/image/clip_tokens.py computes them with ComfyUI's SDXL tokenizer from the pinned tree, through the build-only Dockerfile stages clip-tokens-run, clip-tokens and clip-tokens-check. The loader refuses an entry without a valid count. The sanitizer module gains check_user_prompt and the new PromptSyntaxRefusedError (422 PROMPT_SYNTAX_REFUSED) for the advanced dialog: it refuses `embedding:`, unbalanced unescaped parentheses, and weights outside 0.5 to 1.5 computed by ComfyUI's rules (nesting and non-finite weights included). This attempt fixed the attempt-1 lint failure, one E501 comment line in tags.py. Observed checks: `scripts/lyrveil.cmd test lint` passed; `docker build -f docker/image/Dockerfile --target clip-tokens-check --output type=cacheonly .` passed ('checked 125 tags, 0 differ'); `scripts/lyrveil.cmd test unit tests/unit/test_tag_vocabulary.py` passed (27 tests). Not run: the full suites, and the Pester ImageRuntime test file as a whole. The advanced dialog's HTTP route (POST /images/{id}/regenerate) does not exist yet, so the check is not wired to an endpoint; that comes with the gallery.
+- Files changed: backend/src/lyrveil/domain/errors.py, backend/src/lyrveil/images/sanitizer.py, backend/src/lyrveil/images/tags.py, backend/src/lyrveil/images/vocabulary/tags.v1.json, backend/tests/unit/test_tag_vocabulary.py, docker/image/Dockerfile, docker/image/clip_tokens.py, tests/docker/ImageRuntime.Tests.ps1, docs/architecture.md, docs/image-generation.md, docs/operations.md, docs/testing.md
+- **Learnings for future iterations:**
+  - TagEntry now has clip_tokens (word tokens only; the prompt builder must add one token per comma separator when budgeting).
+  - After any change to tags.v1.json (e.g. adding expression/pose/lighting categories for the scene filter), regenerate counts with: docker build -f docker/image/Dockerfile --target clip-tokens --output type=local,dest=backend/src/lyrveil/images/vocabulary . ; the deps stage takes about 4 minutes when uncached.
+  - parse_vocabulary only accepts CARD_CATEGORIES; the scene filter task must extend it with the scene categories.
+  - check_user_prompt and PromptSyntaxRefusedError exist but no route calls them yet; the gallery's POST /images/{id}/regenerate must call check_user_prompt on both prompts before queueing.
+  - Ruff line limit for backend is 120 characters, comments included.
 ---

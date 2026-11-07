@@ -671,7 +671,12 @@ Delivered in P05.1. Every stage starts from `python:3.12.16-slim-trixie`:
 3. `deps`: `uv pip sync --require-hashes --only-binary :all:` of `docker/image/requirements.lock` into `/opt/venv`,
    with bytecode compiled. Then `uv pip check`, and an install of the commit's `requirements.txt` with `--no-index`,
    which fails when the lock no longer satisfies it.
-4. `runtime`: copy `/opt/venv`, `/opt/ComfyUI` and `docker/image/entrypoint.sh` as
+4. `clip-tokens-run`, `clip-tokens` and `clip-tokens-check` (P05.3a): on top of `deps` and the source, run
+   `docker/image/clip_tokens.py`, which counts the tags of the vocabulary with ComfyUI's SDXL tokenizer. `clip-tokens`
+   exports the file with fresh counts, and `clip-tokens-check` fails when a stored count differs
+   ([Tag vocabulary](image-generation.md#tag-vocabulary)). They are build-only stages: the runtime image never holds
+   the script.
+5. `runtime`: copy `/opt/venv`, `/opt/ComfyUI` and `docker/image/entrypoint.sh` as
    `/usr/local/bin/lyrveil-image-entrypoint`, compile ComfyUI's bytecode, and stop unless `torch.version.cuda` is
    13.0. `HOME` is `/tmp/comfy/home`, `TMPDIR` is `/tmp/comfy/tmp`, no bytecode is written at run time, and the user
    is `10001:10001`. The image holds no model: `models/checkpoints` has only the upstream placeholder file. The image

@@ -191,13 +191,24 @@ text copied from tag wikis. Each entry has:
 | `tag` | The English tag, as written in the prompt |
 | `category` | `hair_color`, `hair_length`, `hairstyle`, `eye_color`, `skin`, `face`, `body`, `marks`, `accessories`, `style`, `expression`, `pose`, `lighting` |
 | `aliases_it` | Italian words that map to the tag, used by the fallback scene and the Creator's search |
-| `clip_tokens` | Token count, computed with ComfyUI's CLIP tokenizer when P05 builds the file |
+| `clip_tokens` | Tokens that ComfyUI's SDXL tokenizer gives the tag, without start, end, padding or separators |
 
 Delivered in P03.1a: the file holds the categories the character card validates (`hair_color`, `hair_length`, `eye_color`,
-`skin`, `hairstyle`, `face`, `body`, `marks`, `accessories`, `style`), each entry with its Italian aliases and without
-`clip_tokens`. P05.3a adds the token counts and the scene categories (`expression`, `pose`, `lighting`). The loader
+`skin`, `hairstyle`, `face`, `body`, `marks`, `accessories`, `style`), each entry with its Italian aliases. The loader
 `lyrveil.images.tags` refuses an entry that the sanitizer would change, and `lyrveil.images.sanitizer.sanitize_tag` is the
 sanitizer below.
+
+Delivered in P05.3a: every entry has `clip_tokens`. `docker/image/clip_tokens.py` counts them with the tokenizer of the
+pinned ComfyUI tree, in the build environment of the image. CLIP-L and CLIP-G must give the same count. The counts are
+never written by hand. After a change of the file or of the pin, rewrite them with:
+
+```bash
+docker build -f docker/image/Dockerfile --target clip-tokens --output type=local,dest=backend/src/lyrveil/images/vocabulary .
+```
+
+The target `clip-tokens-check` fails when a stored count differs. On 2026-11-07 it checked 125 entries and found 0
+differences. The loader refuses an entry without a whole `clip_tokens` that is at least its word count. The scene
+categories (`expression`, `pose`, `lighting`) are not in the file yet. They come with the scene filter.
 
 The grammar of `visual_profile_translate` takes its closed values from this file. T-IMG-16 checks that every entry passes the
 sanitizer and that its token count matches the tokenizer.
@@ -213,8 +224,17 @@ Every tag that comes from a model or a user passes the same function:
 4. Collapse spaces. An empty result is dropped.
 
 Vocabulary entries use only the characters the sanitizer keeps, so each one passes it unchanged and none needs an escape.
-Only the builder writes weights. In the gallery's advanced dialog, user weights are clamped to 0.5 to 1.5, a literal
-parenthesis is written `\(` or `\)`, and `embedding:` is refused with `PROMPT_SYNTAX_REFUSED`.
+Only the builder writes weights. The gallery's advanced dialog keeps ComfyUI's syntax, so a literal parenthesis is written
+`\(` or `\)`. `lyrveil.images.sanitizer.check_user_prompt` refuses its prompt with `PROMPT_SYNTAX_REFUSED` when:
+
+- it holds `embedding:`, in any case;
+- an unescaped parenthesis is unbalanced;
+- any segment gets a weight outside 0.5 to 1.5, bounds included. It computes weights by ComfyUI's rules: each group
+  multiplies by 1.1, and `(text:w)` sets `w`. So `((((tag))))` is about 1.46 and passes, but `(((((tag)))))` is about 1.61
+  and is refused. A weight that is not a finite number is also refused.
+
+A weight out of range is refused, not clamped, so the stored prompt is always the text the user wrote. Delivered in P05.3a:
+the check and `PromptSyntaxRefusedError`. The route of the dialog, `POST /images/{id}/regenerate`, comes with the gallery.
 
 ### Scene filter
 

@@ -10,7 +10,8 @@ from typing import TypeGuard
 from lyrveil.images.sanitizer import sanitize_tag
 
 VOCABULARY_PATH = Path(__file__).parent / "vocabulary" / "tags.v1.json"
-# The categories the character card validates (docs/image-generation.md, Tag vocabulary). P05.3a adds the scene ones.
+# The categories the character card validates (docs/image-generation.md, Tag vocabulary). The scene filter adds the
+# scene ones.
 CARD_CATEGORIES = frozenset(
     {"hair_color", "hair_length", "eye_color", "skin", "hairstyle", "face", "body", "marks", "accessories", "style"}
 )
@@ -22,11 +23,14 @@ class VocabularyError(Exception):
 
 @dataclass(frozen=True)
 class TagEntry:
-    """`tag` is the English tag as written in the prompt; `aliases_it` are the Italian words that map to it."""
+    """`tag` is the English tag as written in the prompt; `aliases_it` are the Italian words that map to it;
+    `clip_tokens` is the number of tokens ComfyUI's SDXL tokenizer gives the tag, separators excluded, always 1 or
+    more. The clip-tokens target of docker/image/Dockerfile writes it and T-IMG-16 checks it."""
 
     tag: str
     category: str
     aliases_it: tuple[str, ...]
+    clip_tokens: int
 
 
 class TagVocabulary:
@@ -60,7 +64,8 @@ def parse_vocabulary(document: object) -> TagVocabulary:
     """Returns the vocabulary of a parsed file.
 
     Raises VocabularyError for a missing or wrong field, a category the card does not know, a tag listed twice in the
-    same category, or a tag that the sanitizer would change (so no tag needs an escape in a prompt).
+    same category, a tag that the sanitizer would change (so no tag needs an escape in a prompt), or a `clip_tokens`
+    that is not a whole number at least the tag's word count (CLIP never encodes a word in fewer than one token).
     """
     if not isinstance(document, dict) or document.get("version") != 1 or not isinstance(document.get("tags"), list):
         raise VocabularyError("the vocabulary needs version 1 and a list of tags")
@@ -70,6 +75,7 @@ def parse_vocabulary(document: object) -> TagVocabulary:
         if not isinstance(item, dict):
             raise VocabularyError("every tag entry must be an object")
         tag, category, aliases = item.get("tag"), item.get("category"), item.get("aliases_it")
+        clip_tokens = item.get("clip_tokens")
         if not isinstance(tag, str) or not tag:
             raise VocabularyError("every entry needs a tag")
         if category not in CARD_CATEGORIES:
@@ -78,10 +84,13 @@ def parse_vocabulary(document: object) -> TagVocabulary:
             raise VocabularyError(f"{tag!r} needs a non-empty list of Italian aliases")
         if sanitize_tag(tag) != tag:
             raise VocabularyError(f"{tag!r} is not written as the sanitizer keeps it")
+        # bool is an int in Python, so it is excluded by name.
+        if isinstance(clip_tokens, bool) or not isinstance(clip_tokens, int) or clip_tokens < len(tag.split()):
+            raise VocabularyError(f"{tag!r} needs its clip_tokens count")
         if (category, tag) in seen:
             raise VocabularyError(f"{tag!r} is listed twice under {category}")
         seen.add((category, tag))
-        entries.append(TagEntry(tag=tag, category=category, aliases_it=tuple(aliases)))
+        entries.append(TagEntry(tag=tag, category=category, aliases_it=tuple(aliases), clip_tokens=clip_tokens))
     return TagVocabulary(tuple(entries))
 
 

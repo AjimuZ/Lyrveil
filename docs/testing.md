@@ -141,7 +141,10 @@ pytest joins it when a Docker test needs Python. The files:
   `+cu130` PyTorch, the `cpu` device and the flags of [Runtime contracts](runtime-contracts.md). The entrypoint turns
   launch files into the documented command (`--print-command`), exits 78 for an unknown, invalid, off-step, repeated
   or missing key, a command substitution, Windows line endings, a line that is not `KEY=VALUE` and a missing launch
-  file, and 64 for an unknown or repeated argument. It needs no GPU and no model. It has not run yet.
+  file, and 64 for an unknown or repeated argument. It needs no GPU and no model. It has not run yet. Since P05.3a it
+  also builds the target `clip-tokens-check` with `--output type=cacheonly`, the docker-level part of T-IMG-16: every
+  `clip_tokens` of the tag vocabulary must equal the count of the pinned tree's tokenizer. That target was built alone
+  on 2026-11-07 and passed; the Pester test itself has not run.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
@@ -618,7 +621,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-IMG-13 | Contextual mode off by default. A proposal needs a valid event and acceptance | Integration | P05 |
 | T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied. The unit part is `backend/tests/unit/test_workflows.py` (P05.2b) | Unit, real GPU | P05 |
 | T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps | Unit | P05 |
-| T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5 | Unit | P05 |
+| T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5. The unit part is `backend/tests/unit/test_tag_vocabulary.py`, the tokenizer match is in `tests/docker/ImageRuntime.Tests.ps1` (P05.3a) | Unit, Docker | P05 |
 | T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene | Unit | P05 |
 | T-IMG-18 | The caption is written through the chat path before the scene, with the normalizer and checks. A failed caption sends the image without text | Integration | P05 |
 

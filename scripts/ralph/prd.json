@@ -1853,8 +1853,8 @@
         "Every vocabulary entry carries its token count."
       ],
       "priority": 78,
-      "passes": false,
-      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "passes": true,
+      "notes": "Every tag vocabulary entry now carries clip_tokens. docker/image/clip_tokens.py computes them with ComfyUI's SDXL tokenizer from the pinned tree, through the build-only Dockerfile stages clip-tokens-run, clip-tokens and clip-tokens-check. The loader refuses an entry without a valid count. The sanitizer module gains check_user_prompt and the new PromptSyntaxRefusedError (422 PROMPT_SYNTAX_REFUSED) for the advanced dialog: it refuses `embedding:`, unbalanced unescaped parentheses, and weights outside 0.5 to 1.5 computed by ComfyUI's rules (nesting and non-finite weights included). This attempt fixed the attempt-1 lint failure, one E501 comment line in tags.py. Observed checks: `scripts/lyrveil.cmd test lint` passed; `docker build -f docker/image/Dockerfile --target clip-tokens-check --output type=cacheonly .` passed ('checked 125 tags, 0 differ'); `scripts/lyrveil.cmd test unit tests/unit/test_tag_vocabulary.py` passed (27 tests). Not run: the full suites, and the Pester ImageRuntime test file as a whole. The advanced dialog's HTTP route (POST /images/{id}/regenerate) does not exist yet, so the check is not wired to an endpoint; that comes with the gallery.",
       "dependsOn": [
         "P05.1"
       ],

@@ -60,6 +60,21 @@ RUN uv venv --quiet /opt/venv \
     && uv pip check --python /opt/venv/bin/python \
     && uv pip install --python /opt/venv/bin/python --no-index -r /tmp/requirements.txt
 
+# Counts the CLIP tokens of the tag vocabulary with this tree's tokenizer and environment (T-IMG-16). After a change of
+# the vocabulary or of the pin, rewrite its clip_tokens with:
+#   docker build -f docker/image/Dockerfile --target clip-tokens --output type=local,dest=backend/src/lyrveil/images/vocabulary .
+# The target clip-tokens-check fails when a committed count differs. Neither stage is part of the runtime image.
+FROM deps AS clip-tokens-run
+COPY --from=source /opt/ComfyUI /opt/ComfyUI
+COPY docker/image/clip_tokens.py backend/src/lyrveil/images/vocabulary/tags.v1.json /tmp/clip/
+RUN /opt/venv/bin/python /tmp/clip/clip_tokens.py write /tmp/clip/tags.v1.json /out/tags.v1.json
+
+FROM scratch AS clip-tokens
+COPY --from=clip-tokens-run /out/tags.v1.json /tags.v1.json
+
+FROM clip-tokens-run AS clip-tokens-check
+RUN /opt/venv/bin/python /tmp/clip/clip_tokens.py check /tmp/clip/tags.v1.json
+
 FROM ${PYTHON_IMAGE} AS runtime
 # HOME and TMPDIR point into the tmpfs /tmp/comfy of compose.yaml, the only writable path; the entrypoint creates both.
 # No bytecode is written at run time: everything is compiled here.

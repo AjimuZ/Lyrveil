@@ -43,6 +43,14 @@ class ContentPolicyBlockedError(DomainError):
     status = 422
 
 
+class PromptSyntaxRefusedError(DomainError):
+    """A prompt edited in the gallery's advanced dialog holds `embedding:`, a weight outside 0.5 to 1.5 or an
+    unbalanced parenthesis (422 `PROMPT_SYNTAX_REFUSED`, docs/image-generation.md, Sanitizer). Nothing is queued."""
+
+    code = "PROMPT_SYNTAX_REFUSED"
+    status = 422
+
+
 class ImportInvalidError(DomainError):
     """A character file is not valid or not of a supported version (422 `IMPORT_INVALID`). Nothing is imported."""
 
