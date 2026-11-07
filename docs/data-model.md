@@ -667,7 +667,12 @@ overwritten: re-summarizing a range inserts the next `version` and marks the old
 `lyrveil.persistence.summaries` writes the table and `conversations.last_summarized_seq` in one transaction per run
 ([Delivered in P04.4](memory-engine.md#delivered-in-p044)); `content_json` holds `events`, `decisions`,
 `relationship_changes`, `unresolved`, `key_facts` and `source_seqs`, and `prompt_version` is `summary.v1`. `purge` deletes
-the checkpoints too. `prompt_assemblies` still belongs to the context-builder task.
+the checkpoints too.
+
+`prompt_assemblies` is not created yet. Since P04.5 `ContextBuilder` returns every value of the table except the ids and
+`created_at` (`Assembly`, [Delivered in P04.5](memory-engine.md#delivered-in-p045)) and each reply logs them as counts;
+the table, its retention and `prompt_text` under diagnostic mode belong with the Memory Studio's diagnostic mode, its
+first reader (P04.9).
 
 Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes `memory_extraction_runs`, conversation
 `memories` with `memory_sources` and `memory_fts`, `episodic_memories` with `episodic_sources`, `episode_links` and

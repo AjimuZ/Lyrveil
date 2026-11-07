@@ -29,7 +29,7 @@ backend/
                          rules; P04.2b; the tombstone guard, P04.2c), retrieval.py (scoring, selection, labels
                          and past-intent cues; P04.3), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
-    context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
+    context/             ContextBuilder, token budgets, length bands, block texts, token counts
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
     images/              ImageGenerationService, VisualConsistencyService, tag vocabulary, sanitizer, workflow loader
     jobs/                JobScheduler, job handlers, retry policy
@@ -73,7 +73,7 @@ orchestrator/
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
-| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the minimal context, the stream and the persistence, under the lease the scheduler holds; the normalizer, the checks and the corrective generation join with P04.8. |
+| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the stream and the persistence, under the lease the scheduler holds; since P04.5 the context is `ContextBuilder`'s; the normalizer, the checks and the corrective generation join with P04.8. |
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
@@ -181,7 +181,7 @@ KoboldCpp endpoint table, or when a request sends a field outside the Generation
 ### Prompt formatter
 
 Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.
-Since P02.5c `ChatInferenceService` renders replies with it; `ContextBuilder` takes over the parts in P04.5.
+Since P02.5c `ChatInferenceService` renders replies with it; since P04.5 `ContextBuilder` fills the parts.
 
 - `formatter_for(family)` returns the formatter of a catalog `template`: `gemma4`, `mistral_v3_tekken` or `chatml`.
 - `chat(parts, current_message)` and `proactive(parts, instruction)` take a `ChatParts`: the stable text, the
@@ -248,14 +248,19 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   lifespan has called `close()` first, which marks the shutdown.
 - A run whose variant is no longer waiting (finished by a run whose job state a restart lost, replaced, or deleted) is
   done at once with `{"skipped": true}`, without touching the runtime. A reply whose chat was deleted ends `failed`.
-- The prompt is `context/minimal.py`: block 1 and block 2 of [Prompting](prompting.md#system-blocks) with the card
-  fields P02 stores, then the chat's `complete` and `interrupted` messages with text, at most the newest 100, and the
-  newest user message before the reply as the current one. The oldest turns are dropped, a quarter at a time, until the
-  runtime's own token count (BOS included) plus `max_length` fits the context size the runtime reports. Blocks 3, 4, 5
-  and 9 are empty until P03.1 and P04.
+- Since P04.5 the prompt is built by `ContextBuilder` ([Delivered in P04.5](memory-engine.md#delivered-in-p045)) from
+  `load_context_request`: the whole card, the chat's `complete` and `interrupted` messages with text before the reply
+  (at most the newest 100), the newest user message among them as the current one, the scenario copy and the active
+  summary checkpoints, all in one read transaction. The request sends the band's `max_length` and the context size the
+  runtime reports. After the reply is announced, the memories of block 5 get their use recorded
+  (`FtsMemoryRetriever.record_use`, its own transaction; a failure is logged and leaves the reply complete), and the
+  selection is kept in memory as the chat's `previous_ids` for its next reply. The assembly is logged as
+  `context_assembled`, counts only, and `context_over_budget` when even the parts never removed exceed the window.
+  Until P04.5 the prompt was `context/minimal.py`, blocks 1 and 2 and the newest turns trimmed a quarter at a time.
 - `ReplySettings` holds the documented defaults while no settings store exists: the `gemma4` family, the `gemma4` chat
-  sampler preset, `max_length` 400 and the user `Utente`. Both tiers' default text profiles are `gemma4`, so another
-  active profile is not followed yet.
+  sampler preset, `max_length` 400 (`llm.max_length`, the cap of every length band) and the user `Utente`. Both tiers'
+  default text profiles are `gemma4`, so another active profile is not followed yet. `Worker.context` carries the
+  `context.*` budgets (`ContextSettings`).
 - Choices the documents did not fix: a crash or a shutdown in the middle of a reply ends its job at the next start
   instead of queuing it again, so the partial text the user saw is not silently replaced; a reply still `queued` when
   the backend stops is queued again. With no user message left before the reply (the user deleted it) the run fails

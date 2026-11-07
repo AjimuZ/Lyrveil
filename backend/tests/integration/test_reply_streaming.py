@@ -339,7 +339,8 @@ async def test_a_reply_streams_its_tokens_in_order_flushes_every_two_seconds_and
     (request,) = runtime.requests
     assert request.prompt.endswith(f"{CURRENT_MESSAGE}Ciao<turn|>\n<|turn>model\n<|channel>thought\n<channel|>")
     assert request.stop_sequence == ("<turn|>", "<|turn>", "\nUtente:")
-    assert (request.max_context_length, request.max_length) == (8192, 400)
+    # The card's default length band, `brevi`, sets max_length under the `llm.max_length` cap of 400.
+    assert (request.max_context_length, request.max_length) == (8192, 120)
     assert request.genkey == finished.genkey
 
 

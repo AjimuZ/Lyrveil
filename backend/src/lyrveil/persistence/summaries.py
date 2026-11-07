@@ -108,6 +108,23 @@ def checkpoints(connection: Connection, conversation_id: str) -> list[Checkpoint
     return [_checkpoint(row) for row in rows]
 
 
+def active_summaries(connection: Connection, conversation_id: str) -> list[StoredSummary]:
+    """Returns the conversation's `active` checkpoints with their prose and lists, in the order of `checkpoints`: the
+    candidates of a reply prompt (docs/memory-engine.md, Choosing summaries for a prompt)."""
+    rows = (
+        connection.execute(
+            text(
+                f"SELECT {_COLUMNS}, text, content_json FROM conversation_summaries "
+                "WHERE conversation_id = :id AND status = :active ORDER BY from_seq, level, to_seq, version"
+            ),
+            {"id": conversation_id, "active": ACTIVE},
+        )
+        .mappings()
+        .all()
+    )
+    return [StoredSummary(_checkpoint(row), row["text"], json.loads(row["content_json"])) for row in rows]
+
+
 def stored_summaries(connection: Connection, ids: Sequence[str]) -> list[StoredSummary]:
     """Returns the checkpoints `ids` with their prose and lists, in the order of `ids`. Raises KeyError for an id that
     does not exist."""

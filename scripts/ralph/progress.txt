@@ -147,6 +147,9 @@
 - Make an append-only record immutable with a SQLite `BEFORE UPDATE OF <all columns except status>` trigger that raises ABORT, so a later version needs a new row.
 - In a background job, re-read what the job covered inside the commit transaction and compare its hash. If the data changed during generation, write nothing, report `superseded` and re-check the trigger.
 - Keep selection, chunking and rollup rules in a pure `memory/*.py` module that takes plain dataclasses, and keep the SQL in `persistence/*.py`. The rules can then be unit-tested without a database.
+- Price per-family template overhead with a fixed probe: count two constant prompts that differ by known turns. The counter cache keeps the result per model, so it costs nothing after the first reply.
+- Log fields must end in `_tokens` or `_count`, or be allowlisted identifiers. Log booleans as `<name>_count=int(flag)`; free text and string lists are dropped by `keep_allowed_fields`.
+- To make a budget test deterministic, derive the squeezed window from a first build's `token_total`, and don't guess window sizes.
 
 ---
 
@@ -1187,4 +1190,55 @@ Not delivered: the call from replies and the prompt block (P04.5), the `memory.r
   - Invalidating checkpoints when a covered message changes is not delivered. Use `status = 'invalidated'`, which the trigger allows. A re-summarize job is a `summary_checkpoint` job with payload `{from_seq, to_seq}` for a level-0 range. Rollups that cover a re-summarized range are not recomputed. That is the next task's to design.
   - The summary token count comes from `runtime.count_tokens` inside the job. The chunk cost uses `estimate_tokens`, a high estimate that errs toward earlier chunks.
   - The `summary.chunk_messages` and `summary.recent_tail_messages` settings are `SummarySettings` constructor values (carried by `Worker.summaries`) until the settings store exists.
+---
+
+## 2026-11-07T14:50:54Z - P04.5
+- Replies are now built by a full ContextBuilder.
+
+**What a reply prompt holds now**
+- **Stable text:** block 1, the full block 2 with traits, block 3 with its examples, the scenario copy, and block 6 with the chosen summary checkpoints.
+- **History:** the messages after the newest active checkpoint.
+- **Dynamic frame:** block 5 (memories from FtsMemoryRetriever) and the anchor (block 9).
+- **Current message:** cut to 2048 tokens in the prompt only; the stored message is unchanged.
+
+**Budget**
+- The window is the context size the runtime reports.
+- The reply reserve and the request's `max_length` come from the character's length band (60/120/240/400), capped by `llm.max_length`. The default card's band, `brevi`, now sends 120 instead of 400.
+- Every count that decides comes from the runtime. Counts are cached in memory by text hash and model name.
+- The whole prompt is counted with `special` after the fill and after each reduction round (at most 3 rounds).
+- Reductions run in the documented order, each spent before the next starts.
+
+**Choices the docs didn't fix (written up in memory-engine.md "Delivered in P04.5")**
+- One extra last-resort step drops history below its 800-token floor, so a prompt never overflows the window and loses its global instructions.
+- When the history was cut by the remaining room, an overshoot comes out of the history first, so a small miss in the turn prices never changes the stable text.
+- `previous_ids` and token counts are kept in memory only. `messages.token_count` is not written.
+- Block 2 gained "Dal tuo passato", "Interessi" and "Preferenze" lines. The reduction order names interests and background as prompt fields, and the old template lacked them.
+
+After each reply, the use of its memories is recorded. The assembly is logged as counts only (`context_assembled`, plus `context_over_budget` when even the parts never removed don't fit).
+
+**Checks I ran**
+- `scripts/lyrveil.cmd test unit tests/unit/test_context_builder.py`: 17 passed (T-CON-11, current-message cut, T-MOD-05 with the full context for each family).
+- The same command with `tests/integration/test_context_builder.py`: 5 passed (T-MEM-21 at 8192 and 4096, runtime counts deciding, reduction order at 4096×3 and 1536, the service wiring and use counters).
+- The formatter, summary, reply-streaming, scenario, extraction, retrieval, conversation and message files: 119 passed. Existing T-MOD-05 still passes.
+- `scripts/lyrveil.cmd test lint`: passed.
+- I did not run the full unit, integration, e2e or docker levels.
+
+**Not delivered**
+- The `prompt_assemblies` table. Data-model.md now places it with the P04.9 diagnostic mode, its first reader.
+- Block 4 (needs P04.6 state and P07.4 time context).
+- Corrective notes (P04.8). The anchor already takes them.
+- The interface note for a cut message.
+- The `context.*` keys as user settings.
+- `context.reply_reserve_tokens` is not read, since the band sets the reserve. Whether to keep that key is recorded as open.
+
+No injected instructions were found in the files I read.
+- Files changed: backend/src/lyrveil/context/__init__.py, backend/src/lyrveil/context/blocks.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/context/tokens.py, backend/src/lyrveil/context/minimal.py, backend/src/lyrveil/memory/summaries.py, backend/src/lyrveil/persistence/summaries.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/domain/characters.py, backend/src/lyrveil/main.py, backend/tests/unit/test_context_builder.py, backend/tests/integration/test_context_builder.py, backend/tests/integration/test_reply_streaming.py, CHANGELOG.md, docs/memory-engine.md, docs/prompting.md, docs/backend.md, docs/data-model.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `ContextRequest.state` is a `StateText(lines, details)`, empty today. P04.6 should fill it: block 4 is placed in the frame automatically, and `details` are the last reduction.
+  - P04.8 passes corrective notes through `ContextRequest.notes`; `blocks.anchor` keeps at most two.
+  - `ChatInferenceService` keeps each chat's last memory selection in `_previous_memories`, in memory only. `prompt_assemblies` does not exist yet. P04.9 can persist `Assembly` (blocks, memories with score parts, summary_ids, gaps, token_total, context_limit) and read `previous_ids` from it.
+  - `load_context_request(connection, conversation_id, before_seq, user=, now=)` in services/chat_inference.py is the public loader; integration tests build prompts with it plus `ContextBuilder(...).build(request, formatter_for(family), llm_max_length)`.
+  - The history candidates are the messages after the max to_seq of active checkpoints. Once P04.7 invalidates checkpoints, that boundary moves back by itself.
+  - `context/minimal.py` now holds only `UserProfile`, `LANGUAGE_NAMES`, `NO_GENDER` and `scenario_block`. Block 1 is in `context/blocks.py` and takes the full `CharacterCard`.
+  - Default reply `max_length` is now 120 (the default band `brevi`), not 400. Tests that assert the request's `max_length` must use the card's band.
 ---

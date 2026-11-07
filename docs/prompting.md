@@ -2,7 +2,8 @@
 
 Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models and 2026-11-06 for the prompt layout and the
 voice fields. Implementation: partial. Delivered in P02.3b: `PromptFormatter` for the three families of
-[Prompt format](#prompt-format) ([Backend](backend.md#prompt-formatter)). The rest is planned, phases P02 to P05.
+[Prompt format](#prompt-format) ([Backend](backend.md#prompt-formatter)). Delivered in P04.5: blocks 1, 2, 3, 5, 6 and 9
+and the length bands of a reply ([System blocks](#system-blocks)). The rest is planned, phases P02 to P05.
 
 `PromptTemplateService` loads templates from `backend/src/lyrveil/prompts/<language>/`. Each
 file has a version in its name, such as `extraction.v1.j2`. Rendering uses Jinja2 with
@@ -166,6 +167,9 @@ caps every band. Targets are median lengths in tokens, measured by the
 | `medi` | 240 | At most 160 | Rispondi in poche frasi. |
 | `lunghi` | 400 | At most 300 | Puoi scrivere un messaggio lungo, se serve. |
 
+Delivered in P04.5 (`lyrveil/context/blocks.py`): `reply_length` gives the band's `max_length` capped by `llm.max_length`;
+every reply sends it and reserves it in the window. The target medians are measured in P04.10.
+
 ## System blocks
 
 ### Block 1: global instructions
@@ -210,10 +214,13 @@ Chi sei:
 {% if character.occupation %}Lavoro: {{ character.occupation }}.{% endif %}
 {% if character.setting %}Dove vivi: {{ character.setting }}.{% endif %}
 {% if character.biography %}Storia: {{ character.biography }}{% endif %}
+{% if character.background %}Dal tuo passato: {{ character.background }}{% endif %}
+{% if character.interests %}Interessi: {{ character.interests | join(", ") }}.{% endif %}
 
 Carattere: {{ traits.main_trait | join("; ") }}
 Valori: {{ traits.value | join("; ") }}
 Motivazioni: {{ traits.motivation | join("; ") }}
+Preferenze: {{ traits.preference | join("; ") }}
 Difetti: {{ traits.flaw | join("; ") }}
 Paure: {{ traits.fear | join("; ") }}
 Abitudini: {{ traits.habit | join("; ") }}
@@ -222,7 +229,10 @@ Temperamento: {{ traits.temperament | join("; ") }}
 Con gli altri: {{ traits.relational_style | join("; ") }}
 ```
 
-Empty lines are omitted.
+Empty lines are omitted. The background, interests and preference lines were added in P04.5: the reduction order of
+[context composition](memory-engine.md#algorithm) names interests and background details as identity fields of the
+prompt, and preferences are a trait category of the card. A line that adds a period does not add a second one to a
+value that already ends a sentence.
 
 ### Block 3: communication profile
 
@@ -242,7 +252,8 @@ Dai del {{ comm.address_form }} a {{ user.display_name }}. {{ narration_text }} 
 Examples are rendered in saved order. Rendering stops before the first example that would take block 3 over its maximum
 of 500 tokens, and under budget pressure examples are the first thing cut, from the last one
 ([context composition](memory-engine.md#context-composition)). The editor shows how many examples reach the prompt, so
-the first examples should be the most typical ones.
+the first examples should be the most typical ones. In P04.5 an empty `punctuation` or `colloquial_style` leaves its
+sentence out of the second line; the editor's count of examples is not delivered.
 
 Fixed texts for `narration` and `emoji` ([ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md)):
 
@@ -292,8 +303,10 @@ Dai del {{ comm.address_form }} a {{ user.display_name }}. {{ length_text }} {{ 
 {% endfor %}
 ```
 
-`anchor_traits` holds the first sentence of up to two main traits, in their saved order. `notes` holds
-up to two corrective notes, chosen by the [consistency engine](consistency-engine.md#reply-checks):
+`anchor_traits` holds the first sentence of up to two main traits, in their saved order; a sentence ends at the first
+`.`, `!`, `?` or `…` followed by a space, and one without an ending gets a period. `notes` holds
+up to two corrective notes, chosen by the [consistency engine](consistency-engine.md#reply-checks) (from P04.8; P04.5
+renders the anchor with the notes it is given):
 
 | Trigger | Note | Lasts |
 | --- | --- | --- |

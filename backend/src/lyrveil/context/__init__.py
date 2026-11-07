@@ -1,1 +1,1 @@
-"""Prompt context: the parts a reply prompt is built from. P02 has a minimal context; ContextBuilder comes in P04.5."""
+"""Prompt context: ContextBuilder, which composes a reply prompt within the token budget, and the blocks it uses."""

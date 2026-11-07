@@ -7,7 +7,8 @@ from lyrveil.domain.card import CharacterCard
 
 @dataclass(frozen=True)
 class CharacterProfile:
-    """The card fields the P02 reply prompt reads: identity, gender and the free-text parts of block 2.
+    """The identity fields the structured tasks read (extraction, summaries): names, age, gender and the free-text
+    parts of block 2. The reply prompt reads the whole card (lyrveil.context.builder).
 
     `grammatical_gender` is `femminile`, `maschile` or `non_indicato`. Empty text fields are left out of the prompt.
     """

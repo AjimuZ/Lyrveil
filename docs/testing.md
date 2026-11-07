@@ -416,6 +416,26 @@ schema, grammar, worked example and prompts. In this change `scripts/lyrveil.cmd
 tests/integration/test_summaries.py tests/integration/test_migrations.py` and the reply, extraction and index tests
 passed, and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
 
+Delivered in P04.5: `backend/tests/integration/test_context_builder.py` runs `ContextBuilder` on a migrated SQLite file
+with `FtsMemoryRetriever`, four stored checkpoints, 24 memories, a full card and a fake runtime whose tokenizer counts a
+fixed number of tokens per word. T-MEM-21: at 8192 and 4096 the prompt fits `window - band - 64` with no reduction,
+eight examples, the four checkpoints and the blocks that are never removed; at 8192 every message after the checkpoints
+fits and the room left widens block 5, at 4096 the history is the newest messages that fit, with the gap before them
+reported; a tokenizer that needs twice the tokens keeps fewer turns, and the sent prompt is the one counted whole with
+`special`; at 4096 with three tokens a word and at 1536 the reductions follow the documented order, each spent before
+the next, the history keeps its floor unless the last step ran, and the blocks never removed stay; a reply through
+`ChatInferenceService` sends the band's `max_length` 240, the summary, the memories and the anchor, and records the use
+of exactly the memories shown. `backend/tests/unit/test_context_builder.py` holds T-CON-11 (the four bands and the
+`llm.max_length` cap set `max_length` and `available`; the anchor's lines with the band's text, two main traits and
+at most two notes, as the last block before the current message; block 3 shows examples in saved order and stops
+before the first that would pass 500 tokens, and a window 30 tokens short cuts exactly the last one), a current message
+over 2048 tokens cut in the prompt only, and T-MOD-05 with the full context for each family (two replies with other
+memories and notes share the stable text and the history, and no old turn carries the frame). In this change
+`scripts/lyrveil.cmd test unit tests/unit/test_context_builder.py` (17 passed), the same command with
+`tests/integration/test_context_builder.py` (5 passed), and the formatter, summary, reply-streaming, scenario,
+extraction, retrieval, conversation and message files (119 passed) passed, and `scripts/lyrveil.cmd test lint`
+passed; the full levels were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |

@@ -121,7 +121,7 @@ Evidence:
 - [x] P04.2 Extraction pipeline with idempotency, consistency rules and tombstones.
 - [x] P04.3 `FtsMemoryRetriever` and scoring.
 - [x] P04.4 Progressive summaries and rollups.
-- [ ] P04.5 Full `ContextBuilder` with runtime token counts, length bands and the anchor.
+- [x] P04.5 Full `ContextBuilder` with runtime token counts, length bands and the anchor.
 - [ ] P04.6 `CharacterStateManager`, bounded updates, replay.
 - [ ] P04.7 Invalidation and re-evaluation.
 - [ ] P04.8 Reply normalizer, reply checks V1 to V13 with the corrective generation, and adaptive notes ([ADR 0032](decisions/0032-model-independent-reply-normalization.md)).

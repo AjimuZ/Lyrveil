@@ -7,26 +7,36 @@ FLUSH_INTERVAL_S seconds and at the end, each time in its own short transaction,
 while the reply streams. After a crash the reply keeps what was written: `recover_interrupted_replies` marks it
 `interrupted` at the next start.
 
-P02 scope: the prompt is the minimal context of lyrveil.context.minimal, rendered by the formatter of
-`ReplySettings.template` and trimmed to the runtime's real context with its own token counts. Tokens are
-stored and published as the runtime yields them: ReplyNormalizer, the reply checks and the corrective
-generation, and with them `message.restarted`, come in P04.8. No message text, prompt or token is ever logged.
+The prompt is built by lyrveil.context.builder.ContextBuilder (docs/memory-engine.md, Context composition) in the
+family of `ReplySettings.template`, with the runtime's own token counts, the character's length band as `max_length`
+and the conversation's memories and summaries. Tokens are stored and published as the runtime yields them:
+ReplyNormalizer, the reply checks and the corrective generation, and with them `message.restarted` and the anchor's
+corrective notes, come in P04.8. No message text, prompt or token is ever logged: the assembly is logged as counts.
 
-After a finished reply is stored and announced, the memory extraction trigger runs in its own transaction
-(lyrveil.services.memory_extraction.queue_extraction_if_due), so a failure there never undoes the reply.
+After a finished reply is stored and announced, the use of its memories is recorded and the memory extraction trigger
+runs (lyrveil.services.memory_extraction.queue_extraction_if_due), each in its own transaction, so a failure there
+never undoes the reply.
 """
 
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 import anyio
 from anyio import to_thread
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
-from lyrveil.context.minimal import UserProfile, chat_parts, split_current_message
-from lyrveil.domain.characters import CharacterProfile
+from lyrveil.context.builder import (
+    Assembly,
+    ContextBuilder,
+    ContextRequest,
+    ContextSettings,
+    SummaryText,
+    split_messages,
+)
+from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.messages import PENDING, Message, MessageStatus, VariantStatus, content_hash, message_document
 from lyrveil.jobs.handlers import (
@@ -43,9 +53,11 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
 from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
+from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
 from lyrveil.persistence import scenarios as scenario_repository
+from lyrveil.persistence import summaries as summary_repository
 from lyrveil.ports.events import (
     MESSAGE_COMPLETED,
     MESSAGE_DELTA,
@@ -62,17 +74,22 @@ from lyrveil.ports.text_runtime import (
     TextRuntime,
     TextRuntimeError,
 )
-from lyrveil.prompts.formatter import FormattedPrompt, PromptFormatter, Turn, formatter_for
+from lyrveil.prompts.formatter import formatter_for
 from lyrveil.services.memory_extraction import queue_extraction_if_due
+from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
 
 # docs/backend.md (Streaming persistence): the streamed text reaches the database at least this often.
 FLUSH_INTERVAL_S = 2.0
-# The newest messages a P02 prompt reads before the token budget trims it; summaries take over in P04.4.
+# The newest messages a prompt reads before the token budget trims them; the summaries cover what lies before.
 MAX_HISTORY_MESSAGES = 100
 _NOTHING_TO_ANSWER = "Non c'è un messaggio a cui rispondere."
 
 logger = get_logger(__name__)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True)
@@ -81,7 +98,8 @@ class ReplySettings:
 
     P02 has no settings store yet, so the defaults are the documented ones: the `gemma4` family of the default text
     profiles of both tiers, the `gemma4` chat preset of docs/prompting.md (Sampler presets), `llm.max_length` 400 and
-    the default user of docs/configuration.md. A sampler field left at None is not sent.
+    the default user of docs/configuration.md. A sampler field left at None is not sent. `max_length` is the ceiling
+    of every length band: the request sends the character's band, capped by it.
     """
 
     template: TextTemplate = "gemma4"
@@ -108,14 +126,16 @@ class _Reply:
     seq: int
     conversation_id: str
     character_id: str
-    language: str
 
 
 @dataclass(frozen=True)
 class _Generated:
+    """A finished generation, with the size of its prompt and the memories and episodes its block 5 held."""
+
     text: str
     status: MessageStatus
     prompt_tokens: int
+    memory_ids: tuple[str, ...]
 
 
 def _presence(reply: _Reply) -> dict[str, str]:
@@ -150,17 +170,92 @@ def _failure(error: Exception) -> tuple[str, bool]:
     return INTERNAL, False
 
 
+def load_context_request(
+    connection: Connection,
+    conversation_id: str,
+    before_seq: int,
+    *,
+    user: UserProfile,
+    now: datetime,
+    previous_memory_ids: frozenset[str] = frozenset(),
+) -> ContextRequest | None:
+    """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
+    readable messages before it, the scenario copy the chat started with and the chat's active checkpoints.
+
+    Everything is keyed by this conversation, so another chat of the same character adds nothing; memories are read
+    later by the builder, under the same scope. Returns None when no user message has text. The conversation must
+    exist.
+    """
+    conversation = conversation_repository.get(connection, conversation_id)
+    assert conversation is not None
+    stored = character_repository.get_card(connection, conversation.character_id)
+    assert stored is not None, "a conversation's character cannot be removed while the chat exists"
+    split = split_messages(repository.prompt_messages(connection, conversation_id, before_seq, MAX_HISTORY_MESSAGES))
+    if split is None:
+        return None
+    history, current = split
+    return ContextRequest(
+        character_id=conversation.character_id,
+        conversation_id=conversation_id,
+        card=stored.card,
+        user=user,
+        language=conversation.effective_language,
+        shares_memory=conversation.shares_memory,
+        history=history,
+        current=current,
+        summaries=[
+            SummaryText(summary.checkpoint, summary.text)
+            for summary in summary_repository.active_summaries(connection, conversation_id)
+        ],
+        now=now,
+        scenario=scenario_repository.snapshot_of(connection, conversation_id),
+        previous_memory_ids=previous_memory_ids,
+    )
+
+
+def _log_assembly(job_id: str, conversation_id: str, assembly: Assembly) -> None:
+    """Logs what the prompt holds as counts only: block sizes, items and reductions, never text."""
+    sizes = {f"{name}_tokens": tokens for name, tokens in assembly.blocks.items()}
+    logger.info(
+        "context_assembled",
+        job_id=job_id,
+        conversation_id=conversation_id,
+        context_limit_tokens=assembly.context_limit,
+        available_tokens=assembly.available,
+        prompt_tokens=assembly.token_total,
+        reply_reserve_tokens=assembly.max_length,
+        example_count=assembly.example_count,
+        memory_count=len(assembly.memories),
+        summary_count=len(assembly.summary_ids),
+        gap_count=len(assembly.gaps),
+        history_count=len(assembly.history_seqs),
+        reduction_count=len(assembly.reductions),
+        truncated_count=int(assembly.current_truncated),
+        **sizes,
+    )
+    if not assembly.fits:
+        logger.warning(
+            "context_over_budget",
+            job_id=job_id,
+            conversation_id=conversation_id,
+            prompt_tokens=assembly.token_total,
+            available_tokens=assembly.available,
+        )
+
+
 class ChatInferenceService:
     """Runs one reply per call, as the JobHandler of `chat_reply` and `chat_regenerate` (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `events` receives each event
     after the change it announces was committed. `extraction` sets the trigger threshold, and `queue` is where the
-    trigger queues extraction jobs. `monotonic` and `flush_interval_s` time the flushes; tests
-    pass fakes. The state a run leaves, besides the job's own:
+    trigger queues extraction jobs. `context` holds the prompt budgets and `retriever` finds the memories (by default
+    an FtsMemoryRetriever on `engine`). `monotonic` and `flush_interval_s` time the flushes and `clock` gives the
+    aware time of retrieval and use counters; tests pass fakes. The selection of a chat's last reply is kept in memory
+    for its next one, so a restart only loses that small bonus. The state a run leaves, besides the job's own:
 
     - finished: variant and message `complete` with the whole text, or `interrupted` when the runtime
-      reports the generation aborted; then `message.completed`, then a `memory_extraction` job when the chat is due
-      and a `summary_checkpoint` job when a summary is due;
+      reports the generation aborted; then `message.completed`, then the use of its memories, then a
+      `memory_extraction` job when the chat is due and a `summary_checkpoint` job when a summary is due;
     - failed with a retry coming (a retryable failure with attempts left, a lost lease, a preemption):
       message back to `queued` with empty text, so the next run starts clean; then `message.updated`;
     - failed for good: variant and message `failed` with the text streamed so far; then `message.failed`;
@@ -176,9 +271,12 @@ class ChatInferenceService:
         *,
         extraction: ExtractionSettings | None = None,
         summaries: SummarySettings | None = None,
+        context: ContextSettings | None = None,
+        retriever: FtsMemoryRetriever | None = None,
         queue: JobQueue | None = None,
         flush_interval_s: float = FLUSH_INTERVAL_S,
         monotonic: Callable[[], float] = time.monotonic,
+        clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._engine = engine
         self._runtime = runtime
@@ -186,10 +284,15 @@ class ChatInferenceService:
         self._settings = settings or ReplySettings()
         self._extraction = extraction or ExtractionSettings()
         self._summaries = summaries or SummarySettings()
+        self._retriever = retriever or FtsMemoryRetriever(engine)
+        self._builder = ContextBuilder(runtime, self._retriever, context)
         self._queue = queue or JobQueue()
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
+        self._clock = clock
         self._closing = False
+        # The memory selection of each chat's last finished reply, the `previous_ids` of its next one.
+        self._previous_memories: dict[str, frozenset[str]] = {}
 
     def close(self) -> None:
         """Marks the backend as shutting down. A run cancelled from now on keeps its reply `streaming` with the text
@@ -210,7 +313,7 @@ class ChatInferenceService:
         self._events.publish(TYPING_STARTED, _presence(reply))
         streamed: list[str] = []
         try:
-            generated = await self._generate(reply, context, streamed)
+            generated = await self._generate(job, reply, context, streamed)
         except anyio.get_cancelled_exc_class():
             with anyio.CancelScope(shield=True):
                 await self._cancelled(job, reply, "".join(streamed))
@@ -230,6 +333,13 @@ class ChatInferenceService:
             reply_chars=len(generated.text),
             prompt_tokens=generated.prompt_tokens,
         )
+        self._previous_memories[reply.conversation_id] = frozenset(generated.memory_ids)
+        if generated.memory_ids:
+            try:
+                await to_thread.run_sync(self._retriever.record_use, generated.memory_ids, self._clock())
+            except Exception:
+                # Use counters only tune recency of use; the stored reply must not become a failed job over them.
+                logger.error("memory_use_failed", job_id=job.id, exc_info=True)
         try:
             await to_thread.run_sync(self._queue_extraction, reply.conversation_id)
         except Exception:
@@ -277,7 +387,6 @@ class ChatInferenceService:
                 seq=message.seq,
                 conversation_id=conversation.id,
                 character_id=conversation.character_id,
-                language=conversation.effective_language,
             )
             if conversation.status is ConversationStatus.DELETED:
                 # A deleted chat is hidden everywhere: its reply ends failed instead of taking the GPU.
@@ -288,30 +397,20 @@ class ChatInferenceService:
 
         return write(self._engine, work)
 
-    async def _generate(self, reply: _Reply, context: RunContext, streamed: list[str]) -> _Generated:
-        """Streams the reply, publishing each token and flushing the text on time. `streamed` collects the
-        tokens, so a failure handler sees what was already shown."""
-        character, messages, scenario = await to_thread.run_sync(self._load_context, reply)
-        split = split_current_message(messages)
-        if split is None:
+    async def _generate(self, job: Job, reply: _Reply, context: RunContext, streamed: list[str]) -> _Generated:
+        """Builds the prompt, then streams the reply, publishing each token and flushing the text on time.
+        `streamed` collects the tokens, so a failure handler sees what was already shown."""
+        wanted = await to_thread.run_sync(self._load_context, reply)
+        if wanted is None:
             raise JobFailedError(INTERNAL, _NOTHING_TO_ANSWER, retryable=False)
-        history, current = split
         settings = self._settings
         formatter = formatter_for(settings.template)
-        info = await self._runtime.info()
-        prompt, prompt_tokens = await self._fit(
-            formatter,
-            character,
-            reply.language,
-            history,
-            current,
-            info.max_context_length - settings.max_length,
-            scenario,
-        )
+        assembly = await self._builder.build(wanted, formatter, settings.max_length)
+        _log_assembly(job.id, reply.conversation_id, assembly)
         request = TextRequest(
-            prompt=prompt.text,
-            max_context_length=info.max_context_length,
-            max_length=settings.max_length,
+            prompt=assembly.prompt.text,
+            max_context_length=assembly.context_limit,
+            max_length=assembly.max_length,
             genkey=context.genkey,
             temperature=settings.temperature,
             top_p=settings.top_p,
@@ -342,44 +441,24 @@ class ChatInferenceService:
         if finish is None:
             raise RuntimeStreamDroppedError("the stream ended without its final chunk")
         status = MessageStatus.INTERRUPTED if finish == "aborted" else MessageStatus.COMPLETE
-        return _Generated("".join(streamed), status, prompt_tokens)
+        memory_ids = tuple(item.id for item in assembly.memories)
+        return _Generated("".join(streamed), status, assembly.token_total, memory_ids)
 
-    async def _fit(
-        self,
-        formatter: PromptFormatter,
-        character: CharacterProfile,
-        language: str,
-        history: Sequence[Turn],
-        current: str,
-        budget: int,
-        scenario: Mapping[str, object] | None = None,
-    ) -> tuple[FormattedPrompt, int]:
-        """Returns the prompt and its token count, with the oldest turns dropped until it fits `budget` tokens.
-
-        Counts with the runtime's tokenizer, BOS included, never by estimate. A quarter of the remaining
-        history goes at each step, so a long chat needs few counts. With no history left the prompt is sent
-        as it is, and the runtime keeps the end of what does not fit.
-        """
-        kept = list(history)
-        user = self._settings.user
-        while True:
-            prompt = formatter.chat(chat_parts(character, user, language, kept, scenario), current)
-            tokens = await self._runtime.count_tokens(prompt.text, special=True)
-            if tokens <= budget or not kept:
-                return prompt, tokens
-            del kept[: max(1, len(kept) // 4)]
-
-    def _load_context(self, reply: _Reply) -> tuple[CharacterProfile, list[Message], dict[str, object] | None]:
-        """Returns the character card, the chat's messages before the reply, and the scenario copy the chat started
-        with. Everything is keyed by this reply's conversation, so another chat of the same character adds nothing."""
-
-        def load(connection: Connection) -> tuple[CharacterProfile, list[Message], dict[str, object] | None]:
-            character = conversation_repository.find_profile(connection, reply.character_id)
-            assert character is not None, "a conversation's character cannot be removed while the chat exists"
-            messages = repository.prompt_messages(connection, reply.conversation_id, reply.seq, MAX_HISTORY_MESSAGES)
-            return character, messages, scenario_repository.snapshot_of(connection, reply.conversation_id)
-
-        return read(self._engine, load)
+    def _load_context(self, reply: _Reply) -> ContextRequest | None:
+        """Returns what the reply's prompt is built from (load_context_request), in one read transaction. Blocks: run
+        it in a thread."""
+        previous = self._previous_memories.get(reply.conversation_id, frozenset())
+        return read(
+            self._engine,
+            lambda connection: load_context_request(
+                connection,
+                reply.conversation_id,
+                reply.seq,
+                user=self._settings.user,
+                now=self._clock(),
+                previous_memory_ids=previous,
+            ),
+        )
 
     def _write(self, reply: _Reply, text: str, status: MessageStatus, variant_status: VariantStatus) -> Message:
         """Stores `text` and the statuses in one transaction and returns the message. Blocks: run it in a thread."""

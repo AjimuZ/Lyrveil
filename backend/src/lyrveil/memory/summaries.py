@@ -190,13 +190,19 @@ def choose_summaries(checkpoints: Sequence[Checkpoint], recent_from_seq: int, bu
     older = [c for c in active if c.level >= 1 and c.to_seq < before and c.token_count <= allowance]
     if older:
         chosen.insert(0, max(older, key=lambda c: (c.level, c.to_seq)))
+    return Selection(tuple(chosen), coverage_gaps(chosen, recent_from_seq))
+
+
+def coverage_gaps(chosen: Sequence[Checkpoint], recent_from_seq: int) -> tuple[tuple[int, int], ...]:
+    """Returns the seq ranges `(first, last)` that no checkpoint of `chosen` (oldest first) covers between them and the
+    recent messages starting at `recent_from_seq`; nothing when `chosen` is empty."""
     gaps: list[tuple[int, int]] = []
     for earlier, later in pairwise(chosen):
         if earlier.to_seq + 1 < later.from_seq:
             gaps.append((earlier.to_seq + 1, later.from_seq - 1))
     if chosen and chosen[-1].to_seq + 1 < recent_from_seq:
         gaps.append((chosen[-1].to_seq + 1, recent_from_seq - 1))
-    return Selection(tuple(chosen), tuple(gaps))
+    return tuple(gaps)
 
 
 def clean_source_seqs(seqs: Sequence[int], first: int, last: int) -> list[int]:

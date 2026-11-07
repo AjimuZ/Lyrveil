@@ -10,19 +10,31 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Replies now use the chat's memory and the whole character card. Each reply's prompt holds the global rules, the full
+  identity with its traits, interests and background, the communication style with the example exchanges (in saved
+  order, as many as fit about 500 tokens), the chat's summaries of older messages, the memories most relevant to the
+  last messages, and a short reminder just before the user's message with the name, age, the first sentence of two
+  main traits, the address form, the length of the character's replies and the asterisk and emoji rules. The
+  character's message length now sets how long a reply may be: about 60, 120, 240 or 400 tokens for "brevissimi",
+  "brevi", "medi" and "lunghi", never above the 400-token ceiling. Everything is sized with the loaded model's own
+  token counts. When the model's window is small, the extras are cut in a fixed order (examples, older summaries,
+  less relevant memories, older messages down to a floor, optional card details) and the essentials of the card, the
+  reminder and the user's message always stay. A message longer than about 2048 tokens is cut in the prompt only, with
+  no note in the interface yet. The memories a reply used are marked as used. Relationship state and time of day are
+  not in the prompt yet, and the per-reply record for the Memory Studio is not stored yet.
 - Progressive summaries, backend only. Once a chat has 40 older messages (or enough to reach about 2400 tokens) that
   are not among the newest 30, a background job summarizes them with the loaded text model and stores the summary as a
   checkpoint over that range of messages, with the events, decisions, relationship changes, open points and key facts.
   When six consecutive checkpoints exist, the oldest four are merged into one longer-range checkpoint; the originals and
   the merged checkpoints are kept. A range summarized again gets a new version and the old one is marked superseded,
   never overwritten. The job runs only while the text model is loaded and retries after 1 and 5 minutes when the model's
-  answer is invalid. Replies do not use the summaries yet, nothing shows them, and checkpoints are not yet invalidated
-  when a message is edited or deleted.
+  answer is invalid. Replies use them (see above); nothing shows them, and checkpoints are not yet invalidated when a
+  message is edited or deleted.
 - Memory extraction, backend only. Once a chat has 10 messages not yet analyzed, or 2 when the user wrote a phrase
   such as "ricordati", "ho cambiato" or "ti prometto", the reply that follows queues a background job. The job reads
   up to 12 of those messages with the loaded text model and stores the facts and events worth remembering, each with
   the messages it came from. It runs only while the text model is loaded, retries after 1 and 5 minutes when the
-  model's answer is invalid, and never analyzes the same messages twice. Replies do not use these memories yet,
+  model's answer is invalid, and never analyzes the same messages twice. Replies use these memories (see above);
   nothing shows them, and relationship changes and the chat state are not stored yet.
 - Memory consistency rules, backend only. Code, not the model, now decides what extraction stores. A fact that
   changed ("ho cambiato lavoro, ora sono da Verdi") replaces the old one, which is kept as history with its source
@@ -41,8 +53,8 @@ No application exists yet. This section records the design documentation.
   with rules, promises and locked memories always considered. It fits them into a token budget, keeps both sides of a
   conflict together and marks each one as sure, uncertain, story, for now, past or event. A memory of one chat never
   reaches another chat or another character; memories shared across chats are read only when the chat has sharing on.
-  On a synthetic set of 60 questions it finds 58 of the 61 expected memories within the first 8. Replies do not use it
-  yet.
+  On a synthetic set of 60 questions it finds 58 of the 61 expected memories within the first 8. Each reply now uses
+  it.
 - Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
   job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
   data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from

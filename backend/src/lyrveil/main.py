@@ -22,6 +22,7 @@ from lyrveil.api.security import (
     domain_error_handler,
     internal_error_handler,
 )
+from lyrveil.context.builder import ContextSettings
 from lyrveil.domain.errors import DomainError
 from lyrveil.events.hub import EventHub
 from lyrveil.jobs.handlers import JobHandler
@@ -75,8 +76,8 @@ def _llm_mode() -> RequiredMode:
 @dataclass(frozen=True)
 class Worker:
     """What the job worker takes from outside the application: a factory of the text runtime, opened for the
-    application's life, the lease calls, the GPU mode whose jobs may run, the reply settings and the memory extraction
-    settings.
+    application's life, the lease calls, the GPU mode whose jobs may run, the reply settings, the memory extraction,
+    summary and prompt budget settings.
 
     Tests pass fakes.
     """
@@ -87,6 +88,7 @@ class Worker:
     replies: ReplySettings = field(default_factory=ReplySettings)
     memory: ExtractionSettings = field(default_factory=ExtractionSettings)
     summaries: SummarySettings = field(default_factory=SummarySettings)
+    context: ContextSettings = field(default_factory=ContextSettings)
 
 
 @asynccontextmanager
@@ -121,7 +123,13 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
         return
     async with worker.text_runtime() as runtime:
         replies = ChatInferenceService(
-            engine, runtime, app.state.events, worker.replies, extraction=worker.memory, summaries=worker.summaries
+            engine,
+            runtime,
+            app.state.events,
+            worker.replies,
+            extraction=worker.memory,
+            summaries=worker.summaries,
+            context=worker.context,
         )
         drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
         memories = MemoryExtractionService(

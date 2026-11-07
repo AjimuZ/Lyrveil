@@ -534,9 +534,10 @@ The contract is `ports/memory_retriever.py` (`RetrievalQuery`, `RetrievalResult`
 - **Past intent.** `is_past_intent` in `memory/retrieval.py` reads `prompts/it/past_cues.txt`; other languages have no list
   yet, so they never have past intent.
 - **Use counters.** `FtsMemoryRetriever.record_use` sets `last_used_at` and adds 1 to `use_count`, leaving `updated_at`
-  alone, so use does not count as recency. Its caller, after the reply is committed, arrives with the context builder.
-- **Not delivered.** The call from replies and the prompt block (P04.5), the `memory.retrieval.*` settings as
-  user settings (the weights are a `RetrievalWeights` argument for now), and past-intent cues outside Italian.
+  alone, so use does not count as recency. Since P04.5 `ChatInferenceService` calls it after each reply is announced.
+- **Not delivered.** The `memory.retrieval.*` settings as user settings (the weights are a `RetrievalWeights` argument
+  for now), and past-intent cues outside Italian. Since P04.5 replies call the retriever and render block 5
+  ([Delivered in P04.5](#delivered-in-p045)).
 
 `tests/integration/test_memory_retrieval.py` holds T-MEM-05, T-MEM-15, T-CON-01, T-CON-02 and T-MEM-22;
 `tests/unit/test_memory_retrieval.py` the pure rules ([Testing](testing.md#memory)).
@@ -637,7 +638,7 @@ the SQL `lyrveil/persistence/summaries.py`, the table `conversation_summaries`
 - **Choosing summaries.** `choose_summaries` implements the three steps above: the newest level-0 checkpoint before the
   recent messages, earlier ones while each ends right before the one after and fits the budget, then the active
   rollup of the highest level that ends before all of them and costs at most 200 tokens. It returns the gaps in
-  coverage for the prompt assembly to log. No prompt calls it yet (P04.5).
+  coverage for the prompt assembly to log. Since P04.5 every reply prompt calls it, through `active_summaries`.
 - **Not delivered.** The invalidation of checkpoints when a covered message is edited or deleted, and the
   re-summarization it queues ([Invalidation](#invalidation-after-message-changes)); the `summary.*` settings as user settings; re-evaluation.
   Rollups are built from the checkpoints' text and lists, not the original messages.
@@ -728,6 +729,63 @@ when the reuse point lies beyond that cache. SWA padding and SmartCache are meas
 
 P04 measures the prompt processing time with `last_process` from `/api/extra/perf`, for this layout and
 for a single system text.
+
+### Delivered in P04.5
+
+`ContextBuilder` is `lyrveil/context/builder.py`, the block texts `lyrveil/context/blocks.py`, the token counts
+`lyrveil/context/tokens.py`. `ChatInferenceService` loads its input with `load_context_request` and sends what it returns
+([Backend](backend.md#streaming-persistence)).
+
+- **Window and reserve.** The limit is `max_context_length` from the runtime's `info`. The reply reserve, and the
+  request's `max_length`, is the band's value capped by `llm.max_length` ([Length bands](prompting.md#length-bands));
+  `available` also leaves `context.safety_margin_tokens`. `context.reply_reserve_tokens` is not read: the algorithm
+  and [Configuration](configuration.md) both tie the reserve to the band, so whether that key stays is open.
+- **Counts.** Every count that decides comes from `count_tokens`. `TokenCounter` caches counts in memory by the SHA-256
+  of the text and the model name, so a model change counts again; at most 8192 counts are kept. A history turn is
+  priced as its text plus the markers of the family, measured once per model on a fixed probe of two turns, plus one
+  token; that price only chooses how many messages to try. The whole prompt is counted with `special: true` after the
+  fill and after each round of reductions, and `token_total` is that count. `messages.token_count` is not written:
+  the in-memory cache replaces it until a restart.
+- **Order.** Block 1, block 2 in full, block 3 with its examples in saved order up to the first that would take it
+  over 500 tokens, block 4, the anchor, and block 8 cut to 2048 tokens when longer (the start is kept, the stored
+  message is not changed, and the interface note is not delivered). Then memories with `context.memory_target_tokens`
+  and summaries with `context.summary_target_tokens`. The history candidates are the messages after the newest active
+  checkpoint; they fill what is left from the newest back and stop at the first that does not fit, so the history
+  stays contiguous, and never get less than the 800-token floor. When every candidate fits, the room left widens the
+  memory query, then the summary budget, up to 1400 and 900.
+- **Summaries.** `choose_summaries` runs with the first history seq; since every checkpoint ends before the
+  candidates, the choice does not depend on how far back the history reaches. The gaps between the chosen checkpoints
+  and the history are returned as `Assembly.gaps`.
+- **Over budget.** When the history was cut by the room left and the count still exceeds `available`, the oldest
+  turns go first, down to the floor, so a small miss of the turn prices never changes the stable text. Then, for at
+  most 3 rounds in all, the reductions apply in order, each until spent before the next starts, until the runtime
+  counts of what they removed cover the excess: the examples from the last, the oldest checkpoints, the lowest memories
+  (a conflict group whole), the oldest turns down to the floor, the optional identity parts, the state details. One
+  step is added after the documented list: turns below the floor, oldest first, because a prompt longer than the window
+  would lose its start, the global instructions, inside the runtime. A prompt still over is sent and logged as
+  `context_over_budget`.
+- **Identity parts.** Block 2 never loses the name, age, gender, narrative identity, main traits and values. The
+  optional parts go in this order: interests, background, the unlocked traits of relational style, temperament,
+  humor, habits, fears, flaws, preferences and motivations, then biography, setting and occupation. A locked trait of any
+  category stays.
+- **Retrieval.** The query is the current message and the two turns before it, with past intent from the Italian cue
+  list, the conversation's `shares_memory`, and the previous reply's selection as `previous_ids`, kept in memory per
+  chat by `ChatInferenceService` (a restart loses only that bonus). The retriever runs in a worker thread. Use counters
+  are recorded after the reply is announced.
+- **Record.** `Assembly` holds the prompt, `max_length`, the limit, `available`, `token_total`, the runtime count of
+  each block, the example count, the memories with their score parts, the summary ids, the gaps, the history seqs, the
+  reductions applied and whether the current message was cut. The reply logs it as `context_assembled`, with counts
+  only. The `prompt_assemblies` table is not written yet ([Data model](data-model.md#prompt_assemblies)).
+- **Not delivered.** Block 4: no state exists before the Character State Manager (P04.6) and no time context before
+  P07.4, so `StateText` is empty and the frame holds blocks 5 and 9. Corrective notes come with P04.8; the anchor takes
+  them already. The `context.*` keys as user settings (`ContextSettings` is a constructor value). `last_process`
+  measurements (P04.10).
+- **Prefix.** While the history fits whole, two replies share the stable text and the history byte for byte. Once the
+  history is cut by the room left, its oldest turn moves with each reply, so the cache reuse ends at the stable text
+  for `gemma4` and `chatml` until the next checkpoint; P04.10 measures what that costs.
+
+`tests/integration/test_context_builder.py` holds T-MEM-21; `tests/unit/test_context_builder.py` holds T-CON-11 and
+T-MOD-05 with the full context ([Testing](testing.md#memory)).
 
 ## Working memory
 
