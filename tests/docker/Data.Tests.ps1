@@ -242,7 +242,7 @@ Describe 'import-model, backup and restore against a test project' {
         (@(Get-VolumeFile -Volume $script:DataVolume) -join ',') | Should -BeExactly $before
     }
 
-    It 'restore replaces the data with the backup, keeps the previous data in pre-restore-<time>, and starts' {
+    It 'restore replaces the data with the backup, keeps the previous data in a pre-restore folder, and starts' {
         Mock -ModuleName DataFiles Read-Confirmation { $true }
         $null = Invoke-Volume -Volume $script:DataVolume -Command 'printf after > /volume/media/after-backup.txt'
 

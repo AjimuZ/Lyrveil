@@ -375,7 +375,7 @@ function Invoke-LyrveilRestore {
         Write-Host "FAILURE  Restore refused: $name failed restore-check (see the output above). Nothing was stopped or changed."
         return 1
     }
-    if (-not (Read-Confirmation -Question "Restore $name? Lyrveil stops, the database, media and launch files of the data volume move to pre-restore-<time>, and the backup's take their place.")) {
+    if (-not (Read-Confirmation -Question "Restore ${name}? Lyrveil stops, the database, media and launch files of the data volume move to pre-restore-<time>, and the backup's take their place.")) {
         Write-Host 'Nothing was restored (exit status 5).'
         return 5
     }
