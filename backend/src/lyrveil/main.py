@@ -17,6 +17,8 @@ from lyrveil.api.security import (
     documented_headers,
     internal_error_handler,
 )
+from lyrveil.jobs.queue import JobQueue
+from lyrveil.jobs.scheduler import recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.persistence.database import (
@@ -86,7 +88,8 @@ def main() -> int:
     """Starts the backend and returns the process exit status.
 
     Returns 78 with a message on stderr naming each invalid setting, before logging or the server starts. Then opens
-    the database, verifies WAL and FTS5, and applies the migrations; if that fails it logs `DB_CAPABILITY_MISSING`
+    the database, verifies WAL and FTS5, applies the migrations and requeues or fails the jobs a restart interrupted
+    (JobQueue.recover_interrupted); if that fails it logs `DB_CAPABILITY_MISSING`
     or `database_unavailable` and returns 69, so the backend never becomes ready on a database it cannot trust.
     Otherwise serves on port 8000 with a single worker, which the in-process WebSocket hub and job worker require,
     until the server stops, and returns 0. The access log is off, because request paths and queries can carry user
@@ -104,6 +107,8 @@ def main() -> int:
         engine = create_database_engine(DATABASE_PATH)
         verify_capabilities(engine)
         upgrade_to_head(engine)
+        # Startup step 5 (docs/backend.md): no worker runs yet, so every `running` job was interrupted by a restart.
+        recover_interrupted_jobs(engine, JobQueue())
     except DatabaseCapabilityError as error:
         logger.error("database_capability_missing", error_code=error.code)
         return EXIT_DATABASE_UNAVAILABLE

@@ -61,6 +61,8 @@ Job errors, reported through `job.updated`:
 | `RUNTIME_UNAVAILABLE` | Runtime stopped responding. |
 | `LEASE_LOST` | The lease expired or the orchestrator restarted. |
 | `JOB_CANCELLED` | The user cancelled. |
+| `JOB_INTERRUPTED` | A restart found the job running. It is queued again, or fails when that was its last attempt. |
+| `INTERNAL` | A job handler failed unexpectedly. The job is not retried. Details stay in the logs. |
 
 Operational codes, reported in logs, in `last_error` of the state document and in **Risorse AI**:
 

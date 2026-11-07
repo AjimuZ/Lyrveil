@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -130,7 +130,7 @@ Adding a model means writing a new adapter or changing a model file. No service 
 ### Text runtime
 
 Delivered in P02.3a: `ports/text_runtime.py` holds `TextRuntime` with its types and errors, and
-`runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Nothing calls the adapter yet: the job queue of P02.4 will.
+`runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Nothing calls the adapter yet: the job handlers of P02.5 will.
 Delivered in P02.3b: `prompts/formatter.py` renders the prompt text that the adapter sends
 ([Prompt formatter](#prompt-formatter)).
 
@@ -230,8 +230,9 @@ written, its status becomes `interrupted` and the interface offers regeneration.
 7. Start the WebSocket hub, job worker and proactive evaluator.
 8. Report ready.
 
-Delivered so far: steps 1 and 2, and step 3 without the backup, because the backup service is planned and the
-baseline has no data to protect. Steps 4 to 7 are planned. `main()` stops with exit status 69 and the log event
+Delivered so far: steps 1 and 2, step 3 without the backup, because the backup service is planned and the
+baseline has no data to protect, and the job half of step 5 ([Job queue](#job-queue)). Step 4, the variant half of
+step 5, and steps 6 and 7 are planned. A failure of the job recovery stops startup like a migration failure. `main()` stops with exit status 69 and the log event
 `database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with
 `database_unavailable` when the file cannot be opened or migrated, so the server never starts on a database it cannot trust.
 
@@ -312,6 +313,63 @@ WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quic
 | Structured output invalid | 2 within the same job, then the job retry policy | None |
 | Extraction and summaries | 3 | 1 min, 5 min, 30 min |
 | Preemption of background work | No attempt consumed | None |
+
+### Job queue
+
+Delivered in P02.4: revision `0002` creates `generation_jobs` ([Data model](data-model.md#generation_jobs)), and
+`jobs/` holds the queue ([ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md)). No handler is registered and
+the worker is not started yet: P02.5 adds the chat handlers and starts it in the lifespan. Mode requests, batching,
+fairness, preemption across modes and cancellation come with P06.3.
+
+| Module | Responsibility |
+| --- | --- |
+| `jobs/policy.py` | `JobKind`, `JobStatus`, `RequiredMode`, `JobClass`, and per kind the priority, class, maximum attempts, backoff and stages of [Job kinds and priorities](gpu-orchestration.md#job-kinds-and-priorities) |
+| `jobs/queue.py` | `JobQueue`: every read and state change of `generation_jobs`, on a connection the caller owns |
+| `jobs/handlers.py` | The handler contract: `RunContext`, the outcomes `JobDone` and `NextStage`, and `JobFailedError`, `JobPreemptedError` |
+| `jobs/scheduler.py` | `JobScheduler`, the single worker, and `recover_interrupted_jobs` for startup step 5 |
+
+Behavior:
+
+- **Durable with its change.** `JobQueue.enqueue(connection, kind, payload, ...)` writes the job in the caller's
+  transaction and never commits, so the job exists exactly when the change that created it does. A repeated
+  `idempotency_key` returns the stored job. Past 200 queued and running jobs it raises `QueueFullError`.
+- **Selection.** `next_eligible` returns the queued job with the lowest priority, then the oldest, then the lowest id,
+  among the jobs whose stage needs one of the given modes and whose kind has a handler. A job whose `not_before` lies in
+  the future, or with `cancel_requested_at` set, waits. The scheduler passes `none` and the mode whose runtime is ready,
+  so a job of another mode waits instead of running.
+- **Leases.** A stage that needs `llm` or `image` runs under a lease of that mode, taken before the job is marked
+  `running`. A refused lease (`NOT_READY`, `LEASE_HELD`) or a control API that does not answer leaves the job queued. The
+  lease is renewed every 10 s; a `410` cancels the handler and the job retries with `LEASE_LOST`, without a release. The
+  release outcome is `oom` for `LLM_OOM` and `IMAGE_OOM`, `runtime_error` for `RUNTIME_UNAVAILABLE`,
+  `GENERATION_STALLED` and `GENERATION_TIMEOUT`, and `ok` otherwise. Each run gets a new `genkey`.
+- **Outcomes.** `JobDone(result)` completes the job. `NextStage(stage, payload)` queues it again in that stage, with the
+  stage's mode, and resets `attempt` to 0, so each stage has the kind's full attempts: the `render` retry of an image
+  is not used up by its `prompt` stage. `JobPreemptedError` queues it again at once and gives the attempt back.
+- **Retries.** `JobFailedError(code, detail, retryable=...)` and a `TextRuntimeError`, which is retryable with its `code`,
+  record a failed attempt. While attempts remain, a retryable failure queues the job again after the kind's backoff for
+  that attempt; otherwise the job ends `failed`. `error_code` and `error_detail`, cut to 500 characters, keep the last
+  reason in both cases. Any other exception ends the job at once with `INTERNAL`, because a bug does not heal on retry.
+- **Restart.** At startup, before any worker, every `running` job is queued again at once in the stage it was running,
+  with `JOB_INTERRUPTED` as its reason and its lease cleared. The interrupted run counts as an attempt, so a job that
+  brings the process down cannot loop forever: one that was on its last attempt ends `failed` with `JOB_INTERRUPTED`.
+
+Choices the documents did not fix:
+
+- `stage` names the step that runs next, from which `required_mode` derives. [Job stages](image-generation.md#job-stages)
+  says it records the last finished step; the two agree once a stage writes its results before the job moves on.
+- Backoffs the retry table does not give: 5 s for `character_draft`, `visual_profile_translate` and
+  `proactive_message`, like a reply. `image_proposal` and `maintenance` have one attempt and no backoff.
+- Extraction and summaries list three waits, 1, 5 and 30 min, but have 3 attempts, so only the first two are used.
+  The third applies if the maximum is raised.
+- A handler writes its results in its own transactions and must be idempotent per stage: a restart between its commit
+  and the scheduler's state change runs the stage again.
+- The FKs of `conversation_id`, `character_id` and `message_id` arrive with the revision that creates those tables.
+
+`tests/integration/test_job_queue.py` covers durability with the creating change and across a new engine, restart
+recovery, the backoff and maximum of a reply and of extraction, priorities, mode eligibility, and the scheduler with a
+fake lease provider: result, refused lease, `none` stage, out of memory, handler bug, new stage, preemption and a lost
+lease. `tests/unit/test_job_policy.py` checks the policy table and the identifier and timestamp helpers of
+`domain/identifiers.py`, which writes UUIDv7 keys and UTC text with milliseconds.
 
 ## Logging
 
@@ -460,5 +518,5 @@ uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedErro
 `NOT_READY` or `LEASE_HELD`. `renew_lease` raises `LeaseLostError` on `410`.
 `release_lease` returns `False` on `410`, when nothing is left to release. Any other
 failure raises `OrchestratorUnavailableError`. The client blocks, so callers run it in a
-worker thread. The job queue that heartbeats every 10 s comes with P02.4.
+worker thread. `JobScheduler` is its caller, and heartbeats every 10 s ([Job queue](#job-queue)).
 `tests/unit/test_orchestrator_client.py` tests it against a local HTTP server.

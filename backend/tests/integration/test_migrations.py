@@ -1,4 +1,4 @@
-"""Checks that `alembic upgrade head` builds the baseline on an empty database, and that the code can do the same."""
+"""Checks that `alembic upgrade head` builds the schema on an empty database, and that the code can do the same."""
 
 import sqlite3
 import subprocess
@@ -8,9 +8,17 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
-from lyrveil.persistence.migrations import PROJECT_ROOT, head_revision, migration_state, upgrade_to_head
+from lyrveil.persistence.migrations import (
+    PROJECT_ROOT,
+    head_revision,
+    known_revisions,
+    migration_state,
+    upgrade_to_head,
+)
 
 BASELINE = "0001"
+HEAD = "0002"
+TABLES = {"alembic_version", "application_settings", "generation_jobs"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -31,16 +39,17 @@ def user_tables(database_path: Path) -> set[str]:
     return {name for (name,) in rows}
 
 
-def test_the_baseline_is_the_only_revision() -> None:
-    assert head_revision() == BASELINE
+def test_the_job_queue_revision_follows_the_baseline() -> None:
+    assert head_revision() == HEAD
+    assert known_revisions() == {BASELINE, HEAD}
 
 
-def test_upgrade_head_creates_the_baseline_on_an_empty_database(database_path: Path, tmp_path: Path) -> None:
+def test_upgrade_head_creates_the_schema_on_an_empty_database(database_path: Path, tmp_path: Path) -> None:
     result = alembic(database_path, "upgrade", "head", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    assert user_tables(database_path) == {"alembic_version", "application_settings"}
+    assert user_tables(database_path) == TABLES
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchall() == [(BASELINE,)]
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchall() == [(HEAD,)]
         assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
         assert [row[1] for row in connection.execute("PRAGMA table_info(application_settings)")] == [
             "key",
@@ -57,18 +66,45 @@ def test_the_baseline_refuses_a_setting_that_is_not_json(database_path: Path, tm
             connection.execute("INSERT INTO application_settings VALUES ('b', 'not json', '2026-11-06T10:00:00.000Z')")
 
 
-def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_table(database_path: Path, tmp_path: Path) -> None:
+def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
+    database_path: Path, tmp_path: Path
+) -> None:
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", BASELINE, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == {"alembic_version", "application_settings"}
     assert alembic(database_path, "downgrade", "base", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == {"alembic_version"}
 
 
+def test_the_job_table_refuses_unknown_values_and_duplicate_idempotency_keys(
+    database_path: Path, tmp_path: Path
+) -> None:
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    columns = "id, kind, status, stage, required_mode, priority, payload_json, attempt, max_attempts, created_at"
+    insert = f"INSERT INTO generation_jobs ({columns}, idempotency_key) VALUES (?, ?, ?, 'run', ?, 10, ?, 0, 2, ?, ?)"
+    now = "2026-11-07T10:00:00.000Z"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(insert, ("a", "chat_reply", "queued", "llm", "{}", now, "k"))
+        connection.execute(insert, ("b", "chat_reply", "queued", "llm", "{}", now, None))
+        connection.execute(insert, ("c", "chat_reply", "queued", "llm", "{}", now, None))
+        for row in (
+            ("d", "dance", "queued", "llm", "{}", now, None),
+            ("e", "chat_reply", "paused", "llm", "{}", now, None),
+            ("f", "chat_reply", "queued", "gpu", "{}", now, None),
+            ("g", "chat_reply", "queued", "llm", "not json", now, None),
+        ):
+            with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+                connection.execute(insert, row)
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            connection.execute(insert, ("h", "chat_reply", "queued", "llm", "{}", now, "k"))
+
+
 def test_the_code_migrates_an_engine_and_reports_the_state(engine: Engine, database_path: Path) -> None:
     before = migration_state(engine)
-    assert (before.current, before.head, before.up_to_date) == (None, BASELINE, False)
+    assert (before.current, before.head, before.up_to_date) == (None, HEAD, False)
     after = upgrade_to_head(engine)
-    assert (after.current, after.head, after.up_to_date) == (BASELINE, BASELINE, True)
+    assert (after.current, after.head, after.up_to_date) == (HEAD, HEAD, True)
     assert upgrade_to_head(engine) == after
-    assert "application_settings" in user_tables(database_path)
+    assert user_tables(database_path) == TABLES

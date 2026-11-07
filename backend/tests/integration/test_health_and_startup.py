@@ -11,12 +11,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 
 import lyrveil.main as backend
+from lyrveil.jobs.policy import JobKind, JobStatus
+from lyrveil.jobs.queue import JobQueue
+from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import configure_logging
 from lyrveil.main import EXIT_DATABASE_UNAVAILABLE, create_app
-from lyrveil.persistence.migrations import upgrade_to_head
+from lyrveil.persistence.database import create_database_engine
+from lyrveil.persistence.migrations import head_revision, upgrade_to_head
 from lyrveil.settings import Settings
 
 TOKEN = "ab" * 32
+HEAD = head_revision()
 # The address of the local app with the default port; any other Host is refused.
 APP_URL = "http://localhost:4200"
 
@@ -47,7 +52,7 @@ def test_ready_reports_every_check_on_a_migrated_database(settings: Settings, en
         "status": "ready",
         "checks": {
             "database": {"ok": True, "journal_mode": "wal"},
-            "migrations": {"ok": True, "current": "0001", "head": "0001"},
+            "migrations": {"ok": True, "current": HEAD, "head": HEAD},
             "fts5": {"ok": True},
         },
         "control_api": {"reachable": True},
@@ -68,7 +73,7 @@ def test_ready_answers_503_while_migrations_are_pending(settings: Settings, engi
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "not_ready"
-    assert body["checks"]["migrations"] == {"ok": False, "current": None, "head": "0001"}
+    assert body["checks"]["migrations"] == {"ok": False, "current": None, "head": HEAD}
     assert body["checks"]["database"]["ok"] is True
     assert body["checks"]["fts5"]["ok"] is True
 
@@ -108,7 +113,24 @@ def test_main_migrates_a_new_database_and_serves_a_ready_application(
     app.state.control_probe = lambda: False
     response = client_for(app).get("/api/v1/health/ready")
     assert response.status_code == 200
-    assert response.json()["checks"]["migrations"]["current"] == "0001"
+    assert response.json()["checks"]["migrations"]["current"] == HEAD
+    app.state.engine.dispose()
+
+
+def test_main_recovers_the_jobs_a_restart_interrupted(monkeypatch: pytest.MonkeyPatch, database_path: Path) -> None:
+    engine = create_database_engine(database_path)
+    upgrade_to_head(engine)
+    queue = JobQueue()
+    job_id = write(engine, lambda connection: queue.enqueue(connection, JobKind.CHAT_REPLY).id)
+    write(engine, lambda connection: queue.start(connection, job_id, "lease-1", "genkey-1"))
+    engine.dispose()
+    served = start(monkeypatch, database_path)
+    assert backend.main() == 0
+    (app,) = served
+    recovered = read(app.state.engine, lambda connection: queue.get(connection, job_id))
+    assert recovered is not None
+    assert (recovered.status, recovered.attempt, recovered.lease_id) == (JobStatus.QUEUED, 1, None)
+    assert recovered.error_code == "JOB_INTERRUPTED"
     app.state.engine.dispose()
 
 

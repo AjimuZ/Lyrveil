@@ -82,7 +82,7 @@ Evidence:
 - [x] P02.1a `config/model-catalog.json`, its validator and the tier defaults, including `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset.
 - [x] P02.2 Orchestrator loads and stops the LLM. Leases.
 - [x] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
-- [ ] P02.4 Job queue with persistence and retries.
+- [x] P02.4 Job queue with persistence and retries.
 - [ ] P02.5 Conversations, messages, variants, streaming over WebSocket, search.
 - [ ] P02.6 Chat list and conversation screens with a built-in minimal character form.
 - [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).

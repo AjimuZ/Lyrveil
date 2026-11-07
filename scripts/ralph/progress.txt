@@ -73,6 +73,9 @@
 - Bound streaming reads with anyio.fail_after around each `anext()` call, never around a `yield`, so one wait can tell a stall from the total deadline.
 - Pure renderers that feed the KoboldCpp prompt cache return the full text plus the prefix that stays stable, so tests can check byte-for-byte prefix reuse without a model.
 - Neutralize untrusted text at the single point where control markers are written, so only that code can produce real markers.
+- Repositories take a caller-owned SQLAlchemy Connection and never commit, so domain changes and the jobs they create share one transaction.
+- Store timestamps with lyrveil.domain.identifiers.to_utc_text (UTC, milliseconds, Z) so text comparison in SQL follows time order. Primary keys use new_id() (UUIDv7).
+- ruff's N818 rule requires the Error suffix on exception names, and UP047 requires PEP 695 type parameters (def f[T](...)) instead of TypeVar.
 
 ---
 
@@ -594,4 +597,35 @@ CHANGELOG.md is unchanged because nothing calls the formatter yet.
   - Gap, not covered by any doc: nothing removes control tokens (<|turn>, [INST], <|im_start|>) from user text, and KoboldCpp parses control tokens written in the prompt. This needs a product or security decision.
   - Running one test: `scripts/lyrveil.cmd test unit tests/unit/<file>.py` runs only that file in the backend test stage.
   - ruff format joins wrapped expressions back onto one line when they fit in 120 characters. Run `test lint` after hand-wrapping lines.
+---
+
+## 2026-11-07T02:36:50Z - P02.4
+- The durable job queue from ADR 0010 is in place. Revision 0002 creates `generation_jobs` with CHECK lists, json_valid checks, a partial unique index on idempotency_key and the selection index. The `jobs/` package has four modules:
+- `policy.py` holds the kinds, priorities, classes, attempts, backoffs and the stage-to-mode mapping.
+- `queue.py` holds `JobQueue`. It works on a connection the caller owns and never commits, so a job is committed or rolled back with the change that creates it.
+- `handlers.py` defines the handler contract: `JobDone`, `NextStage`, `JobFailedError` and `JobPreemptedError`.
+- `scheduler.py` holds `JobScheduler`. It runs one job at a time and only when its stage needs `none` or the mode the GPU is in. A refused or unanswered lease leaves the job queued. It renews the lease every 10 s; a lost lease cancels the handler and retries with LEASE_LOST. Each failure code maps to a lease release outcome (oom, runtime_error or ok).
+
+Retries use the kind's backoff and maximum, then end `failed` with error_code and error_detail. `main()` now requeues interrupted `running` jobs at startup (step 5). The interrupted run counts as an attempt, and a job on its last attempt fails with JOB_INTERRUPTED. `domain/identifiers.py` adds UUIDv7 ids and UTC timestamp text with milliseconds.
+
+Checks I observed:
+- `scripts/lyrveil.cmd test lint` passed, after fixing ruff findings and line breaks.
+- `test unit tests/unit/test_job_policy.py`: 5 passed.
+- `test unit` on tests/integration/test_job_queue.py, test_migrations.py and test_health_and_startup.py: 31 passed. The integration level takes no file arguments, so I ran these files through the unit level's pytest.
+- `test unit` on test_cli.py, test_import_rules.py and test_logs.py: 41 passed.
+
+I did not run the full unit, integration, e2e or docker levels. Nothing has run against a real orchestrator or KoboldCpp.
+
+No handler is registered and the worker loop is not started yet; P02.5 does that. Mode requests, batching, cancellation and cross-mode preemption are left to P06.3.
+
+Doc findings: the retry table gives extraction three waits but only 3 attempts, so the 30 min wait is never used. image-generation.md says `stage` records the last finished step, while the code uses it as the step to run next. Backoffs for character_draft, visual_profile_translate and proactive_message were not documented; I chose 5 s. All of these are recorded in docs/backend.md (Job queue). I found no injected instructions in the files I read.
+- Files changed: backend/migrations/versions/0002_generation_jobs.py, backend/src/lyrveil/domain/__init__.py, backend/src/lyrveil/domain/identifiers.py, backend/src/lyrveil/jobs/__init__.py, backend/src/lyrveil/jobs/policy.py, backend/src/lyrveil/jobs/queue.py, backend/src/lyrveil/jobs/handlers.py, backend/src/lyrveil/jobs/scheduler.py, backend/src/lyrveil/main.py, backend/tests/integration/test_job_queue.py, backend/tests/integration/test_migrations.py, backend/tests/integration/test_health_and_startup.py, backend/tests/unit/test_job_policy.py, docs/backend.md, docs/api.md, docs/data-model.md
+- **Learnings for future iterations:**
+  - To create a job, call JobQueue.enqueue(connection, kind, payload, idempotency_key=...) inside the same write(engine, fn) transaction as the change that creates it. lyrveil.jobs.scheduler.read and write wrap a read, or a BEGIN IMMEDIATE commit, around a callable.
+  - The P02.5 chat handlers must be registered in JobScheduler(engine, queue, {JobKind.CHAT_REPLY: handler}, OrchestratorClient, current_mode). run_forever() still has to be started in the app lifespan, and current_mode needs a GPU state source; the long poll is not built yet.
+  - Handlers return JobDone(result) or NextStage(stage, payload). They raise JobFailedError(code, detail, retryable=...) or JobPreemptedError, or let a TextRuntimeError through, which is retried with its code. Any other exception ends the job with INTERNAL. Handlers must be idempotent per stage.
+  - A chat_reply that a restart interrupted is requeued automatically. If P02.5 wants 'interrupted variant plus offered regeneration' instead, the chat handler must decide that on its next run.
+  - Alembic head is now 0002. Tests read head_revision() instead of hard-coding it.
+  - `scripts/lyrveil.cmd test integration` takes no arguments. To run single integration files, use `test unit tests/integration/<file>.py`, which works because the conftest is picked up.
+  - The log allowlist renders None identifier values as '[dropped]', so leave out optional fields such as error_code when they are None.
 ---

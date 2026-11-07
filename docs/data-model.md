@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: planned, phases P01 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01) and `generation_jobs` (P02.4). The rest is planned, phases P02 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -487,6 +487,11 @@ Indexes: `(character_id, created_at DESC)`, `(conversation_id, created_at DESC)`
 | `cancel_requested_at`, `created_at`, `started_at`, `finished_at` | TEXT | |
 
 Index: `(status, required_mode, priority, created_at)`.
+
+Delivered in revision `0002` (P02.4), with `CHECK` lists on `kind`, `status` and `required_mode`, `json_valid` on both
+JSON columns, and a partial unique index on `idempotency_key`. The three foreign keys are plain columns until the
+revision that creates `conversations`, `characters` and `messages` adds them. `stage` names the step that runs next,
+and `attempt` counts the runs of that stage ([Job queue](backend.md#job-queue)).
 
 ### `model_lifecycle_events`
 
