@@ -283,6 +283,24 @@ Adesso è {{ time.weekday }} {{ time.part_of_day }}, {{ time.date_human }}.
 {% if time.elapsed_human %}Vi siete sentiti l'ultima volta {{ time.elapsed_human }}.{% endif %}
 ```
 
+Delivered in P04.6 as `state_lines` in `lyrveil/context/blocks.py`, for a chat with a `relationship_states` row; a chat
+without one has no block 4. `bands_text` joins the four band phrases with `, `, in the order familiarity, trust,
+confidence, tension. The bands of [From numbers to text](consistency-engine.md#from-numbers-to-text) are worded from the
+user's side, while this block speaks to the character, so block 4 turns them to the second person with
+`user.display_name`:
+
+| Dimension | 0 to 19 | 20 to 39 | 40 to 69 | 70 to 100 |
+| --- | --- | --- | --- | --- |
+| Familiarity | vi siete appena conosciuti | vi state conoscendo | vi conoscete bene | vi conoscete a fondo |
+| Trust | diffidi di {user} | sei prudente con {user} | ti fidi di {user} | ti fidi profondamente di {user} |
+| Confidence | parli poco di te | ti apri su cose leggere | racconti a {user} cose personali | con {user} parli di tutto |
+| Tension | nessuna tensione | qualche attrito | tensione evidente | rapporto molto teso |
+
+A line whose value already ends a sentence gets no second period. The relationship, emotional state, topic and
+boundaries lines are always kept; the open threads, each without its final period and joined with `; `, are the
+details that the budget removes last. The scenario line is left out, because the scenario copy is already in the stable
+text, and so are the time lines until the time context (P07.4). The topic and boundaries are always empty for now.
+
 ### Blocks 5 and 6
 
 Rendering is defined in [Memory engine](memory-engine.md#prompt-rendering). Block 5 is part of the
@@ -350,7 +368,7 @@ Delivered in P04.2a, with memory extraction as the second task:
   validation parses it.
 - `generate_structured` also returns the accepted text, and `StructuredOutputInvalidError.output` holds the last
   refused one, so extraction can keep `raw_output`. Both are private and never logged.
-- The extraction template is `lyrveil/prompts/extraction.py`, version `extraction.v1` (`extraction.v2` since P04.2b), at temperature 0.3 (the structured
+- The extraction template is `lyrveil/prompts/extraction.py`, version `extraction.v1` (`extraction.v2` since P04.2b, `extraction.v3` since P04.6), at temperature 0.3 (the structured
   value of [Sampler presets](#sampler-presets)) and `max_length` 1200. See [Extraction template](#extraction-template).
 
 Each template holds one worked example of input and output. The example stays only if it does not
@@ -359,7 +377,7 @@ lower the score of the [extraction evaluation](consistency-engine.md#extraction-
 
 | Task | Template | Model | `max_length` |
 | --- | --- | --- | --- |
-| Memory extraction | `extraction.v2.j2` | `ExtractionResult` | 1200 |
+| Memory extraction | `extraction.v3.j2` | `ExtractionResult` | 1200 |
 | Summary checkpoint | `summary.v1.j2` (Python, `lyrveil/prompts/summary.py`, since P04.4) | `SummaryResult` | 700 |
 | Character draft | `character_draft.v1.j2` | `CharacterDraft` | 1500 |
 | Visual identity | `visual_profile.v1.j2` | `VisualIdentityResult` | 600 |
@@ -389,6 +407,7 @@ Regole:
 - Scrivi i contenuti in {{ language_name }}, in terza persona, in una frase breve.
 - Registra un episodio solo per eventi davvero importanti.
 - Per il rapporto registra solo cambiamenti con un motivo chiaro.
+- Per chiudere un discorso in sospeso, ripeti il suo testo in "open_threads_close".
 
 Ricordi esistenti:
 {% for memory in existing %}{{ memory.ref }}: {% if memory.status == "uncertain" %}[incerto] {% endif %}{{ memory.content }}
@@ -396,6 +415,10 @@ Ricordi esistenti:
 {% endfor %}
 Episodi recenti:
 {% for episode in episodes %}{{ episode.ref }}: {{ episode.title }}
+{% else %}nessuno
+{% endfor %}
+Discorsi in sospeso:
+{% for thread in state.open_threads %}- {{ thread }}
 {% else %}nessuno
 {% endfor %}
 Contesto, da non analizzare:
@@ -418,6 +441,11 @@ one line and cut at 1200 characters, and an empty context section reads `nessuno
 
 P04.2b made it `extraction.v2`: an `uncertain` memory, part of an unresolved conflict, is shown after `[incerto]`, and the
 rule line about that label is new. `identity_candidate` memories are never shown.
+
+P04.6 made it `extraction.v3`: the open threads of the conversation state are listed under `Discorsi in sospeso:`, one
+per line after `- ` and cut like a message, with the rule line that asks to repeat a thread's text to close it. The
+worked example shows the section as `nessuno`. A close is matched against the open threads as memories are
+deduplicated ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)).
 
 ### Other templates
 

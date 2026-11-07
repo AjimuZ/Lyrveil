@@ -98,8 +98,8 @@ class ContextSettings:
 
 @dataclass(frozen=True)
 class StateText:
-    """Block 4, already rendered as lines. `lines` are always kept; `details` are the last thing the budget removes.
-    Empty until the Character State Manager (P04.6) and the time context (P07.4) fill it."""
+    """Block 4, already rendered as lines (lyrveil.context.blocks.state_lines). `lines` are always kept; `details` are
+    the last thing the budget removes. Empty for a chat whose state was never written; the time context is P07.4's."""
 
     lines: tuple[str, ...] = ()
     details: tuple[str, ...] = ()

@@ -5,17 +5,18 @@ A run takes the window after the conversation's cursor, looks up the run of that
 schema version, and stops there when it is already completed. Otherwise it generates `ExtractionResult` under the
 grammar of its schema with the loaded text model, validates it and repairs it once (lyrveil.prompts.structured). Then
 one transaction applies the consistency rules to each memory item (MemoryConsistencyService) and writes the memories,
-their sources, revisions and index rows, the episodes, the run and the new cursor. Invalid output, a runtime failure
-or an interruption changes no memory, no message and no cursor; the job retries with the backoff of its kind.
+their sources, revisions and index rows, the episodes, the relationship events and state update through
+CharacterStateManager, the run and the new cursor. Invalid output, a runtime failure or an interruption changes no
+memory, no state, no message and no cursor; the job retries with the backoff of its kind.
 
-The relationship events and state of the Character State Manager (P04.6) are validated and counted, not applied. An
-item with an unknown E/P label or a source outside the window is dropped and counted. No message, prompt, memory or
-model output is ever logged; `raw_output` stays in the run row.
+An item with an unknown E/P label or a source outside the window is dropped and counted; a proposed `current_topic` has
+no state event yet and is counted as deferred. No message, prompt, memory, state text or model output is ever logged;
+`raw_output` stays in the run row.
 """
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 from anyio import to_thread
@@ -23,6 +24,7 @@ from pydantic import ValidationError
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
+from lyrveil.consistency.state import LARGE_MIN_EPISODE_IMPORTANCE
 from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.identifiers import new_id, to_utc_text
@@ -32,6 +34,7 @@ from lyrveil.domain.memory_extraction import (
     ExtractedEpisode,
     ExtractedMemory,
     ExtractionResult,
+    RelationshipEvent,
 )
 from lyrveil.domain.messages import Author
 from lyrveil.events.hub import EventHub
@@ -64,6 +67,7 @@ from lyrveil.prompts.structured import (
     StructuredResult,
     generate_structured,
 )
+from lyrveil.services.character_state import CharacterStateManager, StateRun
 from lyrveil.services.memory_consistency import Blocked, MemoryConsistencyService, RunScope
 
 # Generated once from the schema, so the grammar always follows the model.
@@ -176,7 +180,9 @@ class _Prepared:
 @dataclass
 class _Counts:
     """What a run did with the model's items; stored in the job's result and logged. `conflict_ids` are the new
-    uncertain memories that fire `memory.conflict`."""
+    uncertain memories that fire `memory.conflict`. `state_events` counts the history rows of the state. Only
+    `top_episode_importance`, the highest importance of an episode the run stored or confirmed, stays out of the
+    result: it decides whether a `large` relationship change is allowed."""
 
     memories_added: int = 0
     memories_confirmed: int = 0
@@ -185,11 +191,13 @@ class _Counts:
     episodes_added: int = 0
     episodes_confirmed: int = 0
     sources_added: int = 0
+    state_events: int = 0
     dropped_items: int = 0
     blocked_items: int = 0
     deferred_items: int = 0
     memory_ids: list[str] = field(default_factory=list)
     conflict_ids: list[str] = field(default_factory=list)
+    top_episode_importance: int = 0
 
 
 class MemoryExtractionService:
@@ -198,7 +206,9 @@ class MemoryExtractionService:
     `runtime` must be used only under the run's lease, which the scheduler holds. `template` is the prompt family of
     the loaded text model and `user` names the user in the prompt. `settings` gives the trigger threshold that a
     finished run checks again for the messages after its window. `events`, when given, receives `memory.conflict` for
-    each conflict a committed run stored. `clock` returns the aware current time; tests pass a fake one.
+    each conflict a committed run stored. `clock` returns the aware current time; tests pass a fake one. `zone` is the
+    deployment time zone, whose calendar days bound the daily relationship change; the composition root passes
+    `LYRVEIL_TZ`.
     """
 
     def __init__(
@@ -212,6 +222,7 @@ class MemoryExtractionService:
         queue: JobQueue | None = None,
         events: EventHub | None = None,
         clock: Callable[[], datetime] = _utc_now,
+        zone: tzinfo = UTC,
     ) -> None:
         self._engine = engine
         self._runtime = runtime
@@ -221,6 +232,7 @@ class MemoryExtractionService:
         self._queue = queue or JobQueue(clock=clock)
         self._events = events
         self._consistency = MemoryConsistencyService()
+        self._state = CharacterStateManager(zone)
         self._clock = clock
 
     async def __call__(self, job: Job, context: RunContext) -> JobOutcome:
@@ -280,6 +292,7 @@ class MemoryExtractionService:
             dropped_count=int(outcome.get("dropped_items", 0)),
             blocked_count=int(outcome.get("blocked_items", 0)),
             deferred_count=int(outcome.get("deferred_items", 0)),
+            state_count=int(outcome.get("state_events", 0)),
             attempt_count=result.attempts,
         )
         if self._events is not None:
@@ -329,6 +342,7 @@ class MemoryExtractionService:
             assert character is not None, "a conversation's character cannot be removed while the chat exists"
             language = conversation.effective_language
             existing = _existing(connection, conversation_id, window, language)
+            state = self._state.current(connection, conversation_id)
             episodes = repository.recent_episodes(connection, conversation_id, MAX_RECENT_EPISODES)
             context = repository.context_before(connection, conversation_id, window.from_seq, CONTEXT_MESSAGES)
             memory_refs = {f"E{number}": memory for number, memory in enumerate(existing, 1)}
@@ -345,6 +359,7 @@ class MemoryExtractionService:
                 episodes=[Labeled(ref, episode.title) for ref, episode in episode_refs.items()],
                 context=_prompt_messages(context, names),
                 window=_prompt_messages(window.messages, names),
+                open_threads=() if state is None else state.open_threads,
             )
             return _Prepared(
                 run_id=run_id,
@@ -416,6 +431,7 @@ class MemoryExtractionService:
                 "episodes_added": counts.episodes_added,
                 "episodes_confirmed": counts.episodes_confirmed,
                 "sources_added": counts.sources_added,
+                "state_events": counts.state_events,
                 "dropped_items": counts.dropped_items,
                 "blocked_items": counts.blocked_items,
                 "deferred_items": counts.deferred_items,
@@ -441,12 +457,27 @@ class MemoryExtractionService:
             self._apply_memory(connection, prepared, scope, item, by_seq, counts)
         for episode in result.episodes:
             _apply_episode(connection, prepared, episode, by_seq, now, counts)
+        # The state goes last, because a `large` relationship change needs an important episode of this run.
+        events: list[tuple[RelationshipEvent, list[str]]] = []
         for event in result.relationship_events:
-            # The Character State Manager (P04.6) applies relationship events; a valid one is only counted until then.
-            if _sources(event.source_seqs, by_seq) is None:
+            sources = _sources(event.source_seqs, by_seq)
+            if sources is None:
                 counts.dropped_items += 1
             else:
-                counts.deferred_items += 1
+                events.append((event, [source.message_id for source in sources]))
+        run = StateRun(
+            run_id=prepared.run_id,
+            conversation_id=prepared.conversation_id,
+            character_id=prepared.character_id,
+            language=prepared.language,
+            window_message_ids=tuple(message.message_id for message in prepared.window.messages),
+            large_allowed=counts.top_episode_importance >= LARGE_MIN_EPISODE_IMPORTANCE,
+            now=now,
+        )
+        applied = self._state.apply_run(connection, run, events, result.state)
+        counts.state_events += applied.rows_added
+        counts.dropped_items += applied.dropped
+        counts.deferred_items += applied.deferred
         return counts
 
     def _apply_memory(
@@ -530,6 +561,7 @@ def _apply_episode(
         return
     episode_print = fingerprint(f"{title} {description}", prepared.language)
     same = repository.find_episode_by_fingerprint(connection, prepared.conversation_id, episode_print)
+    counts.top_episode_importance = max(counts.top_episode_importance, item.importance)
     if same is not None:
         counts.sources_added += repository.add_episode_sources(connection, same.id, sources)
         counts.episodes_confirmed += 1

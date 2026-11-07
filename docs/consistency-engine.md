@@ -4,7 +4,8 @@ Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text pr
 P04. Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
 stored as a memory that no prompt shows and that changes nothing else
 ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Code does not yet detect a card change the model did not
-label; "Applica al profilo" is P04.9.
+label; "Applica al profilo" is P04.9. Delivered in P04.6: the Character State Manager with bounded updates and replay
+([Delivered in P04.6](#delivered-in-p046)).
 
 The engine stops a character from changing identity, personality or knowledge without a
 reason. Model output is treated as a proposal. Deterministic code decides what is stored and
@@ -80,6 +81,53 @@ Numbers never reach the prompt. The state block uses descriptive bands and the n
 `PATCH /conversations/{id}/relationship` lets the user correct the narrative, expectations and
 limits, and records a `user_correction` row. The numeric values can be edited only on the
 advanced tab of the Memory Studio, and these edits are also recorded.
+
+### Delivered in P04.6
+
+`CharacterStateManager` is `services/character_state.py`, over the pure rules of `lyrveil/consistency/state.py` and the
+SQL of `persistence/relationship.py`. `MemoryExtractionService` calls it in the commit transaction of each run, after the
+memories and episodes, so the state rows are written with the run or not at all.
+
+- **Fold.** `replay(rows, zone)` is the only way a state is computed: the applied rows of one conversation, in the order
+  written (`created_at`, then rowid), over the initial values. A `relationship_change` stores its requested delta in
+  `delta`; the fold applies what the limits allow given the net change of that dimension so far in the row's run (a
+  row without a run counts alone) and on its local day, and keeps the value from 0 to 100. A replay therefore computes
+  the limits again without the rows it no longer reads. `value_before` and `value_after` record what the fold gave at
+  write time, so the row holds the requested and the applied delta. After every write or invalidation the
+  `relationship_states` row is written again from a replay of the rows read back, so it always equals that replay.
+- **Limits.** The per-run limit is a net change of ±8 per dimension, the per-day one ±15 per calendar day of
+  `LYRVEIL_TZ`, from the row's `created_at`. A `large` event is 8 only when the same run stored or confirmed an episode
+  of importance at least 4, otherwise 4. Rows of a run share the commit time, or the newest `created_at` of the chat
+  when the clock is behind it.
+- **Events from a run.** Each relationship event with its sources in the window is one row with its own reason and
+  messages; one with a source outside the window, or a reason that is blank once on one line, is dropped. The
+  `StateUpdate` has no sources or reason of its own, so its rows cite every message of the window and carry a fixed
+  Italian reason per kind. The emotional state is one `emotion_change` when it differs from the current one; each close
+  that matches an open thread is a `thread_closed` naming that thread; each new thread and goal is a `thread_opened` or
+  `goal_change`; a new narrative change is a `narrative_change`. Texts are compared as memories are deduplicated (same
+  fingerprint, or a stem Jaccard of at least 0.8), and must fit 200 characters on one line. Additions not in the
+  documents bound what the model can write: at most 4 items per list per run, and the state keeps the newest 6 open
+  threads, 5 goals and 10 narrative changes. Dropped items are counted in the job's `dropped_items`, and its
+  `state_events` counts the rows written.
+- **Replay after invalidation.** `CharacterStateManager.invalidate(connection, conversation_id, message_ids, now)` marks
+  `invalidated` the applied rows that cite one of the messages and stores the replay of the rest. Nothing calls it yet:
+  invalidation after a message change is P04.7.
+- **Isolation.** Every read, write and invalidation names one conversation, and the fold reads one conversation's
+  rows, so a change in one chat never reaches another (T-CON-03).
+- **Prompt.** A chat with a `relationship_states` row has block 4 ([Block 4](prompting.md#block-4-state-and-time)). The
+  table above words the bands from the user's side ("si fida di te"); block 4 speaks to the character, so it uses the
+  same phrases turned to the second person with the user's name ("ti fidi di Sara"). A chat whose state was never
+  written has no block 4, so the starting values never contradict a scenario that sets none. The extraction prompt
+  (`extraction.v3`) lists the open threads, so the model can close one by repeating it.
+- **Not delivered.** `current_topic`: no event kind exists for it, so a proposed topic is counted in `deferred_items`
+  and the column stays empty; adding one needs a migration of the `event_kind` list, which is open. A scenario's
+  starting narrative and values (scenarios have no such fields), the user's corrections and the relationship routes
+  (P04.9), and the use of `expectations`, goals and narrative changes in a prompt: block 4's template has no line for
+  goals and narrative changes, and nothing writes the narrative, expectations or boundaries yet. `recent_event_ids_json`
+  holds the newest 5 active episodes and is not shown anywhere.
+
+`tests/unit/test_character_state.py` holds T-CON-06 and the pure half of T-MEM-23; `tests/integration/test_character_state.py`
+holds T-CON-03, the extraction half of T-CON-06 and the database half of T-MEM-23 ([Testing](testing.md#consistency)).
 
 ## Character evolution
 

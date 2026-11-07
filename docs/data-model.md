@@ -680,8 +680,21 @@ Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes
 ([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). A source row names the message, its active variant at
 extraction time and that variant's `content_hash`. The cursor only moves forward and leaves `updated_at` alone. A run
 row is written `running` before generation and ends `completed`, `failed` or `superseded`; a later attempt on the same
-window reuses the row with `attempt + 1`. Nothing writes `character_state_history` or `relationship_states` yet, and
-`raw_output` is not yet removed after 30 days.
+window reuses the row with `attempt + 1`. `character_state_history` and `relationship_states` were not written until
+P04.6 (below), and `raw_output` is not yet removed after 30 days.
+
+Since P04.6, `CharacterStateManager` writes `character_state_history` and `relationship_states` in the commit transaction
+of each extraction run ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). A `relationship_change` row
+holds the requested delta in `delta`, and in `value_before` and `value_after` the dimension's value before and after the
+limits, as decimal text, so `value_after - value_before` is the applied delta. A text row holds the new text in
+`value_after`, except `thread_closed`, whose `value_before` is the open thread it closes; `emotion_change` also keeps the
+previous emotional state in `value_before`. `source_message_ids_json` lists the message ids of the event, or every
+message of the run's window for the rows of the state update; `run_id` is the run, and the rows of one run share
+`created_at`, so the replay orders them by rowid after `created_at`. `status` becomes `invalidated` only through
+`CharacterStateManager.invalidate`, and no row is deleted except by a purge. `relationship_states` is inserted by the
+first run that writes a history row and is then replaced whole from the replay after each change; `last_history_id` is
+the newest applied row, `recent_event_ids_json` the newest 5 active episodes, and `current_topic`, `narrative`,
+`expectations` and `boundaries` stay empty because nothing writes them yet.
 
 Since P04.2b the consistency rules ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)) also write
 `memory_revisions` and the columns `status` (`uncertain`, `superseded`, `expired`), `valid_to`, `superseded_by_id`,

@@ -28,7 +28,8 @@ backend/
                          window.py (extraction windows and triggers; P04.2a), consistency.py (the pure consistency
                          rules; P04.2b; the tombstone guard, P04.2c), retrieval.py (scoring, selection, labels
                          and past-intent cues; P04.3), the rest planned
-    consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
+    consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard; state.py (the state
+                         manager's bounded deltas and replay; P04.6)
     context/             ContextBuilder, token budgets, length bands, block texts, token counts
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
     images/              ImageGenerationService, VisualConsistencyService, tag vocabulary, sanitizer, workflow loader
@@ -69,7 +70,7 @@ orchestrator/
 | `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. Delivered in P04.3 as `FtsMemoryRetriever` in `services/memory_retrieval.py`, over `persistence/memory_retrieval.py` and the pure rules of `memory/retrieval.py`; no reply calls it until the context builder (P04.5). |
 | `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry. P04.2c adds the tombstone guard; invalidation is P04.7. User edits and deletions are in `services/memories.py` (`MemoryService`). |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
-| `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. |
+| `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. Delivered in P04.6 as `services/character_state.py`, over the pure rules of `consistency/state.py` and the SQL of `persistence/relationship.py`; extraction runs call it, and invalidation after a message change (P04.7) will ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). |
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |

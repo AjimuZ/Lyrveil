@@ -1,8 +1,9 @@
 """The prompt of the memory extraction task (docs/prompting.md, Extraction template).
 
-It follows `extraction.v2.j2` of the document, as Python because the backend has no template engine yet: a role
+It follows `extraction.v3.j2` of the document, as Python because the backend has no template engine yet: a role
 sentence, the rules, one worked example, then the data (existing memories as E1..En, recent episodes as P1..Pn, the
-context messages and the window) and "Rispondi solo con il JSON richiesto". Message text is data: each message is one
+open threads of the conversation state, the context messages and the window) and "Rispondi solo con il JSON
+richiesto". Message text is data: each message is one
 line, frame markers are neutralized by the formatter, and code validates whatever the model writes.
 """
 
@@ -16,8 +17,9 @@ from lyrveil.context.minimal import LANGUAGE_NAMES
 from lyrveil.prompts.formatter import formatter_for
 from lyrveil.prompts.structured import Repair
 
-# v2 labels memories in conflict `[incerto]` and tells the model what the label means.
-TEMPLATE_VERSION = "extraction.v2"
+# v2 labels memories in conflict `[incerto]` and tells the model what the label means. v3 shows the open threads of
+# the conversation state, which the model closes by repeating their text.
+TEMPLATE_VERSION = "extraction.v3"
 UNCERTAIN_LABEL = "[incerto]"
 # docs/prompting.md (Structured tasks): the `max_length` of memory extraction.
 MAX_LENGTH = 1200
@@ -49,7 +51,8 @@ class Labeled:
 
 @dataclass(frozen=True)
 class ExtractionPrompt:
-    """Everything one extraction prompt shows. `language` is the conversation's language code."""
+    """Everything one extraction prompt shows. `language` is the conversation's language code; `open_threads` are the
+    threads the conversation state holds, oldest first."""
 
     user_name: str
     character_name: str
@@ -58,6 +61,7 @@ class ExtractionPrompt:
     episodes: Sequence[Labeled]
     context: Sequence[PromptMessage]
     window: Sequence[PromptMessage]
+    open_threads: Sequence[str] = ()
 
 
 def _rules(user: str, character: str, language_name: str) -> str:
@@ -76,7 +80,8 @@ Regole:
 - Cita sempre i numeri dei messaggi che lo provano in "source_seqs".
 - Scrivi i contenuti in {language_name}, in terza persona, in una frase breve.
 - Registra un episodio solo per eventi davvero importanti.
-- Per il rapporto registra solo cambiamenti con un motivo chiaro."""
+- Per il rapporto registra solo cambiamenti con un motivo chiaro.
+- Per chiudere un discorso in sospeso, ripeti il suo testo in "open_threads_close"."""
 
 
 # The worked example: an original exchange, short enough to cost few tokens. A unit test validates the answer against
@@ -84,6 +89,8 @@ Regole:
 EXAMPLE_INPUT = """Ricordi esistenti:
 E1: Lavora allo Studio Rossi.
 Episodi recenti:
+nessuno
+Discorsi in sospeso:
 nessuno
 Contesto, da non analizzare:
 [40] Dario: Com'è andata la settimana?
@@ -137,6 +144,10 @@ def _labeled(items: Sequence[Labeled]) -> str:
     return "\n".join(lines) or NOTHING
 
 
+def _threads(threads: Sequence[str]) -> str:
+    return "\n".join(f"- {_one_line(thread)}" for thread in threads) or NOTHING
+
+
 def _messages(messages: Sequence[PromptMessage]) -> str:
     return "\n".join(f"[{m.seq}] {_one_line(m.author)}: {_one_line(m.content)}" for m in messages) or NOTHING
 
@@ -153,6 +164,7 @@ def render_prompt(template: TextTemplate, data: ExtractionPrompt, repair: Repair
     user_parts = [
         f"Ricordi esistenti:\n{_labeled(data.existing)}\n"
         f"Episodi recenti:\n{_labeled(data.episodes)}\n"
+        f"Discorsi in sospeso:\n{_threads(data.open_threads)}\n"
         f"Contesto, da non analizzare:\n{_messages(data.context)}\n"
         f"Messaggi da analizzare:\n{_messages(data.window)}"
     ]

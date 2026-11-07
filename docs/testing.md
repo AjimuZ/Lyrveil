@@ -452,6 +452,27 @@ passed; the full levels were not run.
 | T-CON-10 | A V6, V10 or V11 hit aborts the stream, publishes `message.restarted` and regenerates once with the note in the anchor. A second hit is delivered and recorded. Adaptive notes start, last 3 replies and stay at most two | Integration | P04 |
 | T-CON-11 | Length bands set `max_length` and the reply reserve, capped by `llm.max_length`. The anchor holds the band's text. Block 3 renders examples in saved order and stops before the 500-token maximum | Unit | P04 |
 
+Delivered in P04.6: `backend/tests/unit/test_character_state.py` holds T-CON-06 on the pure rules: the magnitudes give 2,
+4 and 8, and `large` gives 4 without an episode of importance 4; one run moves a dimension by a net 8 at most while each
+row keeps its requested delta; one local day moves it by 15 at most, and the same rows split differently in
+`Europe/Rome` and UTC around midnight; values stay from 0 to 100; and no row can be asked for without a reason and a
+source message, a magnitude's size or a known dimension. It also holds the pure half of T-MEM-23: 300 seeded sequences
+of 30 steps of runs, edits (invalidation, then a run that cites the edited message again) and deletions (invalidation),
+after each of which the replay of the remaining rows equals an independent reading of the rules that moves one point at
+a time, every run and local day stays within its limit, and new ids change nothing; plus the text events of a state
+update and block 4's words (no number, the bands, the threads as details).
+`backend/tests/integration/test_character_state.py` runs `MemoryExtractionService` with a scripted runtime on a migrated
+SQLite file: the extraction half of T-CON-06 (six rows with their requested and applied values, reasons and sources,
+one event outside the window dropped, the topic deferred, the state row equal to the replay), T-CON-03 (two chats of one
+character: changes, a closed thread and the next extraction prompt of one chat leave the other chat's history rows,
+state row and block 4 identical, and invalidating with the other chat's messages changes nothing), and the database half
+of T-MEM-23 (6 seeded sequences of 20 steps through `CharacterStateManager`: after each step the stored row equals the
+replay of the rows read back, and its values equal the independent reading over the changes asked for and not
+invalidated). T-MEM-01 now also checks the state row of its one valid relationship event. Since nothing calls
+`invalidate` on a real message edit or deletion before P04.7, T-MEM-23 drives the invalidation directly. In this change
+`scripts/lyrveil.cmd test unit` with both new files, the extraction, context builder, reply streaming, summary, index and
+migration files passed (113 tests), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Messaging
 
 | ID | Test | Level | Phase |

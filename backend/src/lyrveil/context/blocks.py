@@ -12,6 +12,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from lyrveil.consistency.state import DIMENSIONS, RelationshipState, band
 from lyrveil.context.minimal import LANGUAGE_NAMES, NO_GENDER, UserProfile
 from lyrveil.domain.card import CharacterCard, EmojiUse, MessageLength, Narration, TraitCategory
 from lyrveil.ports.memory_retriever import RetrievedMemory
@@ -83,6 +84,21 @@ OPTIONAL_IDENTITY: tuple[str, ...] = (
     "setting",
     "occupation",
 )
+
+# Block 4's words for the four bands of each dimension, lowest first. docs/consistency-engine.md (From numbers to text)
+# words them from the user's side ("si fida di te"); block 4 speaks to the character, so the same phrases are turned to
+# the second person and name the user, which `{user}` stands for.
+STATE_BANDS: dict[str, tuple[str, str, str, str]] = {
+    "familiarity": ("vi siete appena conosciuti", "vi state conoscendo", "vi conoscete bene", "vi conoscete a fondo"),
+    "trust": ("diffidi di {user}", "sei prudente con {user}", "ti fidi di {user}", "ti fidi profondamente di {user}"),
+    "confidence": (
+        "parli poco di te",
+        "ti apri su cose leggere",
+        "racconti a {user} cose personali",
+        "con {user} parli di tutto",
+    ),
+    "tension": ("nessuna tensione", "qualche attrito", "tensione evidente", "rapporto molto teso"),
+}
 
 _SENTENCE_END = (".", "!", "?", "…")
 _FIRST_SENTENCE = re.compile(r".*?[.!?…](?=\s|$)", re.DOTALL)
@@ -218,6 +234,26 @@ def communication_profile(card: CharacterCard, user: UserProfile, examples: int)
                 lines.append(f"{user.display_name}: {example.user}")
             lines.append(f"{card.identity.first_name}: {example.character}")
     return "\n".join(line for line in lines if line)
+
+
+def state_lines(state: RelationshipState, user: UserProfile) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Returns block 4's lines and details for a conversation state (docs/prompting.md, Block 4).
+
+    The lines, always kept, are the relationship (its narrative, or else the words of the four bands), the emotional
+    state, the topic and the boundaries; the details, which the budget removes last, are the open threads. A value
+    never appears as a number, and an empty field leaves its line out. The time lines are P07.4's.
+    """
+    bands = ", ".join(STATE_BANDS[dimension][band(state.value(dimension))] for dimension in DIMENSIONS)
+    relationship = state.narrative or bands.replace("{user}", user.display_name)
+    lines = (
+        f"Il vostro rapporto: {_ended(relationship)}",
+        f"Come ti senti ora: {_ended(state.emotional_state)}" if state.emotional_state else "",
+        f"Di cosa state parlando: {_ended(state.current_topic)}" if state.current_topic else "",
+        f"Limiti da rispettare: {_ended(state.boundaries)}" if state.boundaries else "",
+    )
+    threads = "; ".join(thread.rstrip(" .;") for thread in state.open_threads)
+    details = (f"Discorsi lasciati in sospeso: {_ended(threads)}",) if threads else ()
+    return tuple(line for line in lines if line), details
 
 
 def state_block(lines: Sequence[str], details: Sequence[str]) -> str:

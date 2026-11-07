@@ -28,11 +28,13 @@ from anyio import to_thread
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
+from lyrveil.context.blocks import state_lines
 from lyrveil.context.builder import (
     Assembly,
     ContextBuilder,
     ContextRequest,
     ContextSettings,
+    StateText,
     SummaryText,
     split_messages,
 )
@@ -56,6 +58,7 @@ from lyrveil.memory.window import ExtractionSettings
 from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence import relationship as state_repository
 from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.persistence import summaries as summary_repository
 from lyrveil.ports.events import (
@@ -180,7 +183,8 @@ def load_context_request(
     previous_memory_ids: frozenset[str] = frozenset(),
 ) -> ContextRequest | None:
     """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
-    readable messages before it, the scenario copy the chat started with and the chat's active checkpoints.
+    readable messages before it, the scenario copy the chat started with, the chat's active checkpoints and its state
+    as block 4 (empty until a run has written one).
 
     Everything is keyed by this conversation, so another chat of the same character adds nothing; memories are read
     later by the builder, under the same scope. Returns None when no user message has text. The conversation must
@@ -194,6 +198,8 @@ def load_context_request(
     if split is None:
         return None
     history, current = split
+    stored_state = state_repository.load_state(connection, conversation_id)
+    state = StateText() if stored_state is None else StateText(*state_lines(stored_state.state, user))
     return ContextRequest(
         character_id=conversation.character_id,
         conversation_id=conversation_id,
@@ -209,6 +215,7 @@ def load_context_request(
         ],
         now=now,
         scenario=scenario_repository.snapshot_of(connection, conversation_id),
+        state=state,
         previous_memory_ids=previous_memory_ids,
     )
 

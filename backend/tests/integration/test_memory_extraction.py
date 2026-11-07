@@ -329,8 +329,9 @@ async def test_valid_output_stores_its_items_with_their_sources(migrated: Engine
         "run_attempt": 1,
     }
     assert (result["memories_added"], result["episodes_added"]) == (3, 1)
-    # A source outside the window, an unknown label, an update without a target and an event outside the window.
-    assert (result["dropped_items"], result["deferred_items"]) == (4, 1)
+    # A source outside the window, an unknown label, an update without a target and an event outside the window. The
+    # event inside the window is one state row; nothing waits.
+    assert (result["dropped_items"], result["deferred_items"], result["state_events"]) == (4, 0, 1)
 
     stored = rows(
         migrated,
@@ -382,7 +383,11 @@ async def test_valid_output_stores_its_items_with_their_sources(migrated: Engine
         (episode["id"], message_id) for message_id in message_ids[:2]
     }
     assert count(migrated, "episode_fts") == 1
-    assert count(migrated, "character_state_history") == 0, "relationship events wait for the state manager"
+    [state_row] = rows(
+        migrated, "SELECT event_kind, dimension, delta, source_message_ids_json FROM character_state_history"
+    )
+    assert (state_row["event_kind"], state_row["dimension"], state_row["delta"]) == ("relationship_change", "trust", 2)
+    assert json.loads(state_row["source_message_ids_json"]) == [message_ids[4]]
 
     [run] = rows(migrated, "SELECT * FROM memory_extraction_runs")
     assert (run["status"], run["attempt"], run["from_seq"], run["to_seq"], run["error_code"]) == (
@@ -392,7 +397,7 @@ async def test_valid_output_stores_its_items_with_their_sources(migrated: Engine
         10,
         None,
     )
-    assert (run["prompt_version"], run["schema_version"], run["raw_output"]) == ("extraction.v2", "1", VALID)
+    assert (run["prompt_version"], run["schema_version"], run["raw_output"]) == ("extraction.v3", "1", VALID)
     assert cursor(migrated, conversation_id) == 10
     assert count(migrated, "generation_jobs") == 1, "nothing is left after the window, so no other job is queued"
 

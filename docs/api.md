@@ -423,7 +423,9 @@ Creator polls this route while a draft runs, since `job.updated` is not publishe
 `episodes_confirmed`, `sources_added`, `dropped_items`, `deferred_items`, and `memory_ids`. It never holds memory text
 ([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). Since P04.2b a completed one also has
 `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items` counts only relationship events
-([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). The list, cancel and retry
+([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Since P04.6 a completed one also has `state_events`, the
+relationship state rows the run wrote, and `deferred_items` counts only a proposed `current_topic`
+([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). The list, cancel and retry
 routes are planned. Not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ## Event WebSocket

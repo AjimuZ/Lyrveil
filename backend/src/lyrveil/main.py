@@ -139,6 +139,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             user=worker.replies.user,
             settings=worker.memory,
             events=app.state.events,
+            zone=app.state.settings.zone,
         )
         summaries = SummaryService(
             engine,

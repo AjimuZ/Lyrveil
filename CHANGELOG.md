@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Relationship state per chat. Each memory extraction now also records how the relationship moved (familiarity, trust,
+  confidence and tension), the character's current mood, the topics left open and closed, goals and changes in the
+  story, each with the reason and the messages it came from. Changes are small and bounded: at most 8 points per
+  dimension per extraction, 15 per day (in the configured time zone), always between 0 and 100, and a big jump needs an
+  important event in the same messages. The values stay internal; once a chat has a state, each reply's prompt describes
+  it in words ("vi state conoscendo, sei prudente con…", the mood, the open topics), never as numbers. A state change
+  in one chat never affects another chat. The extraction prompt now lists the open topics so the model can close
+  them. Not yet: the current topic, a scenario's starting relationship, the user's corrections and the Memory Studio
+  view, and recomputing the state when a message is edited or deleted, which comes with the invalidation step.
 - Replies now use the chat's memory and the whole character card. Each reply's prompt holds the global rules, the full
   identity with its traits, interests and background, the communication style with the example exchanges (in saved
   order, as many as fit about 500 tokens), the chat's summaries of older messages, the memories most relevant to the
@@ -20,8 +29,8 @@ No application exists yet. This section records the design documentation.
   token counts. When the model's window is small, the extras are cut in a fixed order (examples, older summaries,
   less relevant memories, older messages down to a floor, optional card details) and the essentials of the card, the
   reminder and the user's message always stay. A message longer than about 2048 tokens is cut in the prompt only, with
-  no note in the interface yet. The memories a reply used are marked as used. Relationship state and time of day are
-  not in the prompt yet, and the per-reply record for the Memory Studio is not stored yet.
+  no note in the interface yet. The memories a reply used are marked as used. Time of day is not in the prompt yet
+  (the relationship state is, see above), and the per-reply record for the Memory Studio is not stored yet.
 - Progressive summaries, backend only. Once a chat has 40 older messages (or enough to reach about 2400 tokens) that
   are not among the newest 30, a background job summarizes them with the loaded text model and stores the summary as a
   checkpoint over that range of messages, with the events, decisions, relationship changes, open points and key facts.
@@ -35,7 +44,7 @@ No application exists yet. This section records the design documentation.
   up to 12 of those messages with the loaded text model and stores the facts and events worth remembering, each with
   the messages it came from. It runs only while the text model is loaded, retries after 1 and 5 minutes when the
   model's answer is invalid, and never analyzes the same messages twice. Replies use these memories (see above);
-  nothing shows them, and relationship changes and the chat state are not stored yet.
+  nothing shows them. Relationship changes and the chat state are stored too (see above).
 - Memory consistency rules, backend only. Code, not the model, now decides what extraction stores. A fact that
   changed ("ho cambiato lavoro, ora sono da Verdi") replaces the old one, which is kept as history with its source
   messages. Two facts that disagree with no clear change are both kept as uncertain, and a conflict that matters raises

@@ -150,6 +150,9 @@
 - Price per-family template overhead with a fixed probe: count two constant prompts that differ by known turns. The counter cache keeps the result per model, so it costs nothing after the first reply.
 - Log fields must end in `_tokens` or `_count`, or be allowlisted identifiers. Log booleans as `<name>_count=int(flag)`; free text and string lists are dropped by `keep_allowed_fields`.
 - To make a budget test deterministic, derive the squeezed window from a first build's `token_total`, and don't guess window sizes.
+- Compute derived state only as a pure fold over the history rows, and rewrite the stored row from a fold of the rows read back after every change. Then the stored value equals a replay of the history by construction, and invalidating a row needs no special case.
+- Rows from one run share their `created_at`; order such rows by `created_at, rowid`, because UUIDv7 ids made in the same millisecond have no defined order.
+- Inside test loops, Ruff B023 flags lambdas that capture loop variables even when they are called at once. Move the call into a module-level helper that takes the values as parameters.
 
 ---
 
@@ -1241,4 +1244,36 @@ No injected instructions were found in the files I read.
   - The history candidates are the messages after the max to_seq of active checkpoints. Once P04.7 invalidates checkpoints, that boundary moves back by itself.
   - `context/minimal.py` now holds only `UserProfile`, `LANGUAGE_NAMES`, `NO_GENDER` and `scenario_block`. Block 1 is in `context/blocks.py` and takes the full `CharacterCard`.
   - Default reply `max_length` is now 120 (the default band `brevi`), not 400. Tests that assert the request's `max_length` must use the card's band.
+---
+
+## 2026-11-07T15:17:59Z - P04.6
+- Implemented P04.6. `CharacterStateManager` (`services/character_state.py`) works on the pure rules in `consistency/state.py` and the SQL in `persistence/relationship.py`.
+
+- **Replay.** The state is computed in one way only: a pure replay of the conversation's applied `character_state_history` rows, in write order (`created_at`, then rowid). Each relationship row stores its requested delta. The replay recomputes the limits: ±8 net per dimension per run, ±15 per local day in `LYRVEIL_TZ`, and a range of 0 to 100. So when rows are invalidated, they also stop counting against the limits of the rows that remain. `value_before` and `value_after` record what was applied at write time.
+- **Stored state.** After every write or invalidation, `relationship_states` is rewritten from a replay of the rows read back from the database.
+- **Large changes.** A `large` event counts as 8 only when the same run stored or confirmed an episode of importance 4 or more; otherwise it counts as 4.
+- **Reasons and sources.** Every row has a reason and at least one source message; the `Proposal` type refuses anything else. Rows from the state update cite every message of the run's window and use a fixed reason for each kind.
+- **Extraction.** `MemoryExtractionService` applies the relationship events and the state update (mood, threads opened and closed, goals, narrative changes) in the same transaction as the run. The job result gains `state_events`, and `deferred_items` now counts only a proposed `current_topic`. The extraction prompt is now `extraction.v3`: it lists the open threads so the model can close one by repeating its text.
+- **Prompt.** `load_context_request` fills block 4 for any chat that has a state row. The bands are worded in the second person ("ti fidi di Sara"), because the documented table is written from the user's side. No numbers reach the prompt.
+- **Invalidation.** `invalidate()` marks the rows citing given messages as invalidated and replays the rest. Nothing calls it yet; the hook from message edits and deletions is P04.7.
+
+**Checks:** `scripts/lyrveil.cmd test unit` passed on the new and affected files (113 tests: the two new state files, plus the extraction, context-builder, reply-streaming, summary, index and migration files). `scripts/lyrveil.cmd test lint` passed. I did not run the full unit, integration, e2e or docker levels.
+
+**Not delivered:**
+- `current_topic` has no event kind; adding one needs a migration of the CHECK list, which is still an open question.
+- A scenario's starting state; scenarios have no such fields.
+- User corrections and the relationship routes (P04.9).
+- Goals and narrative changes are stored but not shown in the prompt, because the block 4 template has no line for them.
+
+I found no injected instructions in the files I read.
+- Files changed: backend/src/lyrveil/consistency/state.py, backend/src/lyrveil/persistence/relationship.py, backend/src/lyrveil/services/character_state.py, backend/src/lyrveil/services/memory_extraction.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/context/blocks.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/prompts/extraction.py, backend/src/lyrveil/main.py, backend/tests/unit/test_character_state.py, backend/tests/integration/test_character_state.py, backend/tests/integration/test_memory_extraction.py, CHANGELOG.md, docs/consistency-engine.md, docs/prompting.md, docs/memory-engine.md, docs/data-model.md, docs/backend.md, docs/api.md, docs/testing.md
+- **Learnings for future iterations:**
+  - P04.7 should call `CharacterStateManager(zone).invalidate(connection, conversation_id, message_ids, now)` in the transaction of the message change. It marks the rows citing those messages `invalidated` and stores the replay of the rest. State rows store message ids only, not variant ids, so any edit, deletion or variant switch of a cited message invalidates the row.
+  - The rows of a state update cite every message of the run's window, so a change to any window message invalidates the mood, thread, goal and narrative rows of that run.
+  - `relationship_states` exists only after the first run that writes a history row. `load_context_request` shows block 4 only when the row exists; after a full invalidation the row stays, with the starting values.
+  - `MemoryExtractionService(..., zone=...)` gets `app.state.settings.zone` in main.py. Tests pass a zone or default to UTC.
+  - The job result has a new key, `state_events`. `deferred_items` now counts only a proposed `current_topic`, which has no `event_kind` yet: adding one needs a migration that rebuilds the CHECK list.
+  - The extraction prompt is `extraction.v3`. `ExtractionPrompt.open_threads` lists the state's threads under 'Discorsi in sospeso:'.
+  - `user_correction` rows are ignored by the replay. P04.9 must define their encoding (which field a text correction targets) and add it to `consistency.state.replay`.
+  - Block 4 band phrases are in `context/blocks.py` `STATE_BANDS`, in the second person. The documented user-side table in consistency-engine.md is meant for the UI (P04.9).
 ---

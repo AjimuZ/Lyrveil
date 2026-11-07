@@ -215,8 +215,9 @@ Windows and triggers are `lyrveil/memory/window.py`, the SQL is `lyrveil/persist
   with the same fingerprint; `linked_episode_refs` become `related` links.
 - **Not applied yet.** `update`, `contradiction` and `correction` items, and the guards of
   [Consistency rules](#consistency-rules), were P04.2b ([Delivered in P04.2b](#delivered-in-p042b)); relationship
-  events and the state update are P04.6. Valid ones were counted as `deferred_items` in the job's result and not
-  stored, so a window extracted before those tasks does not get them later. An item with an unknown label, a missing
+  events and the state update came with P04.6 ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). Valid
+  ones were counted as `deferred_items` in the job's result and not stored, so a window extracted before those tasks
+  does not get them later. An item with an unknown label, a missing
   target, a source outside the window or blank text is counted in `dropped_items`.
 - **Fingerprint.** `lyrveil.memory.text.fingerprint`: the SHA-256 of the distinct stems, sorted. Repeated words count
   once. A text made only of stop words falls back to its distinct normalized words. Similarity deduplication came with
@@ -335,11 +336,13 @@ deduplication, what the relation and guard 3 ask of each existing memory, then t
 - **Expiry.** When a run starts, the conversation's temporary memories in use whose `expires_at` has passed become
   `expired`, each with a revision by `consistency` with reason `expired`. Lasting memories are never touched.
 - **Prompt.** The extraction prompt is `extraction.v2` ([Extraction template](prompting.md#extraction-template)): it
-  never shows an identity candidate, and shows an uncertain memory as `E2: [incerto] ...`.
+  never shows an identity candidate, and shows an uncertain memory as `E2: [incerto] ...`. Since P04.6 it is
+  `extraction.v3`, which also lists the open threads of the conversation state.
 - **Event and result.** After a committed run, `memory.conflict` with `memory_id` and `conversation_id` is published for
   each new memory stored `uncertain` when the highest importance among it and the memories it conflicts with is at
   least 3. The job's result adds `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items`
-  now counts only relationship events.
+  now counts only relationship events. Since P04.6 relationship events are applied, `state_events` counts the state
+  rows a run wrote, and `deferred_items` counts only a proposed `current_topic`.
 - **Not delivered.** `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
   reply prompt, which needs retrieval and the context builder (P04.3, P04.5); invalidation (P04.7). Only Italian has
   change cues, so in another language a changed single-valued value always becomes a contradiction. Tombstones came
@@ -776,8 +779,10 @@ for a single system text.
   each block, the example count, the memories with their score parts, the summary ids, the gaps, the history seqs, the
   reductions applied and whether the current message was cut. The reply logs it as `context_assembled`, with counts
   only. The `prompt_assemblies` table is not written yet ([Data model](data-model.md#prompt_assemblies)).
-- **Not delivered.** Block 4: no state exists before the Character State Manager (P04.6) and no time context before
-  P07.4, so `StateText` is empty and the frame holds blocks 5 and 9. Corrective notes come with P04.8; the anchor takes
+- **Not delivered.** Block 4: no state existed before the Character State Manager and no time context exists before
+  P07.4, so `StateText` was empty and the frame held blocks 5 and 9. Since P04.6 `load_context_request` fills block 4
+  from the chat's stored state ([Block 4](prompting.md#block-4-state-and-time)); a chat whose state was never written
+  still has none, and the time lines wait for P07.4. Corrective notes come with P04.8; the anchor takes
   them already. The `context.*` keys as user settings (`ContextSettings` is a constructor value). `last_process`
   measurements (P04.10).
 - **Prefix.** While the history fits whole, two replies share the stable text and the history byte for byte. Once the
