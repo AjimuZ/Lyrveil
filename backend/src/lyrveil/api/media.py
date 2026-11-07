@@ -1,14 +1,17 @@
-"""Media routes of docs/api.md (Images): the files of character assets, served outside the JSON API under `/media`.
+"""Media routes of docs/api.md (Images): the files of character assets and generated images, served outside the JSON
+API under `/media`.
 
 A route takes an identifier and looks the path up in the database; no part of the request path becomes a file path
-(docs/security.md, File safety). The image routes arrive with the image pipeline (P05).
+(docs/security.md, File safety). The image routes read the stored files only, so they work with ComfyUI off.
 """
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
 from lyrveil.api.assets import Service
+from lyrveil.api.images import ImageApiService
 from lyrveil.services.assets import CharacterAssetService
+from lyrveil.services.images import ImageService
 
 router = APIRouter(prefix="/media", tags=["media"], include_in_schema=False)
 
@@ -33,3 +36,22 @@ def read_asset_thumbnail(asset_id: str, service: CharacterAssetService = Service
     """Serves the WebP thumbnail of a live asset, longest side at most 512 pixels. Answers 404 `NOT_FOUND` for an id
     that names no live asset."""
     return _file(service, asset_id, thumbnail=True)
+
+
+def _image_file(service: ImageService, image_id: str, *, thumbnail: bool) -> FileResponse:
+    path, media_type = service.media_file(image_id, thumbnail=thumbnail)
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": _CACHE_CONTROL})
+
+
+@router.get("/images/{image_id}/original")
+def read_image_original(image_id: str, service: ImageService = ImageApiService) -> FileResponse:
+    """Serves the original file of a live generated image with its media type. Answers 404 `NOT_FOUND` for an id that
+    names no live image."""
+    return _image_file(service, image_id, thumbnail=False)
+
+
+@router.get("/images/{image_id}/thumbnail")
+def read_image_thumbnail(image_id: str, service: ImageService = ImageApiService) -> FileResponse:
+    """Serves the WebP thumbnail of a live generated image, longest side at most 512 pixels. Answers 404 `NOT_FOUND`
+    for an id that names no live image."""
+    return _image_file(service, image_id, thumbnail=True)

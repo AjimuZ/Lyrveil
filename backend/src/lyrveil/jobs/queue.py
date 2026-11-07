@@ -137,12 +137,14 @@ class JobQueue:
         message_id: str | None = None,
         idempotency_key: str | None = None,
         priority: int | None = None,
+        stage: str | None = None,
     ) -> Job:
         """Writes a queued job in the caller's transaction and returns it; the caller's commit makes it durable.
 
-        The job starts in the kind's first stage, with its mode, its maximum attempts and, unless `priority` is
-        given, its default priority. With an `idempotency_key` already stored, returns that job and writes nothing.
-        Raises QueueFullError when the queue holds MAX_ACTIVE_JOBS active jobs.
+        The job starts in the kind's first stage, or in `stage` when given (a regenerated image skips `prompt`), with
+        its mode, its maximum attempts and, unless `priority` is given, its default priority. With an
+        `idempotency_key` already stored, returns that job and writes nothing. Raises QueueFullError when the queue
+        holds MAX_ACTIVE_JOBS active jobs, and ValueError for a `stage` the kind does not have.
         """
         if idempotency_key is not None:
             existing = connection.execute(
@@ -156,7 +158,9 @@ class JobQueue:
         if active >= self._max_active:
             raise QueueFullError(f"the queue already holds {active} active jobs")
         policy = policy_for(kind)
-        stage = policy.first_stage
+        stage = policy.first_stage if stage is None else stage
+        if stage not in policy.stages:
+            raise ValueError(f"{kind.value} has no stage {stage!r}")
         job_id = new_id()
         connection.execute(
             text(

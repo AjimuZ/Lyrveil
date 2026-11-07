@@ -9,7 +9,7 @@ with one repair, and an output still invalid after it gives the fallback scene. 
 ever logged.
 
 Delivered here: the stage's work. The `image_request` job that runs it, chooses the seed and stores what it returns
-is not delivered yet.
+is lyrveil.services.image_generation.
 """
 
 from collections.abc import Mapping, Sequence

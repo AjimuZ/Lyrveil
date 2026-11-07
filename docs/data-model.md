@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the prompt assemblies (P04.9b, revision `0012`), are described in their "Delivered in" notes below. The rest is planned, phases P04 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the generated images (P05.4b, revision `0013`), are described in their "Delivered in" notes below. The rest is planned, phases P05 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -515,6 +515,15 @@ Retention: the newest 200 per conversation.
 | `created_at`, `deleted_at` | TEXT | |
 
 Indexes: `(character_id, created_at DESC)`, `(conversation_id, created_at DESC)`.
+
+Delivered in revision `0013` (P05.4b) with `CHECK` lists for `purpose`, `aspect` and `quality_preset`, `json_valid` on
+`scene_json` and `workflow_json`, the unique index on `job_id`, an index on `message_id`, and every column above as
+`NOT NULL` except the checkpoint hash, `model_version`, `comfyui_version`, the three `hires_*` columns and `deleted_at`.
+`model_version` stays NULL until the settings store knows it. The id and both file names derive from the job id
+(`images/YYYY/MM/<id>.png`, `thumbs/YYYY/MM/<id>.webp`), so a persist that restarts overwrites the same files and the
+unique `job_id` makes the insert a no-op. `message_variants.image_id` and `character_assets.generated_image_id` stay plain
+columns; the persistence layer sets the first. A character purge deletes its image rows, and the service removes their
+files after the commit.
 
 ### `generation_jobs`
 

@@ -503,6 +503,20 @@ Steps:
 `generated_images.job_id` is unique, so repeating step 5 cannot duplicate an image. The file name comes from the identifier and never
 from model or user text.
 
+Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md#generated_images)):
+
+- The three stages run as `ImageGenerationService`. The rendered file is staged at `.staging/<job_id>/render`, a folder that
+  startup leaves alone, so a crash in `persist` restarts from it.
+- The image id is a UUID derived from the job id, and both file names derive from it, so a restarted `persist` writes the
+  same files and inserts nothing twice. Pillow re-encodes the PNG without metadata, and `sha256` and `byte_size`
+  describe the stored bytes.
+- The caption becomes the variant's text. The message is `mixed` with a caption and `image` without one, stays `queued`
+  while its job works, and carries `image_id`. `image.progress` reports `prompt`, `loading`, `sampling`, `refining`
+  and `saving`; `image.completed` and `message.completed` follow the commit.
+- Not delivered: the explicit request and gallery routes (P05.5, P05.6), the mode switch through the orchestrator
+  (P05.7), the `waiting` phase, the settings that choose the profile and the quality, the retry with **Rapida** after a
+  second out of memory (P06), and the browser test of T-IMG-07 and T-IMG-08.
+
 ComfyUI's directories live in a tmpfs that disappears when the container stops. The backend serves `/media/...` from `data/media`, so
 images never depend on ComfyUI.
 
@@ -513,6 +527,10 @@ exports.
 
 `POST /images/{id}/regenerate` creates a new job with the stored prompt, skips the `prompt` stage and uses a new seed unless `keep_seed` is
 true. In a conversation the result is a new variant of the same message, with the same arrows as text alternatives.
+
+Delivered in P05.4b as `ImageService.regenerate`, without the route: it applies to the last visible message of an active
+conversation that is not being produced, keeps the image's caption as the new variant's text, and queues the job at
+the `render` stage, so no text model is needed. An image outside a conversation cannot be regenerated yet.
 
 The gallery's advanced dialog can edit positive and negative prompts. The [sanitizer](#sanitizer) rules for user weights apply, the
 safety negative is always appended and the guard always runs.

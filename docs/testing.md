@@ -611,10 +611,10 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-IMG-03 | Request detector on at least 100 phrases | Unit | P05 |
 | T-IMG-04 | GPU alternation in the right order, with fakes | Integration | P06 |
 | T-IMG-05 | ComfyUI messages map to progress | Unit | P05 |
-| T-IMG-06 | Persistence is atomic and idempotent | Integration | P05 |
-| T-IMG-07 | The image appears as a message with metadata | Integration, E2E | P05 |
-| T-IMG-08 | Images load with ComfyUI off | Integration, E2E | P05 |
-| T-IMG-09 | Regeneration adds a variant | Integration | P05 |
+| T-IMG-06 | Persistence is atomic and idempotent. In `backend/tests/integration/test_image_job.py` (P05.4b): the `persist` stage run twice leaves one row, one original and one thumbnail, and a staged file that is not an image leaves no row and no file and fails the message | Integration | P05 |
+| T-IMG-07 | The image appears as a message with metadata. The integration part is in `test_image_job.py` (P05.4b), through the scheduler with a fake text model and a fake ComfyUI; the browser part waits for the request route and the conversation screen (P05.5) | Integration, E2E | P05 |
+| T-IMG-08 | Images load with ComfyUI off. The integration part is in `test_image_job.py` (P05.4b): the media routes answer after the fake ComfyUI is switched off; the browser part waits for the conversation screen (P05.5) | Integration, E2E | P05 |
+| T-IMG-09 | Regeneration adds a variant. In `test_image_job.py` (P05.4b): a new variant with a new seed (or the same with `keep_seed`) and no text-model call, the older variant keeps its image | Integration | P05 |
 | T-IMG-10 | Cancellation at each stage | Integration | P06 |
 | T-IMG-11 | Out of memory leads to a tiled retry of the same preset, then one **Rapida** try. The stored preset is the one that produced the file | Integration | P06 |
 | T-IMG-12 | Restart in each stage resumes without duplicates | Integration | P06 |

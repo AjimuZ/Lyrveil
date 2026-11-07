@@ -31,6 +31,7 @@ class MessageOut(BaseModel):
     active_variant_id: str | None
     content: str
     variant_count: int
+    image_id: str | None = None
     edited_at: str | None
     created_at: str
 

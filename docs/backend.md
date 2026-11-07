@@ -243,7 +243,8 @@ documented range raises `WorkflowError`. `final_size` gives the saved size: the 
 a multiple of 8.
 
 The sampler name is checked for shape only, not against ComfyUI's `KSAMPLER_NAMES`; ComfyUI refuses an unknown name
-at validation. The backend and test images copy `workflows/` to `/app/workflows/comfyui`. No job calls the builder yet.
+at validation. The backend and test images copy `workflows/` to `/app/workflows/comfyui`. The `render` stage of
+`image_request` calls the builder ([Image job](#image-job)).
 
 #### Visual consistency
 
@@ -258,7 +259,7 @@ lists every dropped tag with the step that dropped it. Both are pure and read no
 vocabulary and the card, merges the result with `apply_identity_result`, which keeps the locked slots, and validates the
 merged card with `validate_card`, with one repair. `prompts/gbnf.py` gained `json_schema_to_gbnf` for such narrowed
 schemas. Not delivered: the `visual_profile_translate` handler, the save path that queues it, and the write of the
-translated slots. No job calls the builder yet; `image_request` (P05.4b) will.
+translated slots. The builder is called by the `prompt` stage of `image_request` ([Image job](#image-job)).
 
 #### Image prompt stage
 
@@ -276,8 +277,34 @@ with `load_context_request` at the message's seq, or None outside a chat. It ret
 - `prompt`: `VisualConsistencyService.build` on the scene.
 - `aspect`, `width`, `height`: `resolve_aspect` and `final_size` of `images/workflows.py`.
 
-The caption call always comes before the scene call. Not delivered: the `image_request` handler that runs the stage
-under a lease, the seed and the storage of the result (P05.4b).
+The caption call always comes before the scene call.
+
+#### Image job
+
+Delivered in P05.4b: `services/image_generation.py` holds `ImageGenerationService`, the `JobHandler` of `image_request`
+(`Worker.image_runtime` and `Worker.images` give it its runtime and `ImageSettings`; without an image runtime the
+worker registers no handler and such jobs wait). Each stage hands the next one the whole payload:
+
+- `prompt` (llm): runs `ImagePromptStage` on the reply context of the job's message (`load_context_request` at its
+  `seq`) and chooses the seed unless the request gave one. The payload then holds the caption and its checks, the scene,
+  the final prompts, the outfit key, the aspect and the size.
+- `render` (image): `build_workflow` with the quality preset and the profile's checkpoint; the second attempt uses the
+  tiled file. `ComfyUiRuntime.render` publishes `image.progress`, and the file is staged at `.staging/<job id>/render`
+  (`MediaStore.stage_job_file`, which `clear_staging` leaves alone).
+- `persist` (none): Pillow validates the staged file (`prepare_upload`), the thumbnail and the original are written under
+  names derived from the job id, then one transaction inserts `generated_images`, links the variant, writes the caption
+  as the variant's text, sets the message `complete` (`kind` `mixed`, or `image` without a caption) and its
+  `image_id`. Then `image.completed` and `message.completed`.
+
+The message stays `queued` while the job works, so the startup rule that interrupts `streaming` messages never touches
+it. A failure with no attempt left sets the message and the variant `failed` and publishes `message.failed`; a
+`ContentPolicyBlockedError` is `CONTENT_POLICY_BLOCKED`, an outfit the card does not offer is `VALIDATION_ERROR`, and an
+`ImageRuntimeError` keeps its port code, retried only for out of memory, an unavailable runtime, a stall or a timeout.
+
+`services/images.py` holds `ImageService`: `request` saves the user's request, the image placeholder and the job in one
+transaction (a full queue rolls all of it back), `regenerate` adds a `generated` variant and queues the job at the
+`render` stage with the stored prompt (`JobQueue.enqueue(..., stage=)`), `get` and `media_file` read the metadata and
+the files. No setting store, orchestrator mode switch or HTTP route starts a request yet (P05.5, P05.7).
 
 ### Prompt formatter
 

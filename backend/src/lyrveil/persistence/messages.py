@@ -11,7 +11,8 @@ from lyrveil.domain.messages import Author, Message, MessageStatus, Variant, Var
 _MESSAGE_SELECT = """
 SELECT m.id, m.conversation_id, m.seq, m.client_message_id, m.author, m.kind, m.status, m.read_state,
        m.active_variant_id, m.content, m.edited_at, m.deleted_at, m.created_at,
-       (SELECT count(*) FROM message_variants AS v WHERE v.message_id = m.id) AS variant_count
+       (SELECT count(*) FROM message_variants AS v WHERE v.message_id = m.id) AS variant_count,
+       (SELECT v.image_id FROM message_variants AS v WHERE v.id = m.active_variant_id) AS image_id
 FROM messages AS m
 """
 _VARIANT_SELECT = "SELECT id, message_id, variant_no, content, source, status, created_at FROM message_variants"
@@ -33,6 +34,7 @@ def _message(row: RowMapping) -> Message:
         edited_at=row["edited_at"],
         deleted_at=row["deleted_at"],
         created_at=row["created_at"],
+        image_id=row["image_id"],
     )
 
 

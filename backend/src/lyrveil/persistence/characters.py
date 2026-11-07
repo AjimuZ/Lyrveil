@@ -353,9 +353,10 @@ def has_running_job(connection: Connection, character_id: str) -> bool:
 def purge(connection: Connection, character_id: str) -> None:
     """Hard-deletes the character with everything it owns, children first because every key is RESTRICT: the jobs that
     name it, its memory rows (state, memories with their revisions, sources and index rows, tombstones, episodes,
-    extraction runs, summary checkpoints, prompt assemblies), its message variants, messages and conversations (the
-    search triggers clear their index rows), then its traits, asset rows, visual profile, versions and the character
-    row. The caller owns the transaction, the confirmation and the asset files, which it removes after the commit."""
+    extraction runs, summary checkpoints, prompt assemblies), its generated image rows, its message variants, messages
+    and conversations (the search triggers clear their index rows), then its traits, asset rows, visual profile,
+    versions and the character row. The caller owns the transaction, the confirmation and the asset and image files,
+    which it removes after the commit."""
     params = {"id": character_id}
     owned_conversations = "SELECT id FROM conversations WHERE character_id = :id"
     owned_messages = f"SELECT id FROM messages WHERE conversation_id IN ({owned_conversations})"
@@ -379,6 +380,7 @@ def purge(connection: Connection, character_id: str) -> None:
         f"DELETE FROM memory_extraction_runs WHERE conversation_id IN ({owned_conversations})",
         f"DELETE FROM conversation_summaries WHERE conversation_id IN ({owned_conversations})",
         f"DELETE FROM prompt_assemblies WHERE conversation_id IN ({owned_conversations})",
+        "DELETE FROM generated_images WHERE character_id = :id",
         f"DELETE FROM message_variants WHERE message_id IN ({owned_messages})",
         f"DELETE FROM messages WHERE conversation_id IN ({owned_conversations})",
         "DELETE FROM conversations WHERE character_id = :id",

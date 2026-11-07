@@ -11,6 +11,8 @@ MESSAGE_RESTARTED = "message.restarted"
 MESSAGE_COMPLETED = "message.completed"
 MESSAGE_FAILED = "message.failed"
 MESSAGE_UPDATED = "message.updated"
+IMAGE_PROGRESS = "image.progress"
+IMAGE_COMPLETED = "image.completed"
 
 
 class EventPublisher(Protocol):

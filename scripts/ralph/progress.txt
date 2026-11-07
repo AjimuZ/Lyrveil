@@ -182,6 +182,9 @@
 - When a structured-task bound must match a Pydantic model, read it from Model.model_json_schema()['properties'][name]['maxItems'] rather than hard-coding it, so the grammar, the fallback and the model cannot drift.
 - Only allowlisted log fields survive (lyrveil.logs): use error_code, *_count and the ids. A custom key such as `check` is dropped silently.
 - To narrow a wide Literal to a narrower one under mypy strict, look the value up in a dict keyed by the narrow type instead of returning it after an == check.
+- Tests for a multi-stage job drive the real JobScheduler with a mutable GPU mode (`lambda: harness.mode`), switching it between run_once calls to match each stage's required_mode.
+- Make persistence idempotent by deriving ids and file names from the job id (uuid5) and keeping a unique job_id column; a repeat then overwrites the same files and inserts nothing.
+- Event publishing must happen on the event loop: do the database work in a thread, return what to announce, and publish after the thread returns.
 
 ---
 
@@ -1621,4 +1624,39 @@ No injected instructions found in the files I read.
   - The seed is not chosen by the stage. The job must pick it and save it in the prompt stage.
   - `scripts/lyrveil.cmd test integration` takes no arguments. `scripts/lyrveil.cmd test unit tests/integration/<file>.py -q` runs one integration file through pytest in the same test image.
   - A plain `git status` through Bash is refused in this session's allowlist.
+---
+
+## 2026-11-07T19:02:21Z - P05.4b
+- Delivered the `image_request` job and its persistence, but not the browser (end-to-end) part of T-IMG-07 and T-IMG-08, so one acceptance criterion is only partly met.
+
+**What now works**
+- **Handler:** `ImageGenerationService` (`services/image_generation.py`) runs the three stages.
+  - `prompt` runs `ImagePromptStage` on the image message's chat and picks the seed.
+  - `render` builds the workflow, forwards progress and stages the file at `.staging/<job_id>/render`.
+  - `persist` validates the file with Pillow, writes the thumbnail and the original, then stores `generated_images`, links the variant and completes the message in one transaction.
+- **Persistence:** migration `0013` adds `generated_images`, with `job_id` unique so repeating the insert is a no-op. File names derive from the job id, so a restarted `persist` overwrites the same files. A character purge now also deletes image rows and files.
+- **Failures:** a final failure sets the message and variant `failed` and publishes `message.failed`. A scene blocked by the content guard is `CONTENT_POLICY_BLOCKED`, and an `ImageRuntimeError` keeps its code.
+- **Service and routes:** `ImageService` (`services/images.py`) has `request`, `regenerate` (skips the `prompt` stage, new seed unless `keep_seed`), `get` and `media_file`. New routes are `GET /media/images/{id}/original`, `GET /media/images/{id}/thumbnail` and `GET /images/{id}`. Messages and `image.completed` carry `image_id` and the image metadata.
+- **Smaller changes:** `JobQueue.enqueue` gained a `stage` argument. `MediaStore` has `stage_job_file`, `read_staged` and `discard_staged`, and `clear_staging` leaves job folders alone. `Worker` got optional `image_runtime` and `images` fields.
+
+**What I ran**
+- `scripts/lyrveil.cmd test lint` passed (ruff, format, mypy strict, docs checks, frontend lint and build).
+- New `backend/tests/integration/test_image_job.py` (6 tests) and the new media-store unit tests pass. They cover the persistence, metadata, ComfyUI-off and regeneration checks of T-IMG-06 to T-IMG-09.
+- Regression files also pass: migrations, job queue, messages, characters, avatars, job policy, reply streaming and image caption.
+- I did not run the full unit, integration, e2e or docker levels.
+
+**Not delivered**
+- The end-to-end parts of T-IMG-07 and T-IMG-08 are not done. They need the request route and the conversation screen, which belong to P05.5, so those criteria are only met at integration level. I recorded this in `docs/testing.md` and `docs/image-generation.md`.
+- `main()` does not pass an image runtime yet, so `image_request` jobs wait in the queue until the orchestrator mode switch (P05.7).
+- Still missing: the explicit request and regeneration HTTP routes, the settings that choose the profile and quality, and the **Rapida** retry after a second out-of-memory (P06).
+
+**Docs:** updated `backend.md`, `api.md`, `data-model.md`, `image-generation.md` and `testing.md`. I left `CHANGELOG.md` alone because nothing is reachable by users yet, and left the roadmap checkbox for the orchestrator.
+- Files changed: backend/migrations/versions/0013_generated_images.py, backend/src/lyrveil/persistence/images.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/persistence/messages.py, backend/src/lyrveil/services/image_generation.py, backend/src/lyrveil/services/images.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/services/image_prompt.py, backend/src/lyrveil/api/images.py, backend/src/lyrveil/api/media.py, backend/src/lyrveil/api/messages.py, backend/src/lyrveil/domain/messages.py, backend/src/lyrveil/jobs/queue.py, backend/src/lyrveil/media/store.py, backend/src/lyrveil/ports/events.py, backend/src/lyrveil/main.py, backend/tests/integration/test_image_job.py, backend/tests/integration/test_migrations.py, backend/tests/unit/test_media_store.py, docs/backend.md, docs/api.md, docs/data-model.md, docs/image-generation.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The end-to-end part of T-IMG-07 and T-IMG-08 was not delivered: it needs POST /conversations/{id}/images and the conversation screen (P05.5), plus a fake ComfyUI in compose.test.yaml. The integration tests cover the flow with a fake ImageRuntime.
+  - main() leaves Worker.image_runtime as None, so image_request jobs wait until P05.7 wires ComfyUiRuntime and the orchestrator image mode. Worker.images (ImageSettings) defaults to illustrious-xl-v2.0, alta; ImageSettings.for_profile builds it from a catalog ImageProfile.
+  - The message stays `queued` while its image job works, because recover_interrupted_replies fails every `streaming` message at startup. Keep it that way for image messages.
+  - ImageService.request saves the user's request message, the image placeholder and the job in one transaction; a full queue rolls everything back (unlike text sends, which keep the message). ImageService.regenerate enqueues at stage `render` via JobQueue.enqueue(stage=...) and reuses the stored prompt.
+  - The integration level takes no arguments; run one file with `scripts/lyrveil.cmd test unit tests/integration/<file>.py -q`; several files can be passed together.
+  - MediaStore staged files live in `.staging/<job_id>/render`; clear_staging removes only loose files, so a restarted persist can still read them. The job id must be a lowercase UUID.
 ---

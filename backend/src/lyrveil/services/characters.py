@@ -23,6 +23,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.media.store import MediaStore
 from lyrveil.persistence import assets as asset_repository
 from lyrveil.persistence import characters as repository
+from lyrveil.persistence import images as image_repository
 from lyrveil.services.card_rules import validate_card
 
 STATUSES = frozenset({"active", "archived"})
@@ -121,7 +122,7 @@ class CharacterService:
         deleted otherwise.
 
         Raises NotFoundError for an unknown character, ValidationFailedError when the name does not match and
-        ConflictError while a job of the character is running. The asset files are removed after the commit
+        ConflictError while a job of the character is running. The asset and image files are removed after the commit
         (docs/data-model.md, Deletion policy); their paths are checked inside the transaction, so a path outside the
         media root (MediaPathError) rolls the purge back.
         """
@@ -135,7 +136,10 @@ class CharacterService:
                 raise ValidationFailedError(_NAME_MISMATCH)
             if repository.has_running_job(connection, character_id):
                 raise ConflictError(_JOB_RUNNING)
-            paths = asset_repository.file_paths(connection, character_id)
+            paths = [
+                *asset_repository.file_paths(connection, character_id),
+                *image_repository.file_paths(connection, character_id),
+            ]
             if media is not None:
                 for path in paths:
                     media.resolve(path)

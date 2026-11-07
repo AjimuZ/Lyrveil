@@ -65,7 +65,8 @@ class Message:
     """One message row. `content` is a copy of the active variant's text; it is empty while the reply is queued.
 
     `seq` is the message's number in its conversation, from 1 and never reused, so a gap marks a deleted message.
-    `variant_count` is how many versions exist. `read_state` is set for user messages only.
+    `variant_count` is how many versions exist. `read_state` is set for user messages only. `image_id` names the image
+    of the active variant, None for a message that shows no image; the image's metadata is `GET /images/{id}`.
     """
 
     id: str
@@ -82,6 +83,7 @@ class Message:
     edited_at: str | None
     deleted_at: str | None
     created_at: str
+    image_id: str | None = None
 
 
 def message_document(message: Message) -> dict[str, object]:
@@ -100,6 +102,7 @@ def message_document(message: Message) -> dict[str, object]:
         "active_variant_id": message.active_variant_id,
         "content": message.content,
         "variant_count": message.variant_count,
+        "image_id": message.image_id,
         "edited_at": message.edited_at,
         "created_at": message.created_at,
     }

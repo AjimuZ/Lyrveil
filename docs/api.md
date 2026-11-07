@@ -393,7 +393,15 @@ Media is looked up by identifier. A request path never becomes a file path.
 
 Delivered in P03.4a: `GET /media/assets/{id}` and `GET /media/assets/{id}/thumbnail` (WebP, longest side 512 px), with
 `Cache-Control: private, max-age=31536000, immutable`, since a file never changes once written. An id that names no
-live asset, or whose stored path leaves the media root, answers `404 NOT_FOUND`. The image routes are planned (P05).
+live asset, or whose stored path leaves the media root, answers `404 NOT_FOUND`.
+
+Delivered in P05.4b: `GET /media/images/{id}/original` and `/thumbnail` with the same headers and the same `404`, and
+`GET /images/{id}`, which answers the stored metadata (size, request, scene, final prompts, seed, sampler values,
+profile, preset, workflow file and ComfyUI version, but not the submitted workflow) with `url` and `thumbnail_url`. The
+files come from `data/media`, so they load with ComfyUI off. A message carries `image_id`, the image of its active
+variant (null for a message with none), and `image.completed` carries the same metadata as `image`. Planned (P05.5 and
+P05.6): the explicit request, the gallery, regeneration and deletion routes. The service behind the first two exists
+(`ImageService.request`, `regenerate`).
 
 ### Memory
 

@@ -1,7 +1,9 @@
 """MediaStore: the files below the media root. Writes pass through a staging folder and an atomic move; every read,
 write and delete accepts only a path that really resolves below the root (docs/security.md, File safety)."""
 
+import contextlib
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -13,6 +15,8 @@ DEFAULT_MEDIA_ROOT = Path("/data/media")
 STAGING = ".staging"
 # A media file sits in a category folder at least: `assets/<character id>/<asset id>.png`, never at the root itself.
 _MIN_DEPTH = 2
+# A job identifier is a generated UUID; nothing else names a folder of the staging area.
+_JOB_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 logger = get_logger(__name__)
 
@@ -86,9 +90,52 @@ class MediaStore:
             raise
         path.unlink(missing_ok=True)
 
+    def stage_job_file(self, job_id: str, data: bytes) -> None:
+        """Writes `data` as the staged file of the job, `.staging/<job id>/render`, replacing an earlier one.
+
+        The `render` stage leaves the runtime's file here so the `persist` stage can restart from it
+        (docs/image-generation.md, Persistence). The folder of a job survives clear_staging, which removes only the
+        loose files of the staging folder. Raises MediaPathError for an id that is not a plain identifier, and
+        OSError when the disk fails, after removing the partial file.
+        """
+        target = self._staged_path(job_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.parent / f"{uuid.uuid4().hex}.part"
+        try:
+            with partial.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(partial, target)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
+
+    def read_staged(self, job_id: str) -> bytes | None:
+        """Returns the staged file of the job, or None when it has none. Raises MediaPathError as stage_job_file."""
+        try:
+            return self._staged_path(job_id).read_bytes()
+        except FileNotFoundError:
+            return None
+
+    def discard_staged(self, job_id: str) -> None:
+        """Removes the staged file of the job and its folder; nothing staged is no error."""
+        target = self._staged_path(job_id)
+        target.unlink(missing_ok=True)
+        for leftover in target.parent.glob("*.part"):
+            leftover.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            target.parent.rmdir()
+
+    def _staged_path(self, job_id: str) -> Path:
+        if not _JOB_ID.fullmatch(job_id):
+            raise MediaPathError("the job id is not a plain identifier")
+        return self._root.resolve() / STAGING / job_id / "render"
+
     def clear_staging(self) -> int:
         """Removes what cut writes left in the staging folder and returns how many entries it removed. Startup calls it
-        before any write can be in flight. A missing folder counts as empty; a link is removed, never followed."""
+        before any write can be in flight. A missing folder counts as empty; a link is removed, never followed. The
+        folders of jobs, which hold files a restarted `persist` stage still needs, are left alone."""
         staging = self._root.resolve() / STAGING
         if not staging.is_dir():
             return 0

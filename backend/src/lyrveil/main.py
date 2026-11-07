@@ -3,7 +3,7 @@
 import sys
 import uuid
 from collections.abc import AsyncIterator, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,6 +21,7 @@ from lyrveil.api import (
     diagnostics,
     events,
     health,
+    images,
     jobs,
     media,
     memories,
@@ -54,11 +55,13 @@ from lyrveil.persistence.database import (
     verify_capabilities,
 )
 from lyrveil.persistence.migrations import upgrade_to_head
+from lyrveil.ports.image_runtime import ImageRuntime
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
 from lyrveil.services.daily_backup import DailyBackup
+from lyrveil.services.image_generation import ImageGenerationService, ImageSettings
 from lyrveil.services.memory_extraction import MemoryExtractionService
 from lyrveil.services.summaries import SummaryService
 from lyrveil.settings import Settings, SettingsError, load_settings
@@ -89,14 +92,17 @@ def _llm_mode() -> RequiredMode:
 class Worker:
     """What the job worker takes from outside the application: a factory of the text runtime, opened for the
     application's life, the lease calls, the GPU mode whose jobs may run, the reply settings, the memory extraction,
-    summary and prompt budget settings.
+    summary and prompt budget settings, and optionally a factory of the image runtime with the image settings.
 
-    Tests pass fakes.
+    Without `image_runtime` the worker has no `image_request` handler and such jobs wait in the queue: `main` leaves
+    it out until the orchestrator switches modes for images (P05.7). Tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
     leases: LeaseProvider
     current_mode: Callable[[], RequiredMode] = _llm_mode
+    image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
+    images: ImageSettings = field(default_factory=ImageSettings)
     replies: ReplySettings = field(default_factory=ReplySettings)
     memory: ExtractionSettings = field(default_factory=ExtractionSettings)
     summaries: SummarySettings = field(default_factory=SummarySettings)
@@ -124,16 +130,21 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
 
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
     CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
-    `summary_checkpoint` with SummaryService, and is kept in
-    `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed text and stays `streaming`
-    for the next start to mark `interrupted`; its lease is not released and expires by itself.
+    `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
+    image runtime, and is kept in `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed
+    text and stays `streaming` for the next start to mark `interrupted`; its lease is not released and expires by
+    itself.
     """
     worker: Worker | None = app.state.worker
     engine: Engine | None = app.state.engine
     if worker is None or engine is None:
         yield
         return
-    async with worker.text_runtime() as runtime:
+    async with AsyncExitStack() as stack:
+        runtime = await stack.enter_async_context(worker.text_runtime())
+        image_runtime: ImageRuntime | None = None
+        if worker.image_runtime is not None:
+            image_runtime = await stack.enter_async_context(worker.image_runtime())
         replies = ChatInferenceService(
             engine,
             runtime,
@@ -168,6 +179,17 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             JobKind.MEMORY_REEVALUATION: memories,
             JobKind.SUMMARY_CHECKPOINT: summaries,
         }
+        if image_runtime is not None:
+            handlers[JobKind.IMAGE_REQUEST] = ImageGenerationService(
+                engine,
+                runtime,
+                image_runtime,
+                app.state.media,
+                app.state.events,
+                worker.images,
+                worker.replies,
+                context=worker.context,
+            )
         scheduler = JobScheduler(engine, JobQueue(), handlers, worker.leases, worker.current_mode)
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
@@ -228,6 +250,7 @@ def create_app(
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(memories.router, prefix=API_PREFIX)
     app.include_router(diagnostics.router, prefix=API_PREFIX)
+    app.include_router(images.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(events.router)
     app.include_router(media.router)

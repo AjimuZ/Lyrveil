@@ -83,3 +83,32 @@ def test_clear_staging_removes_what_a_cut_write_left(root: Path) -> None:
     assert store.clear_staging() == 1
     assert list((root / STAGING).iterdir()) == []
     assert (root / "assets" / "c" / "a.png").exists()
+
+
+JOB = "0199a000-0000-7000-8000-000000000001"
+
+
+def test_a_staged_job_file_survives_clear_staging_until_it_is_discarded(root: Path) -> None:
+    store = MediaStore(root)
+    assert store.read_staged(JOB) is None
+    store.stage_job_file(JOB, b"first")
+    store.stage_job_file(JOB, b"second")
+    (root / STAGING / "loose.part").write_bytes(b"x")
+
+    assert store.clear_staging() == 1
+    assert store.read_staged(JOB) == b"second"
+    assert [path.name for path in (root / STAGING / JOB).iterdir()] == ["render"]
+
+    store.discard_staged(JOB)
+    store.discard_staged(JOB)
+    assert store.read_staged(JOB) is None
+    assert not (root / STAGING / JOB).exists()
+
+
+@pytest.mark.parametrize("job_id", ["../escape", "", "a/b", "not-a-uuid", JOB.upper()])
+def test_only_a_plain_job_identifier_names_a_staged_file(root: Path, job_id: str) -> None:
+    store = MediaStore(root)
+    with pytest.raises(MediaPathError):
+        store.stage_job_file(job_id, b"x")
+    with pytest.raises(MediaPathError):
+        store.read_staged(job_id)
