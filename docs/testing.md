@@ -130,13 +130,25 @@ pytest joins it when a Docker test needs Python. The files:
   documented command (`--print-command`), and exits 78 for an unknown, invalid, repeated or missing key, Windows line
   endings, a command substitution, a path in `MODEL_FILE`, a line that is not `KEY=VALUE`, a missing launch file and
   a missing model, and 64 for an unknown argument. It needs no GPU and no model. It has not run yet.
+- `tests/docker/ImageRuntime.Tests.ps1` (P05.1) builds `docker/image/Dockerfile` as `lyrveil/image:test`; the first
+  run downloads ComfyUI and about 4 GB of wheels, later runs use the build cache. It checks that the Dockerfile clones
+  the commit of [Technology](technology.md), that every package of `docker/image/requirements.lock` has one version
+  and at least one SHA-256, and that `torch` and `torchvision` are `+cu130` builds. The image runs as `10001:10001`
+  and holds no `.gguf`, `.safetensors`, `.sft`, `.ckpt`, `.pt`, `.env` or `.git`, and no `.pth` other than Python
+  path files at the top of `site-packages`; its checkpoints folder holds only the upstream placeholder. With a
+  read-only root, the 4 GiB tmpfs `/tmp/comfy`, no capabilities, `no-new-privileges` and no network, the entrypoint
+  started with `--cpu` and the example launch file makes ComfyUI answer `GET /system_stats` with version `0.43.0`, a
+  `+cu130` PyTorch, the `cpu` device and the flags of [Runtime contracts](runtime-contracts.md). The entrypoint turns
+  launch files into the documented command (`--print-command`), exits 78 for an unknown, invalid, off-step, repeated
+  or missing key, a command substitution, Windows line endings, a line that is not `KEY=VALUE` and a missing launch
+  file, and 64 for an unknown or repeated argument. It needs no GPU and no model. It has not run yet.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
-`:setup-test`, and puts the fakes image in place of the KoboldCpp image of `lyrveil-llm`, without its
-`container_name`, GPU request, volume subpaths or health check, so setup creates a runtime container with no 629 MB
-download and no GPU. The lifecycle, data and models overrides give `lyrveil-llm` a profile that no command enables, so
-those projects build and create no runtime, as before P02.1. Every command names the
+`:setup-test`, and puts the fakes image in place of the KoboldCpp image of `lyrveil-llm` and the ComfyUI image of
+`lyrveil-image`, without their `container_name`, GPU request, volumes or health check, so setup creates the two
+runtime containers with no runtime download and no GPU. The lifecycle, data and models overrides give both runtimes a
+profile that no command enables, so those projects build and create no runtime, as before P02.1. Every command names the
 project with `-p`, `--env-file` points at `.env.example` or at a `.env` in Pester's temporary drive, and setup refuses
 to start unless the resolved configuration names only the test volumes. The test removes the project and both volumes
 afterwards and fails if a volume is left. Only `Data.Tests.ps1` uses a backup folder, its own in Pester's temporary

@@ -17,7 +17,7 @@ that date. AI runtimes and models were read again on 2026-11-05. Lock files pin 
 | --- | --- | --- | --- |
 | KoboldCpp | `v1.124.2`, commit `6d2fedf8624e5f05926af3191f9efdcb13c4133c`, asset `koboldcpp-linux-x64` (628,981,944 bytes) | `LostRuins/koboldcpp` | SHA-256 `c66ae0106673c7d9c41bafcc92c95bc5a6256709e9d853e5e2255bf536c1b069` |
 | ComfyUI | `v0.43.0`, commit `426f5eea52a7ece1dd599fff4cb6cd1f352ddd24` | `Comfy-Org/ComfyUI` (the `comfyanonymous/ComfyUI` URL redirects there) | Git commit hash |
-| PyTorch for ComfyUI | Build for CUDA 13.0, index `whl/cu130` | `download.pytorch.org` | Pinned with hashes in `docker/image/requirements.lock` at P05 |
+| PyTorch for ComfyUI | `torch` `2.14.1+cu130` and `torchvision` `0.29.1+cu130`, index `whl/cu130` | `download.pytorch.org` | SHA-256 per file in `docker/image/requirements.lock` (P05.1), with every other dependency of ComfyUI's `requirements.txt` from PyPI |
 | Text and image models | Five text profiles and three image profiles, each with a pinned revision, size and hash | Hugging Face, none gated | SHA-256 per file in [Model catalog](models.md) |
 
 The default profiles total 21.38 GB on the target tier and 13.91 GB on the reduced tier, and need no Hugging Face

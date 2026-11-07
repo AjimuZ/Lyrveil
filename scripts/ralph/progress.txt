@@ -168,6 +168,9 @@
 - Anything written as a side effect of a reply goes in its own short transaction after the reply is stored, with a try/except that logs and continues, so it can never turn the reply into a failed job.
 - Show stored memory text by reading it by id when it is displayed (nothing is copied into the diagnostic row), and say so in the UI when the row is gone.
 - Record exit evidence in docs/verification/<date>-<phase>-exit.md with versions printed by the commands, exact commands, last-run counts, a test-to-file table, what failed and changed, and a Not run section; link it under an Evidence: list in the phase section without editing item lines.
+- Runtime entrypoints read launch files as data: KEY=VALUE lines checked against anchored regexes, exit 78 naming the key but never the value, exit 64 for bad arguments, and --print-command for tests that need no GPU.
+- Python runtime images: a lock stage with `uv pip compile --generate-hashes --only-binary :all:`, exported with a scratch `lockfile` stage, then `uv pip sync --require-hashes`, plus an offline `--no-index` install of the upstream requirements to catch a stale lock.
+- Pester docker tests pass shell and Python scripts to containers in base64 arguments, and keep scripts free of double quotes, so Windows PowerShell 5.1 passes them unchanged.
 
 ---
 
@@ -1433,4 +1436,32 @@ I updated `CHANGELOG.md`, `docs/api.md`, `docs/frontend.md`, `docs/memory-engine
   - T-MEM-22 is a Quality-level catalog test but runs in the backend integration level on a synthetic fixture; its recall figure only prints with pytest -s, so the evidence file records the assertion, not the number.
   - The e2e memory-studio spec labels its diagnostic test T-MEM-21, which the catalog assigns to ContextBuilder; left as written.
   - P04.10 (quality protocols on real profiles) and the docker level for P04 remain unrun; the orchestrator runs the full plan at the end.
+---
+
+## 2026-11-07T17:48:35Z - P05.1
+- I added the ComfyUI image runtime. It builds and starts ComfyUI in CPU mode, and the lint level passes. Its new docker-level test file is written but has not run yet.
+
+`docker/image/Dockerfile` fetches ComfyUI v0.43.0 at commit 426f5eea52a7ece1dd599fff4cb6cd1f352ddd24, checks the commit and removes `.git`. A `lockfile` stage generated `docker/image/requirements.lock` in a container: 103 packages, each with SHA-256 hashes, including torch 2.14.1+cu130 and torchvision 0.29.1+cu130. The build installs only wheels from that lock, rejects any file without a matching hash, fails if the lock no longer covers ComfyUI's own requirements.txt, and checks that PyTorch is built for CUDA 13.0. The image runs as 10001:10001, with HOME and TMPDIR inside the tmpfs /tmp/comfy. `docker/image/entrypoint.sh` reads RESERVE_VRAM_GB from `runtime/image-launch.env` the same way the text runtime reads its launch file: it exits 78 for a bad file and 64 for an unknown or repeated argument. It also accepts `--cpu` (tests only) and `--print-command`. The `lyrveil-image` service is in `compose.yaml` under the `ai` profile, matching docs/operations.md.
+
+What I observed:
+- `docker build` of the image succeeded. The image is 11.6 GB, runs as user 10001:10001, and its entrypoint is `lyrveil-image-entrypoint`.
+- In a temporary build stage (since removed), running as user 10001 with no network, the entrypoint with `--cpu` got an answer from GET /system_stats after 6 s: version 0.43.0, PyTorch 2.14.1+cu130, device cpu, and all the documented flags. It wrote only under /tmp/comfy. That stage had a writable root, so the read-only root itself is not yet checked.
+- No model files are in the image. The only matches were a Python path file and sentencepiece's normalization tables.
+- `scripts/lyrveil.cmd test lint` passed (run three times).
+
+Not verified:
+- `docker compose --profile ai config --quiet` and `docker compose --profile ai build` were both refused in this session. The task notes list them as allowed, so I did not retry them another way. `tests/docker/Security.Tests.ps1` resolves compose.yaml with `--profile ai` and checks the new service's user and networks at the docker level.
+- `tests/docker/ImageRuntime.Tests.ps1` and the changed setup tests have not run. They need the docker level, which the orchestrator runs. The CPU start on a truly read-only root is first checked there.
+- No GPU generation has run (T-GPU-06).
+
+Because `compose.yaml` now has the service, I also changed the test setups. The setup test override uses the fake ComfyUI instead of the real image, and `Setup.Tests.ps1` now expects two runtime containers. The lifecycle, data and models overrides leave the image runtime out with a profile no command enables, as they already did for the text runtime. Docs updated: operations, testing, security, risks (A-04), technology, architecture, runtime-contracts, a dated verification note and its index entry, and the changelog.
+- Files changed: docker/image/Dockerfile, docker/image/entrypoint.sh, docker/image/requirements.lock, compose.yaml, tests/docker/ImageRuntime.Tests.ps1, tests/docker/Setup.Tests.ps1, tests/docker/compose.setup-test.yaml, tests/docker/compose.lifecycle-test.yaml, tests/docker/compose.data-test.yaml, tests/docker/compose.models-test.yaml, scripts/lib/Setup.psm1, docs/operations.md, docs/testing.md, docs/security.md, docs/risks.md, docs/technology.md, docs/architecture.md, docs/runtime-contracts.md, docs/README.md, docs/verification/2026-11-07-image-runtime.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Regenerate docker/image/requirements.lock with `docker build -f docker/image/Dockerfile --target lockfile --output type=local,dest=docker/image .`; the deps stage fails if the lock no longer satisfies the pinned commit's requirements.txt.
+  - ComfyUI v0.43.0 starts in CPU mode in about 6 s with the documented flags plus --cpu. With no network and --offline it writes only to its tmpfs directories and to TMPDIR (torchinductor_uid_10001); the default database path caused no error.
+  - GET /system_stats returns system.comfyui_version, pytorch_version, argv (sys.argv without the interpreter) and devices[].type, which P05.2 can use for readiness and to store comfyui_version.
+  - The image runtime is 11.6 GB; the first build downloads about 4 GB of wheels. Tag test builds lyrveil/image:test.
+  - In this session `docker compose --profile ai config` and `docker compose --profile ai build` were refused despite the task notes; plain `docker build`, `docker image inspect` and `scripts/lyrveil.cmd test lint` worked.
+  - A temporary build stage (`RUN --network=none` as USER 10001) is a way to try container behavior when `docker run` is not allowed; remove the stage afterwards.
+  - Every test override layered on compose.yaml must handle lyrveil-image like lyrveil-llm: setup replaces it with fakes.fake_comfy, while lifecycle, data and models give it an unused profile.
 ---

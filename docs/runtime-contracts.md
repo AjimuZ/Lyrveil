@@ -169,6 +169,10 @@ Sources: `comfy/cli_args.py`, `nodes.py`, `README.md`,
 Never used: `--enable-manager`, `--enable-assets`, `--multi-user`,
 `--enable-cors-header`, `--tls-*`.
 
+On 2026-11-07 the image of P05.1 started with every flag above plus `--cpu`, with no GPU and no network, and
+`GET /system_stats` answered with them in `system.argv`
+([evidence](verification/2026-11-07-image-runtime.md)). That run loaded no model.
+
 ### Endpoints
 
 | Method and path | Use | Contract |

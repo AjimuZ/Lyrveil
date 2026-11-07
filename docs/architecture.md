@@ -182,7 +182,7 @@ lyrveil/
   orchestrator/          Model Lifecycle Manager (planned, P01)
   docker/
     llm/                 KoboldCpp image: Dockerfile, entrypoint (P02.1)
-    image/               ComfyUI image: Dockerfile, lock file (planned, P05)
+    image/               ComfyUI image: Dockerfile, entrypoint, requirements.lock (P05.1)
   workflows/comfyui/     API-format ComfyUI workflows (planned, P05)
   config/examples/       Example launch files, reference only
   scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell module and helpers (planned, P01)

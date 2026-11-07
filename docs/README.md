@@ -74,3 +74,4 @@
 | [Models command, 2026-11-07](verification/2026-11-07-models.md) | `scripts\lyrveil.cmd models` against a local HTTPS test server, T-DCK-11, and what has not run |
 | [Import, backup and restore, 2026-11-07](verification/2026-11-07-data-files.md) | `import-model`, `backup` and `restore`, the `cli.py` backup commands, their unit tests, and what has not run |
 | [P01 exit, 2026-11-07](verification/2026-11-07-p01-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, WAL and FTS5 in the real image, the contract test fix, and what has not run |
+| [Image runtime image, 2026-11-07](verification/2026-11-07-image-runtime.md) | The ComfyUI image of P05.1: the lock, the build checks, a CPU start in a build stage, and what has not run |

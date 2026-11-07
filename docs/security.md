@@ -167,7 +167,9 @@ These rules hold for every service of `compose.yaml` ([ADR 0003](decisions/0003-
 
 `tests/docker/Security.Tests.ps1` checks these rules (T-DCK-08 to T-DCK-10): the resolved `compose.yaml`, and a
 running test project with the fake runtimes. The real KoboldCpp image arrived in P02.1, and
-`tests/docker/TextRuntime.Tests.ps1` checks its user, read-only root and content; the ComfyUI image comes with P05. The `--gpus` case of assumption A-11 in [Risks](risks.md) needs the real runtimes and stays
+`tests/docker/TextRuntime.Tests.ps1` checks its user, read-only root and content. The real ComfyUI image arrived in
+P05.1, and `tests/docker/ImageRuntime.Tests.ps1` checks its user, read-only root, content and a start in CPU mode with
+no network. The `--gpus` case of assumption A-11 in [Risks](risks.md) needs the real runtimes and stays
 open until T-GPU-01.
 
 ## Runtime isolation

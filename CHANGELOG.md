@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The image runtime image, `lyrveil/image:local`, built from ComfyUI `v0.43.0` at its pinned commit, with PyTorch
+  `2.14.1` for CUDA 13.0 and every other package installed only from `docker/image/requirements.lock`, each with its
+  SHA-256. It is the `lyrveil-image` service of the `ai` profile in `compose.yaml`: user `10001:10001`, a read-only
+  root with only the tmpfs `/tmp/comfy`, the internal runtime network, and settings from `runtime/image-launch.env`.
+  Setup now builds it, which downloads about 4 GB once (the image is about 11.6 GB), and creates its container; setup
+  has not yet run this way on a real installation. The image has started in CPU mode; it has not yet generated an
+  image on a GPU, and nothing in the app uses it yet.
 - The Memory Studio. A character's profile has a **Memoria** link to a screen with four tabs. **Ricordi** lists what the
   character remembers, with search and filters (chat, status, type, origin, locked). Each memory shows its text, where
   it came from (stated, inferred, narrative or confirmed), its importance and confidence, and when it changed; you can

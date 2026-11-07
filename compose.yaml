@@ -1,6 +1,6 @@
-# The core services, networks and external volumes of Lyrveil, the text runtime of the "ai" profile and the model
-# download tool of the "tools" profile. The image runtime joins the "ai" profile in P05. docs/operations.md (Reference
-# Compose file) is the specification of this file: change both together.
+# The core services, networks and external volumes of Lyrveil, the text and image runtimes of the "ai" profile and the
+# model download tool of the "tools" profile. docs/operations.md (Reference Compose file) is the specification of this
+# file: change both together.
 #
 # Images are built locally from the repository root and never pulled, so the runtime works offline:
 #   docker compose build
@@ -113,6 +113,38 @@ services:
       timeout: 3s
       retries: 3
       start_period: 240s
+      start_interval: 2s
+
+  # The image runtime, ComfyUI, built by docker/image/Dockerfile. The orchestrator starts and stops it, so nothing
+  # depends on it and it never restarts by itself. It reads its settings from runtime/image-launch.env and the
+  # checkpoints from image/checkpoints/, both read-only, and exits 78 for an invalid launch file. Everything it writes,
+  # including HOME and TMPDIR, stays in the tmpfs /tmp/comfy, so it keeps no state. The two subpaths must exist.
+  lyrveil-image:
+    <<: *common
+    profiles: [ai]
+    container_name: lyrveil-image
+    image: lyrveil/image:local
+    build: {context: ., dockerfile: docker/image/Dockerfile, target: runtime}
+    restart: "no"
+    user: "10001:10001"
+    gpus: all
+    read_only: true
+    environment:
+      HOME: /tmp/comfy/home
+    volumes:
+      - {type: volume, source: lyrveil-models, target: /opt/ComfyUI/models/checkpoints, read_only: true, volume: {subpath: image/checkpoints}}
+      - {type: volume, source: lyrveil-data, target: /run/lyrveil, read_only: true, volume: {subpath: runtime}}
+      - type: tmpfs
+        target: /tmp/comfy
+        tmpfs: {size: 4294967296}
+    networks: [lyrveil-runtime]
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8188/system_stats', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 180s
       start_interval: 2s
 
   # One-shot model downloader, run only by "scripts\lyrveil.cmd models" with "docker compose run". It reuses the

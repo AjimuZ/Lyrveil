@@ -19,8 +19,8 @@ $script:TargetTierWindowsGiB = 30
 $script:VolumeLabel = 'io.lyrveil.volume'
 $script:Volumes = [ordered]@{ 'lyrveil-data' = 'data'; 'lyrveil-models' = 'models' }
 $script:ServiceUser = '10001:10001'
-# The runtime services, created and never started by setup. lyrveil-llm is in compose.yaml since P02.1; lyrveil-image
-# enters it with P05.
+# The runtime services, created and never started by setup. lyrveil-llm is in compose.yaml since P02.1 and
+# lyrveil-image since P05.1.
 $script:RuntimeServices = @('lyrveil-llm', 'lyrveil-image')
 # The service whose image runs the one-off ownership containers. It is local and built by setup, so no pull is needed.
 $script:OwnerImageService = 'lyrveil-backend'

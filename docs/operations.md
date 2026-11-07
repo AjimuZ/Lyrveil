@@ -583,9 +583,11 @@ Notes:
 
 - `depends_on` is not used for the runtimes, because the orchestrator starts them.
 - When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here. The text
-  runtime needs only `/tmp` without a GPU (P02.1); its first model load in P02 confirms that with a GPU.
-- The volume subpaths `llm/` and `runtime/` must exist when a runtime container starts. Setup builds the runtime image
-  and creates its container without starting it.
+  runtime needs only `/tmp` without a GPU (P02.1); its first model load in P02 confirms that with a GPU. The image
+  runtime needs only `/tmp/comfy` in CPU mode (P05.1): its image points `HOME` and `TMPDIR` there, and `/tmp` itself
+  stays read-only. Its first GPU generation (T-GPU-06) confirms that with a GPU.
+- The volume subpaths `llm/`, `image/checkpoints/` and `runtime/` must exist when a runtime container starts. Setup
+  builds the runtime images and creates their containers without starting them.
 - `compose.test.yaml` (delivered in P01.8b) replaces the runtimes with the fakes of `tests/fakes/` and has no `gpus`
   and no Docker socket. It is a separate project, `lyrveil-test`, with its own port (`LYRVEIL_TEST_HTTP_PORT`, default
   14200), volumes, image tags and settings, so it never touches `lyrveil-data`, `lyrveil-models` or the backup folder.
@@ -658,14 +660,31 @@ extraction.
 
 ### `docker/image/Dockerfile`
 
-1. Base `python:3.12.16-slim-trixie`.
-2. Clone `Comfy-Org/ComfyUI` at commit `426f5eea52a7ece1dd599fff4cb6cd1f352ddd24` and remove `.git`.
-3. Install `docker/image/requirements.lock`, which pins PyTorch for CUDA 13.0 and all of ComfyUI's dependencies with hashes.
+Delivered in P05.1. Every stage starts from `python:3.12.16-slim-trixie`:
 
-The command reads `RESERVE_VRAM_GB` from the launch file and runs:
+1. `source`, with `git`: fetch `Comfy-Org/ComfyUI` at commit `426f5eea52a7ece1dd599fff4cb6cd1f352ddd24`
+   (`v0.43.0`) with `git fetch --depth 1`, stop unless `HEAD` is that commit, and remove `.git`.
+2. `lock` and `lockfile`: `uv pip compile` of the commit's `requirements.txt` with `--torch-backend cu130`,
+   `--only-binary :all:` and `--generate-hashes`. PyTorch packages come from `download.pytorch.org/whl/cu130`, the
+   rest from PyPI. Regenerate the lock after a change of the commit, never by hand:
+   `docker build -f docker/image/Dockerfile --target lockfile --output type=local,dest=docker/image .`
+3. `deps`: `uv pip sync --require-hashes --only-binary :all:` of `docker/image/requirements.lock` into `/opt/venv`,
+   with bytecode compiled. Then `uv pip check`, and an install of the commit's `requirements.txt` with `--no-index`,
+   which fails when the lock no longer satisfies it.
+4. `runtime`: copy `/opt/venv`, `/opt/ComfyUI` and `docker/image/entrypoint.sh` as
+   `/usr/local/bin/lyrveil-image-entrypoint`, compile ComfyUI's bytecode, and stop unless `torch.version.cuda` is
+   13.0. `HOME` is `/tmp/comfy/home`, `TMPDIR` is `/tmp/comfy/tmp`, no bytecode is written at run time, and the user
+   is `10001:10001`. The image holds no model: `models/checkpoints` has only the upstream placeholder file. The image
+   measured 11.6 GB on 2026-11-07.
+
+`entrypoint.sh` reads `/run/lyrveil/image-launch.env` as data, with the same rules as the text runtime's: every
+non-comment line is `KEY=VALUE`, `RESERVE_VRAM_GB` appears exactly once with a value of the
+[launch file table](configuration.md#launch-files), and nothing else appears. Otherwise it prints the reason, naming
+the key and line but never the value, and exits 78. Then it creates `output`, `input`, `temp`, `user`, `home` and
+`tmp` in the tmpfs `/tmp/comfy` and runs:
 
 ```bash
-exec python main.py \
+exec python /opt/ComfyUI/main.py \
   --listen 0.0.0.0 --port 8188 \
   --disable-auto-launch --offline --disable-all-custom-nodes --disable-metadata \
   --preview-method none --log-stdout \
@@ -673,6 +692,15 @@ exec python main.py \
   --temp-directory /tmp/comfy/temp --user-directory /tmp/comfy/user \
   --reserve-vram "${RESERVE_VRAM_GB}"
 ```
+
+The argument `--cpu` appends ComfyUI's `--cpu`, for tests with no GPU; production never passes it.
+`--print-command` runs the same checks, then prints the command, one argument per line, and exits 0 without starting
+it. Any other or repeated argument exits 64.
+
+`tests/docker/ImageRuntime.Tests.ps1` starts the image with `--cpu` on a read-only root, with only the tmpfs
+`/tmp/comfy` and no network, and expects `GET /system_stats` to answer. Whether a GPU generation needs any other
+writable path is checked by the first real generation (T-GPU-06); a path it needs gets a tmpfs recorded in the Compose
+notes above.
 
 ## Data layout
 

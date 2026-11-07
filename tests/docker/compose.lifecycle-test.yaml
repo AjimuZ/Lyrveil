@@ -28,12 +28,16 @@ services:
     image: lyrveil/orchestrator:lifecycle-test
     container_name: !reset null
     env_file: !reset []
-  # The text runtime is left out of this project: a profile that no command enables keeps it from setup's build and
-  # "create", so the tests need no 629 MB download, no GPU and no model. Its tag and container name still differ from
-  # an installation's, should anything enable it.
+  # The runtimes are left out of this project: a profile that no command enables keeps them from setup's build and
+  # "create", so the tests need no runtime download, no GPU and no model. Their tags and container names still differ
+  # from an installation's, should anything enable them.
   lyrveil-llm:
     profiles: !override [not-in-lifecycle-test]
     image: lyrveil/llm:lifecycle-test
+    container_name: !reset null
+  lyrveil-image:
+    profiles: !override [not-in-lifecycle-test]
+    image: lyrveil/image:lifecycle-test
     container_name: !reset null
 
 volumes:

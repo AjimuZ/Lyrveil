@@ -270,7 +270,7 @@ Describe 'Setup run twice against a test project (T-DCK-06, T-DCK-13)' {
         $script:First.Status | Should -Be 0 -Because $script:First.Text
         $script:First.Text | Should -Match 'created with a new control token'
         $script:First.Text | Should -Match 'Volume lyrveil-setup-test-data: created'
-        $script:First.Text | Should -Match 'lyrveil-llm created, not started'
+        $script:First.Text | Should -Match 'lyrveil-llm, lyrveil-image created, not started'
     }
 
     It 'succeeds on the second run and repeats nothing' {
@@ -297,9 +297,11 @@ Describe 'Setup run twice against a test project (T-DCK-06, T-DCK-13)' {
         $script:FirstState.Volumes | Should -Contain 'lyrveil-setup-test-models label=models owner=10001:10001'
     }
 
-    It 'creates the runtime container without starting it' {
-        $script:FirstState.Containers.Count | Should -Be 1
-        $script:FirstState.Containers[0] | Should -Match '^lyrveil-setup-test-lyrveil-llm-1 \S+ created$'
+    It 'creates the runtime containers without starting them' {
+        # Sorted by name, as Get-SetupState returns them.
+        $script:FirstState.Containers.Count | Should -Be 2
+        $script:FirstState.Containers[0] | Should -Match '^lyrveil-setup-test-lyrveil-image-1 \S+ created$'
+        $script:FirstState.Containers[1] | Should -Match '^lyrveil-setup-test-lyrveil-llm-1 \S+ created$'
     }
 
     It 'keeps both volumes through docker compose down -v, because they are external' {
