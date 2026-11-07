@@ -30,5 +30,6 @@ def test_the_direct_dependencies_have_the_documented_versions() -> None:
         "structlog": "26.1.0",
         "tzdata": "2026.6",
         "uvicorn": "0.54.0",
+        "websockets": "17.4",
     }
     assert {name: metadata.version(name) for name in expected} == expected

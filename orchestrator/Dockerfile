@@ -3,7 +3,7 @@
 # Regenerates orchestrator/uv.lock after a change to orchestrator/pyproject.toml, since uv is not installed on Windows:
 #   docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .
 # Every installed package comes from uv.lock: "uv sync --locked" refuses a lock that does not match pyproject.toml.
-# The runtime stage comes with main.py, which will serve the control API of api.py on port 8100.
+# The runtime stage runs main.py, which serves the control API of api.py on port 8100.
 
 FROM python:3.12.16-slim-trixie AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -40,9 +40,22 @@ COPY tests/fakes/*.py ./fakes/
 COPY docs/runtime-contracts.md ./docs/runtime-contracts.md
 CMD ["pytest"]
 
-# The image of compose.yaml, selected there with "target: runtime". It holds no tests and no development packages.
-# lyrveil_orchestrator.main does not exist yet: it comes with the lifecycle manager (P02), so a container started from
-# this image exits at once until then. The preflight command already works: "python -m lyrveil_orchestrator.preflight".
+# The orchestrator of compose.test.yaml only, tagged "lyrveil/orchestrator-fakes:test": the runtime's packages and
+# source plus the fakes of the container gate and the GPU probe, started by fakes.fake_orchestrator. compose.yaml never
+# names this stage and the runtime stage copies nothing from it, so the fakes cannot reach a production image.
+FROM base AS fake-runtime
+ENV PYTHONPATH=/app/src:/app
+COPY --from=deps /app/.venv /app/.venv
+COPY orchestrator/src ./src
+COPY tests/fakes/__init__.py tests/fakes/fake_docker.py tests/fakes/fake_nvml.py tests/fakes/fake_orchestrator.py ./fakes/
+RUN python -m compileall -q src fakes
+USER 10001:10001
+EXPOSE 8100
+CMD ["python", "-m", "fakes.fake_orchestrator"]
+
+# The image of compose.yaml, selected there with "target: runtime". It holds no tests, no fakes and no development
+# packages. Its command serves the control API over the Docker socket and NVML; the preflight runs as a one-off with
+# "python -m lyrveil_orchestrator.preflight". It stays the last stage, so a build without --target gets it.
 FROM base AS runtime
 COPY --from=deps /app/.venv /app/.venv
 COPY orchestrator/src ./src

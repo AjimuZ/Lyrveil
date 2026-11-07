@@ -10,6 +10,11 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The orchestrator service now runs: `python -m lyrveil_orchestrator.main` serves the control API on port 8100 over
+  the Docker socket and NVML, so its Compose health check can pass. The backend image gains the `websockets` library,
+  so `/ws` accepts connections and a reply streams to the browser. In the Compose test project a sent message gets a
+  lease and a streamed, stored reply from the fake KoboldCpp. `start.cmd` does not start the orchestrator yet. Not yet
+  tried with a real GPU and Docker socket.
 - The chat list screen at `/chats`: search over names, titles and messages, an **Attive** and an **Archiviate** tab,
   and a menu on each chat to pin, archive or unarchive, and delete, with a **Ripristina** notice after a delete. **Nuova
   conversazione** opens a dialog that picks a character and a language, or creates a character with a minimal form
@@ -32,8 +37,8 @@ No application exists yet. This section records the design documentation.
   basic card fields and the recent chat. The text is saved every 2 seconds and at the end; a runtime failure is
   retried once from a clean reply, and a reply cut by a crash or a shutdown is shown as interrupted with what it had
   written. The event WebSocket `/ws` now sends the reply's typing, token, completion and failure events, replays what a
-  reconnecting tab missed from the newest 2000 events, or asks it to reload. Not yet usable end to end: the backend
-  image lacks the WebSocket library, the orchestrator service is not served yet, and the chat screens come with P02.6.
+  reconnecting tab missed from the newest 2000 events, or asks it to reload. Not yet usable end to end: the chat
+  screens come with P02.6.
   Replies are not yet normalized or checked (P04.8), and sampling uses the `gemma4` defaults whatever the profile.
 - The model catalog, `config/model-catalog.json`, with the five text and three image
   profiles, each pinned to a revision with its size and SHA-256 as `docs/models.md`

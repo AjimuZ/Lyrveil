@@ -298,10 +298,10 @@ before accepting, and refuses the handshake with `403 FORBIDDEN_ORIGIN` otherwis
 
 Delivered in P01.7a: the checks, the handshake and the `connected` frame. Delivered in P02.5c: the `hello`, replay and
 `resync.required`, and the reply events (`lyrveil/events/hub.py`, `lyrveil/api/events.py`). In-process tests cover it.
-The backend image cannot serve it yet, because Uvicorn needs a WebSocket library, `websockets` in
-[Technology](technology.md), which is not in `pyproject.toml` and `uv.lock` yet; until then Uvicorn cannot upgrade the
-connection. Adding it needs the lock regenerated in the `lockfile` stage
-([Backend](backend.md#dependencies-and-image)) and its version added to `tests/unit/test_locked_environment.py`.
+Since P02.6c the backend image serves it too: `websockets` 17.4 ([Technology](technology.md)) is in `pyproject.toml`
+and `uv.lock`, so Uvicorn upgrades the connection. `tests/e2e/specs/reply-stream.spec.mjs` opens `/ws` through nginx
+in the Compose test project and receives a reply's `typing.started`, `message.delta`, `typing.stopped` and
+`message.completed` frames.
 
 Rules of the delivered server, beyond the protocol below:
 
@@ -401,8 +401,10 @@ Every other route of the table came in P02.2, served by `ModelLifecycleManager`
 (`lifecycle.py`), whose run loop the application's lifespan starts. The text path is
 covered: start from mode `llm`, readiness, leases, drain and release verification. The
 VRAM check before a load, so `blocked_reason` too, and the image flow come in P06.
-`blocked_reason` is always `null` until then. Not delivered yet: `lyrveil_orchestrator.main`,
-which serves the application on port 8100, so the Compose service does not serve it yet.
+`blocked_reason` is always `null` until then. Since P02.6c `lyrveil_orchestrator.main`, the
+command of the `runtime` image, serves the application with Uvicorn on port 8100, over the
+Docker socket and NVML. In `compose.test.yaml` the test-only image `lyrveil/orchestrator-fakes:test`
+serves the same application over `FakeContainerGate` and `FakeGpuProbe` ([Testing](testing.md)).
 
 Rules of the delivered routes:
 

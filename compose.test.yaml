@@ -13,8 +13,10 @@
 #
 # The fake runtimes are the services "lyrveil-llm" and "lyrveil-image", so the backend reaches them by the names it uses
 # in production. The orchestrator has no Docker socket and no GPU here: ContainerGate would refuse these containers, whose
-# Compose project is not "lyrveil", and the lifecycle manager (P02) drives FakeContainerGate and FakeGpuProbe in process.
-# Until P02 adds lyrveil_orchestrator.main, its container exits at once, as in compose.yaml.
+# Compose project is not "lyrveil". So its image is the test-only "fake-runtime" stage of orchestrator/Dockerfile, whose
+# command, fakes.fake_orchestrator, runs the real control API and lifecycle manager over FakeContainerGate and
+# FakeGpuProbe in process. The fake gate reports the text runtime healthy once started, so leases are granted while the
+# fake KoboldCpp answers the backend. The production image has neither the fakes nor a setting that selects them.
 name: lyrveil-test
 
 x-common: &common
@@ -70,11 +72,18 @@ services:
 
   lyrveil-orchestrator:
     <<: *common
-    image: lyrveil/orchestrator:test
-    build: {context: ., dockerfile: orchestrator/Dockerfile, target: runtime}
+    image: lyrveil/orchestrator-fakes:test
+    build: {context: ., dockerfile: orchestrator/Dockerfile, target: fake-runtime}
     user: "10001:10001"
     environment: *settings
     networks: [lyrveil-control]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8100/v1/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+      start_interval: 2s
 
   # KoboldCpp's stand-in. FAKE_SCRIPT, a JSON object of routes to lists of steps, scripts its behavior at start.
   lyrveil-llm:

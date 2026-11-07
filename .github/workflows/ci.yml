@@ -91,7 +91,7 @@ jobs:
       - name: Start the test project
         run: >
           docker compose -p lyrveil-test -f compose.test.yaml up --build --detach --wait
-          lyrveil-frontend lyrveil-llm lyrveil-image
+          lyrveil-frontend lyrveil-orchestrator lyrveil-llm lyrveil-image
       - name: Playwright
         working-directory: tests/e2e
         run: npx playwright test

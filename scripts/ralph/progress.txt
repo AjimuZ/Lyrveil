@@ -89,6 +89,9 @@
 - Open a modal with a native <dialog> element and showModal(), which gives Esc, focus trapping and focus return for free. Row menus are disclosure buttons (aria-expanded, plain buttons), not role=menu, so no arrow-key behavior is implied. Close them with a host binding on document:keydown.escape, because the template lint rejects key handlers on non-focusable elements.
 - Catalog keys must be literal TextKey values. For dynamic labels, use typed option arrays or objects with `satisfies Record<..., TextKey>`, and render them with `option.label | t`.
 - e2e: wait for a control that appears on both outcomes of an async step (for example the Annulla button) instead of waiting for a loading text to disappear, which passes before the loading text has rendered.
+- Composition roots take adapter factories (`run(gate_factory, probe_factory)`), and the production `main()` passes only the real adapters. Test wiring lives in a tests/fakes entry point built into a test-only Dockerfile stage, never in a setting.
+- tests/fakes modules are linted by both the backend and the orchestrator, which classify lyrveil_orchestrator differently (third-party vs first-party). A fake that imports both lyrveil_orchestrator and sibling fakes should import the siblings relatively, so the import order passes ruff in both components.
+- Regenerate a component's lock with `docker build -f <component>/Dockerfile --target lockfile --output type=local,dest=<component> .`, then add the pinned version to that component's tests/unit/test_locked_environment.py.
 
 ---
 
@@ -719,4 +722,33 @@ Doc findings: the retry table gives extraction three waits but only 3 attempts, 
   - A row links to /chats/:conversationId, which is still the unavailable placeholder. P02.6b replaces only that route's loadComponent. Starting a chat stays on the list and does not navigate; P02.6b can add the navigation.
   - The e2e tests share one database per run, so chat-list.spec.mjs uses names unique to the run (a timestamp plus a counter). Any new e2e spec should do the same. `scripts/lyrveil.cmd test e2e` took about a minute here with cached layers, and every e2e test passed.
   - The tool allowlist let `scripts/lyrveil.cmd test lint|unit|integration|e2e` run, but denied `npm --prefix ...` and `cd frontend` chains.
+---
+
+## 2026-11-07T04:21:55Z - P02.6c
+- Added lyrveil_orchestrator/main.py, the composition root. It reads LYRVEIL_CONTROL_TOKEN and LYRVEIL_LOG_LEVEL, exits 78 when one is invalid, then builds NvmlProbe, ContainerGate, ProcessSupervisor and ModelLifecycleManager and serves the control API with one Uvicorn worker on port 8100. `main()` always passes the real gate and probe; no setting selects anything else. Uvicorn 0.54.0 was added to the orchestrator and websockets 17.4 to the backend, and both locks were regenerated with the Docker lockfile stages. compose.test.yaml now runs a test-only `fake-runtime` stage of orchestrator/Dockerfile, image lyrveil/orchestrator-fakes:test, with a health check. Its command, tests/fakes/fake_orchestrator.py, passes FakeContainerGate and FakeGpuProbe to the same `run`. The production `runtime` stage stays the last stage and never copies the fakes. EndToEnd.psm1 and the CI e2e job now start the orchestrator too.
+
+Tests added:
+- `tests/e2e/specs/reply-stream.spec.mjs`: sends a message from the page and checks the typing, delta (with offsets), completed frames over /ws through nginx and the stored reply. It also reads the orchestrator's /v1/events with `docker compose exec` to show the reply job's lease was granted and released with ok.
+- `orchestrator/tests/unit/test_main.py`: checks the settings, the exit 78 path, that main always uses ContainerGate and NvmlProbe, and that no orchestrator module imports `fakes`.
+- `tests/docker/Orchestrator.Tests.ps1` with `compose.orchestrator-test.yaml`: starts the production image with no socket and no GPU. It checks the image command, healthy status under compose.yaml's health check and hardening, T-ORC-10 (200 on /v1/health, 401 elsewhere), ERROR with DOCKER_UNAVAILABLE, a failed preflight GPU row, and that `import fakes` fails.
+- `Security.Tests.ps1` now starts every service, builds the production orchestrator as lyrveil/orchestrator:test for its image checks, and uses the orchestrator-fakes image as a second control.
+
+Also fixed a race in new-chat-dialog.ts. The first e2e run failed T-MSG-11: `open()` reset the step to `pick` when the character list arrived, which undid a click on "Nuovo personaggio" made on the view painted before the loading state. Now only an empty list changes the step.
+
+Checks run:
+- `scripts/lyrveil.cmd test lint`: passed (final run).
+- `scripts/lyrveil.cmd test unit` on orchestrator test_main.py and test_locked_environment.py: 15 passed. Backend test_locked_environment.py: 2 passed.
+- `scripts/lyrveil.cmd test e2e`: the first run had 7 passed and T-MSG-11 failed with the dialog race. After the fix, all 8 passed, including the new reply-stream spec. The orchestrator-fakes container reached healthy.
+- `docker build --target runtime` of orchestrator/Dockerfile: succeeded.
+
+Not run: the docker level. `Orchestrator.Tests.ps1` and the changed `Security.Tests.ps1` have never run, because the level has no file filter and running Pester directly was denied. Frontend unit tests were not run either; the strict build passed in lint.
+- Files changed: .github/workflows/ci.yml, CHANGELOG.md, backend/pyproject.toml, backend/tests/unit/test_locked_environment.py, backend/uv.lock, compose.test.yaml, docs/api.md, docs/backend.md, docs/operations.md, docs/technology.md, docs/testing.md, frontend/src/app/features/chats/new-chat-dialog.ts, orchestrator/Dockerfile, orchestrator/pyproject.toml, orchestrator/tests/unit/test_locked_environment.py, orchestrator/uv.lock, orchestrator/src/lyrveil_orchestrator/main.py, orchestrator/tests/unit/test_main.py, scripts/lib/EndToEnd.psm1, tests/docker/Security.Tests.ps1, tests/docker/Orchestrator.Tests.ps1, tests/docker/compose.orchestrator-test.yaml, tests/e2e/specs/reply-stream.spec.mjs, tests/fakes/fake_orchestrator.py
+- **Learnings for future iterations:**
+  - The orchestrator image in compose.test.yaml is now lyrveil/orchestrator-fakes:test, the `fake-runtime` stage of orchestrator/Dockerfile, with a health check. The production `runtime` stage must stay the last stage. Security.Tests.ps1 builds the runtime stage as lyrveil/orchestrator:test for its image checks.
+  - In the test stack the fake gate makes the text runtime healthy at once, so leases are granted about a second after the orchestrator starts. A reply then streams from fake_kobold: 'Ciao, sono qui.' in 3 deltas.
+  - The e2e services list (scripts/lib/EndToEnd.psm1 and .github/workflows/ci.yml) now includes lyrveil-orchestrator. The CI e2e job has not run with this change.
+  - tests/docker/Orchestrator.Tests.ps1 and the changed Security.Tests.ps1 have not run. The docker level has no file filter, and running Pester directly through pwsh was denied by the allowlist.
+  - start.cmd still does not start the orchestrator. Lifecycle.Tests.ps1 asserts that, and operations.md now says main exists but start.cmd will start the orchestrator later.
+  - An e2e test can reach the internal control API with `docker compose -p lyrveil-test exec -T lyrveil-orchestrator python -c ...` through Node's execFileSync; reply-stream.spec.mjs reads /v1/events this way.
+  - The new-chat dialog's open() now changes the step only for an empty character list. Setting it back to 'pick' after loading undid a click made on the view painted before the loading state, and made T-MSG-11 flaky once /ws really connected.
 ---

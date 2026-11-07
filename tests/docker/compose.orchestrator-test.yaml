@@ -1,0 +1,38 @@
+# The production orchestrator image alone, for tests/docker/Orchestrator.Tests.ps1, as the project
+# "lyrveil-orchestrator-test":
+#   docker compose -p lyrveil-orchestrator-test -f tests/docker/compose.orchestrator-test.yaml up --build --wait
+# It builds the "runtime" stage that compose.yaml uses, with the user, hardening and health check of compose.yaml's
+# lyrveil-orchestrator, which the test compares with that file. It differs only where a real installation would be
+# reached or a GPU needed:
+#   - the image is tagged ":orchestrator-test" and no container name is set, so nothing of an installation is replaced;
+#   - no Docker socket, no GPU and no .env: the token below guards only this project;
+#   - its one network is internal and nothing is published, so it needs no port.
+# Without the socket the lifecycle manager ends in ERROR with DOCKER_UNAVAILABLE, and without NVML the preflight fails;
+# the control API still serves, which is what the test checks.
+name: lyrveil-orchestrator-test
+
+services:
+  lyrveil-orchestrator:
+    image: lyrveil/orchestrator:orchestrator-test
+    build: {context: ../.., dockerfile: orchestrator/Dockerfile, target: runtime}
+    init: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pull_policy: never
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      LYRVEIL_CONTROL_TOKEN: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      LYRVEIL_LOG_LEVEL: DEBUG
+    networks: [lyrveil-control]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8100/v1/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+networks:
+  lyrveil-control: {internal: true}

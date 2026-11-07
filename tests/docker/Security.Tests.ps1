@@ -199,9 +199,17 @@ Describe 'A running test project with the fake runtimes (T-DCK-08 to T-DCK-10)' 
         @($config.services.'lyrveil-frontend'.ports)[0].published | Should -Be $script:TestPort
 
         Clear-SecurityTestProject
-        # The orchestrator is left out of "up", which fails on a service that has exited: it exits at once until P02.
-        $null = Invoke-Docker ((Get-TestComposeArgument) + @('up', '--build', '--detach', '--wait', '--wait-timeout', '180',
-                'lyrveil-frontend', 'lyrveil-llm', 'lyrveil-image'))
+        $null = Invoke-Docker ((Get-TestComposeArgument) + @('up', '--build', '--detach', '--wait', '--wait-timeout', '180'))
+        # The test project's orchestrator is the test-only image over the fakes, so the production stage is built here
+        # under the ":test" tag, and the image checks below judge it.
+        Push-Location $script:RepositoryRoot
+        try {
+            $null = Invoke-Docker @('build', '--quiet', '--file', 'orchestrator/Dockerfile', '--target', 'runtime',
+                '--tag', 'lyrveil/orchestrator:test', '.')
+        }
+        finally {
+            Pop-Location
+        }
     }
 
     AfterAll {
@@ -265,6 +273,7 @@ Describe 'A running test project with the fake runtimes (T-DCK-08 to T-DCK-10)' 
         @{ Image = 'lyrveil/frontend:test' }
         @{ Image = 'lyrveil/backend:test' }
         @{ Image = 'lyrveil/orchestrator:test' }
+        @{ Image = 'lyrveil/orchestrator-fakes:test' }
         @{ Image = 'lyrveil/fakes:test' }
     ) {
         (Invoke-Docker @('image', 'inspect', '--format', '{{.Config.User}}', $Image)) -join '' | Should -Be $script:ServiceUser
@@ -280,7 +289,10 @@ Describe 'A running test project with the fake runtimes (T-DCK-08 to T-DCK-10)' 
         @(Get-ForbiddenImagePath -Path $files) | Should -BeNullOrEmpty
     }
 
-    It 'sees the fakes in the image built from tests/fakes/Dockerfile, so the image check can fail' {
-        @(Get-ForbiddenImagePath -Path @(Get-ImageFile -Image 'lyrveil/fakes:test')).Count | Should -BeGreaterThan 3
+    It 'sees the fakes in the test-only image <Image>, so the image check can fail' -ForEach @(
+        @{ Image = 'lyrveil/fakes:test' }
+        @{ Image = 'lyrveil/orchestrator-fakes:test' }
+    ) {
+        @(Get-ForbiddenImagePath -Path @(Get-ImageFile -Image $Image)).Count | Should -BeGreaterThan 3
     }
 }

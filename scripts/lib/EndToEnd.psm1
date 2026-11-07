@@ -7,10 +7,9 @@ Import-Module (Join-Path $PSScriptRoot 'RepositoryFiles.psm1') -Force
 # The project of compose.test.yaml. Passed with -p so that no COMPOSE_PROJECT_NAME can point these commands at "lyrveil".
 $script:ProjectName = 'lyrveil-test'
 
-# The services the suite needs: the frontend (which starts the backend it waits for) and the two fake runtimes.
-# lyrveil-orchestrator is left out because "up --wait" fails on a service that has exited, and it exits at once until
-# P02 adds lyrveil_orchestrator.main. Add it here when P02 lands.
-$script:Services = @('lyrveil-frontend', 'lyrveil-llm', 'lyrveil-image')
+# The services the suite needs: the frontend (which starts the backend it waits for), the orchestrator over its fakes,
+# which grants the reply leases, and the two fake runtimes. "up --wait" waits for the health check of each.
+$script:Services = @('lyrveil-frontend', 'lyrveil-orchestrator', 'lyrveil-llm', 'lyrveil-image')
 
 function Test-EndToEndComponent {
     <#

@@ -97,7 +97,11 @@ export class NewChatDialog {
       const found = await this.store.listCharacters();
       this.characters.set(found);
       this.characterId.set(found[0]?.id ?? '');
-      this.step.set(found.length === 0 ? 'create' : 'pick');
+      // Only an empty list changes the step. showModal can paint the previous view before the loading state, and a
+      // click on "new character" there must not be undone when the list arrives.
+      if (found.length === 0) {
+        this.step.set('create');
+      }
     } catch (failure) {
       this.error.set(toApiError(failure));
     } finally {

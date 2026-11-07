@@ -497,7 +497,9 @@ The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
 
 A unit test of the test stage checks that every installed distribution has the version
 `uv.lock` pins. Since P02.3a, HTTPX 0.28.1 is a runtime dependency, the runtimes' client, and its AnyIO
-gives the generation timeouts. Before that it was in the `dev` group only. The test stage also copies
+gives the generation timeouts. Before that it was in the `dev` group only. Since P02.6c, websockets 17.4 is a
+runtime dependency, the library Uvicorn needs to upgrade `/ws`; without it Uvicorn refuses every handshake. The test
+stage also copies
 `tests/fakes/` to `/app/fakes` and `docs/runtime-contracts.md`, and `"."` on the pytest path and the
 mypy path makes `fakes` importable there.
 
@@ -507,12 +509,21 @@ mypy path makes `fakes` importable there.
 settings, `package = false`, a Linux-only `uv.lock`, and a Dockerfile with the same `lock`,
 `lockfile`, `deps` and `test` stages. The test stage adds `src/` and `tests/`. The runtime
 dependencies so far are HTTPX 0.28.1, for the container gate, FastAPI 0.162.0, for the
-control API, and nvidia-ml-py 13.615.71, for the GPU monitor. `[tool.uv]` holds Pydantic,
+control API, Uvicorn 0.54.0, which serves it, and nvidia-ml-py 13.615.71, for the GPU monitor.
+`[tool.uv]` holds Pydantic,
 which FastAPI brings, at 2.14.2 with `constraint-dependencies`, the backend's version, and
 mypy skips the untyped `pynvml` import. The `dev` group adds Hypothesis 6.170.14 and respx
 0.23.1. Async tests run with the pytest plugin of AnyIO, which HTTPX brings, so
-pytest-asyncio is not needed. The `runtime` stage, with `main.py` and Uvicorn, is planned
-for the item that adds the orchestrator service to Compose. The lock is regenerated with:
+pytest-asyncio is not needed.
+
+Since P02.6c the `runtime` stage runs `python -m lyrveil_orchestrator.main`, the composition
+root: it reads `LYRVEIL_CONTROL_TOKEN` and `LYRVEIL_LOG_LEVEL` (exit status 78 with the
+variable's name, never its value, when one is invalid), builds `NvmlProbe`, `ContainerGate`,
+`ProcessSupervisor` and `ModelLifecycleManager`, and serves the control API with one Uvicorn
+worker on port 8100, with the access log off. No setting selects another adapter. The
+`fake-runtime` stage, for `compose.test.yaml` only, adds `tests/fakes/` and starts
+`fakes.fake_orchestrator`, which passes `FakeContainerGate` and `FakeGpuProbe` to the same
+`run` function. The lock is regenerated with:
 
 ```powershell
 docker build -f orchestrator/Dockerfile --target lockfile --output type=local,dest=orchestrator .

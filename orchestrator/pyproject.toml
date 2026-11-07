@@ -8,11 +8,13 @@ description = "Lyrveil orchestrator: GPU state machine, leases and the two runti
 license = "Apache-2.0"
 requires-python = "==3.12.*"
 # The state machine needs no third-party package. HTTPX is the container gate's client for the Docker socket, FastAPI
-# serves the control API, and nvidia-ml-py reads NVML for the GPU monitor and the preflight.
+# serves the control API and Uvicorn runs it (main.py), and nvidia-ml-py reads NVML for the GPU monitor and the
+# preflight. The control API has no WebSocket, so Uvicorn needs no WebSocket library here.
 dependencies = [
     "fastapi==0.162.0",
     "httpx==0.28.1",
     "nvidia-ml-py==13.615.71",
+    "uvicorn==0.54.0",
 ]
 
 [dependency-groups]

@@ -36,13 +36,13 @@ asset, so its image starts from the pinned source. Lyrveil builds both images it
 | --- | --- | --- | --- |
 | Python | 3.12, image `python:3.12.16-slim-trixie` | PSF-2.0 | Required. Debian trixie ships SQLite with FTS5. |
 | FastAPI | 0.162.0 | MIT | Required. Typed routes, OpenAPI, WebSocket. |
-| Uvicorn | 0.54.0 | BSD-3-Clause | ASGI server, started with one worker by `python -m lyrveil.main` ([Backend](backend.md#concurrency-model)). |
+| Uvicorn | 0.54.0 | BSD-3-Clause | ASGI server, started with one worker by `python -m lyrveil.main` ([Backend](backend.md#concurrency-model)) and by `python -m lyrveil_orchestrator.main`. |
 | Pydantic | 2.14.2 | MIT | Required. Validates API data and every structured model output. |
 | pydantic-settings | 2.16.2 | MIT | Typed `.env` configuration. |
 | SQLAlchemy | 2.1.6 | MIT | Required. Synchronous ORM ([ADR 0009](decisions/0009-synchronous-sqlalchemy.md)). |
 | Alembic | 1.20.1 | MIT | Required. Migrations, including raw SQL for FTS5. |
 | HTTPX | 0.28.1 | BSD-3-Clause | Async HTTP to runtimes and to the Docker socket. |
-| websockets | 17.4 | BSD-3-Clause | WebSocket server support and ComfyUI progress client. |
+| websockets | 17.4 | BSD-3-Clause | WebSocket server support (backend, since P02.6c) and ComfyUI progress client. |
 | python-multipart | 0.0.33 | Apache-2.0 | Avatar and reference uploads. |
 | Jinja2 | 3.1.6 | BSD-3-Clause | Prompt templates with `StrictUndefined`. |
 | Pillow | 13.0.0 | MIT-CMU | Validates uploads, crops, writes thumbnails. |

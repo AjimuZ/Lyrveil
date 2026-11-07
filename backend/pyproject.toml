@@ -8,6 +8,7 @@ description = "Lyrveil backend: API, services and job worker."
 license = "Apache-2.0"
 requires-python = "==3.12.*"
 # HTTPX is the client of the runtimes (lyrveil/runtimes/), with AnyIO, which it brings, for the generation timeouts.
+# websockets is the WebSocket library Uvicorn needs to upgrade /ws; without one it refuses every handshake.
 dependencies = [
     "alembic==1.20.1",
     "fastapi==0.162.0",
@@ -18,6 +19,7 @@ dependencies = [
     "structlog==26.1.0",
     "tzdata==2026.6",
     "uvicorn==0.54.0",
+    "websockets==17.4",
 ]
 
 [dependency-groups]

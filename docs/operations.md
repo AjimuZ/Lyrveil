@@ -283,8 +283,8 @@ option.
 - Step 3 runs the orchestrator's preflight in a one-off container with `docker compose run --rm --no-deps -T`. A failed
   row, or Docker failing to run the container, exits 2. This step has not run against a real GPU yet: the tests skip it.
 - Step 7 starts only `lyrveil-backend` and `lyrveil-frontend`, with `docker compose up --detach --no-build --wait
-  --wait-timeout 120`. The orchestrator is not started until P02, because `lyrveil_orchestrator.main` does not exist
-  and its container exits at once; start prints a warning for it.
+  --wait-timeout 120`. The orchestrator is not started yet: `lyrveil_orchestrator.main` serves the control API since
+  P02.6c, but start.cmd begins starting it only with the rest of P02's startup; start prints a warning for it.
 - Step 8: a service that is unhealthy, or not healthy within 120 s, exits 3 with the last 50 log lines of both
   services. After the health checks, start sends a GET to the published port of the frontend on `127.0.0.1` and exits 3
   if it does not answer.
@@ -415,8 +415,10 @@ Differences between `compose.yaml` and the file below, all in the core services:
   Without `.env` the backend stops with exit status 78 and names `LYRVEIL_CONTROL_TOKEN`.
 - The backend and orchestrator builds name `target: runtime`, because the last stage of `orchestrator/Dockerfile` would
   otherwise be the test stage.
-- `orchestrator/Dockerfile` has a `runtime` stage, but `lyrveil_orchestrator.main` does not exist yet (P02). The
-  image builds, and a container started from it exits at once until then.
+- The `runtime` stage of `orchestrator/Dockerfile` starts `python -m lyrveil_orchestrator.main`, which serves the
+  control API on port 8100 (P02.6c). `tests/docker/Orchestrator.Tests.ps1` starts it under this service's user,
+  hardening and health check, without the Docker socket or a GPU, and sees it become healthy. It has not run with the
+  socket and a GPU yet. The stage `fake-runtime` of the same file is for `compose.test.yaml` only.
 
 ```yaml
 name: lyrveil
