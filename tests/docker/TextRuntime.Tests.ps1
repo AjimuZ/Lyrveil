@@ -132,8 +132,9 @@ Describe 'The image lyrveil/llm:test' {
     }
 
     It 'holds no model, launch file or single-file binary' {
-        # As root without capabilities, so every folder of the image can be listed; -xdev skips /proc, /sys and /tmp.
-        $run = Invoke-DockerCapture @('run', '--rm', '--user', '0:0', '--cap-drop', 'ALL', '--read-only', '--network', 'none',
+        # As root with only DAC_READ_SEARCH, so every folder of the image can be listed, including the 0700 apt cache
+        # folder owned by _apt that the base image ships; -xdev skips /proc, /sys and /tmp.
+        $run = Invoke-DockerCapture @('run', '--rm', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'DAC_READ_SEARCH', '--read-only', '--network', 'none',
             '--entrypoint', 'find', $script:Image, '/', '-xdev', '-type', 'f', '(', '-name', '*.gguf', '-o', '-name', '*.safetensors',
             '-o', '-name', '*.ckpt', '-o', '-name', '*.env', '-o', '-name', 'koboldcpp-linux-x64', ')', '-print')
         $run.Status | Should -Be 0 -Because $run.Text
