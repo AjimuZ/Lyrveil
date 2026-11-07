@@ -632,7 +632,7 @@
       ],
       "priority": 28,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: The Schemathesis criterion cannot be met. Schemathesis is not in backend/pyproject.toml or backend/uv.lock, and the Dockerfile runs `uv sync --locked`. Adding it needs the lock regenerated with `docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend .`, which needs network access and writes backend/uv.lock. Both are outside my allowlist, and this session denied network commands. A test that imports schemathesis would also fail mypy --strict in `lint`. Next step: add `schemathesis==4.33.0` to the backend dev group, regenerate the lock, and add the contrac",
       "dependsOn": [
         "P01.8c",
         "P01.6a"
