@@ -130,6 +130,9 @@
 - When two PowerShell modules would import each other, move the shared functions into a third module that both import; load it with -Force in the first one and without -Force everywhere else so one instance is reused.
 - An evidence file lists the last run of each level, the failures of earlier runs with their fix, and what was not run, so nothing unrun is recorded as passed.
 - A docker-level test that depends on image contents builds the image itself instead of trusting a tag that setup left from an earlier checkout.
+- Keep module docstrings and test docstrings under 120 characters; ruff E501 applies to them.
+- Derived search text (stems) is written by application code in the same transaction as the source row, through a persistence helper, not by SQL triggers.
+- Quote every stem and join with OR before MATCH; stems are letters and digits only, so user text never reaches FTS query syntax.
 
 ---
 
@@ -1050,4 +1053,17 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - The Creator shows a field's message only after the field is touched, so e2e specs must blur a field before they expect its message; getByLabel with a numbered aria-label also matches the 'Rimuovi ...' buttons unless exact is set.
   - The e2e chat list shows the newest chat first; openChat opens the first matching row when a character has several chats.
   - The hardware and manual part is still pending for P03.EXIT-HW: T-GPU-05 on the real model and AC-01 to AC-06, AC-08 to AC-10, AC-16 with an uploaded avatar. The Impostazioni > Dati screen with POST and GET /backups and the backup before migrations are still planned from R-BE-07.
+---
+
+## 2026-11-07T08:36:19Z - P04.1
+- I finished P04.1 from the interrupted attempt's working tree. Migration 0010 creates the memory tables with their CHECK, UNIQUE and FOREIGN KEY constraints, plus `memory_fts` and `episode_fts` (FTS5 with `unicode61 remove_diacritics 2`). `lyrveil.memory.text` does NFKC, lowercase, accent folding, stop-word removal (five per-language lists) and Snowball stemming, and builds a safe quoted-OR MATCH query. `lyrveil.persistence.memory_index` writes and queries the index rows. Character purge now deletes the new tables. This session I added snowballstemmer to the pinned-versions test, corrected two docs notes that said the lock was unwritten and the tests unrun, and fixed three ruff E501 findings and one format finding. Checks run: `test unit -k "memory_text or locked_environment or stem or fts"` passed (37 backend, 8 orchestrator), including the T-MEM-06 and T-MEM-07 tests. `test integration` passed in full (227 backend, 200 orchestrator), including the migration upgrade-from-P03 test, the constraint tests and the index tests. `test lint` passed. Not run: unit, e2e and docker in full, left for the orchestrator. No test inserts memory rows and then purges a character, so the purge SQL is only checked against the empty tables. No CHANGELOG entry, because nothing user-visible changed.
+- Files changed: backend/pyproject.toml, backend/uv.lock, backend/migrations/versions/0010_memory.py, backend/src/lyrveil/memory/__init__.py, backend/src/lyrveil/memory/text.py, backend/src/lyrveil/memory/stopwords/it.txt, backend/src/lyrveil/memory/stopwords/en.txt, backend/src/lyrveil/memory/stopwords/fr.txt, backend/src/lyrveil/memory/stopwords/de.txt, backend/src/lyrveil/memory/stopwords/es.txt, backend/src/lyrveil/persistence/memory_index.py, backend/src/lyrveil/persistence/characters.py, backend/tests/unit/test_memory_text.py, backend/tests/unit/test_locked_environment.py, backend/tests/integration/test_memory_index.py, backend/tests/integration/test_migrations.py, docs/data-model.md, docs/memory-engine.md, docs/backend.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit` always runs `tests/unit` and appends extra arguments to pytest, so use `-k` to narrow it; integration, e2e and docker accept no arguments.
+  - Memory tables exist but nothing writes them yet: P04.2 extraction should call lyrveil.persistence.memory_index in the same transaction as the memory row.
+  - memory_fts and episode_fts have no triggers, because the stems come from Python.
+  - The new tables are only checked by the purge SQL against empty tables; P04.2 should add a purge test with real memory rows.
+  - Stop-word lists are a starting point; P04.10 tunes them against the retrieval evaluation.
+  - relationship_states dimension defaults are 0; P04.6 sets the real starting values.
+  - conversation_summaries and prompt_assemblies were left out of 0010 on purpose, for the summary and context-builder tasks.
 ---

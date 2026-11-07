@@ -1,6 +1,8 @@
 # Lyrveil Memory Engine
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: planned, phase P04.
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: partial, phase P04. Delivered in
+P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` indexes, and the text preparation of
+[Stemming](#stemming). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -234,14 +236,27 @@ A later message that states the same fact is new information, so the memory can 
 
 FTS5 has no Italian stemmer, so Python prepares the text:
 
-1. Normalize with NFKC and lowercase.
-2. Split into word tokens with the `\w+` pattern.
+1. Normalize with NFKC and lowercase, and remove accents.
+2. Split into word tokens with the `[^\W_]+` pattern (letters and digits).
 3. Remove stop words, from a list stored per language in the repository.
 4. Stem with `snowballstemmer`: `italian`, `english`, `french`, `german`, `spanish`.
 
 The indexed column stores the stems. The tokenizer `unicode61 remove_diacritics 2` handles
-accents. Queries use the same steps. Each stem is quoted and joined with `OR`, so raw user
-text never reaches FTS query syntax. Unknown languages skip the stemming step.
+accents in the index too. Queries use the same steps. Each stem is quoted and joined with `OR`, so raw user
+text never reaches FTS query syntax. Unknown languages skip the stop-word and stemming steps.
+
+Delivered in P04.1 (`lyrveil.memory.text`):
+
+- Accents are folded in step 1, before stemming, so `perché` and `perche` give the same stem even where a stemmer
+  would treat the two spellings differently. The stop-word files are folded the same way when read.
+- The language is the primary subtag of the memory's tag (`it-IT` gives `it`). The lists are
+  `backend/src/lyrveil/memory/stopwords/<code>.txt` for `it`, `en`, `fr`, `de` and `es`: one word per line, `#`
+  comments, elided forms such as `dell` or `l` without the apostrophe. They are a starting point: P04.10 tunes them
+  against the retrieval evaluation.
+- `match_query(text, language)` returns the quoted, distinct stems joined with `OR`, or `None` when no word is left.
+  Words such as `AND`, `NOT`, `NEAR`, a column filter (`content_stem:x`), a star or a quote become plain words.
+- Tests: `tests/unit/test_memory_text.py` covers T-MEM-06 and T-MEM-07 against a real in-memory FTS5 table, and
+  `tests/integration/test_memory_index.py` the index rows of a migrated database.
 
 ### Retrieval contract
 

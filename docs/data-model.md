@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to `scenarios` (P03.7a, revision `0009`), are described in their "Delivered in" notes below. The rest is planned, phases P02 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the memory tables (P04.1, revision `0010`), are described in their "Delivered in" notes below. The rest is planned, phases P04 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -632,7 +632,31 @@ A maintenance command rebuilds all three: `python -m lyrveil.cli rebuild-search`
 Delivered in P02.5d (revision `0005`): `message_fts` as above and `conversation_fts(conversation_id UNINDEXED,
 title_stem)`. They are kept by SQL triggers on `messages.content` and `conversations.title`, not by application code,
 because no stemmer exists yet and the columns hold the text as written. Soft-deleted rows stay indexed and queries
-filter them out. `memory_fts`, `episode_fts` and `rebuild-search` are not delivered.
+filter them out. `rebuild-search` is not delivered.
+
+Delivered in P04.1 (revision `0010`): the tables of layers B to E of [Memory engine](memory-engine.md#memory-layers)
+exactly as in [Memory tables](#memory-tables), except `conversation_summaries` and `prompt_assemblies`, which come with the
+summary and context-builder tasks: `memories`, `memory_revisions`, `memory_sources`, `memory_tombstones`,
+`memory_extraction_runs`, `episodic_memories`, `episodic_sources`, `episode_links`, `character_state_history` and
+`relationship_states`. Details the document leaves open:
+
+- CHECK constraints cover every enumeration and range, the scope rule (`(scope = 'conversation') = (conversation_id IS
+  NOT NULL)`), `json_valid` on every JSON column, and three rules of [the memory record](memory-engine.md#the-memory-record):
+  an inferred memory has confidence at most 0.6, a `user_confirmed` one has exactly 1.0, and a temporary one has
+  `expires_at`. `character_state_history` accepts an empty `source_message_ids_json` only for `user_correction`.
+- `memory_revisions` refuses UPDATE with a trigger, as `character_versions` does. Its CASCADE and the one on
+  `memory_sources` are the only cascades; `episodic_sources` and `episode_links` are RESTRICT, so a purge deletes them
+  first.
+- The unique fingerprint index of `memories` is `uq_memories_fingerprint`, on `(character_id, ifnull(conversation_id,
+  'shared'), fingerprint)` for `active` and `uncertain` rows; episodes have `uq_episodic_memories_fingerprint` on
+  `(conversation_id, fingerprint)` for `active` rows.
+- `relationship_states` dimensions are NOT NULL with default 0; the Character State Manager (P04.6) sets the real
+  starting values. `memory_extraction_runs.attempt` starts at 1.
+- `memory_fts` and `episode_fts` are as above, with no triggers. `lyrveil.persistence.memory_index` writes, replaces and
+  removes their rows (`index_memory`, `index_episode`, `unindex_*`) and reads them (`match_memory_ids`); the caller does
+  it in the transaction of the source row. The stems come from `lyrveil.memory.text`.
+- `CharacterService.purge` deletes the new tables too (`lyrveil.persistence.characters.purge`), before messages and
+  conversations. Nothing writes to these tables yet: extraction is P04.2.
 
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON
@@ -687,7 +711,7 @@ of the table is replaced by deleting the row), `message_variants`, `messages` (t
 `conversations` (and `conversation_fts`), `character_traits`, `character_assets` (since P03.4a, deleted rows included),
 `character_visual_profiles`, `character_versions` and `characters`. It is refused with a conflict while one of those
 jobs is `running`. The asset paths are checked against the media root inside the transaction and the files are removed
-after the commit. Memories and images do not exist yet.
+after the commit. Memories exist since P04.1 and the purge deletes them (see the P04.1 note above); images do not exist yet.
 
 Delivered in P03.4a: deleting an asset as in the table above (`CharacterAssetService.delete`), refused with a conflict
 for the primary avatar; the row keeps its data with `deleted_at` set. The deletion of a conversation on its own, the 30-day purge and the tombstones are not

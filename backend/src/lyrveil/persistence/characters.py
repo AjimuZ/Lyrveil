@@ -352,15 +352,31 @@ def has_running_job(connection: Connection, character_id: str) -> bool:
 
 def purge(connection: Connection, character_id: str) -> None:
     """Hard-deletes the character with everything it owns, children first because every key is RESTRICT: the jobs that
-    name it, its message variants, messages and conversations (the search triggers clear their index rows), then its
-    traits, asset rows, visual profile, versions and the character row. The caller owns the transaction, the
+    name it, its memory rows (state, memories with their revisions, sources and index rows, tombstones, episodes,
+    extraction runs), its message variants, messages and conversations (the search triggers clear their index rows),
+    then its traits, asset rows, visual profile, versions and the character row. The caller owns the transaction, the
     confirmation and the asset files, which it removes after the commit."""
     params = {"id": character_id}
     owned_conversations = "SELECT id FROM conversations WHERE character_id = :id"
     owned_messages = f"SELECT id FROM messages WHERE conversation_id IN ({owned_conversations})"
+    owned_memories = "SELECT id FROM memories WHERE character_id = :id"
+    owned_episodes = "SELECT id FROM episodic_memories WHERE character_id = :id"
     for sql in (
         f"DELETE FROM generation_jobs WHERE character_id = :id OR conversation_id IN ({owned_conversations}) "
         f"OR message_id IN ({owned_messages})",
+        # Memory rows point at messages, variants and conversations, and the index rows have no key at all.
+        f"DELETE FROM relationship_states WHERE conversation_id IN ({owned_conversations})",
+        f"DELETE FROM character_state_history WHERE character_id = :id OR conversation_id IN ({owned_conversations})",
+        f"DELETE FROM memory_fts WHERE memory_id IN ({owned_memories})",
+        f"DELETE FROM memory_sources WHERE memory_id IN ({owned_memories})",
+        f"DELETE FROM memory_revisions WHERE memory_id IN ({owned_memories})",
+        "DELETE FROM memories WHERE character_id = :id",
+        "DELETE FROM memory_tombstones WHERE character_id = :id",
+        f"DELETE FROM episode_fts WHERE episode_id IN ({owned_episodes})",
+        f"DELETE FROM episode_links WHERE from_episode_id IN ({owned_episodes}) OR to_episode_id IN ({owned_episodes})",
+        f"DELETE FROM episodic_sources WHERE episode_id IN ({owned_episodes})",
+        "DELETE FROM episodic_memories WHERE character_id = :id",
+        f"DELETE FROM memory_extraction_runs WHERE conversation_id IN ({owned_conversations})",
         f"DELETE FROM message_variants WHERE message_id IN ({owned_messages})",
         f"DELETE FROM messages WHERE conversation_id IN ({owned_conversations})",
         "DELETE FROM conversations WHERE character_id = :id",

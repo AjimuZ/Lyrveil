@@ -23,7 +23,8 @@ backend/
     domain/              Entities, enums, state rules. Pure, no I/O
     ports/               Protocols: TextRuntime, ImageRuntime, MemoryRetriever, Clock...
     services/            CharacterService, ConversationService, MessageService...
-    memory/              MemoryManager, extraction, retrieval, consistency, summaries
+    memory/              MemoryManager, extraction, retrieval, consistency, summaries; text.py and stopwords/*.txt
+                         (normalization, stop words, Snowball stems, safe FTS queries; P04.1), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
     context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
@@ -510,7 +511,9 @@ The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
 A unit test of the test stage checks that every installed distribution has the version
 `uv.lock` pins. Since P02.3a, HTTPX 0.28.1 is a runtime dependency, the runtimes' client, and its AnyIO
 gives the generation timeouts. Before that it was in the `dev` group only. Since P02.6c, websockets 17.4 is a
-runtime dependency, the library Uvicorn needs to upgrade `/ws`; without it Uvicorn refuses every handshake. The test
+runtime dependency, the library Uvicorn needs to upgrade `/ws`; without it Uvicorn refuses every handshake. Since
+P04.1, snowballstemmer 3.1.1 is a runtime dependency, the stemmer of the memory index; its `uv.lock` entry was
+generated with the lockfile command above. The test
 stage also copies
 `tests/fakes/` to `/app/fakes` and `docs/runtime-contracts.md`, and `"."` on the pytest path and the
 mypy path makes `fakes` importable there.

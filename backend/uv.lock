@@ -327,6 +327,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
+    { name = "snowballstemmer" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "tzdata" },
@@ -351,6 +352,7 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.14.2" },
     { name = "pydantic-settings", specifier = "==2.16.2" },
     { name = "python-multipart", specifier = "==0.0.33" },
+    { name = "snowballstemmer", specifier = "==3.1.1" },
     { name = "sqlalchemy", specifier = "==2.1.6" },
     { name = "structlog", specifier = "==26.1.0" },
     { name = "tzdata", specifier = "==2026.6" },
@@ -685,6 +687,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/23/1b/a8762062188992bf6c07396c40dedbe2a9ed600f09f600d23e3adfce1061/schemathesis-4.33.0.tar.gz", hash = "sha256:44b08505da5ae7f313562b63e6219559071327a0a33df9205424d5a54d839c88", size = 4017000, upload-time = "2026-11-01T17:16:38.385Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/76/22/1738c60f79e5e40e21791909f266b10fc72827f649e00fd10b55f8e05d27/schemathesis-4.33.0-py3-none-any.whl", hash = "sha256:74474467b884a00b55d38dfd2abfba6053ce183b35ce05a8fac20547be09fe36", size = 1255212, upload-time = "2026-11-01T17:16:36.256Z" },
+]
+
+[[package]]
+name = "snowballstemmer"
+version = "3.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/f8/0a71edf031f03c40db17503cb8ca78a69a171254e568e7db241b0ab57ea1/snowballstemmer-3.1.1.tar.gz", hash = "sha256:e07bbc54a0d798fe6010a12398422e62a8bfbba95c394fd0956ef58cb4d3e260", size = 123314, upload-time = "2026-06-03T00:56:40.194Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/07/2ebca9b11fb9be7340a818d8d6f63feaebb146be2c4afbd6061701d6df6e/snowballstemmer-3.1.1-py3-none-any.whl", hash = "sha256:7e207fa178741da09cdee59d3ecec3827ad5f92b1fc5c9ff3755b639f71f5752", size = 104164, upload-time = "2026-06-03T00:56:38.614Z" },
 ]
 
 [[package]]

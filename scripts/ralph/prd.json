@@ -1042,7 +1042,7 @@
       ],
       "priority": 44,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e scarica rocinante-x-12b; poi unblock per misurare la VRAM sul PC di riferimento.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e scarica rocinante-x-12b; poi unblock per misurare la VRAM sul PC di riferimento.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P02.EXIT"
       ],
@@ -1065,7 +1065,7 @@
       ],
       "priority": 45,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per i test gpu e la chat lunga in italiano.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per i test gpu e la chat lunga in italiano.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P02.7"
       ],
@@ -1403,7 +1403,7 @@
       ],
       "priority": 59,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai il collaudo manuale con un avatar caricato (AC-01..AC-06, AC-08..AC-10, AC-16).\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai il collaudo manuale con un avatar caricato (AC-01..AC-06, AC-08..AC-10, AC-16).\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P03.EXIT",
         "P02.EXIT-HW"
@@ -1425,8 +1425,8 @@
         "The migration creates the tables, their constraints and the FTS5 table, and a migration test upgrades from the P03 schema."
       ],
       "priority": 60,
-      "passes": false,
-      "notes": "BLOCKED: The code, migration, tests and docs are written, but nothing was run, and backend/uv.lock needs a new entry that I could not create. P04.1 adds snowballstemmer==3.1.1 to backend/pyproject.toml. The image installs with `uv sync --locked`, which fails until the lock lists the package. The lock is regenerated with `docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend .`. That command needs a container build with network access and writes a file, which my shell rules deny. I did not hand-write the entry, because the PyPI URLs and hashes would be invented. ",
+      "passes": true,
+      "notes": "I finished P04.1 from the interrupted attempt's working tree. Migration 0010 creates the memory tables with their CHECK, UNIQUE and FOREIGN KEY constraints, plus `memory_fts` and `episode_fts` (FTS5 with `unicode61 remove_diacritics 2`). `lyrveil.memory.text` does NFKC, lowercase, accent folding, stop-word removal (five per-language lists) and Snowball stemming, and builds a safe quoted-OR MATCH query. `lyrveil.persistence.memory_index` writes and queries the index rows. Character purge now deletes the new tables. This session I added snowballstemmer to the pinned-versions test, corrected two docs notes that said the lock was unwritten and the tests unrun, and fixed three ruff E501 findings and one format finding. Checks run: `test unit -k \"memory_text or locked_environment or stem or fts\"` passed (37 backend, 8 orchestrator), including the T-MEM-06 and T-MEM-07 tests. `test integration` passed in full (227 backend, 200 orchestrator), including the migration upgrade-from-P03 test, the constraint tests and the index tests. `test lint` passed. Not run: unit, e2e and docker in full, left for the orchestrator. No test inserts memory rows and then purges a character, so the purge SQL is only checked against the empty tables. No CHANGELOG entry, because nothing user-visible changed.",
       "dependsOn": [
         "P03.EXIT"
       ],
@@ -1449,7 +1449,7 @@
       ],
       "priority": 61,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.1"
       ],
@@ -1473,7 +1473,7 @@
       ],
       "priority": 62,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.2a"
       ],
@@ -1496,7 +1496,7 @@
       ],
       "priority": 63,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.2b"
       ],
@@ -1520,7 +1520,7 @@
       ],
       "priority": 64,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.2c"
       ],
@@ -1542,7 +1542,7 @@
       ],
       "priority": 65,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.2a"
       ],
@@ -1564,7 +1564,7 @@
       ],
       "priority": 66,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.3",
         "P04.4"
@@ -1588,7 +1588,7 @@
       ],
       "priority": 67,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.2b"
       ],
@@ -1612,7 +1612,7 @@
       ],
       "priority": 68,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.6",
         "P04.4"
@@ -1635,7 +1635,7 @@
       ],
       "priority": 69,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.5"
       ],
@@ -1658,7 +1658,7 @@
       ],
       "priority": 70,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.8a"
       ],
@@ -1682,7 +1682,7 @@
       ],
       "priority": 71,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.7",
         "P04.2c"
@@ -1705,7 +1705,7 @@
       ],
       "priority": 72,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.9a",
         "P04.5"
@@ -1728,7 +1728,7 @@
       ],
       "priority": 73,
       "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.1",
         "P04.2a",
@@ -1762,7 +1762,7 @@
       ],
       "priority": 74,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, scarica tutti i profili testo (models -All) e dai i tuoi voti e il test alla cieca dei protocolli di qualità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, scarica tutti i profili testo (models -All) e dai i tuoi voti e il test alla cieca dei protocolli di qualità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.EXIT",
         "P02.EXIT-HW"
@@ -1786,7 +1786,7 @@
       ],
       "priority": 75,
       "passes": false,
-      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.EXIT"
       ],
@@ -1809,7 +1809,7 @@
       ],
       "priority": 76,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.1"
       ],
@@ -1832,7 +1832,7 @@
       ],
       "priority": 77,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.2a"
       ],
@@ -1854,7 +1854,7 @@
       ],
       "priority": 78,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.1"
       ],
@@ -1879,7 +1879,7 @@
       ],
       "priority": 79,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.3a"
       ],
@@ -1902,7 +1902,7 @@
       ],
       "priority": 80,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.3b",
         "P05.2b"
@@ -1927,7 +1927,7 @@
       ],
       "priority": 81,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.4a"
       ],
@@ -1950,7 +1950,7 @@
       ],
       "priority": 82,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.4b"
       ],
@@ -1973,7 +1973,7 @@
       ],
       "priority": 83,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.5a",
         "P03.4b"
@@ -1996,7 +1996,7 @@
       ],
       "priority": 84,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.4b"
       ],
@@ -2017,7 +2017,7 @@
       ],
       "priority": 85,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.4b"
       ],
@@ -2039,7 +2039,7 @@
       ],
       "priority": 86,
       "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.1",
         "P05.2a",
@@ -2071,7 +2071,7 @@
       ],
       "priority": 87,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai la revisione alla cieca della griglia immagini e delle coppie di identità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai la revisione alla cieca della griglia immagini e delle coppie di identità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.EXIT",
         "P02.EXIT-HW"
@@ -2095,7 +2095,7 @@
       ],
       "priority": 88,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-01/06 e verifica AC-07, AC-13, AC-14.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-01/06 e verifica AC-07, AC-13, AC-14.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.8"
       ],
@@ -2118,7 +2118,7 @@
       ],
       "priority": 89,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.EXIT"
       ],
@@ -2140,7 +2140,7 @@
       ],
       "priority": 90,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.1"
       ],
@@ -2163,7 +2163,7 @@
       ],
       "priority": 91,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.1"
       ],
@@ -2186,7 +2186,7 @@
       ],
       "priority": 92,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.2"
       ],
@@ -2209,7 +2209,7 @@
       ],
       "priority": 93,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.3",
         "P06.4"
@@ -2233,7 +2233,7 @@
       ],
       "priority": 94,
       "passes": false,
-      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`.",
+      "notes": "Tests never touch a real installation: their own Compose project name, port, volumes, `.env` and backup folder, never `lyrveil-data`, `lyrveil-models` or `%USERPROFILE%\\Documents\\Lyrveil\\backups`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.5"
       ],
@@ -2257,7 +2257,7 @@
       ],
       "priority": 95,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.6a"
       ],
@@ -2279,7 +2279,7 @@
       ],
       "priority": 96,
       "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.1",
         "P06.2",
@@ -2307,7 +2307,7 @@
       ],
       "priority": 97,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-07..12 e verifica AC-15, AC-18, AC-19 con i tempi misurati.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-07..12 e verifica AC-15, AC-18, AC-19 con i tempi misurati.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.EXIT",
         "P05.EXIT-HW"
@@ -2331,7 +2331,7 @@
       ],
       "priority": 98,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.EXIT"
       ],
@@ -2353,7 +2353,7 @@
       ],
       "priority": 99,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.1"
       ],
@@ -2374,7 +2374,7 @@
       ],
       "priority": 100,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.1"
       ],
@@ -2396,7 +2396,7 @@
       ],
       "priority": 101,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.1"
       ],
@@ -2417,7 +2417,7 @@
       ],
       "priority": 102,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.2",
         "P07.3"
@@ -2439,7 +2439,7 @@
       ],
       "priority": 103,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.5"
       ],
@@ -2460,7 +2460,7 @@
       ],
       "priority": 104,
       "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.1",
         "P07.2",
@@ -2487,7 +2487,7 @@
       ],
       "priority": 105,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P07.EXIT"
       ],
@@ -2509,7 +2509,7 @@
       ],
       "priority": 106,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.1a"
       ],
@@ -2531,7 +2531,7 @@
       ],
       "priority": 107,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.1b"
       ],
@@ -2553,7 +2553,7 @@
       ],
       "priority": 108,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.2"
       ],
@@ -2576,7 +2576,7 @@
       ],
       "priority": 109,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.3"
       ],
@@ -2597,7 +2597,7 @@
       ],
       "priority": 110,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.4",
         "P03.6b"
@@ -2620,7 +2620,7 @@
       ],
       "priority": 111,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.5"
       ],
@@ -2642,7 +2642,7 @@
       ],
       "priority": 112,
       "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.1a",
         "P08.1b",
@@ -2670,7 +2670,7 @@
       ],
       "priority": 113,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, dai i voti di qualità e lascia girare la sessione di due ore di T-GPU-13.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, dai i voti di qualità e lascia girare la sessione di due ore di T-GPU-13.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.EXIT",
         "P04.10",
@@ -2695,7 +2695,7 @@
       ],
       "priority": 114,
       "passes": false,
-      "notes": "If a command the audit needs is denied, return `status: blocked` naming the exact command, so the supervising session can allow it narrowly.",
+      "notes": "If a command the audit needs is denied, return `status: blocked` naming the exact command, so the supervising session can allow it narrowly. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P08.EXIT"
       ],
@@ -2716,7 +2716,7 @@
       ],
       "priority": 115,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P09.1"
       ],
@@ -2737,7 +2737,7 @@
       ],
       "priority": 116,
       "passes": false,
-      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`.",
+      "notes": "Sessions may run `docker build`, `docker compose build`, `docker compose config`, `docker info`, `docker version`, `docker image inspect`, `docker image ls`, `docker ps` and `docker logs`; anything else in Docker goes through the `scripts/lyrveil.cmd test` levels. `uv` is not installed on Windows: produce `uv.lock` in a container, for example a Dockerfile stage exported with `docker build --output`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P09.1"
       ],
@@ -2758,7 +2758,7 @@
       ],
       "priority": 117,
       "passes": false,
-      "notes": "",
+      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P09.2",
         "P09.3",
@@ -2783,7 +2783,7 @@
       ],
       "priority": 118,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Sul PC di riferimento: clone pulito, setup e start, collaudo AC-01..AC-20 e i livelli gpu e quality.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure.",
+      "notes": "BLOCKED: waiting for a person: Sul PC di riferimento: clone pulito, setup e start, collaudo AC-01..AC-20 e i livelli gpu e quality.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P09.4",
         "P02.EXIT-HW",
@@ -2809,7 +2809,7 @@
       ],
       "priority": 119,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Decidi tu la pubblicazione: crea il tag v1.0.0, fai il push e pubblica la release.\nSet aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run.",
+      "notes": "BLOCKED: waiting for a person: Decidi tu la pubblicazione: crea il tag v1.0.0, fai il push e pubblica la release.\nSet aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P09.5"
       ],

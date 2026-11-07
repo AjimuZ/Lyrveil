@@ -27,6 +27,7 @@ def test_the_direct_dependencies_have_the_documented_versions() -> None:
         "httpx": "0.28.1",
         "pydantic": "2.14.2",
         "pydantic-settings": "2.16.2",
+        "snowballstemmer": "3.1.1",
         "structlog": "26.1.0",
         "tzdata": "2026.6",
         "uvicorn": "0.54.0",

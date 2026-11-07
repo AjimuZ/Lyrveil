@@ -117,7 +117,7 @@ Evidence:
 
 **Depends on:** P03. **Areas:** memory engine, consistency engine, Memory Studio.
 
-- [ ] P04.1 Memory tables, FTS5, stemming and stop-word lists.
+- [x] P04.1 Memory tables, FTS5, stemming and stop-word lists.
 - [ ] P04.2 Extraction pipeline with idempotency, consistency rules and tombstones.
 - [ ] P04.3 `FtsMemoryRetriever` and scoring.
 - [ ] P04.4 Progressive summaries and rollups.
