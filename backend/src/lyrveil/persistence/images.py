@@ -128,6 +128,58 @@ def document(row: RowMapping) -> dict[str, Any]:
     return shown
 
 
+def list_page(
+    connection: Connection,
+    *,
+    character_id: str | None,
+    conversation_id: str | None,
+    purpose: str | None,
+    after: tuple[str, str] | None,
+    limit: int,
+) -> list[RowMapping]:
+    """Returns up to `limit` live images, newest first, narrowed by the filters that are not None.
+
+    `after` is the `(created_at, id)` of the last row of the previous page: the page starts below it. The order is
+    `created_at` then `id`, both descending, so equal timestamps still page without a repeat or a gap.
+    """
+    clauses = ["deleted_at IS NULL"]
+    values: dict[str, Any] = {"limit": limit}
+    for column, value in (("character_id", character_id), ("conversation_id", conversation_id), ("purpose", purpose)):
+        if value is not None:
+            clauses.append(f"{column} = :{column}")
+            values[column] = value
+    if after is not None:
+        clauses.append("(created_at < :after_at OR (created_at = :after_at AND id < :after_id))")
+        values["after_at"], values["after_id"] = after
+    sql = f"{_SELECT} WHERE {' AND '.join(clauses)} ORDER BY created_at DESC, id DESC LIMIT :limit"
+    return list(connection.execute(text(sql), values).mappings())
+
+
+def mark_deleted(connection: Connection, image_id: str, now: str) -> None:
+    """Sets `deleted_at` on the image and on the assets that share its files. The files are the caller's to remove."""
+    connection.execute(
+        text("UPDATE generated_images SET deleted_at = :now WHERE id = :id"), {"id": image_id, "now": now}
+    )
+    connection.execute(
+        text("UPDATE character_assets SET deleted_at = :now WHERE generated_image_id = :id AND deleted_at IS NULL"),
+        {"id": image_id, "now": now},
+    )
+
+
+def is_primary_asset(connection: Connection, image_id: str) -> bool:
+    """Returns whether a live asset that shares this image's files is its character's primary image."""
+    return (
+        connection.execute(
+            text(
+                "SELECT 1 FROM character_assets WHERE generated_image_id = :id AND is_primary = 1 "
+                "AND deleted_at IS NULL"
+            ),
+            {"id": image_id},
+        ).first()
+        is not None
+    )
+
+
 def link_variant(connection: Connection, variant_id: str, image_id: str) -> None:
     """Points the message variant at its image. `message_variants.image_id` is a plain column, so the code keeps it
     valid."""
@@ -137,12 +189,13 @@ def link_variant(connection: Connection, variant_id: str, image_id: str) -> None
 
 
 def image_of_message(connection: Connection, message_id: str) -> RowMapping | None:
-    """Returns the image of the message's active variant, or None when the message shows no image."""
+    """Returns the live image of the message's active variant, or None when the message shows none (a deleted image
+    counts as none)."""
     return (
         connection.execute(
             text(
                 "SELECT g.* FROM generated_images AS g JOIN message_variants AS v ON v.image_id = g.id "
-                "JOIN messages AS m ON m.active_variant_id = v.id WHERE m.id = :id"
+                "JOIN messages AS m ON m.active_variant_id = v.id WHERE m.id = :id AND g.deleted_at IS NULL"
             ),
             {"id": message_id},
         )

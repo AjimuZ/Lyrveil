@@ -58,7 +58,11 @@ export const routes: Routes = [
       import('./features/memory/memory-studio-screen').then((module) => module.MemoryStudioScreen),
     data: { screen: 'screen.characterMemory' satisfies TextKey },
   },
-  unavailable('gallery', 'screen.gallery'),
+  {
+    path: 'gallery',
+    loadComponent: () => import('./features/gallery/gallery-screen').then((module) => module.GalleryScreen),
+    data: { screen: 'screen.gallery' satisfies TextKey },
+  },
   {
     path: 'scenarios',
     loadComponent: () => import('./features/scenarios/scenarios-screen').then((module) => module.ScenariosScreen),

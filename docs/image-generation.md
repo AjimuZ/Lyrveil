@@ -343,7 +343,7 @@ Only the builder writes weights. The gallery's advanced dialog keeps ComfyUI's s
   and is refused. A weight that is not a finite number is also refused.
 
 A weight out of range is refused, not clamped, so the stored prompt is always the text the user wrote. Delivered in P05.3a:
-the check and `PromptSyntaxRefusedError`. The route of the dialog, `POST /images/{id}/regenerate`, comes with the gallery.
+the check and `PromptSyntaxRefusedError`. The route of the dialog, `POST /images/{id}/regenerate`, is not routed yet.
 
 ### Scene filter
 
@@ -580,7 +580,10 @@ Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md
 - The caption becomes the variant's text. The message is `mixed` with a caption and `image` without one, stays `queued`
   while its job works, and carries `image_id`. `image.progress` reports `prompt`, `loading`, `sampling`, `refining`
   and `saving`; `image.completed` and `message.completed` follow the commit.
-- Not delivered: the gallery routes (P05.6), the mode switch through the orchestrator (P05.7), the `waiting` phase,
+- Delivered with P05.6: the gallery routes (`GET /images`, `POST /images/{id}/regenerate`, `DELETE /images/{id}`; see
+  [the API](api.md#images)) and the gallery screen. The regenerate route takes `keep_seed` only; the advanced dialog
+  with editable prompts (`check_user_prompt`) is still to come.
+- Not delivered: the mode switch through the orchestrator (P05.7), the `waiting` phase,
   the settings that choose the profile and the quality, the retry with **Rapida** after a second out of memory (P06),
   and the browser test of T-IMG-07 and T-IMG-08. The explicit request route arrived with P05.5a
   ([Delivered in P05.5a](#delivered-in-p055a)).

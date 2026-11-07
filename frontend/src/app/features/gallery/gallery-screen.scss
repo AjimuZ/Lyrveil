@@ -1,0 +1,161 @@
+:host {
+  display: block;
+  padding: var(--ob-space-5);
+}
+
+.header {
+  margin-bottom: var(--ob-space-3);
+}
+
+.title {
+  margin: 0;
+}
+
+.note,
+.meta {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-text-muted);
+}
+
+.error {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-danger);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ob-space-3);
+  margin-bottom: var(--ob-space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+}
+
+.control {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--ob-space-2);
+  margin: 0 0 var(--ob-space-4);
+  padding: 0;
+  list-style: none;
+}
+
+// A cell far from the viewport skips layout and paint, which keeps a long gallery cheap.
+.cell {
+  content-visibility: auto;
+  contain-intrinsic-size: 160px 160px;
+}
+
+.thumb-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: var(--ob-surface);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-4);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--ob-hover);
+  }
+
+  &:disabled {
+    color: var(--ob-text-muted);
+    cursor: not-allowed;
+  }
+
+  &.danger {
+    color: var(--ob-danger);
+  }
+}
+
+.lightbox {
+  width: min(900px, calc(100vw - var(--ob-space-5)));
+  max-height: calc(100dvh - var(--ob-space-5));
+  padding: var(--ob-space-4);
+  overflow-y: auto;
+  background: var(--ob-elevated);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  box-shadow: var(--ob-shadow-overlay);
+
+  &::backdrop {
+    background: color-mix(in srgb, var(--ob-bg) 70%, transparent);
+  }
+}
+
+.original {
+  display: block;
+  max-width: 100%;
+  max-height: 60dvh;
+  margin: 0 auto var(--ob-space-3);
+  object-fit: contain;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ob-space-1) var(--ob-space-3);
+
+  dt {
+    color: var(--ob-text-muted);
+  }
+
+  dd {
+    margin: 0;
+    color: var(--ob-text);
+    overflow-wrap: anywhere;
+  }
+}
+
+.actions,
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+}
+
+.keep {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ob-space-1);
+  min-height: 44px;
+}

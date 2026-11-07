@@ -1,0 +1,126 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.gallery' | t }}</h1>
+  </header>
+
+  <div class="filters">
+    <div class="field">
+      <label for="gallery-character">{{ 'gallery.filter.character' | t }}</label>
+      <select id="gallery-character" class="control" (change)="filterCharacter($event)">
+        <option value="" [selected]="store.filters().characterId === ''">{{ 'gallery.filter.allCharacters' | t }}</option>
+        @for (character of characters(); track character.id) {
+          <option [value]="character.id" [selected]="character.id === store.filters().characterId">
+            {{ character.full_name }}
+          </option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="gallery-purpose">{{ 'gallery.filter.purpose' | t }}</label>
+      <select id="gallery-purpose" class="control" (change)="filterPurpose($event)">
+        <option value="" [selected]="store.filters().purpose === ''">{{ 'gallery.filter.allPurposes' | t }}</option>
+        @for (purpose of purposes; track purpose.value) {
+          <option [value]="purpose.value" [selected]="purpose.value === store.filters().purpose">
+            {{ purpose.label | t }}
+          </option>
+        }
+      </select>
+    </div>
+  </div>
+
+  @if (store.loading()) {
+    <p class="note" role="status">{{ 'gallery.loading' | t }}</p>
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.load()">{{ 'gallery.retry' | t }}</button>
+    </div>
+  } @else if (store.items().length === 0) {
+    <p class="note">{{ 'gallery.empty' | t }}</p>
+  } @else {
+    <ul class="grid" [attr.aria-label]="'gallery.grid' | t">
+      @for (image of store.items(); track image.id) {
+        <li class="cell">
+          <button type="button" class="thumb-button" [attr.aria-label]="'gallery.open' | t: { request: image.user_request }" (click)="open(image)">
+            <img
+              class="thumb"
+              loading="lazy"
+              decoding="async"
+              [src]="image.thumbnail_url"
+              [width]="image.width"
+              [height]="image.height"
+              [alt]="image.user_request"
+            />
+          </button>
+        </li>
+      }
+    </ul>
+    @if (store.hasMore()) {
+      <button type="button" class="button more" [disabled]="store.loadingMore()" (click)="store.loadMore()">
+        {{ 'gallery.more' | t }}
+      </button>
+    }
+  }
+
+  <dialog #lightbox class="lightbox" [attr.aria-label]="'gallery.lightbox' | t" (close)="closed()">
+    @if (selected(); as image) {
+      <img class="original" [src]="image.url" [alt]="image.user_request" />
+      <dl class="meta">
+        <dt>{{ 'gallery.meta.character' | t }}</dt>
+        <dd>{{ characterName(image) }}</dd>
+        <dt>{{ 'gallery.meta.purpose' | t }}</dt>
+        <dd>{{ purposeText(image.purpose) | t }}</dd>
+        <dt>{{ 'gallery.meta.request' | t }}</dt>
+        <dd>{{ image.user_request }}</dd>
+        <dt>{{ 'gallery.meta.positive' | t }}</dt>
+        <dd class="prompt">{{ image.prompt_positive }}</dd>
+        <dt>{{ 'gallery.meta.negative' | t }}</dt>
+        <dd class="prompt">{{ image.prompt_negative }}</dd>
+        <dt>{{ 'gallery.meta.aspect' | t }}</dt>
+        <dd>{{ image.aspect }} · {{ image.width }}×{{ image.height }}</dd>
+        <dt>{{ 'gallery.meta.seed' | t }}</dt>
+        <dd data-testid="gallery-seed">{{ image.seed }}</dd>
+        <dt>{{ 'gallery.meta.steps' | t }}</dt>
+        <dd>{{ image.steps }}</dd>
+        <dt>{{ 'gallery.meta.cfg' | t }}</dt>
+        <dd>{{ image.cfg }}</dd>
+        <dt>{{ 'gallery.meta.model' | t }}</dt>
+        <dd>{{ image.profile_id }} · {{ image.quality_preset }}</dd>
+        <dt>{{ 'gallery.meta.workflow' | t }}</dt>
+        <dd>{{ image.workflow_id }}</dd>
+      </dl>
+
+      @if (store.actionError(); as failure) {
+        <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+      }
+      @if (regenerated()) {
+        <p class="note" role="status">{{ 'gallery.regenerated' | t }}</p>
+      }
+
+      <div class="actions">
+        @if (image.conversation_id !== null) {
+          <a class="button" [routerLink]="['/chats', image.conversation_id]" (click)="close()">{{ 'gallery.source' | t }}</a>
+          <label class="keep">
+            <input type="checkbox" [checked]="keepSeed()" (change)="keepSeed.set(checked($event))" />
+            {{ 'gallery.keepSeed' | t }}
+          </label>
+          <button type="button" class="button" [disabled]="busy()" (click)="regenerate(image)">
+            {{ 'gallery.regenerate' | t }}
+          </button>
+        }
+        @if (confirmingDelete()) {
+          <span class="confirm" role="group" [attr.aria-label]="'gallery.delete.confirm' | t">
+            <span>{{ 'gallery.delete.confirm' | t }}</span>
+            <button type="button" class="button danger" [disabled]="busy()" (click)="confirmRemove(image)">
+              {{ 'gallery.delete.yes' | t }}
+            </button>
+            <button type="button" class="button" (click)="confirmingDelete.set(false)">{{ 'gallery.delete.no' | t }}</button>
+          </span>
+        } @else {
+          <button type="button" class="button danger" (click)="confirmingDelete.set(true)">{{ 'gallery.delete' | t }}</button>
+        }
+        <button type="button" class="button" (click)="close()">{{ 'gallery.close' | t }}</button>
+      </div>
+    }
+  </dialog>
+</section>

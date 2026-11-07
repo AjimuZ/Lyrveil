@@ -344,6 +344,23 @@ otherwise. The state lives in `memory-store.ts`; every action calls the REST API
 
 Grid of thumbnails with virtual scrolling. Filters by character, conversation, purpose and date. The lightbox has metadata (prompt, scene, outfit, aspect, seed, steps, CFG, model, workflow), regenerate with advanced options, a link to the source message, delete and save-as-avatar. The advanced options refuse `embedding:` and weights outside 0.5 to 1.5 with an Italian explanation.
 
+Delivered in P05.6 (`features/gallery/`): the route `/gallery` loads `gallery-screen.ts`. The grid shows thumbnails only
+(`/media/images/{id}/thumbnail`, loaded lazily by the browser, with `content-visibility: auto` on each cell), 24 per page,
+and **Carica altre** requests the next page by the opaque cursor of `GET /images`. The filters are **Personaggio** and
+**Tipo** (the purpose). A thumbnail opens the lightbox, a modal `<dialog>` that closes with Escape: the original, the
+character, purpose, request, final prompts, aspect and size, seed, steps, CFG, profile and preset, and workflow; a link to
+the source chat; **Rigenera** with **Mantieni il seed** (`POST /images/{id}/regenerate`, a new variant in the source chat,
+offered only for an image that has a chat); and **Elimina** with an inline confirmation. The files are read from
+`data/media`, so the gallery works with ComfyUI off. A character's primary avatar cannot be deleted (`409`, with the
+reason on screen).
+Not delivered: the conversation and date filters (the route takes `conversation_id`, the screen does not offer it),
+virtual scrolling (paging plus lazy thumbnails instead), the advanced regenerate dialog with editable prompts, and
+save-as-avatar (an avatar is chosen from the profile's avatar tools).
+- **Tests:** `gallery-store.spec.ts` (unit) and `tests/e2e/specs/gallery.spec.mjs`. The end-to-end spec drives the
+  real screen over a Playwright fake of the image routes, because the Compose test project draws nothing before P05.7; the
+  real routes, rows and files are covered by `test_the_gallery_pages_filters_serves_thumbnails_and_deletes`. The specs
+  were written but not run in this change.
+
 ### 7. Scenarios
 
 List with search, edit form (title, description, setting, opening message, optional character, language) and archive. **Inizia conversazione** opens the new chat picker. A note says that existing conversations keep their copy.

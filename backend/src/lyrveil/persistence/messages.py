@@ -12,7 +12,8 @@ _MESSAGE_SELECT = """
 SELECT m.id, m.conversation_id, m.seq, m.client_message_id, m.author, m.kind, m.status, m.read_state,
        m.active_variant_id, m.content, m.edited_at, m.deleted_at, m.created_at,
        (SELECT count(*) FROM message_variants AS v WHERE v.message_id = m.id) AS variant_count,
-       (SELECT v.image_id FROM message_variants AS v WHERE v.id = m.active_variant_id) AS image_id
+       (SELECT v.image_id FROM message_variants AS v JOIN generated_images AS g ON g.id = v.image_id
+         WHERE v.id = m.active_variant_id AND g.deleted_at IS NULL) AS image_id
 FROM messages AS m
 """
 _VARIANT_SELECT = "SELECT id, message_id, variant_no, content, source, status, created_at FROM message_variants"

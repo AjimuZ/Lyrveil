@@ -2,19 +2,29 @@
 of a generated image. The files are served by api/media.py.
 
 Delivered with P05.4b: `GET /images/{id}`. Delivered with P05.5a: `POST /conversations/{id}/images` and `POST
-/image-proposals/{id}/accept` and `/reject`. The gallery, regeneration and deletion routes come with P05.6.
+/image-proposals/{id}/accept` and `/reject`.
+Delivered with P05.6: `GET /images` (the gallery), `POST /images/{id}/regenerate` and `DELETE /images/{id}`.
 """
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 
-from lyrveil.api.messages import SendResult, _job, _message, _wake_worker
+from lyrveil.api.messages import RegenerateResult, SendResult, _job, _message, _wake_worker
 from lyrveil.media.store import MediaStore
 from lyrveil.services.image_proposals import ImageProposalService
-from lyrveil.services.images import MAX_CFG, MAX_REQUEST_CHARS, MAX_STEPS, MIN_CFG, MIN_STEPS, ImageService
+from lyrveil.services.images import (
+    GALLERY_MAX_PAGE_SIZE,
+    GALLERY_PAGE_SIZE,
+    MAX_CFG,
+    MAX_REQUEST_CHARS,
+    MAX_STEPS,
+    MIN_CFG,
+    MIN_STEPS,
+    ImageService,
+)
 
 router = APIRouter(tags=["images"], include_in_schema=False)
 
@@ -95,14 +105,62 @@ def reject_proposal(proposal_id: str, service: ImageProposalService = ProposalSe
     return service.reject(proposal_id)
 
 
-@router.get("/images/{image_id}")
-def read_image(image_id: str, service: ImageService = ImageApiService) -> dict[str, Any]:
-    """Returns the metadata of a live image: its size, the request, the scene, the final prompts, the seed and the
-    sampler values, the profile and the preset that produced the file, and when. The submitted workflow stays out.
-    Answers 404 `NOT_FOUND` for an id that names no live image."""
-    metadata = service.get(image_id)
+def _with_urls(metadata: dict[str, Any]) -> dict[str, Any]:
+    image_id = metadata["id"]
     return {
         **metadata,
         "url": f"/media/images/{image_id}/original",
         "thumbnail_url": f"/media/images/{image_id}/thumbnail",
     }
+
+
+@router.get("/images")
+def list_images(
+    character_id: str | None = None,
+    conversation_id: str | None = None,
+    purpose: str | None = None,
+    cursor: str | None = None,
+    limit: int = Query(GALLERY_PAGE_SIZE, ge=1, le=GALLERY_MAX_PAGE_SIZE),
+    service: ImageService = ImageApiService,
+) -> dict[str, Any]:
+    """The gallery: live images, newest first, as `GET /images/{id}` shows them. `next_cursor` is the `cursor` of the
+    next page, null on the last. 422 `VALIDATION_ERROR` for an unknown `purpose` or a `cursor` the server did not
+    issue."""
+    items, next_cursor = service.list_page(
+        character_id=character_id, conversation_id=conversation_id, purpose=purpose, cursor=cursor, limit=limit
+    )
+    return {"items": [_with_urls(item) for item in items], "next_cursor": next_cursor}
+
+
+@router.get("/images/{image_id}")
+def read_image(image_id: str, service: ImageService = ImageApiService) -> dict[str, Any]:
+    """Returns the metadata of a live image: its size, the request, the scene, the final prompts, the seed and the
+    sampler values, the profile and the preset that produced the file, and when. The submitted workflow stays out.
+    Answers 404 `NOT_FOUND` for an id that names no live image."""
+    return _with_urls(service.get(image_id))
+
+
+class RegenerateImageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keep_seed: bool = False
+
+
+@router.post("/images/{image_id}/regenerate", response_model=RegenerateResult, status_code=202)
+def regenerate_image(
+    image_id: str, request: Request, body: RegenerateImageBody | None = None, service: ImageService = ImageApiService
+) -> RegenerateResult:
+    """Draws the image again as a new variant of its message, from the stored prompts: a new seed unless `keep_seed`.
+    404 for an unknown image; 409 when the image has no chat, the chat is archived, the message is not the last one or
+    is still being produced, or the queue is full."""
+    result = service.regenerate(image_id, keep_seed=body.keep_seed if body is not None else False)
+    _wake_worker(request)
+    return RegenerateResult(message=_message(result.message), variant_id=result.variant_id, job=_job(result.job))
+
+
+@router.delete("/images/{image_id}", status_code=204)
+def delete_image(image_id: str, service: ImageService = ImageApiService) -> Response:
+    """Deletes the image and its files. 404 for an unknown or deleted image, 409 while it is a character's primary
+    image."""
+    service.delete(image_id)
+    return Response(status_code=204)

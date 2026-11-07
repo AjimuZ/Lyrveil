@@ -6,13 +6,14 @@ placeholder with its `streaming` variant, and the job are committed in one trans
 nothing behind. The placeholder stays `queued` until ImageGenerationService completes or fails it.
 """
 
+import base64
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args
 
-from sqlalchemy import Connection, Engine, text
+from sqlalchemy import Connection, Engine, RowMapping, text
 
 from lyrveil.domain.assets import GENERATED_KINDS
 from lyrveil.domain.conversations import Conversation, ConversationStatus
@@ -44,6 +45,8 @@ from lyrveil.prompts.image_scene import outfit_choices
 from lyrveil.services.image_generation import STAGE_RENDER, random_seed
 
 MAX_REQUEST_CHARS = 1000
+GALLERY_PAGE_SIZE = 40
+GALLERY_MAX_PAGE_SIZE = 100
 # docs/configuration.md (`images.steps`, `images.cfg`): the ranges a request may override.
 MIN_STEPS, MAX_STEPS = 10, 50
 MIN_CFG, MAX_CFG = 1.0, 12.0
@@ -60,6 +63,9 @@ _NO_OUTFIT = "Il personaggio non ha questo abito."
 _ALREADY_SENT = "Questo messaggio è già stato inviato come testo."
 _NO_CHAT = "Conversazione non trovata."
 _NO_IMAGE = "Immagine non trovata."
+_BAD_CURSOR = "Il cursore non è valido."
+_PRIMARY_IMAGE = "È l'immagine principale del personaggio: scegline un'altra prima di eliminarla."
+_PURPOSES = frozenset({"chat", "avatar", "profile", "scene", "variant"})
 _QUEUE_FULL = "Troppe richieste in coda: riprova tra poco."
 _BUSY = "Il messaggio è ancora in elaborazione."
 _ONLY_LAST = "Solo l'ultimo messaggio della conversazione può essere rigenerato."
@@ -325,6 +331,66 @@ class ImageService:
             raise NotFoundError(_NO_IMAGE)
         return image_repository.document(row)
 
+    def list_page(
+        self,
+        *,
+        character_id: str | None = None,
+        conversation_id: str | None = None,
+        purpose: str | None = None,
+        cursor: str | None = None,
+        limit: int = GALLERY_PAGE_SIZE,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Returns one page of the gallery: the metadata of live images, newest first, and the `cursor` of the next
+        page (None on the last one).
+
+        The filters narrow the list when given. `limit` is clamped to 1..GALLERY_MAX_PAGE_SIZE. Raises
+        ValidationFailedError for a `purpose` outside the stored ones or a `cursor` this service did not issue.
+        """
+        if purpose is not None and purpose not in _PURPOSES:
+            raise ValidationFailedError("Il tipo di immagine non è valido.")
+        after = _decode_cursor(cursor) if cursor is not None else None
+        size = max(1, min(limit, GALLERY_MAX_PAGE_SIZE))
+
+        def work(connection: Connection) -> list[Any]:
+            return image_repository.list_page(
+                connection,
+                character_id=character_id,
+                conversation_id=conversation_id,
+                purpose=purpose,
+                after=after,
+                limit=size + 1,
+            )
+
+        rows = read(self._engine, work)
+        shown = rows[:size]
+        more = len(rows) > size
+        return [image_repository.document(row) for row in shown], _encode_cursor(shown[-1]) if more else None
+
+    def delete(self, image_id: str) -> None:
+        """Marks the image deleted, together with the assets that share its files, and removes its file and thumbnail.
+
+        A message that showed the image keeps its text and shows no image. Raises NotFoundError for an unknown or
+        already deleted image, and ConflictError while the image is a character's primary image (another one must be
+        chosen first). Both paths are checked inside the transaction, so a path outside the media root
+        (MediaPathError) leaves the row as it was.
+        """
+        now = to_utc_text(self._clock())
+
+        def work(connection: Connection) -> RowMapping:
+            row = image_repository.get(connection, image_id)
+            if row is None or row["deleted_at"] is not None:
+                raise NotFoundError(_NO_IMAGE)
+            if image_repository.is_primary_asset(connection, image_id):
+                raise ConflictError(_PRIMARY_IMAGE)
+            self._media.resolve(row["file_path"])
+            self._media.resolve(row["thumb_path"])
+            image_repository.mark_deleted(connection, image_id, now)
+            return row
+
+        deleted = write(self._engine, work)
+        self._media.delete(deleted["file_path"])
+        self._media.delete(deleted["thumb_path"])
+
     def media_file(self, image_id: str, *, thumbnail: bool) -> tuple[Path, str]:
         """Returns the real path and media type of the original of a live image, or of its WebP thumbnail.
 
@@ -389,6 +455,20 @@ class ImageService:
             return write(self._engine, save)
         except QueueFullError:
             raise ConflictError(_QUEUE_FULL) from None
+
+
+def _encode_cursor(row: RowMapping) -> str:
+    """Returns the opaque cursor that resumes the gallery below `row`."""
+    return base64.urlsafe_b64encode(f"{row['created_at']}|{row['id']}".encode()).decode().rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str]:
+    """Returns the `(created_at, id)` a cursor names. Raises ValidationFailedError for any other text."""
+    try:
+        created_at, image_id = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode().split("|")
+    except ValueError:
+        raise ValidationFailedError(_BAD_CURSOR) from None
+    return created_at, image_id
 
 
 def _check_options(aspect: str, quality: str | None, seed: int | None, steps: int | None, cfg: float | None) -> None:

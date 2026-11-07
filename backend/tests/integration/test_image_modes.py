@@ -342,6 +342,51 @@ def test_the_generate_route_queues_a_character_image(client: TestClient, harness
     assert client.post(f"{API}/characters/missing/assets/generate", json={}).status_code == 404
 
 
+@pytest.mark.anyio
+async def test_the_gallery_pages_filters_serves_thumbnails_and_deletes(
+    client: TestClient, harness: Harness, chat: str, tmp_path: Path
+) -> None:
+    """The gallery routes: newest first with a cursor, the filters, files that load with no ComfyUI running, and a
+    delete that removes the files, hides the image and keeps the primary avatar."""
+    character_id = character_of(harness.engine, chat)
+    for purpose in ("avatar", "scene", "profile"):
+        harness.images.request_asset(character_id, purpose, "il porto" if purpose == "scene" else "")
+        await harness.run_all()
+
+    first = client.get(f"{API}/images", params={"limit": 2}).json()
+    assert (len(first["items"]), first["next_cursor"] is not None) == (2, True)
+    second = client.get(f"{API}/images", params={"limit": 2, "cursor": first["next_cursor"]}).json()
+    assert (len(second["items"]), second["next_cursor"]) == (1, None)
+    listed = [item["id"] for item in first["items"] + second["items"]]
+    assert len(set(listed)) == 3
+    scene = client.get(f"{API}/images", params={"purpose": "scene", "character_id": character_id}).json()["items"]
+    assert [item["purpose"] for item in scene] == ["scene"]
+    assert client.get(f"{API}/images", params={"character_id": "missing"}).json()["items"] == []
+    assert client.get(f"{API}/images", params={"purpose": "nope"}).status_code == 422
+    assert client.get(f"{API}/images", params={"cursor": "!!"}).status_code == 422
+
+    thumbnail = client.get(scene[0]["thumbnail_url"])
+    assert (thumbnail.status_code, thumbnail.headers["content-type"]) == (200, "image/webp")
+
+    avatar = client.get(f"{API}/images", params={"purpose": "avatar"}).json()["items"][0]
+    assert client.delete(f"{API}/images/{avatar['id']}").status_code == 409
+
+    before = len(files(tmp_path / "data" / "media", "images"))
+    assert client.delete(f"{API}/images/{scene[0]['id']}").status_code == 204
+    assert client.get(f"{API}/images/{scene[0]['id']}").status_code == 404
+    assert client.get(scene[0]["thumbnail_url"]).status_code == 404
+    assert client.delete(f"{API}/images/{scene[0]['id']}").status_code == 404
+    assert len(client.get(f"{API}/images").json()["items"]) == 2
+    assert len(files(tmp_path / "data" / "media", "images")) < before
+    kinds = [asset.kind for asset in CharacterAssetService(harness.engine, harness.media).list_assets(character_id)]
+    assert sorted(kinds) == ["avatar", "profile"]
+
+
+def test_regenerating_an_image_with_no_chat_is_refused(client: TestClient) -> None:
+    assert client.post(f"{API}/images/missing/regenerate", json={"keep_seed": True}).status_code == 404
+    assert client.post(f"{API}/images/missing/regenerate", json={"seed": 1}).status_code == 422
+
+
 # Contextual mode.
 
 

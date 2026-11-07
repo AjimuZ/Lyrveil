@@ -54,9 +54,9 @@ describe('routes', () => {
     TestBed.configureTestingModule({ providers: [provideRouter(routes, withComponentInputBinding())] });
     const harness = await RouterTestingHarness.create();
 
-    await harness.navigateByUrl('/gallery');
+    await harness.navigateByUrl('/settings');
     const heading = harness.routeNativeElement?.querySelector('h1');
-    expect(heading?.textContent?.trim()).toBe('Galleria');
+    expect(heading?.textContent?.trim()).toBe('Impostazioni');
     expect(harness.routeNativeElement?.textContent).toContain('Questa schermata non è ancora disponibile.');
   });
 });

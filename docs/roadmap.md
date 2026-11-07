@@ -145,7 +145,7 @@ Evidence:
 - [x] P05.3 `VisualConsistencyService`, the tag vocabulary with token counts, the sanitizer, structured profile translation and the scene filter ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md)).
 - [x] P05.4 `image_request` job with `ImageScene`, the caption in the character's voice and aspect `auto`, persistence, thumbnails and message integration ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)).
 - [x] P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation.
-- [ ] P05.6 Gallery.
+- [x] P05.6 Gallery.
 - [ ] P05.7 Mode switching through the orchestrator's normal path, with exclusivity enforced. Full automation and recovery follow in P06.
 - [ ] P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile, the image identity protocol and the measured levers: PAG, identity weight, and the tall and wide sizes. Apply the preset rule and the default rule.
 

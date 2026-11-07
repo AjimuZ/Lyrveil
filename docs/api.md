@@ -419,9 +419,21 @@ Delivered in P05.5a ([Delivered in P05.5a](image-generation.md#delivered-in-p055
   `message_id`, `scene`, `reason`, `status`, `job_id`, `created_at`, `decided_at`), and `image.completed` carries
   `message_id: null` for an image of character mode.
 
-Planned (P05.6): the gallery, regeneration and deletion routes. The service behind regeneration exists
-(`ImageService.regenerate`). None of the image routes is in `backend/openapi.json` until it is next regenerated with
-Docker.
+Delivered in P05.6:
+
+- `GET /images` answers `{"items": [...], "next_cursor": null}`: live images newest first, each with the metadata of
+  `GET /images/{id}` plus `url` and `thumbnail_url`. `limit` is 1 to 100 (default 40); `next_cursor` is the opaque
+  `cursor` of the next page. `character_id`, `conversation_id` and `purpose` narrow the list. `422` for an unknown
+  `purpose` or a cursor the server did not issue.
+- `POST /images/{id}/regenerate` takes an optional `{"keep_seed": false}` and answers `202` with `message`,
+  `variant_id` and `job`, like a text regeneration. `404` for an unknown image; `409` for an image with no chat, an
+  archived chat, a message that is not the last or is still being produced, or a full queue. Editable prompts are not
+  accepted yet.
+- `DELETE /images/{id}` answers `204`, marks the image and the assets that share its files as deleted and removes the
+  files. `404` for an unknown or deleted image, `409` while a live asset of the image is its character's primary
+  image. A message that showed the image keeps its text and its `image_id` becomes null.
+
+None of the image routes is in `backend/openapi.json` until it is next regenerated with Docker.
 
 ### Memory
 

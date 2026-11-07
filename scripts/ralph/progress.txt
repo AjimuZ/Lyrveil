@@ -190,6 +190,8 @@
 - Keep form limits and request-body conversion in a pure module (image-request.ts) with a spec, and make the dialog a thin component over it.
 - A dialog that sends through a store should get the failure back as a return value (`Promise<ApiError | null>`) and show it inside the dialog, since the screen's `actionError` banner sits behind the modal.
 - To follow a queued job from a component, poll `GET /jobs/{id}` with a generation ticket and a stored timer handle, and clear both in `onDestroy` and when the input changes, so a stale poll never writes.
+- Page lists by an opaque base64 cursor of (created_at, id) ordered descending, and fetch limit+1 rows to know whether another page exists.
+- Keep the grid on thumbnail URLs only, with loading=lazy and content-visibility: auto on cells; open the original only in the lightbox.
 
 ---
 
@@ -1688,4 +1690,16 @@ No injected instructions found in the files I read.
   - There is no job cancel route yet (P06.3), so the 'cancel' action in docs/frontend.md Placeholders is not drawn. An image message (`kind` image or mixed) does not offer Rigenera, because the text regenerate route does not apply; image regeneration belongs to P05.6.
   - The image routes and the generate route are still not in backend/openapi.json; the frontend types are hand-written (conversation.model.ts, image-request.ts, asset.model.ts).
   - A job's `stage` is the stage it is waiting in or running, not the last finished one, despite docs/image-generation.md saying so under Job stages; the avatar tools rely on the actual behavior (prompt, render, persist).
+---
+
+## 2026-11-07T19:39:35Z - P05.6
+- Built the gallery. Backend: `GET /images` (cursor paging; character, conversation and purpose filters), `POST /images/{id}/regenerate` (`keep_seed`) and `DELETE /images/{id}`. Frontend: `/gallery` screen with a thumbnail grid, "Carica altre", character and purpose filters, a lightbox with metadata, a link to the source chat, Rigenera, and Elimina with confirmation. Checks run: `test lint` passed (ruff, mypy, eslint, strict build, docs checks). The backend image integration tests passed (36, including the new gallery test). NOT run: the new frontend unit spec `gallery-store.spec.ts` and the Playwright spec `gallery.spec.mjs`, since frontend specs can only run through the orchestrator's full unit and e2e levels. The e2e spec drives the real screen over a Playwright fake of the image routes, because the Compose test project draws no images before P05.7. The routes, rows, files and cursor are covered by the backend integration test.
+- Files changed: backend/src/lyrveil/api/images.py, backend/src/lyrveil/services/images.py, backend/src/lyrveil/persistence/images.py, backend/src/lyrveil/persistence/messages.py, backend/tests/integration/test_image_modes.py, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/i18n/it.json, frontend/src/app/features/gallery/gallery.model.ts, frontend/src/app/features/gallery/gallery-store.ts, frontend/src/app/features/gallery/gallery-store.spec.ts, frontend/src/app/features/gallery/gallery-screen.ts, frontend/src/app/features/gallery/gallery-screen.html, frontend/src/app/features/gallery/gallery-screen.scss, tests/e2e/specs/gallery.spec.mjs, CHANGELOG.md, docs/frontend.md, docs/api.md, docs/image-generation.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit tests/integration/<file>.py` runs a single backend integration file; `test integration` accepts no arguments.
+  - Run the new frontend specs first in the orchestrator's full unit level: gallery-store.spec.ts and the updated app.routes.spec.ts (the 'not available' check now uses /settings, since /gallery is a real screen).
+  - The gallery e2e spec fakes the image routes in the browser because the e2e stack draws nothing until P05.7. Once P05.7 lands, replace the fake with real fake-ComfyUI runs.
+  - Deleting an image soft-deletes it and the assets that share its files (generated_images.deleted_at plus character_assets.deleted_at), then removes the files. A message's image_id (persistence/messages.py) and image_of_message now ignore deleted images.
+  - The regenerate route takes keep_seed only. Editable prompts (check_user_prompt on both prompts) and save-as-avatar are not routed yet; the lightbox offers neither.
+  - The image routes, including the new ones, are still not in backend/openapi.json; gallery.model.ts is hand-written.
 ---

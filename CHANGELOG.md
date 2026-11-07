@@ -10,6 +10,10 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The gallery (`/gallery`): a grid of thumbnails in pages, filtered by character and purpose, with a lightbox that shows
+  the metadata, links to the source chat, regenerates (with or without the seed) and deletes an image. New routes:
+  `GET /images`, `POST /images/{id}/regenerate` and `DELETE /images/{id}`.
+
 - Image requests on the conversation screen and avatar generation. The composer has **Chiedi un'immagine**, which opens
   a form with the request (the text already typed fills it), the aspect (**Automatico** by default), the outfit
   (**Lascia decidere alla scena**, **Abituale** or one of the character's named outfits), **Alta** or **Rapida**, and,
