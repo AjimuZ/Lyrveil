@@ -41,12 +41,13 @@ from lyrveil.events.hub import EventHub
 from lyrveil.jobs.handlers import JobHandler
 from lyrveil.jobs.policy import JobKind, RequiredMode
 from lyrveil.jobs.queue import JobQueue
-from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, ModeSwitch, recover_interrupted_jobs
+from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, ModeSwitch, read, recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
 from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
 from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
 from lyrveil.orchestration.client import OrchestratorClient
+from lyrveil.orchestration.gpu_state import GpuStateFollower, GpuStateSource
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.persistence.database import (
     DEFAULT_DATABASE_PATH,
@@ -98,14 +99,15 @@ class Worker:
 
     Without `image_runtime` the worker has no `image_request` handler and such jobs wait in the queue. With
     `mode_switch`, the scheduler reads the GPU mode from the orchestrator and asks for the mode its queue needs,
-    instead of calling `current_mode` (JobScheduler). `main` passes ComfyUiRuntime and the OrchestratorClient for
-    both; tests pass fakes.
+    instead of calling `current_mode` (JobScheduler). With `gpu_states`, GpuStateFollower publishes each GPU state as
+    `gpu.state`. `main` passes ComfyUiRuntime and the OrchestratorClient for all three; tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
     leases: LeaseProvider
     current_mode: Callable[[], RequiredMode] = _llm_mode
     mode_switch: ModeSwitch | None = None
+    gpu_states: GpuStateSource | None = None
     image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
     images: ImageSettings = field(default_factory=ImageSettings)
     replies: ReplySettings = field(default_factory=ReplySettings)
@@ -136,9 +138,10 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
     CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
     `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
-    image runtime, and is kept in `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed
-    text and stays `streaming` for the next start to mark `interrupted`; its lease is not released and expires by
-    itself.
+    image runtime, and is kept in `app.state.scheduler` meanwhile. When the Worker has `gpu_states`, the
+    GpuStateFollower runs beside it and reports the depth of the same queue. On shutdown the running reply keeps its
+    flushed text and stays `streaming` for the next start to mark `interrupted`; its lease is not released and expires
+    by itself.
     """
     worker: Worker | None = app.state.worker
     engine: Engine | None = app.state.engine
@@ -195,11 +198,15 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
                 worker.replies,
                 context=worker.context,
             )
+        queue = JobQueue()
         scheduler = JobScheduler(
-            engine, JobQueue(), handlers, worker.leases, worker.current_mode, mode_switch=worker.mode_switch
+            engine, queue, handlers, worker.leases, worker.current_mode, mode_switch=worker.mode_switch
         )
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
+            if worker.gpu_states is not None:
+                follower = GpuStateFollower(worker.gpu_states, app.state.events, lambda: read(engine, queue.depth))
+                group.start_soon(follower.run_forever)
             app.state.scheduler = scheduler
             try:
                 yield
@@ -285,7 +292,7 @@ def main() -> int:
     with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
     returns 0. The job worker streams
     replies from KoboldCpp and draws images with ComfyUI under leases of the control API, asking it for the GPU mode
-    its queue needs, and DailyBackup writes one backup of /data a day while
+    its queue needs and publishing each GPU state it reports, and DailyBackup writes one backup of /data a day while
     the backend is idle. The access log is off, because request paths and queries can carry user text.
     """
     try:
@@ -323,6 +330,7 @@ def main() -> int:
         text_runtime=KoboldCppRuntime,
         leases=orchestrator,
         mode_switch=orchestrator,
+        gpu_states=orchestrator,
         image_runtime=ComfyUiRuntime,
     )
     daily_backup = DailyBackup(DATA_ROOT, settings.zone)

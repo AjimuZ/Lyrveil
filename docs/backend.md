@@ -37,7 +37,7 @@ backend/
     scheduling/          Proactive evaluation and policies
     persistence/         SQLAlchemy models, repositories, PersistenceService
     runtimes/            KoboldCppRuntime, ComfyUiRuntime
-    orchestration/       OrchestratorClient
+    orchestration/       OrchestratorClient, GpuStateFollower
     media/               MediaStore: staging, atomic moves, checked paths; Pillow checks, crops, thumbnails
     events/              EventHub: event ids, replay buffer, one bounded queue per WebSocket connection
   tests/
@@ -798,7 +798,10 @@ event buffer. It applies one transition of `state_machine.py` per step, and the 
 `create_app` runs its loop. `tests/unit/test_supervisor.py` tests the supervisor, and
 `tests/unit/test_leases.py` holds T-ORC-03. Both use the fakes of `tests/fakes/`.
 `tests/integration/test_text_lifecycle.py` drives the control API from mode `llm` to
-`LLM_READY`, through a lease, and back to `IDLE` on `POST /v1/drain`.
+`LLM_READY`, through a lease, and back to `IDLE` on `POST /v1/drain`. Since P06.1
+`tests/integration/test_image_lifecycle.py` holds T-IMG-04, the 18 steps of an image request through the control API,
+and `tests/unit/test_exclusivity_property.py` holds T-ORC-02, the property over random event sequences. A
+`PUT /v1/desired-mode` keeps its `job_id`, which the events of the switch it causes carry.
 
 On the backend side, `lyrveil/orchestration/client.py` holds `OrchestratorClient`, which
 uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedError` with
@@ -809,3 +812,13 @@ uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedErro
 failure raises `OrchestratorUnavailableError`. The client blocks, so callers run it in a
 worker thread. `JobScheduler` is its caller, and heartbeats every 10 s ([Job queue](#job-queue)).
 `tests/unit/test_orchestrator_client.py` tests it against a local HTTP server.
+
+Since P06.1 `GpuStatus` also carries `seq`, `boot_id` and `blocked_reason` when the answer has them, and
+`wait_for_state(since, wait_s)` long-polls `GET /v1/state?since=&wait=`, with `wait_s` held to 25 s and an answer
+without `seq` or `boot_id` refused as unavailable. `lyrveil/orchestration/gpu_state.py` holds `GpuStateFollower`,
+which runs beside the scheduler when `Worker.gpu_states` is set, as `main` does. It publishes
+[`gpu.state`](api.md#event-websocket) once for each new `boot_id` and `seq`, with the state, the `label_key` of its
+[interface label](gpu-orchestration.md#interface-labels), the queue depth (`JobQueue.depth`, queued and running jobs)
+and the blocked reason. The first read, and the first after a failure, does not wait, since the orchestrator may have
+restarted with a lower `seq`; a failure waits 5 s. `tests/unit/test_gpu_state.py` tests the label of every state and
+the follower; `tests/integration/test_reply_streaming.py` checks that the event reaches the socket.

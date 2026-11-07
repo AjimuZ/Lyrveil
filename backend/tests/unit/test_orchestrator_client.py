@@ -155,6 +155,38 @@ def test_the_state_is_read_and_a_mode_is_requested(client: OrchestratorClient) -
     ]
 
 
+def test_the_state_is_long_polled_with_its_sequence_and_blocked_reason(client: OrchestratorClient) -> None:
+    blocked = {
+        "state": "IDLE",
+        "desired_mode": "image",
+        "draining": False,
+        "seq": 12,
+        "boot_id": "orchestrator-1",
+        "blocked_reason": "GPU_INSUFFICIENT_VRAM",
+    }
+    ControlApi.answers = [
+        (200, blocked),
+        (200, {**blocked, "blocked_reason": None}),
+        (200, {"state": "IDLE", "desired_mode": "image", "draining": False, "seq": 12}),
+    ]
+    status = client.wait_for_state(11, 25.0)
+    assert (status.state, status.seq, status.boot_id, status.blocked_reason) == (
+        "IDLE",
+        12,
+        "orchestrator-1",
+        "GPU_INSUFFICIENT_VRAM",
+    )
+    assert client.wait_for_state(0, 0.0).blocked_reason is None
+    # A follower cannot go on without the sequence, so an answer without it is not a state.
+    with pytest.raises(OrchestratorUnavailableError):
+        client.wait_for_state(12, 60.0)
+    assert [request[1] for request in ControlApi.requests] == [
+        "/v1/state?since=11&wait=25",
+        "/v1/state?since=0&wait=0",
+        "/v1/state?since=12&wait=25",
+    ]
+
+
 def test_a_mode_refused_while_draining_and_a_malformed_state_are_reported(client: OrchestratorClient) -> None:
     ControlApi.answers = [
         (409, {"status": 409, "code": "CONFLICT"}),

@@ -152,9 +152,7 @@ class JobQueue:
             ).one_or_none()
             if existing is not None:
                 return _job(existing._mapping)
-        active = connection.execute(
-            text("SELECT count(*) FROM generation_jobs WHERE status IN ('queued', 'running')")
-        ).scalar_one()
+        active = self.depth(connection)
         if active >= self._max_active:
             raise QueueFullError(f"the queue already holds {active} active jobs")
         policy = policy_for(kind)
@@ -185,6 +183,14 @@ class JobQueue:
             },
         )
         return self._get(connection, job_id)
+
+    def depth(self, connection: Connection) -> int:
+        """Returns the number of active jobs, queued or running: the queue depth that `gpu.state` reports and that
+        MAX_ACTIVE_JOBS bounds."""
+        active: int = connection.execute(
+            text("SELECT count(*) FROM generation_jobs WHERE status IN ('queued', 'running')")
+        ).scalar_one()
+        return active
 
     def has_queued(
         self, connection: Connection, kind: JobKind, conversation_id: str, payload: Mapping[str, Any]

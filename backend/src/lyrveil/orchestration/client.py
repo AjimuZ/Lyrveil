@@ -2,7 +2,8 @@
 
 A lease is the global GPU lock. The job scheduler acquires one before it uses a runtime, renews it every 10 s while the
 job runs, and releases it with the job's outcome (docs/gpu-orchestration.md, Leases and the global lock). It reads the
-GPU state and asks for the mode its queue needs with PUT /v1/desired-mode. The client is blocking, like
+GPU state and asks for the mode its queue needs with PUT /v1/desired-mode, and GpuStateFollower long-polls the state
+with `wait_for_state` to announce each change on the event WebSocket. The client is blocking, like
 probe_control_api: call it from a worker thread, never on the event loop. It ignores proxy settings from the
 environment, so the token only ever travels to the orchestrator.
 
@@ -34,6 +35,8 @@ _READY_STATES: dict[str, LeaseMode] = {
 DEFAULT_LEASE_TTL_S = 30
 HEARTBEAT_INTERVAL_S = 10
 REQUEST_TIMEOUT_S = 5.0
+# The longest long poll GET /v1/state accepts (docs/api.md, Control API).
+MAX_STATE_WAIT_S = 25.0
 # The refusals of POST /v1/leases. Both mean "not now": the job stays queued.
 REFUSAL_CODES = frozenset({"NOT_READY", "LEASE_HELD"})
 
@@ -51,12 +54,19 @@ class Lease:
 
 @dataclass(frozen=True)
 class GpuStatus:
-    """The part of the state document the scheduler acts on. `state` is the GPU state name, `desired_mode` the mode
-    the orchestrator is moving to, and `draining` whether it refuses new modes."""
+    """The part of the state document the backend acts on. `state` is the GPU state name, `desired_mode` the mode
+    the orchestrator is moving to, and `draining` whether it refuses new modes.
+
+    `seq` counts the orchestrator's transitions since the process named `boot_id` started, and `blocked_reason` is the
+    code that holds a load back, such as GPU_INSUFFICIENT_VRAM. Each is None when the answer did not carry it.
+    """
 
     state: str
     desired_mode: DesiredMode
     draining: bool
+    seq: int | None = None
+    boot_id: str | None = None
+    blocked_reason: str | None = None
 
     @property
     def ready_mode(self) -> LeaseMode | None:
@@ -106,7 +116,25 @@ class OrchestratorClient:
     def read_state(self) -> GpuStatus:
         """Returns the current GPU state, without waiting. Raises OrchestratorUnavailableError for anything but a 200
         whose state, desired mode and drain flag have the documented types."""
-        status, body = self._send("GET", "/v1/state", None)
+        return self._state("/v1/state", self._timeout_s)
+
+    def wait_for_state(self, since: int, wait_s: float) -> GpuStatus:
+        """Returns the GPU state once its `seq` exceeds `since`, or after `wait_s` seconds, whichever comes first: the
+        long poll of GET /v1/state. `wait_s` is held to 0 to MAX_STATE_WAIT_S, and 0 answers at once.
+
+        Raises OrchestratorUnavailableError as read_state does, and also for an answer without `seq` and `boot_id`,
+        which a follower of the state needs. `since` must be at least 0.
+        """
+        wait = min(max(wait_s, 0.0), MAX_STATE_WAIT_S)
+        status = self._state(f"/v1/state?since={since}&wait={wait:g}", self._timeout_s + wait)
+        if status.seq is None or status.boot_id is None:
+            raise OrchestratorUnavailableError("the control API sent a state without seq or boot_id")
+        return status
+
+    def _state(self, path: str, timeout_s: float) -> GpuStatus:
+        """Reads the state document at `path`. `seq`, `boot_id` and `blocked_reason` are None when absent or of
+        another type; the other fields must have their documented types, or OrchestratorUnavailableError is raised."""
+        status, body = self._send("GET", path, None, timeout_s)
         state, desired, draining = body.get("state"), body.get("desired_mode"), body.get("draining")
         if (
             status != 200
@@ -115,7 +143,15 @@ class OrchestratorClient:
             or not isinstance(draining, bool)
         ):
             raise OrchestratorUnavailableError(f"the control API answered {status} to state without a state")
-        return GpuStatus(state=state, desired_mode=desired, draining=draining)
+        seq, boot_id, blocked = body.get("seq"), body.get("boot_id"), body.get("blocked_reason")
+        return GpuStatus(
+            state=state,
+            desired_mode=desired,
+            draining=draining,
+            seq=seq if isinstance(seq, int) and not isinstance(seq, bool) and seq >= 0 else None,
+            boot_id=boot_id if isinstance(boot_id, str) else None,
+            blocked_reason=blocked if isinstance(blocked, str) else None,
+        )
 
     def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None:
         """Asks the orchestrator to move to `mode` once no lease is active, on behalf of `job_id` when given. Raises
@@ -156,9 +192,11 @@ class OrchestratorClient:
             return False
         raise OrchestratorUnavailableError(f"the control API answered {status} to release")
 
-    def _send(self, method: str, path: str, payload: dict[str, Any] | None) -> tuple[int, dict[str, Any]]:
+    def _send(
+        self, method: str, path: str, payload: dict[str, Any] | None, timeout_s: float | None = None
+    ) -> tuple[int, dict[str, Any]]:
         """Returns the status and the JSON object of the answer, {} when the body is not one. Raises
-        OrchestratorUnavailableError when no answer arrives within the timeout."""
+        OrchestratorUnavailableError when no answer arrives within `timeout_s`, by default the client's timeout."""
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             self._base_url + path,
@@ -172,7 +210,7 @@ class OrchestratorClient:
         )
         unanswered = OrchestratorUnavailableError(f"the control API did not answer {method} {path}")
         try:
-            response = self._opener.open(request, timeout=self._timeout_s)
+            response = self._opener.open(request, timeout=self._timeout_s if timeout_s is None else timeout_s)
         except urllib.error.HTTPError as error:
             # A 4xx or 5xx answer is still an answer: its status and body are read like a success's.
             response = error

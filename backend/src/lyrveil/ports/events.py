@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 # Event types of docs/api.md (Event WebSocket) that the backend publishes so far.
+GPU_STATE = "gpu.state"
 TYPING_STARTED = "typing.started"
 TYPING_STOPPED = "typing.stopped"
 MESSAGE_DELTA = "message.delta"

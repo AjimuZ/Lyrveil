@@ -10,6 +10,12 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The GPU state on the event WebSocket, backend only. The backend follows the orchestrator and publishes `gpu.state`
+  with the state, the key of its Italian label (such as **In attesa della scheda video…** while the text model makes
+  room for an image, or **Sta tornando in chat…** on the way back), the number of queued and running jobs, and the
+  reason a load is held back. The labels are in the interface catalog, but no screen shows them yet. The orchestrator's
+  event log now names the job that asked for a mode change on each step of the switch.
+
 - Images are drawn. The job worker now asks the orchestrator for image mode when an image waits and no reply or other
   foreground text work is queued. The orchestrator stops the text model, verifies that the GPU memory was released,
   starts ComfyUI, and returns to the text model once no image is left. The two models never run at the same time: a

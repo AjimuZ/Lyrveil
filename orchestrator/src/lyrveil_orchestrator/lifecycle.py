@@ -4,9 +4,10 @@ It moves the runtimes toward the desired mode through the ProcessSupervisor, one
 time, and applies the lease rules of docs/gpu-orchestration.md (Leases and the global lock). Delivered in P02.2: the
 text-mode path (start from the default mode `llm`, readiness, stop with release verification, drain), the leases,
 and a reduced recovery. Delivered in P05.7: the switch to mode `image` and back takes the same load and stop path,
-tested with the exclusivity rules, and recovery verifies the release before IDLE. Not delivered yet (P06): the VRAM
-check before a load with `blocked_reason`, the timed retry out of ERROR, launch-level fallbacks and the rest of the
-image flow of the 18 steps.
+tested with the exclusivity rules, and recovery verifies the release before IDLE. Delivered in P06.1: the GPU side of
+the 18 steps of an image request, with the job that asked for a mode named on the events of the switch it causes,
+tested step by step (T-IMG-04) and by a property over random event sequences (T-ORC-02). Not delivered yet (P06.2 to
+P06.4): the VRAM check before a load with `blocked_reason`, the timed retry out of ERROR and launch-level fallbacks.
 
 Everything runs on one asyncio event loop. The lease and mode methods never await, so each sees and changes the state
 in one piece. `step` awaits container work, and before each await it enters a LOADING or UNLOADING state, in which no
@@ -152,6 +153,9 @@ class ModelLifecycleManager:
         self._tick_s = tick_s
         self._state = INITIAL_STATE
         self._desired = Mode.LLM
+        # The job on whose behalf the desired mode was last requested, None for the default mode or a request without
+        # one. The transitions of the switch toward that mode name it.
+        self._mode_job: str | None = None
         self._draining = False
         self._lease: Lease | None = None
         self._last_error: str | None = None
@@ -235,12 +239,14 @@ class ModelLifecycleManager:
 
     # Mode, drain and recovery requests. None of these await; the run loop applies them.
 
-    def request_mode(self, mode: Mode) -> None:
-        """Records the desired mode. It is applied once no lease is active. Raises LifecycleConflictError while
-        draining, since a drain refuses new modes."""
+    def request_mode(self, mode: Mode, job_id: str | None = None) -> None:
+        """Records the desired mode, on behalf of `job_id` when given. It is applied once no lease is active, and the
+        events of the switch it causes, from the stop of the current runtime to the ready state of the new one, carry
+        `job_id`. Raises LifecycleConflictError, changing nothing, while draining, since a drain refuses new modes."""
         if self._draining:
             raise LifecycleConflictError("the orchestrator is draining")
         self._desired = mode
+        self._mode_job = job_id
         self._wake.set()
 
     def drain(self) -> None:
@@ -383,27 +389,30 @@ class ModelLifecycleManager:
         return True
 
     async def _load(self, runtime: Runtime) -> None:
-        self._move(_LOADING[runtime], f"mode {runtime}")
+        job_id = self._mode_job
+        self._move(_LOADING[runtime], f"mode {runtime}", job_id=job_id)
         try:
             report = await self._supervisor.start(runtime)
         except SupervisorError as error:
             self._load_failures += 1
             delay = LOAD_RETRY_DELAYS_S[min(self._load_failures, len(LOAD_RETRY_DELAYS_S)) - 1]
             self._retry_at = self._clock() + delay
-            self._move(GpuState.RECOVERING, "failed or timed out", code=error.code)
+            self._move(GpuState.RECOVERING, "failed or timed out", job_id=job_id, code=error.code)
             return
         self._load_failures = 0
         self._next_health_check = self._clock() + self._health_interval_s
-        self._move(_READY[runtime], "healthy, model verified", details=_load_details(report))
+        self._move(_READY[runtime], "healthy, model verified", job_id=job_id, details=_load_details(report))
 
     async def _unload(self, runtime: Runtime, reason: str) -> None:
-        self._move(_UNLOADING[runtime], reason)
+        # A drain stops the runtime for no job; a mode change stops it for the job that asked for the new mode.
+        job_id = None if self._draining else self._mode_job
+        self._move(_UNLOADING[runtime], reason, job_id=job_id)
         try:
             report = await self._supervisor.stop(runtime)
         except SupervisorError as error:
-            self._move(GpuState.RECOVERING, "stop or release failed", code=error.code)
+            self._move(GpuState.RECOVERING, "stop or release failed", job_id=job_id, code=error.code)
             return
-        self._move(GpuState.IDLE, "release verified", details=_release_details(report))
+        self._move(GpuState.IDLE, "release verified", job_id=job_id, details=_release_details(report))
 
     async def _watch_health(self, runtime: Runtime) -> bool:
         """Reads the runtime's health every health interval and enters RECOVERING when it is lost, ending any lease."""

@@ -602,7 +602,7 @@ reconnects after 1, 2, 5 and then every 10 seconds.
 
 | Type | Data | When |
 | --- | --- | --- |
-| `gpu.state` | `state`, `label_key`, `queue`, `blocked_reason` | Every transition. |
+| `gpu.state` | `state`, `label_key`, `queue`, `blocked_reason` | Every transition the backend sees. Delivered in P06.1, see below the table. |
 | `job.updated` | `job_id`, `kind`, `status`, `stage`, `queue_position`, `error_code` | Every job change. |
 | `typing.started`, `typing.stopped` | `conversation_id`, `character_id` | Real generation start and end. |
 | `message.created` | `message` | New message or placeholder. |
@@ -625,6 +625,18 @@ Client frames: `hello` and `ping`. All actions go through REST.
 
 `message.delta` carries private text and is never logged.
 
+Since P06.1 the backend publishes `gpu.state`. `GpuStateFollower` (`lyrveil/orchestration/gpu_state.py`) long-polls
+`GET /v1/state` of the control API and publishes once for each new `boot_id` and `seq`:
+
+- `state` is the orchestrator's GPU state.
+- `label_key` is the key in `frontend/src/i18n/it.json` of its [interface label](gpu-orchestration.md#interface-labels),
+  or `null` when no GPU text is shown.
+- `queue` is the number of queued and running jobs.
+- `blocked_reason` is the orchestrator's, `null` until P06.2 delivers the VRAM check.
+
+Transitions closer together than one answer are folded into the latest one, so the momentary `IDLE` between a stop
+and the next start is usually not published. No screen shows the label yet.
+
 ## Control API
 
 Between backend and orchestrator only. Internal network, port 8100. Every request
@@ -643,7 +655,8 @@ answers `404`. No OpenAPI document is served: this table is the contract.
 Every other route of the table came in P02.2, served by `ModelLifecycleManager`
 (`lifecycle.py`), whose run loop the application's lifespan starts. The text path is
 covered: start from mode `llm`, readiness, leases, drain and release verification. The
-VRAM check before a load, so `blocked_reason` too, and the image flow come in P06.
+switch to mode `image` and back came in P05.7, and P06.1 tests the 18 steps of an image request through these routes
+(T-IMG-04). The VRAM check before a load, so `blocked_reason` too, comes in P06.2.
 `blocked_reason` is always `null` until then. Since P02.6c `lyrveil_orchestrator.main`, the
 command of the `runtime` image, serves the application with Uvicorn on port 8100, over the
 Docker socket and NVML. In `compose.test.yaml` the test-only image `lyrveil/orchestrator-fakes:test`
@@ -668,6 +681,9 @@ Rules of the delivered routes:
 - `GET /v1/events` answers `{"boot_id", "events"}`. Each event has `seq`, `at`, `from`,
   `to`, `reason`, `job_id`, `code` and `details`. `details` holds only VRAM values in MiB
   and exit codes. For another `boot_id`, every buffered event is returned.
+- Since P06.1 the `job_id` of `PUT /v1/desired-mode` is kept: the events of the switch it causes, from the stop of
+  the current runtime to the ready state of the new one, carry it. A lease's events carry the lease's job, and a drain
+  or a recovery carries none.
 - `ERROR` is left only through `POST /v1/recover`. The timed retry comes in P06.
 
 `GET /v1/preflight` answers `200` with `ok`, the rows of [Preflight checks](operations.md#preflight-checks)

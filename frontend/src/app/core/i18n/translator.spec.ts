@@ -26,6 +26,19 @@ describe('Translator', () => {
     expect(translator.t('screen.unavailable', { unused: 'x' })).toBe('Questa schermata non è ancora disponibile.');
   });
 
+  it('has the Italian GPU labels of docs/gpu-orchestration.md for the keys that gpu.state sends', () => {
+    // The backend's lyrveil/orchestration/gpu_state.py maps every GPU state to one of these keys, or to none in
+    // LLM_READY and GENERATING_TEXT; its tests check that mapping state by state.
+    expect(translator.t('gpu.state.waiting')).toBe('In attesa della scheda video…');
+    expect(translator.t('gpu.state.drawing')).toBe('Sta disegnando…');
+    expect(translator.t('gpu.state.returning')).toBe('Sta tornando in chat…');
+    expect(translator.t('gpu.state.recovering')).toBe('Sto riprendendo il controllo della scheda video…');
+    expect(translator.t('gpu.state.error')).toBe('La scheda video non risponde. Riprova');
+    expect(translator.t('gpu.blocked.insufficientVram')).toBe(
+      'Altri programmi stanno usando la scheda video. Chiudili e riprova',
+    );
+  });
+
   it('has a non-empty text for every catalog entry and every plural form', () => {
     for (const [key, value] of Object.entries(catalog)) {
       const forms = typeof value === 'string' ? [value] : Object.values(value);

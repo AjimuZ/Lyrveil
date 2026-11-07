@@ -1,6 +1,7 @@
 """Checks reply streaming on a real database: T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13, T-SEC-06 (integration level),
 that the reply normalizer stands between the runtime and both the client and the database (P04.8a), and T-CON-10:
-the corrective generation after a V6, V10 or V11 hit, the adaptive notes, and the V1 and V4 endings (P04.8b).
+the corrective generation after a V6, V10 or V11 hit, the adaptive notes, and the V1 and V4 endings (P04.8b). Since
+P06.1, also that the job worker publishes each GPU state the orchestrator reports as `gpu.state` on the same socket.
 
 The text runtime is a fake that keeps the TextRuntime contract; the job worker, the event hub, the WebSocket
 route and the database are the real ones. The WebSocket is spoken in raw ASGI messages on the test's own event
@@ -9,6 +10,7 @@ loop, the loop of the job worker, so every wait has a deadline instead of blocki
 
 import io
 import json
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -32,7 +34,7 @@ from lyrveil.jobs.queue import Job, JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, read, write
 from lyrveil.logs import configure_logging
 from lyrveil.main import Worker, create_app
-from lyrveil.orchestration.client import Lease, LeaseMode, LeaseOutcome
+from lyrveil.orchestration.client import GpuStatus, Lease, LeaseMode, LeaseOutcome
 from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.ports.text_runtime import (
@@ -127,6 +129,22 @@ class Leases:
 
     def release_lease(self, lease: Lease, outcome: LeaseOutcome = "ok") -> bool:
         return True
+
+
+class GpuStates:
+    """A GpuStateSource that answers `states` one per call. Past the last one it waits a moment, as a long poll with
+    no transition does, and answers the last one again."""
+
+    def __init__(self, *states: GpuStatus) -> None:
+        self._states = list(states)
+        self._last = states[0]
+
+    def wait_for_state(self, since: int, wait_s: float) -> GpuStatus:
+        if self._states:
+            self._last = self._states.pop(0)
+        else:
+            time.sleep(min(wait_s, 0.05))
+        return self._last
 
 
 class Ticks:
@@ -758,6 +776,29 @@ async def test_a_reply_reaches_the_socket_in_order_and_a_reconnect_gets_the_repl
                 ("complete", "Ciao"),
                 ("complete", "Ciao, com'è andata?"),
             ]
+
+
+@pytest.mark.anyio
+async def test_each_gpu_state_reaches_the_socket_with_its_label_and_the_queue_depth(
+    settings: Settings, migrated: Engine
+) -> None:
+    # A job of a kind this worker has no handler for stays queued, so the queue depth is 1.
+    write(migrated, lambda connection: JobQueue().enqueue(connection, JobKind.IMAGE_REQUEST))
+    states = GpuStates(
+        GpuStatus("LLM_READY", "llm", False, seq=3, boot_id="orchestrator-1"),
+        GpuStatus("UNLOADING_LLM", "image", False, seq=4, boot_id="orchestrator-1"),
+    )
+    worker = Worker(text_runtime=lambda: opened(FakeRuntime()), leases=Leases(), gpu_states=states)
+    app = create_app(settings, migrated, worker=worker)
+    with anyio.fail_after(DEADLINE_S):
+        async with running(app), connected(app) as (socket, hello):
+            # Position 0 of this process: whatever was published before the hello is replayed.
+            await socket.send_json({"type": "hello", "last_event_id": 0, "boot_id": hello["boot_id"]})
+            frames = [await socket.receive_json() for _ in range(2)]
+    assert [(frame["type"], frame["data"]) for frame in frames] == [
+        ("gpu.state", {"state": "LLM_READY", "label_key": None, "queue": 1, "blocked_reason": None}),
+        ("gpu.state", {"state": "UNLOADING_LLM", "label_key": "gpu.state.waiting", "queue": 1, "blocked_reason": None}),
+    ]
 
 
 @pytest.mark.anyio

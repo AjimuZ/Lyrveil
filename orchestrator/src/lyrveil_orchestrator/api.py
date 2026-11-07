@@ -165,13 +165,14 @@ def create_app(control_token: str, monitor: GPUResourceMonitor, lifecycle: Model
 
     @app.put("/v1/desired-mode", status_code=202, response_model=None)
     async def desired_mode(body: DesiredModeRequest) -> dict[str, Any] | JSONResponse:
-        """Records the desired mode, applied once no lease is active; 409 CONFLICT while draining.
+        """Records the desired mode, applied once no lease is active, on behalf of the body's `job_id`, which the
+        events of the switch then carry; 409 CONFLICT while draining.
 
         This route and the other lifecycle routes are async on purpose: the manager is not thread-safe, so it is only
         touched from the event loop, never from FastAPI's thread pool.
         """
         try:
-            lifecycle.request_mode(body.mode)
+            lifecycle.request_mode(body.mode, body.job_id)
         except LifecycleConflictError:
             return _problem(409, "CONFLICT", "The orchestrator is draining")
         return {"desired_mode": body.mode.value, "state": lifecycle.state.value}

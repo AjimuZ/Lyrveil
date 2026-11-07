@@ -1,6 +1,6 @@
 # GPU orchestration: Model Lifecycle Manager
 
-Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Still planned, P06: the VRAM checks before a load with `blocked_reason`, the timed retry out of `ERROR`, launch-level fallbacks, failure classification from the logs, and the image flow of the 18 steps. The rest is planned, phases P02, P05 and P06.
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Still planned: the VRAM checks before a load with `blocked_reason` (P06.2), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
 
 The text model and the image model never share the GPU, whichever [profiles](models.md) are active. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
 job queue and asks the orchestrator for a mode and a lease
@@ -73,6 +73,25 @@ stateDiagram-v2
 
 A property test with Hypothesis drives random sequences of events through the table and asserts that no path can reach both runtimes running.
 
+Delivered in P06.1 as T-ORC-02, `orchestrator/tests/unit/test_exclusivity_property.py`. The events go to the real
+`ModelLifecycleManager` and `ProcessSupervisor` over the fake gate and the fake probe:
+
+- the backend's calls: mode requests, leases, heartbeats, releases with each outcome, drain, resume and recover;
+- what happens outside Lyrveil: crashes, unhealthy runtimes, failed starts, Docker and NVML failures, memory that
+  keeps moving, time passing, and a runtime started by hand while the GPU rests in a state without one.
+
+After each event the manager steps until it rests, as its run loop does. An event can also arrive while a container
+call is in flight. The test checks at every container call and after every step:
+
+- the two containers never run together;
+- no start is made while the other runtime runs;
+- a lease exists only in the generating state of its mode;
+- between steps, the runtime of the state is the only one running.
+
+With rule 3 disabled, the test finds a three-event sequence that breaks the rule: a drain, a start by hand and a
+resume. A start by hand during the supervisor's own inspect and start is outside the test: rule 3 cannot see it,
+and recovery handles it.
+
 ## The 18 steps of an image request
 
 | # | Requirement | Where | State |
@@ -97,6 +116,21 @@ A property test with Hypothesis drives random sequences of events through the ta
 | 18 | Resume queued conversation work | Scheduler selects queued text jobs in order | `GENERATING_TEXT` |
 
 Steps 12 and 13 may finish after step 14, because `persist` needs no GPU and uses the staged file.
+
+Delivered in P06.1 (T-IMG-04, `orchestrator/tests/integration/test_image_lifecycle.py`). The test plays the steps
+through the control API as the backend sends them, with the real lifecycle manager and supervisor over the fakes. For
+each step it checks the State column: the state after the step, or for a stop or a start, the state the call happens
+in. It also checks:
+
+- the order of the container calls: stop KoboldCpp with a 20 s grace, start ComfyUI, stop ComfyUI with a 30 s grace,
+  start KoboldCpp;
+- the memory drop of each verified release;
+- the job id on each event of the switch.
+
+A second test adds a lost Docker after step 18, which leads to `ERROR` and back, so every state of the table is reached.
+The backend's side of the steps, the stages and the mode requests, is tested in
+`backend/tests/integration/test_image_mode_switch.py` (P05.7). Not covered by P06.1: the VRAM check of step 8 (P06.2)
+and the abort of background work in step 5 (P06.3).
 
 Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it with the default profiles.
 
@@ -321,13 +355,32 @@ Each process handles SIGTERM. Containers use `init: true`, so children are reape
 
 ## Interface labels
 
-| State or case | Italian text |
-| --- | --- |
-| `LLM_READY`, `GENERATING_TEXT` | No text. The conversation shows only the typing indicator |
-| Text queued during image work | In coda: risponderà appena finisce l'immagine |
-| `UNLOADING_LLM`, `LOADING_IMAGE` | In attesa della scheda video… |
-| `GENERATING_IMAGE` | Sta disegnando… |
-| `UNLOADING_IMAGE`, `LOADING_LLM` | Sta tornando in chat… |
-| `RECOVERING` | Sto riprendendo il controllo della scheda video… |
-| `ERROR` | La scheda video non risponde. Riprova |
-| `GPU_INSUFFICIENT_VRAM` | Altri programmi stanno usando la scheda video. Chiudili e riprova |
+| State or case | Italian text | `label_key` |
+| --- | --- | --- |
+| `LLM_READY`, `GENERATING_TEXT` | No text. The conversation shows only the typing indicator | `null` |
+| Text queued during image work | In coda: risponderà appena finisce l'immagine | Not a GPU state (P06.3) |
+| `UNLOADING_LLM`, `LOADING_IMAGE` | In attesa della scheda video… | `gpu.state.waiting` |
+| `GENERATING_IMAGE` | Sta disegnando… | `gpu.state.drawing` |
+| `UNLOADING_IMAGE`, `LOADING_LLM` | Sta tornando in chat… | `gpu.state.returning` |
+| `RECOVERING` | Sto riprendendo il controllo della scheda video… | `gpu.state.recovering` |
+| `ERROR` | La scheda video non risponde. Riprova | `gpu.state.error` |
+| `GPU_INSUFFICIENT_VRAM` | Altri programmi stanno usando la scheda video. Chiudili e riprova | `gpu.blocked.insufficientVram` |
+| `IDLE` with desired mode `image` | In attesa della scheda video… | `gpu.state.waiting` |
+| `IDLE` with desired mode `llm` | Sta tornando in chat… | `gpu.state.returning` |
+| `IMAGE_READY` with desired mode `image` | Sta disegnando… | `gpu.state.drawing` |
+| `IMAGE_READY` with desired mode `llm` | Sta tornando in chat… | `gpu.state.returning` |
+| `IDLE`, `IMAGE_READY` with mode `none` or a drain | No text | `null` |
+
+The last five rows came in P06.1, so that every state has a label. `IDLE` and `IMAGE_READY` take the label of the
+switch they are part of, from the desired mode, and use only the texts above. `GPU_INSUFFICIENT_VRAM` wins over the
+state.
+
+The backend sends `label_key` in the [`gpu.state` event](api.md#event-websocket), and the Italian text is in
+`frontend/src/i18n/it.json`. Tests:
+
+- `backend/tests/unit/test_gpu_state.py` maps every state to its key;
+- `frontend/src/app/core/i18n/translator.spec.ts` checks the text of each key;
+- `backend/tests/integration/test_reply_streaming.py` checks that the event reaches the socket.
+
+No screen shows these labels yet: the conversation's queue note comes with P06.3, and the **Risorse AI** screen with
+P06.6.
