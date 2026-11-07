@@ -57,7 +57,7 @@ orchestrator/
 | `CharacterService` | `services` | CRUD, versioning, diff, restore, locks, duplicate, import and export. Sole writer of canonical data. |
 | `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. |
 | `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. |
-| `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. |
+| `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; the notification joins with P04.7 and search with P02.5d. |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |
 | `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. |

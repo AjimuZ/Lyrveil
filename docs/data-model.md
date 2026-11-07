@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), and `conversations` with `characters` (P02.5a, revision `0003`). The rest is planned, phases P02 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`). The rest is planned, phases P02 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -217,6 +217,16 @@ the delete is not stored; cancelling its scheduled events joins the delete with 
 
 Index: `(conversation_id, seq)`, partial `(conversation_id, seq) WHERE deleted_at IS NULL`.
 
+Delivered in revision `0004` (P02.5b) with `CHECK` lists, the unique `(conversation_id, seq)` that also serves as the
+first index, and a partial unique index on `(conversation_id, client_message_id)` for non-null values.
+`scheduled_event_id` is a plain column until `scheduled_events` exists. `active_variant_id` has no key, because the
+variant table points back at the message; the service keeps it valid. `read_state` is NULL for messages that are not
+the user's. `seq` is taken from `conversations.next_seq` in the same write transaction as the insert and is never
+reused, so a deleted message leaves a gap. A send writes a user message and a reply placeholder with consecutive
+numbers: the user's is `complete`; the character's is `queued`, with empty `content` and one `streaming` variant that
+its `chat_reply` job fills (`payload` holds `variant_id`). The job's `idempotency_key` is `chat_reply:<user message id>`
+and its `message_id` the reply's. Deleting only sets `deleted_at`; the message and its variants stay.
+
 ### `message_variants`
 
 Every text or image version of a message. A user edit and a regeneration each add one.
@@ -235,6 +245,13 @@ Every text or image version of a message. A user edit and a regeneration each ad
 | `checks_json` | TEXT | Normalizer rules and reply checks that fired, with counts, and the number of corrective generations. NULL for user text |
 | `prompt_assembly_id` | TEXT | FK, SET NULL |
 | `created_at` | TEXT | |
+
+Delivered in revision `0004` (P02.5b) with `CHECK` lists and `json_valid` on the two JSON columns. `image_id` and
+`prompt_assembly_id` are plain columns until their tables exist. A regeneration inserts a `generated` variant with
+status `streaming` and empty text, makes it the message's active variant and queues `chat_regenerate` with its id under
+the key `chat_regenerate:<variant id>`; the older variants stay selectable. An edit inserts an `edited` variant that is
+already `complete`. The keys from `generation_jobs` to `conversations`, `characters` and `messages` are still plain
+columns: the batch rebuild of the job table is not part of this revision.
 
 ## Memory tables
 

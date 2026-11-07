@@ -140,7 +140,12 @@ class SecurityHeadersMiddleware:
 async def domain_error_handler(_request: Request, error: Exception) -> JSONResponse:
     """Answers a DomainError a service raised with its own status, code and Italian detail as problem+json."""
     assert isinstance(error, DomainError)
-    titles = {"NOT_FOUND": "Non trovato", "CONFLICT": "Operazione non consentita"}
+    titles = {
+        "NOT_FOUND": "Non trovato",
+        "CONFLICT": "Operazione non consentita",
+        "VALIDATION_ERROR": "Dati non validi",
+        "PAYLOAD_TOO_LARGE": "Contenuto troppo grande",
+    }
     return problem_response(error.status, error.code, titles.get(error.code, "Richiesta rifiutata"), error.detail)
 
 

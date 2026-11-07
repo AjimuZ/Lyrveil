@@ -13,6 +13,11 @@ No application exists yet. This section records the design documentation.
 - Conversations in the backend: create a chat for a character, list (pinned first, then by activity), pin, archive,
   soft-delete and restore within 30 days, through `/api/v1/conversations`. Migration `0003` adds the `conversations`
   table and the minimal `characters` table it refers to. The routes are not in `backend/openapi.json` yet.
+- Messages in the backend: send with a `client_message_id` that makes retries return the first result, saved before
+  its `chat_reply` job is queued; edit, soft-delete, regenerate the last reply into variants and switch between them,
+  and page through history, through `/api/v1/conversations/{id}/messages` and `/api/v1/messages/{id}`. Migration `0004`
+  adds `messages` and `message_variants`. Nothing answers the queued replies yet (streaming comes with P02.5c), and
+  the routes are not in `backend/openapi.json` yet.
 - The model catalog, `config/model-catalog.json`, with the five text and three image
   profiles, each pinned to a revision with its size and SHA-256 as `docs/models.md`
   lists them, and the backend validator that refuses a bad catalog. The tier defaults

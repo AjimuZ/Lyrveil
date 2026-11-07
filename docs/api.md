@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, and the conversation routes listed under [Conversations](#conversations). The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), and the message routes listed under [Messages](#messages). The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -187,6 +187,32 @@ Content-Type: application/json
   "job": {"id": "...", "kind": "chat_reply", "status": "queued", "queue_position": 1}
 }
 ```
+
+Delivered in P02.5b, all except `remember` and `diagnostics` (P04, P06):
+
+- **Send** answers `202`. It saves the user message (`complete`, `read_state` `sent`) and the reply placeholder (`queued`,
+  empty text, one `streaming` variant that the job fills) in one transaction, and queues the `chat_reply` job in a second
+  one, so the text is never lost to a full queue. Sending the same `client_message_id` to the same chat again returns the
+  first result and writes nothing; if the first attempt died before queuing its job, the retry queues it. A chat that is
+  deleted answers `404`, an archived one `409`, blank text `422` and text over 8000 characters `413`. `queue_position`
+  counts the queued and running jobs that run before the job, itself included. The `image` intent answers `409` until
+  P05; `auto` and `text` both produce a text reply.
+- **History** returns the newest `limit` messages below `before_seq` (default: the newest), oldest first inside the page,
+  as `{"items": [], "next_before_seq": null}`. `next_before_seq` is the `before_seq` of the next older page and null at
+  the start. Deleted messages are left out and their `seq` is not reused. Queued, streaming, failed and interrupted
+  replies are listed with their status, which is how a reload recovers the chat.
+- **Edit** (`PATCH`) adds an `edited` variant, makes it active and sets `edited_at`; the same text again changes nothing.
+  It answers `409` for a system message or one still queued or streaming. It starts no re-evaluation yet (P04.7).
+- **Delete** answers `204`, `404` when already deleted and `409` for a message still queued or streaming.
+- **Regenerate** answers `202` with the message, the new `variant_id` and the `chat_regenerate` job. It applies only to
+  the last visible message of an active chat when a character wrote it and it is not queued or streaming (`409`
+  otherwise). The new `generated` variant is active at once, so the message is `queued` with empty text and the older
+  variants stay as alternatives. If the queue is full the new variant and the message are marked `failed` and the call
+  answers `409`; an older variant can then be activated.
+- **Variants** lists every version in creation order. **Activate** has the same last-character-message rule, copies the
+  variant's text and status to the message and refuses a variant that is still `streaming` (`409`).
+
+These routes are not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ### Images
 

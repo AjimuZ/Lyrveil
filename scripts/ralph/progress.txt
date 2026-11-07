@@ -77,6 +77,9 @@
 - Store timestamps with lyrveil.domain.identifiers.to_utc_text (UTC, milliseconds, Z) so text comparison in SQL follows time order. Primary keys use new_id() (UUIDv7).
 - ruff's N818 rule requires the Error suffix on exception names, and UP047 requires PEP 695 type parameters (def f[T](...)) instead of TypeVar.
 - In tests, use a typed inner function with a Connection parameter instead of a lambda when calling write(engine, fn).
+- Save first, then queue: commit the user's data in its own transaction and queue the job in a second one. A failure to queue marks the placeholder failed instead of rolling back the user's text, and a retry under the same idempotency key finishes the work.
+- For any retryable action, derive the job's `idempotency_key` from a stable id (`chat_reply:<message id>`), and have the retry path check whether the job exists before resetting a failed placeholder.
+- Services raise DomainError subclasses (NotFoundError, ConflictError, ValidationFailedError, PayloadTooLargeError). The API maps them to problem+json through the shared handler, so routers hold no error logic.
 
 ---
 
@@ -639,4 +642,34 @@ Doc findings: the retry table gives extraction three waits but only 3 attempts, 
   - Backend ruff line length is 120, and ruff format joins short wrapped calls, so run the formatter before finishing.
   - Test helpers passed to write() need typed functions rather than lambdas, because mypy --strict rejects lambdas with default arguments.
   - Search is not part of this task (P02.5d).
+---
+
+## 2026-11-07T02:49:42Z - P02.5b
+- Added messages to the backend: send with an idempotency key, edit, delete, regenerate into variants with selectable alternatives, and history paging. This is migration 0004, a new domain, repository, service and API router, and docs. I ran `test_messages.py` (10 tests), `test_migrations.py` and `test_conversations.py` at the unit level: 23 passed. `scripts/lyrveil.cmd test lint` passes. I did not run the full unit, integration, e2e or docker levels.
+
+**What it does**
+- **Send** saves the user message and a queued reply placeholder in one transaction, then queues the `chat_reply` job in a second one. A full queue therefore can't lose the user's text. Retrying with the same `client_message_id` returns the first result, and queues the job if the first attempt died before queuing it.
+- **Regenerate** works only on the last visible message, and only when a character wrote it. It adds an active `generated` variant and queues `chat_regenerate`. The old variants stay and can be switched back to with activate.
+- **Edit** adds an `edited` variant, and editing to the same text changes nothing. **Delete** is a soft delete.
+- **History** returns pages of the newest messages below `before_seq`, oldest first inside each page. Queued, failed and interrupted replies are included with their status.
+
+**Choices I made without a spec**
+- Send and regenerate in an archived conversation answer 409.
+- The `image` intent answers 409 until P05.
+- If the queue is full, the new reply or variant is marked failed and the call answers 409. A retry with the same `client_message_id` queues it again.
+
+**Still open**
+- The new routes are not in `backend/openapi.json` yet, same as the conversation routes.
+- Nothing answers the queued replies until P02.5c adds the handlers and starts the worker.
+- I did not add the SET NULL keys from `generation_jobs` to `conversations`, `characters` and `messages` (batch rebuild of the job table). I couldn't verify that rebuild here, and the docs say so.
+- Edit and delete start no memory re-evaluation yet (P04.7).
+- Files changed: backend/migrations/versions/0004_messages.py, backend/src/lyrveil/domain/messages.py, backend/src/lyrveil/domain/errors.py, backend/src/lyrveil/persistence/messages.py, backend/src/lyrveil/services/messages.py, backend/src/lyrveil/api/messages.py, backend/src/lyrveil/api/security.py, backend/src/lyrveil/api/conversations.py, backend/src/lyrveil/main.py, backend/tests/integration/test_messages.py, backend/tests/integration/test_migrations.py, CHANGELOG.md, docs/api.md, docs/data-model.md, docs/backend.md
+- **Learnings for future iterations:**
+  - Alembic head is now 0004. `messages` and `message_variants` exist. The job table's `conversation_id`, `character_id` and `message_id` are still plain columns, because I did not rebuild it with SET NULL keys.
+  - A send creates a user message (complete) and a reply placeholder (queued, empty text) with consecutive `seq`, plus a `chat_reply` job. The job's `message_id` is the reply, its `idempotency_key` is `chat_reply:<user id>`, and its payload holds `user_message_id`, `reply_message_id`, `variant_id` and `intent`.
+  - A regeneration queues `chat_regenerate` under the key `chat_regenerate:<variant id>`, with payload `message_id` and `variant_id`.
+  - For P02.5c: the reply and regenerate handlers must fill the existing `streaming` variant named by `variant_id` (variant content, then message content), then set the variant and the message to complete, failed or interrupted. They must not insert a new variant, so a second generation overwrites the same variant.
+  - Handlers are still not registered and the worker is not started in the app lifespan. A restart also leaves a variant `streaming` and the message `queued` or `streaming` until a handler runs.
+  - In `ruff format`, a signature or assert that fits within 120 characters on one line gets joined, so check the length by hand. Run `scripts/lyrveil.cmd test lint` to see the exact diff.
+  - `scripts/lyrveil.cmd test unit tests/integration/<file>.py ...` accepts several files and runs the integration files at the unit level.
 ---

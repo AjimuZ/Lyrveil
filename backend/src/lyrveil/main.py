@@ -10,7 +10,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import conversations, events, health
+from lyrveil.api import conversations, events, health, messages
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
     SecurityHeadersMiddleware,
@@ -74,6 +74,7 @@ def create_app(
     app.state.boot_id = str(uuid.uuid4())
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
+    app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(events.router)
     headers = documented_headers(settings.http_port)
     app.add_exception_handler(DomainError, domain_error_handler)

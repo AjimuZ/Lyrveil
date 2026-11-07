@@ -18,7 +18,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"], include_in_s
 class ConversationOut(BaseModel):
     """A conversation as the chat list and the chat header show it.
 
-    The last message, the avatar and the typing flag join it with messages (P02.5b) and assets (P03).
+    The last-message preview, the avatar and the typing flag join it with streaming (P02.5c) and assets (P03).
     """
 
     id: str

@@ -25,3 +25,17 @@ class ConflictError(DomainError):
 
     code = "CONFLICT"
     status = 409
+
+
+class ValidationFailedError(DomainError):
+    """A value breaks a rule that only the service can check (422 `VALIDATION_ERROR`)."""
+
+    code = "VALIDATION_ERROR"
+    status = 422
+
+
+class PayloadTooLargeError(DomainError):
+    """A message is over the size limit (413 `PAYLOAD_TOO_LARGE`)."""
+
+    code = "PAYLOAD_TOO_LARGE"
+    status = 413
