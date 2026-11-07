@@ -108,9 +108,15 @@ All paths are under `/api/v1`.
 | `GET /characters/{id}/versions/{a}/diff/{b}` | Field-level comparison. |
 | `POST /characters/{id}/versions/{n}/restore` | New version with that content. |
 | `GET /characters/{id}/export?include_assets=` | Format in [Character system](character-system.md#exchange-format). |
-| `POST /characters/import` | Upload a file. Always creates a new character. |
+| `POST /characters/import` | Multipart upload of `file`. Always creates a new character. |
 | `GET /characters/format-schema` | JSON Schema of the exchange format. |
 | `POST /characters/drafts` | Body `{"description": "..."}`. Starts `character_draft`. The job result is an unsaved draft. |
+
+Delivered in P03.5: the three exchange routes. `GET .../export` answers the file as a download named after the first name
+(`include_assets` is `false` by default); `POST /characters/import` takes the multipart field `file` (up to 64 MB, else
+`413 PAYLOAD_TOO_LARGE`) and answers `201` with `{"character": {...summary}, "assets_imported": n, "assets_without_data":
+n}`; `GET .../format-schema` answers the JSON Schema (draft 2020-12). A refused file answers `422 IMPORT_INVALID` with an
+Italian `detail` and writes nothing. The routes are not in `backend/openapi.json` yet, like the other character routes.
 
 Delivered in P02.6a and P03.1a: `GET /characters` (`status` `active` or `archived`, default `active`; `q` keeps the names
 that contain it, ignoring case; newest update first), `POST /characters` and `GET /characters/{id}`.

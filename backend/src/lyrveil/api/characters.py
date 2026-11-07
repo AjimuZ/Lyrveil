@@ -1,22 +1,25 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
-versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, and the assisted
-draft.
-
-The exchange routes of that section arrive with the rest of the Creator (P03). Not in the committed OpenAPI document
-yet, for the reason given in lyrveil.api.conversations.
+versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
+draft, and the exchange routes: export, import and the JSON Schema of the format. Not in the committed OpenAPI
+document yet, for the reason given in lyrveil.api.conversations.
 """
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
+from starlette.concurrency import run_in_threadpool
 
 from lyrveil.api.jobs import JobOut, wake_worker
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
+from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
 from lyrveil.images.tags import load_vocabulary
+from lyrveil.media.store import MediaStore
 from lyrveil.services.character_creator import CharacterCreatorService
+from lyrveil.services.character_exchange import CharacterExchangeService
 from lyrveil.services.characters import CharacterService
 
 router = APIRouter(prefix="/characters", tags=["characters"], include_in_schema=False)
@@ -100,6 +103,14 @@ class PurgeBody(BaseModel):
     confirm_name: str
 
 
+class ImportOut(BaseModel):
+    """The character an import created, with how many images it stored and how many listed assets had no bytes."""
+
+    character: CharacterOut
+    assets_imported: int
+    assets_without_data: int
+
+
 class DraftBody(BaseModel):
     """The length limit is checked by the service, which answers 422 with an Italian detail."""
 
@@ -168,6 +179,18 @@ def get_service(request: Request) -> CharacterService:
 Service = Depends(get_service)
 
 
+def get_exchange(request: Request) -> CharacterExchangeService:
+    """Returns the exchange service on the application's engine and media store."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    media: MediaStore = request.app.state.media
+    return CharacterExchangeService(engine, media)
+
+
+Exchange = Depends(get_exchange)
+
+
 @router.get("", response_model=CharacterList)
 def list_characters(
     status: str = "active", q: str | None = Query(default=None, max_length=200), service: CharacterService = Service
@@ -202,6 +225,32 @@ def start_draft(body: DraftBody, request: Request) -> JobOut:
     return JobOut(id=job.id, kind=job.kind, status=job.status, queue_position=job.queue_position)
 
 
+@router.post("/import", response_model=ImportOut, status_code=201)
+async def import_character(
+    file: Annotated[UploadFile, File()], exchange: CharacterExchangeService = Exchange
+) -> ImportOut:
+    """Creates a new active character, at version 1 with actor `import`, from an uploaded `.lyrveil-character.json`
+    file, and stores its images. It never overwrites a character. Answers `201`; `assets_without_data` counts listed
+    assets that carried no bytes. Answers 413 `PAYLOAD_TOO_LARGE` over 64 MB and 422 `IMPORT_INVALID`, with an Italian
+    detail, for a file that is not valid JSON, is of another or a newer format, breaks the card rules (an age under 18
+    among them), holds an unknown field or has an image whose hash or bytes are wrong. Nothing is written then."""
+    # One byte over the limit is enough to refuse, so a larger file is never read whole into memory.
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    result = await run_in_threadpool(exchange.import_file, data)
+    return ImportOut(
+        character=_out(result.character),
+        assets_imported=result.assets_imported,
+        assets_without_data=result.assets_without_data,
+    )
+
+
+@router.get("/format-schema")
+def read_format_schema() -> JSONResponse:
+    """Returns the JSON Schema of the exchange format, generated from the model the import validates with. Declared
+    before `/{character_id}`, so "format-schema" is no id."""
+    return JSONResponse(json_schema(), media_type="application/schema+json")
+
+
 @router.get("/vocabulary", response_model=VocabularyOut)
 def read_vocabulary() -> VocabularyOut:
     """Returns the tag vocabulary of the card categories, in file order: the tags the Creator offers for each identity
@@ -228,6 +277,20 @@ def save_character(
     answers the character; a card equal to the stored one creates none. The locks in the body are the new locks. Answers
     404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` as the create route does."""
     return _detail(service.update(character_id, _as_card(body)))
+
+
+@router.get("/{character_id}/export")
+def export_character(
+    character_id: str, include_assets: bool = False, exchange: CharacterExchangeService = Exchange
+) -> JSONResponse:
+    """Returns the character as a `lyrveil.character` file, sent as a download named after its first name and ending in
+    `.lyrveil-character.json`. The assets are listed with their media type and SHA-256; with `include_assets=true` they
+    also carry their bytes in `data_base64`. Conversations and memories are never included. Answers 404 `NOT_FOUND` for
+    an unknown character."""
+    exported = exchange.export(character_id, include_assets)
+    return JSONResponse(
+        exported.document, headers={"Content-Disposition": f'attachment; filename="{exported.file_name}"'}
+    )
 
 
 @router.post("/{character_id}/duplicate", response_model=CharacterOut, status_code=201)

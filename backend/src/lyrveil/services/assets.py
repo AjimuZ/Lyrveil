@@ -55,6 +55,16 @@ class CharacterAssetService:
         self._require_character(character_id)
         return self._store(character_id, kind, "upload", images.prepare_upload(data, declared_type), crop=None)
 
+    def import_asset(self, character_id: str, kind: str, image: EncodedImage, *, primary: bool) -> StoredAsset:
+        """Returns the new asset holding the already validated `image` of an imported file (images.prepare_import),
+        stored as an upload of `kind`. With `primary` an avatar also becomes the primary one; otherwise the first live
+        avatar does anyway. Raises NotFoundError for an unknown character and ValidationFailedError for a kind outside
+        ASSET_KINDS or `primary` on another kind."""
+        if kind not in ASSET_KINDS or (primary and kind != "avatar"):
+            raise ValidationFailedError(_BAD_KIND)
+        stored = self._store(character_id, kind, "upload", image, crop=None)
+        return self.set_primary(character_id, stored.id) if primary and not stored.is_primary else stored
+
     def crop(self, character_id: str, asset_id: str, *, x: int, y: int, width: int, height: int) -> StoredAsset:
         """Returns a new asset of the same kind holding the rectangle of `asset_id` scaled to 512 x 512 (see
         images.crop). The original stays. The crop becomes primary only as the first avatar would.

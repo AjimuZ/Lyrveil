@@ -251,6 +251,15 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
 | T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |
 
+Delivered in P03.5: T-CHR-05, T-CHR-06 and the round trip of T-CHR-14 are
+`backend/tests/integration/test_character_exchange.py` (a round trip with a PNG, a JPEG and a WebP checks the card, the
+primary avatar and the hashes; refusals of a newer format, another format, text that is not JSON, unknown fields in the
+file, in the card and in an asset, an age of 17, an unknown slot tag, a reserved outfit key, a wrong hash, bad base64,
+non-image bytes and two primary avatars, each leaving the character count unchanged; the 64 MB limit). The test file
+was written without being run in the change that delivered it. The JSON Schema is checked for shape and published
+content, and every export is validated with the model the schema is generated from; no independent JSON Schema
+validator is installed, so the schema was not run through one.
+
 Delivered in P03.2b: T-CHR-04 is `test_duplicate_copies_the_card_but_not_conversations_or_memories` in
 `backend/tests/integration/test_characters.py`, beside the archive, unarchive and purge tests of the same file (the purge
 test checks every table, the search index and the jobs; another character stays untouched). The profile has unit specs

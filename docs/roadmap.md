@@ -103,7 +103,7 @@ Evidence:
 - [x] P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge.
 - [x] P03.3 Assisted creation with grammar, validation and repair.
 - [x] P03.4 Upload, crop, variants and primary avatar.
-- [ ] P03.5 Exchange format, import, export and JSON Schema.
+- [x] P03.5 Exchange format, import, export and JSON Schema.
 - [ ] P03.6 Content guard for character data. Demo characters.
 - [ ] P03.7 Multiple conversations per character, scenarios, backup and restore.
 

@@ -34,6 +34,13 @@ class ValidationFailedError(DomainError):
     status = 422
 
 
+class ImportInvalidError(DomainError):
+    """A character file is not valid or not of a supported version (422 `IMPORT_INVALID`). Nothing is imported."""
+
+    code = "IMPORT_INVALID"
+    status = 422
+
+
 class PayloadTooLargeError(DomainError):
     """A message or an upload is over its size limit, in bytes or in pixels (413 `PAYLOAD_TOO_LARGE`)."""
 

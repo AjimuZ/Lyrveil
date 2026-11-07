@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Character export and import, backend only: `GET /api/v1/characters/{id}/export` downloads a character as a
+  `.lyrveil-character.json` file with its card and the type and SHA-256 of each image (`include_assets=true` also embeds
+  the images), and `POST /api/v1/characters/import` creates a new character from such a file, never overwriting one.
+  The file is checked in full before anything is written: a newer format, an unknown field, an age under 18, a wrong
+  image hash or an image that is not a real PNG, JPEG or WebP are refused with `IMPORT_INVALID`; files over 64 MB with
+  `413`. `GET /api/v1/characters/format-schema` publishes the JSON Schema of the format. There is no button for it in
+  the Creator yet, and the content guard on imported text arrives later.
 - Avatar tools in the Character Creator (Images tab, for a saved character) and in the profile: choose an image and
   see a preview before it is sent, crop a variant to a square (saved as a new variant, the original stays), choose the
   primary avatar among the variants. A refused upload shows the Italian message of its error code. The conversation list

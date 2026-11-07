@@ -22,6 +22,8 @@ _TOO_LARGE_BYTES = "L'immagine supera i 15 MB."
 _TOO_LARGE_PIXELS = "L'immagine supera 8192 x 8192 pixel."
 _UNSUPPORTED = "Il file non è un'immagine PNG, JPEG o WebP valida."
 _CROP_OUTSIDE = "Il ritaglio deve stare dentro l'immagine."
+# Keys a decoder reports for the container itself; they are no personal metadata and the encoders write them again.
+_CONTAINER_INFO = frozenset({"jfif", "jfif_version", "jfif_unit", "jfif_density", "dpi", "progressive", "progression"})
 _ENCODE_QUALITY = 92
 _THUMBNAIL_QUALITY = 85
 
@@ -98,6 +100,15 @@ def _open_clean(data: bytes, image_format: ImageFormat) -> Image.Image:
     return clean
 
 
+def _thumbnail(image: Image.Image) -> bytes:
+    """Returns the WebP thumbnail of `image`, whose longest side is at most THUMBNAIL_SIDE."""
+    thumbnail = image.copy()
+    thumbnail.thumbnail((THUMBNAIL_SIDE, THUMBNAIL_SIDE), Image.Resampling.LANCZOS)
+    buffer = io.BytesIO()
+    thumbnail.save(buffer, "WEBP", quality=_THUMBNAIL_QUALITY)
+    return buffer.getvalue()
+
+
 def _encode(image: Image.Image, image_format: ImageFormat) -> EncodedImage:
     """Returns `image` encoded as `image_format` with its thumbnail. No metadata is passed to the encoders."""
     buffer = io.BytesIO()
@@ -106,13 +117,9 @@ def _encode(image: Image.Image, image_format: ImageFormat) -> EncodedImage:
     else:
         image.save(buffer, image_format.pillow_name, quality=_ENCODE_QUALITY)
     data = buffer.getvalue()
-    thumbnail = image.copy()
-    thumbnail.thumbnail((THUMBNAIL_SIDE, THUMBNAIL_SIDE), Image.Resampling.LANCZOS)
-    thumbnail_buffer = io.BytesIO()
-    thumbnail.save(thumbnail_buffer, "WEBP", quality=_THUMBNAIL_QUALITY)
     return EncodedImage(
         data=data,
-        thumbnail=thumbnail_buffer.getvalue(),
+        thumbnail=_thumbnail(image),
         format=image_format,
         width=image.width,
         height=image.height,
@@ -134,6 +141,38 @@ def prepare_upload(data: bytes, declared_type: str | None) -> EncodedImage:
     if image_format is None or (declared_type is not None and declared_type != image_format.media_type):
         raise UnsupportedMediaError(_UNSUPPORTED)
     return _encode(_open_clean(data, image_format), image_format)
+
+
+def _carries_metadata(data: bytes, image_format: ImageFormat) -> bool:
+    """Returns whether re-encoding `data` would change more than its encoding: EXIF, an ICC profile, text chunks, a
+    comment or further frames. Any doubt answers True."""
+    try:
+        image = Image.open(io.BytesIO(data), formats=[image_format.pillow_name])
+        return bool(set(image.info) - _CONTAINER_INFO) or bool(image.getexif()) or getattr(image, "n_frames", 1) > 1
+    except Exception:
+        return True
+
+
+def prepare_import(data: bytes, declared_type: str | None) -> EncodedImage:
+    """Returns the image of an imported file, validated like an upload (prepare_upload).
+
+    A file that already is what prepare_upload would produce, that is one without metadata, keeps its exact bytes, so
+    the hash an export recorded survives the round trip even for the lossy JPEG and WebP. A file with metadata is
+    re-encoded without it, and its hash then differs from the recorded one. Raises what prepare_upload raises.
+    """
+    encoded = prepare_upload(data, declared_type)
+    digest = hashlib.sha256(data).hexdigest()
+    if encoded.sha256 == digest or _carries_metadata(data, encoded.format):
+        return encoded
+    image = _open_clean(data, encoded.format)
+    return EncodedImage(
+        data=data,
+        thumbnail=_thumbnail(image),
+        format=encoded.format,
+        width=image.width,
+        height=image.height,
+        sha256=digest,
+    )
 
 
 def crop(data: bytes, image_format: ImageFormat, *, x: int, y: int, width: int, height: int) -> EncodedImage:

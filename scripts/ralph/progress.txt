@@ -114,6 +114,8 @@
 - Write files before their DB row and delete files after the row is gone, so a crash leaves at most an orphan file.
 - Shared screen widgets that act on a stored entity take the entity id as a required input and reload from the server after each action.
 - Show the catalog text of an ApiError code (`failure.textKey`) when the criterion demands Italian catalog messages, and do not fall back to `detail`.
+- Declare fixed-path routes such as /import and /format-schema before /{character_id} so they are not read as ids.
+- Read an upload with file.read(limit + 1) so an oversized file is refused without being loaded whole.
 
 ---
 
@@ -941,4 +943,14 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - The e2e spec avatar.spec.mjs builds a PNG with node:zlib (`crc32` needs Node 22 or later) and is unrun; check it when the orchestrator runs the e2e level.
   - Deleting an avatar variant has an API route but no UI control yet.
   - Assets belong to a stored character, so the Creator shows the tools only in edit mode.
+---
+
+## 2026-11-07T06:20:25Z - P03.5
+- Attempt 1 had already built the exchange format: export, import, JSON Schema route, domain model, service, a new test file and docs. The lint failure was one line over 120 characters (E501) in the `export_character` docstring in `backend/src/lyrveil/api/characters.py`. I rewrapped it. The full `test lint` stage now passes: docs checks, ruff check and format, mypy --strict, frontend lint and build. I did not run `backend/tests/integration/test_character_exchange.py`. A targeted pytest run was denied by the permission mode, and I did not try another way to run it. So T-CHR-05, T-CHR-06, T-CHR-02 at import and the T-CHR-14 round trip are written but unverified. `docs/testing.md` says so.
+- Files changed: backend/src/lyrveil/api/characters.py, backend/src/lyrveil/api/security.py, backend/src/lyrveil/domain/errors.py, backend/src/lyrveil/domain/exchange.py, backend/src/lyrveil/media/images.py, backend/src/lyrveil/services/assets.py, backend/src/lyrveil/services/character_exchange.py, backend/src/lyrveil/services/characters.py, backend/tests/integration/test_character_exchange.py, CHANGELOG.md, docs/api.md, docs/character-system.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The lint stage runs backend ruff E501 at 120 characters, and it also applies to docstrings.
+  - test_character_exchange.py has never been run; the orchestrator's integration stage is the first real run, so check it for failures.
+  - No independent JSON Schema validator is installed, so the published schema is checked only for shape and by validating exports with the pydantic model it comes from.
+  - The exchange routes are not in the committed OpenAPI document (include_in_schema=False), and the Creator has no import or export button yet.
 ---

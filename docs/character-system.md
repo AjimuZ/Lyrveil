@@ -364,6 +364,28 @@ The format has a JSON Schema generated from the model and published at `/api/v1/
 
 Lyrveil never requires this format to run. Any field can be entered by hand.
 
+Delivered in P03.5 (backend only; the Creator has no import or export button yet). The model is
+`lyrveil.domain.exchange.ExchangeFile`, and the import runs in `lyrveil.services.character_exchange`.
+
+- The export lists every live asset, the primary avatar first. `sha256` is the hash of the bytes the export read. Without
+  `include_assets` the assets carry no `data_base64`; such a file imports the card only, and the response counts them in
+  `assets_without_data`.
+- The import checks, in this order, the size, that the text is JSON, `format`, `format_version` (a higher number is
+  refused with a message that asks to update Lyrveil), the card with the rules of the Creator (an age under 18, unknown
+  fields, vocabulary slots, outfit keys), the rest of the file (unknown fields are refused here too) and each image:
+  valid base64, a hash equal to `sha256`, and the upload validation. Only then does it write. If writing an image fails
+  anyway, the new character is purged again.
+- Imported images keep the bytes of the file when those carry no metadata, so the hash of an export survives the round
+  trip for PNG, JPEG and WebP alike. Bytes with EXIF, an ICC profile, text chunks or more than one frame are re-encoded
+  without them, and the stored hash then differs from the recorded one. Every imported image is stored as an upload;
+  `crop` and `source_asset_id` links are not part of the format.
+- At most one asset may be flagged `is_primary`, and it must be an avatar. Without a flagged one, the first avatar
+  becomes primary.
+- The JSON Schema comes from the same Pydantic model. It checks structure, closed lists, bounds and unknown fields. The
+  rules that need the tag vocabulary or the sanitizer (slot tags, free tags of at most four words) are applied by the
+  import only.
+- Not delivered: the content guard on imported text (P03.6) and the Creator's import and export buttons.
+
 ### Character Card V2
 
 Import of Character Card V2 JSON is planned after 1.0 as a one-way adapter. See [ADR 0021](decisions/0021-character-format-and-card-v2.md).

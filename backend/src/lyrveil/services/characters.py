@@ -67,6 +67,11 @@ class CharacterService:
         """
         return self._insert_new(validate_card(raw_card), actor="user", summary="Creazione")
 
+    def create_imported(self, card: CharacterCard) -> CharacterSummary:
+        """Returns a new active character at version 1 with actor `import`, holding `card`, which the caller has
+        already validated with validate_card. An import never overwrites: the character always has a new id."""
+        return self._insert_new(card, actor="import", summary="Importazione")
+
     def duplicate(self, character_id: str) -> CharacterSummary:
         """Returns a new active character holding a copy of the current card of `character_id`, at version 1 with actor
         `duplicate`. Conversations, memories and the version history are not copied. The first name gets the suffix
