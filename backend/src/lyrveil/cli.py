@@ -2,14 +2,15 @@
 
 The Windows scripts run them in one-off containers with no network (docs/operations.md, Backup and restore):
 
-    backup                  writes a consistent backup of the data volume to /data/backups
+    backup                  writes a consistent backup of the data volume to /data/backups, keeping the newest 7
     export-backups FOLDER   copies every backup of /data/backups that FOLDER lacks, by name
     restore-check FILE      verifies a backup's manifest, sizes, SHA-256 hashes and schema revision; changes nothing
     restore FILE            checks FILE, then replaces db, media and runtime of /data with its content
 
 A backup is `lyrveil-<UTC time>.tar`: `manifest.json` first, then `db/lyrveil.sqlite3`, copied with the SQLite backup
 API, and every file of `media/` (except `media/.staging`) and `runtime/`. The manifest records the format, the
-creation time, the app version, the database's Alembic revision and the size and SHA-256 of each file.
+creation time, the app version, the database's Alembic revision and the size and SHA-256 of each file. The backend's
+daily backup (lyrveil.services.daily_backup) writes the same archives with create_backup and prune_backups.
 
 Exit status 0 on success and 1 on any failure or refusal, with a FAILURE line on standard error. `restore` requires
 the backend to be stopped, because it moves the database files that a running backend keeps open.
@@ -52,6 +53,8 @@ MANIFEST_FORMAT = "lyrveil-backup"
 MANIFEST_VERSION = 1
 MAX_MANIFEST_BYTES = 64 << 20
 BACKUP_NAME = re.compile(r"^lyrveil-\d{8}T\d{6}Z\.tar$")
+# docs/operations.md (Data layout): the data volume keeps the newest 7 backups; the Windows folder keeps every copy.
+KEEP_BACKUPS = 7
 CHUNK_BYTES = 1 << 20
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -362,6 +365,24 @@ def backup_names(folder: Path) -> list[str]:
     return sorted(path.name for path in folder.iterdir() if BACKUP_NAME.match(path.name) and path.is_file())
 
 
+def prune_backups(folder: Path, keep: int = KEEP_BACKUPS) -> list[str]:
+    """Deletes the oldest backups of folder until at most `keep` remain, and returns the deleted names, oldest first.
+
+    Only `lyrveil-<UTC time>.tar` files count and are deleted; the names sort by time, so the newest stay. Requires
+    keep >= 1. Raises CliError when a file cannot be deleted; the deletions done before stay.
+    """
+    if keep < 1:
+        raise ValueError("keep must be at least 1")
+    names = backup_names(folder)
+    surplus = names[: max(0, len(names) - keep)]
+    for name in surplus:
+        try:
+            (folder / name).unlink()
+        except OSError as error:
+            raise CliError(f"{BACKUP_FOLDER}/{name} could not be deleted: {error}") from error
+    return surplus
+
+
 def export_backups(source: Path, target: Path) -> tuple[list[str], int]:
     """Copies every backup of source whose name target lacks, and returns the copied names and how many were present.
 
@@ -473,6 +494,8 @@ def command_backup(_args: argparse.Namespace, data_root: Path, now: datetime) ->
         f"Backup written: {BACKUP_FOLDER}/{path.name}, {len(manifest.files)} files, {_size_text(total)}, schema"
         f" revision {manifest.schema_revision}"
     )
+    for name in prune_backups(data_root / BACKUP_FOLDER):
+        _out(f"Removed {BACKUP_FOLDER}/{name}: the data volume keeps the newest {KEEP_BACKUPS} backups")
     return EXIT_OK
 
 

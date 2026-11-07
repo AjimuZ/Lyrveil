@@ -3,6 +3,7 @@
 Set-StrictMode -Version Latest
 
 Import-Module (Join-Path $PSScriptRoot 'Setup.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ToolContainer.psm1') -Force
 
 # The services start.cmd starts and waits for. The frontend publishes the app; it depends on the backend being healthy.
 $script:CoreServices = @('lyrveil-backend', 'lyrveil-frontend')
@@ -23,7 +24,6 @@ $script:LogTail = 50
 # What start.cmd and stop.cmd cannot do yet, printed as warnings so that no run claims it was done.
 $script:ModelFilesPending = 'not checked, because the model catalog is not available yet (P02)'
 $script:TextModelPending = 'not started, because the model catalog and the runtimes are not available yet (P02). The app works for reading and editing'
-$script:BackupsPending = 'not copied to the Windows backup folder by this command yet (P03.7b). scripts\lyrveil.cmd backup makes a backup and copies them'
 $script:DrainPending = 'skipped, because the job queue and its drain command come with P02'
 $script:ReleasePending = 'skipped, because the orchestrator manages no runtime until P02'
 # What status.cmd cannot report yet. The keys are the JSON fields, which are null until then.
@@ -317,12 +317,15 @@ function Invoke-LyrveilStart {
       4. the orchestrator's GPU rows, in a one-off container, skipped with a warning by SkipGpuPreflight;
       5. "docker compose up -d --no-build --wait" for the core services, waiting up to WaitSeconds for health, then
          a GET of the app's URL;
-      6. the ready line, "Lyrveil <e-grave> pronto: <url>", printed last, after a summary of the warnings.
-    Model files, the text model and the backup copy are not available yet: each prints a warning and never fails.
-    The orchestrator is not started until P02, also with a warning.
+      6. the copy of the backups that the Windows backup folder lacks (Copy-BackupToWindows), which warns and never
+         fails the start;
+      7. the ready line, "Lyrveil <e-grave> pronto: <url>", printed last, after a summary of the warnings.
+    Model files and the text model are not available yet: each prints a warning and never fails. The orchestrator is
+    not started until P02, also with a warning.
 
     The parameters after Argument are for tests, as in Invoke-LyrveilSetup: they keep every command away from the
-    project "lyrveil", its volumes and its .env. SkipGpuPreflight lets the tests run on a machine without a GPU.
+    project "lyrveil", its volumes and its .env. SkipGpuPreflight lets the tests run on a machine without a GPU, and
+    BackupFolder replaces the Windows backup folder of the .env.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -335,7 +338,8 @@ function Invoke-LyrveilStart {
         [string]$ExamplePath = '',
         [hashtable]$PreflightFact = $null,
         [switch]$SkipGpuPreflight,
-        [int]$WaitSeconds = $script:HealthWaitSeconds
+        [int]$WaitSeconds = $script:HealthWaitSeconds,
+        [string]$BackupFolder = ''
     )
 
     $options = Read-CommandOption -Command 'start' -Argument $Argument
@@ -432,7 +436,8 @@ function Invoke-LyrveilStart {
     Write-Host 'Text model'
     Write-WarningRow -Collector $warnings -Name 'Text model' -Detail $script:TextModelPending
     Write-Host 'Backups'
-    Write-WarningRow -Collector $warnings -Name 'Backups' -Detail $script:BackupsPending
+    $backupProblem = Copy-BackupToWindows -Context $context -Folder $BackupFolder
+    if ($backupProblem) { Write-WarningRow -Collector $warnings -Name 'Backups' -Detail $backupProblem }
 
     Write-Host "Started with $($warnings.Count) warnings:"
     foreach ($warning in $warnings) { Write-Host "  - $warning" }
@@ -446,7 +451,8 @@ function Invoke-LyrveilStop {
     Runs stop.cmd and returns its exit status: 0 when every service of the project is stopped, also when they were
     stopped already or Docker is not running, 1 on an unknown argument or when "docker compose stop" fails. It stops
     the containers with "docker compose --profile ai stop --timeout 40" and keeps them, their volumes and their data:
-    it never runs "docker compose down", with or without -v. The queue drain, the runtime release and the backup copy
+    it never runs "docker compose down", with or without -v. Before that it copies the backups that the Windows backup
+    folder lacks (Copy-BackupToWindows), which warns and never fails the stop. The queue drain and the runtime release
     are not available yet and print warnings. The parameters after Argument are for tests (see Invoke-LyrveilStart).
     #>
     [CmdletBinding()]
@@ -457,7 +463,8 @@ function Invoke-LyrveilStop {
         [string]$ProjectName = 'lyrveil',
         [string[]]$ComposeFile = @('compose.yaml'),
         [string]$EnvPath = '',
-        [string]$ExamplePath = ''
+        [string]$ExamplePath = '',
+        [string]$BackupFolder = ''
     )
 
     $options = Read-CommandOption -Command 'stop' -Argument $Argument
@@ -471,7 +478,9 @@ function Invoke-LyrveilStop {
     $warnings = New-Object System.Collections.Generic.List[string]
     Write-WarningRow -Collector $warnings -Name 'Queue drain' -Detail $script:DrainPending
     Write-WarningRow -Collector $warnings -Name 'Runtime release' -Detail $script:ReleasePending
-    Write-WarningRow -Collector $warnings -Name 'Backups' -Detail $script:BackupsPending
+    Write-Host 'Backups'
+    $backupProblem = Copy-BackupToWindows -Context $context -Folder $BackupFolder
+    if ($backupProblem) { Write-WarningRow -Collector $warnings -Name 'Backups' -Detail $backupProblem }
 
     Write-Host 'Services'
     $status = Invoke-NativeShown -Command 'docker' -Argument ((Get-ComposeArgument -Context $context) + @('--profile', 'ai', 'stop', '--timeout', "$script:StopTimeoutSeconds"))
@@ -499,12 +508,13 @@ function Invoke-LyrveilRestart {
         [string]$ExamplePath = '',
         [hashtable]$PreflightFact = $null,
         [switch]$SkipGpuPreflight,
-        [int]$WaitSeconds = $script:HealthWaitSeconds
+        [int]$WaitSeconds = $script:HealthWaitSeconds,
+        [string]$BackupFolder = ''
     )
 
     $options = Read-CommandOption -Command 'restart' -Argument $Argument
     if ($null -eq $options) { return 1 }
-    $common = @{ Root = $Root; ProjectName = $ProjectName; ComposeFile = $ComposeFile; EnvPath = $EnvPath; ExamplePath = $ExamplePath }
+    $common = @{ Root = $Root; ProjectName = $ProjectName; ComposeFile = $ComposeFile; EnvPath = $EnvPath; ExamplePath = $ExamplePath; BackupFolder = $BackupFolder }
     $stopStatus = Invoke-LyrveilStop @common
     if ([int]$stopStatus -ne 0) { return [int]$stopStatus }
     return [int](Invoke-LyrveilStart @common -PreflightFact $PreflightFact -SkipGpuPreflight:$SkipGpuPreflight -WaitSeconds $WaitSeconds)

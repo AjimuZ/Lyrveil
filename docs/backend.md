@@ -17,6 +17,7 @@ backend/
     logs.py              JSON logging with the field allowlist
     catalog.py           Validator of config/model-catalog.json and the tier defaults (P02.1a)
     cli.py               backup, export-backups, restore-check, restore (P01.6d); rebuild-search, drain (planned)
+                         The daily backup, services/daily_backup.py (P03.7b), writes the same archive
     tools/               One-shot tools: models.py (downloads), import_model.py (copies a custom model file)
     api/                 Routers, request and response schemas, error mapping, WebSocket
     domain/              Entities, enums, state rules. Pure, no I/O
@@ -270,9 +271,10 @@ of `main()`, the retry path and T-SEC-06. `tests/unit/test_event_hub.py` covers 
 7. Start the WebSocket hub, job worker and proactive evaluator.
 8. Report ready.
 
-Delivered so far: steps 1 and 2, step 3 without the backup, because the backup service is planned and the
-baseline has no data to protect, step 5 ([Job queue](#job-queue), [Streaming persistence](#streaming-persistence)),
-and step 7 for the WebSocket hub, built with the application, and the job worker, started by its lifespan. Step 4
+Delivered so far: steps 1 and 2, step 3 without the backup, which is still planned, step 5 ([Job queue](#job-queue), [Streaming persistence](#streaming-persistence)),
+and step 7 for the WebSocket hub, built with the application, and the job worker, started by its lifespan. The same
+lifespan runs the daily backup (P03.7b, `services/daily_backup.py`, [Backup and
+restore](operations.md#backup-and-restore)), which first removes what a backup cut by a stop left in `backups/`. Step 4
 is delivered for the staging folder only (P03.4a, `MediaStore.clear_staging`, run after step 5; a failure is logged as
 `media_staging_cleanup_failed` and does not stop startup); orphan media cleanup, step 6 and the proactive evaluator of
 step 7 are planned. Until step 6 the worker assumes the `llm` mode: a lease the

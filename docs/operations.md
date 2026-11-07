@@ -288,9 +288,11 @@ option.
 - Step 8: a service that is unhealthy, or not healthy within 120 s, exits 3 with the last 50 log lines of both
   services. After the health checks, start sends a GET to the published port of the frontend on `127.0.0.1` and exits 3
   if it does not answer.
-- Steps 6, 9 and 10 are not delivered: the model catalog and the runtimes come with P02, and the backup copy at start
-  with P03.7b; until then `scripts\lyrveil.cmd backup` copies the backups. Each prints a `WARNING` line and never fails
-  the start.
+- Steps 6 and 9 are not delivered: the model catalog and the runtimes come with P02. Each prints a `WARNING` line and
+  never fails the start.
+- Step 10 (P03.7b) runs `python -m lyrveil.cli export-backups` as the `backup` command does, and prints
+  `PASS     Backups: every backup of the data volume is in <folder>`. An invalid `LYRVEIL_BACKUP_DIR`, a missing data
+  volume or image, or a failed copy prints a `WARNING` line instead and never fails the start.
 - Step 11 prints a summary of the warnings, then the ready line as the last line. The URL uses the port that the
   Compose file publishes, 4200 by default.
 
@@ -304,8 +306,9 @@ option.
 It succeeds when services are already stopped. It never runs `down -v`, and the volumes are external, so even that
 command would keep them.
 
-Delivered in P01.6b: step 4, which keeps the containers. Steps 1 to 3 print a `WARNING` line, because the queue and
-the lifecycle manager do not exist yet, and the backup copy at stop comes with P03.7b. Stop never runs `docker compose down` in any form. It exits
+Delivered in P01.6b: step 4, which keeps the containers, and in P03.7b step 3, the same copy as step 10 of start,
+which warns and never fails the stop. Steps 1 and 2 print a `WARNING` line, because the queue drain command and the
+lifecycle manager do not exist yet. Stop never runs `docker compose down` in any form. It exits
 0 when the services are stopped, also when they were stopped already or Docker is not running, and 1 when
 `docker compose stop` fails or an argument is given.
 
@@ -721,9 +724,19 @@ An older-schema backup migrates forward at start. The backend also creates a bac
 Delivered in P01.6d, in `scripts/lib/DataFiles.psm1` and `backend/src/lyrveil/cli.py`
 ([evidence](verification/2026-11-07-data-files.md)): the `backup` and `restore` commands and the `cli.py` commands
 `backup`, `export-backups`, `restore-check` and `restore`. Every container runs the local backend image with
-`--network none --read-only --cap-drop ALL` as `10001:10001`. Not delivered yet: the daily backup and the pruning to 7
-in the volume, **Impostazioni > Dati**, the copy at start and stop, and the pre-migration backup (P03.7b); the T-DCK-12
-round trip with real content is verified in P03.7b.
+`--network none --read-only --cap-drop ALL` as `10001:10001`. Delivered in P03.7b: the daily backup and the pruning to
+7 in the volume (`backend/src/lyrveil/services/daily_backup.py`), the copy at start and stop (`Copy-BackupToWindows` in
+`scripts/lib/ToolContainer.psm1`), and the T-DCK-12 round trip in `tests/docker/Data.Tests.ps1`. Not delivered yet:
+**Impostazioni > Dati** with `POST` and `GET /backups`, and the backup before migrations.
+
+- The daily backup runs inside the backend and writes the same archive as `backup`. Every 60 s it checks whether a
+  backup is due: none in `backups/` was written on the current day in `LYRVEIL_TZ`, a backup of the command included.
+  It then writes one only while idle: no generation job is `running`, and SQLite's `PRAGMA data_version` on a
+  read-only connection is unchanged since the previous check, so nothing committed a write for at least 60 s. A backup
+  taken during writes is still consistent, because the SQLite backup API copies one snapshot; a media file that changes
+  during the copy fails the archive's check, and nothing is kept. After a failure, such as a full volume, the next try
+  waits one hour. A backup cut by a stop leaves `.lyrveil-*` entries in `backups/`, which the backend removes at its next
+  start. Then the oldest backups beyond the newest 7 are deleted from the volume; `backup` prunes the same way.
 
 - The backup folder is `LYRVEIL_BACKUP_DIR` from `.env`, with `%VARIABLES%` expanded, or
   `%USERPROFILE%\Documents\Lyrveil\backups` when it is empty. A value that is not an absolute folder on a drive, or

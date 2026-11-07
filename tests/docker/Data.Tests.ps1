@@ -1,8 +1,10 @@
 # Docker-level tests of import-model, backup and restore (docs/operations.md): import-model copies a .gguf to llm/ and
 # a .safetensors to image/checkpoints/ and refuses an existing name; backup writes a backup into the data volume and
 # copies it to the Windows backup folder of LYRVEIL_BACKUP_DIR; restore refuses a backup that fails restore-check and
-# changes nothing, asks first, and otherwise replaces the data and keeps the previous data in pre-restore-<time>/.
-# T-DCK-12 and T-DCK-14 are completed later (P03.7b, P06).
+# changes nothing, asks first, and otherwise replaces the data and keeps the previous data in pre-restore-<time>/; and
+# T-DCK-12, a round trip of characters, conversations, assets and settings through the copy in the Windows folder,
+# which tests/docker/round_trip.py seeds and reads inside the backend container. T-DCK-14 is completed in P06.
+# The backend's daily backup may add a backup to the test volume at any idle moment, so no test counts backups.
 # The commands run against the project "lyrveil-data-test" of tests/docker/compose.data-test.yaml, with its own volumes,
 # image tags, port 14212, and a .env and a backup folder in Pester's temporary drive, so a real installation, its
 # volumes "lyrveil-data" and "lyrveil-models", its .env and %USERPROFILE%\Documents\Lyrveil\backups are never touched.
@@ -14,6 +16,8 @@ BeforeAll {
     Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\DataFiles.psm1') -Force
     # DataFiles.psm1 has loaded Lifecycle.psm1; without -Force its instance is reused and only made visible here.
     Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\Lifecycle.psm1')
+    Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\ToolContainer.psm1')
+    $script:RoundTripScript = Join-Path $PSScriptRoot 'round_trip.py'
 
     $script:ProjectName = 'lyrveil-data-test'
     $script:ComposeFile = @('compose.yaml', 'tests/docker/compose.data-test.yaml')
@@ -93,6 +97,23 @@ BeforeAll {
         # Returns the SHA-256 of the file at the relative path Path in the test volume Volume.
         param([string]$Volume, [string]$Path)
         return ((Invoke-Volume -Volume $Volume -Command "sha256sum '/volume/$Path'") -join '').Split(' ')[0]
+    }
+
+    function Invoke-RoundTrip {
+        # Runs tests/docker/round_trip.py with Mode (seed, change or read) in the running backend container, the
+        # script on standard input so that no double quote crosses a native argument, and returns its last line.
+        param([string]$Mode)
+        $code = Get-Content -Raw -LiteralPath $script:RoundTripScript
+        $output = @($code | & docker @((Get-TestComposeArgument) + @('exec', '-T', 'lyrveil-backend', 'python', '-', $Mode)))
+        if ($LASTEXITCODE -ne 0) { throw "round_trip.py $Mode failed with exit status ${LASTEXITCODE}: $($output -join ' ')" }
+        return [string]$output[-1]
+    }
+
+    function Get-WrittenBackup {
+        # Returns the name of the backup that the backup command reports in Text.
+        param([string]$Text)
+        $Text | Should -Match 'Backup written: backups/(lyrveil-\d{8}T\d{6}Z\.tar), '
+        return $Matches[1]
     }
 
     function Write-TestFile {
@@ -192,19 +213,19 @@ Describe 'import-model, backup and restore against a test project' {
 
     It 'backup writes a backup into the data volume and copies it to the configured Windows folder' {
         $null = Invoke-Volume -Volume $script:DataVolume -Command 'mkdir -p /volume/media && printf backed-up > /volume/media/before-backup.txt'
-        Test-Path -LiteralPath $script:BackupFolder | Should -BeFalse
 
         $run = Invoke-Captured -Name 'Invoke-LyrveilBackup' -Parameters $script:Common
         $run.Status | Should -Be 0 -Because $run.Text
         $run.Text | Should -Match 'Backup written: backups/lyrveil-\d{8}T\d{6}Z\.tar, 2 files'
         $run.Text | Should -Match ([regex]::Escape("The backups are in $script:BackupFolder"))
+        $name = Get-WrittenBackup -Text $run.Text
 
         $copies = @(Get-ChildItem -LiteralPath $script:BackupFolder -File)
-        $copies.Length | Should -Be 1
-        $copies[0].Name | Should -Match '^lyrveil-\d{8}T\d{6}Z\.tar$'
-        $script:BackupFile = $copies[0].FullName
-        @(Get-VolumeFile -Volume $script:DataVolume) | Should -Contain "backups/$($copies[0].Name)"
-        Get-VolumeSha256 -Volume $script:DataVolume -Path "backups/$($copies[0].Name)" |
+        @($copies | Where-Object { $_.Name -notmatch '^lyrveil-\d{8}T\d{6}Z\.tar$' }).Length | Should -Be 0
+        $script:BackupFile = Join-Path $script:BackupFolder $name
+        Test-Path -LiteralPath $script:BackupFile -PathType Leaf | Should -BeTrue
+        @(Get-VolumeFile -Volume $script:DataVolume) | Should -Contain "backups/$name"
+        Get-VolumeSha256 -Volume $script:DataVolume -Path "backups/$name" |
             Should -Be (Get-FileHash -LiteralPath $script:BackupFile -Algorithm SHA256).Hash.ToLowerInvariant()
     }
 
@@ -259,6 +280,42 @@ Describe 'import-model, backup and restore against a test project' {
         @($files | Where-Object { $_ -match '^pre-restore-\d{8}T\d{6}Z/media/after-backup\.txt$' }).Length | Should -Be 1
         @($files | Where-Object { $_ -match '^pre-restore-\d{8}T\d{6}Z/db/lyrveil\.sqlite3$' }).Length | Should -Be 1
         @($files | Where-Object { $_ -match '^\.restore-' }).Length | Should -Be 0
-        @($files | Where-Object { $_ -match '^backups/lyrveil-\d{8}T\d{6}Z\.tar$' }).Length | Should -Be 1
+        $files | Should -Contain "backups/$(Split-Path -Leaf $script:BackupFile)"
+    }
+
+    It 'a backup and restore round trip through the Windows folder keeps characters, conversations, assets and settings (T-DCK-12)' {
+        Mock -ModuleName DataFiles Read-Confirmation { $true }
+        $null = Invoke-RoundTrip -Mode 'seed'
+        $null = Invoke-Volume -Volume $script:DataVolume -Command 'mkdir -p /volume/runtime && printf MODEL_FILE=t-dck-12.gguf > /volume/runtime/llm-launch.env'
+        $before = Invoke-RoundTrip -Mode 'read'
+        $state = $before | ConvertFrom-Json
+        @($state.characters).Count | Should -BeGreaterThan 0
+        @($state.conversations).Count | Should -BeGreaterThan 0
+        @($state.assets).Count | Should -BeGreaterThan 0
+        $state.setting | Should -Not -BeNullOrEmpty
+
+        $run = Invoke-Captured -Name 'Invoke-LyrveilBackup' -Parameters $script:Common
+        $run.Status | Should -Be 0 -Because $run.Text
+        $name = Get-WrittenBackup -Text $run.Text
+        $copy = Join-Path $script:BackupFolder $name
+        Test-Path -LiteralPath $copy -PathType Leaf | Should -BeTrue
+        $copyHash = (Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash
+
+        # Everything changes after the backup, and the volume loses its own copy, so only the Windows copy can bring
+        # the content back.
+        $null = Invoke-RoundTrip -Mode 'change'
+        $null = Invoke-Volume -Volume $script:DataVolume -Command "rm /volume/backups/$name && printf changed > /volume/runtime/llm-launch.env"
+        Invoke-RoundTrip -Mode 'read' | Should -Not -BeExactly $before
+
+        $restore = Invoke-Captured -Name 'Invoke-LyrveilRestore' -Parameters ($script:StartParameters + @{ Argument = @($copy) })
+        $restore.Status | Should -Be 0 -Because $restore.Text
+        $restore.Text | Should -Match ([regex]::Escape("PASS     $name"))
+        $restore.Last | Should -BeExactly $script:ReadyLine
+
+        Invoke-RoundTrip -Mode 'read' | Should -BeExactly $before
+        (Invoke-Volume -Volume $script:DataVolume -Command 'cat /volume/runtime/llm-launch.env') -join '' | Should -BeExactly 'MODEL_FILE=t-dck-12.gguf'
+        # Stop and start copied the volume's backups to the Windows folder again, which never overwrites a copy.
+        $restore.Text | Should -Match 'PASS     Backups: every backup of the data volume is in'
+        (Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash | Should -Be $copyHash
     }
 }

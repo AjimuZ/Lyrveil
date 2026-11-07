@@ -92,7 +92,12 @@ pytest joins it when a Docker test needs Python. The files:
   backup folder set by `LYRVEIL_BACKUP_DIR` in the test's `.env`, a folder in Pester's temporary drive. `restore`
   refuses a backup whose manifest hash was changed, without asking, stopping or changing anything; without console
   input it exits 5; after a yes it stops, replaces the data, keeps the previous data in `pre-restore-<time>/` and ends
-  with the ready line. The round trip of T-DCK-12 is completed in P03.7b and T-DCK-14 in P06.
+  with the ready line. T-DCK-12 (P03.7b) seeds a character with an avatar, a conversation, an application setting
+  and a launch file through `tests/docker/round_trip.py`, piped to `python -` in the running backend container, backs
+  up, changes all of them, deletes the backup from the volume, restores the copy in the Windows folder, and requires
+  the same characters, conversations, assets with the SHA-256 of their files, settings and launch file as before, with
+  the copy in the folder unchanged. Since the backend may add a daily backup at any idle moment, no test counts
+  backups. T-DCK-14 is completed in P06.
 - `tests/docker/Security.Tests.ps1` (P01.7b) holds T-DCK-08 to T-DCK-10. It resolves `compose.yaml` with both
   profiles and an empty env file, and checks that only the frontend publishes a port, `127.0.0.1:4200` to 8080, that no
   service uses the host network, that every service other than the frontend and `lyrveil-models` joins only internal
@@ -156,8 +161,13 @@ The data tests use `tests/docker/compose.data-test.yaml` the same way, with the 
 to run unless the resolved configuration has the test project, the test volumes, no `container_name` and port 14212,
 and unless the backup folder resolved from its `.env` is the one in the temporary drive.
 `tests/scripts/DataFiles.Tests.ps1`, at the `unit` level, checks without Docker that the one-off containers have no
-network and mount the Windows folder read-only, how `LYRVEIL_BACKUP_DIR` is resolved, and that wrong arguments,
-extensions and names are refused before any Docker call.
+network and mount the Windows folder read-only, how `LYRVEIL_BACKUP_DIR` is resolved, that the backup copy of start
+and stop turns an invalid folder into a warning reason, and that wrong arguments, extensions and names are refused
+before any Docker call. `tests/docker/Lifecycle.Tests.ps1` passes its own backup folder in the temporary drive to
+start and stop, because setup writes its `.env` from the template, whose empty `LYRVEIL_BACKUP_DIR` means the
+Documents folder. `backend/tests/unit/test_daily_backup.py` covers the daily backup: one per day of `LYRVEIL_TZ`, only
+after a check interval without commits and without a running job, pruning to 7, one hour of wait after a failure, and
+a database copy that stays consistent while another connection writes.
 
 ### The `e2e` level
 

@@ -10,6 +10,12 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
+  job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
+  data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from
+  the Windows backup folder (`LYRVEIL_BACKUP_DIR`), which is never pruned; a failed copy prints a warning and never
+  fails the start or the stop. A restore of a copy from that folder brings back characters, conversations, assets,
+  settings and launch files. **Impostazioni > Dati** and the backup before migrations are not delivered yet.
 - Scenarios. The **Scenari** screen creates, edits, searches, archives and deletes scenarios (title, description,
   setting, opening message, an optional character and a language), and **Inizia conversazione** on a scenario opens the
   new-chat picker with it chosen; the picker also has an optional **Scenario** choice. A chat started from a scenario

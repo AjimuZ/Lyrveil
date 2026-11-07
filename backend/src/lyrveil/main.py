@@ -5,6 +5,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import anyio
 import uvicorn
@@ -42,6 +43,7 @@ from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
+from lyrveil.services.daily_backup import DailyBackup
 from lyrveil.settings import Settings, SettingsError, load_settings
 
 API_PREFIX = "/api/v1"
@@ -56,6 +58,8 @@ EXIT_INVALID_SETTINGS = 78
 EXIT_DATABASE_UNAVAILABLE = 69
 DATABASE_PATH = DEFAULT_DATABASE_PATH
 MEDIA_ROOT = DEFAULT_MEDIA_ROOT
+# The data volume, which holds db/, media/, runtime/ and the daily backups in backups/ (docs/operations.md).
+DATA_ROOT = Path("/data")
 
 
 def _llm_mode() -> RequiredMode:
@@ -80,7 +84,22 @@ class Worker:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Runs the job worker for the life of the application (startup step 7), when it has a database and a Worker.
+    """Runs the daily backup, when `app.state.daily_backup` holds one, and the job worker for the life of the
+    application. On shutdown a backup being written is finished before the application ends."""
+    daily_backup: DailyBackup | None = app.state.daily_backup
+    async with anyio.create_task_group() as group:
+        if daily_backup is not None:
+            group.start_soon(daily_backup.run_forever)
+        try:
+            async with _job_worker(app):
+                yield
+        finally:
+            group.cancel_scope.cancel()
+
+
+@asynccontextmanager
+async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
+    """Runs the job worker while the context is open (startup step 7), when the app has a database and a Worker.
 
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
     CharacterCreatorService, and is kept in
@@ -118,6 +137,7 @@ def create_app(
     control_probe: Callable[[], bool] = probe_control_api,
     worker: Worker | None = None,
     media_store: MediaStore | None = None,
+    daily_backup: DailyBackup | None = None,
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
 
@@ -125,7 +145,8 @@ def create_app(
     503. `media_store` holds the asset files, in `app.state.media`; by default it is the store at `/data/media`, which
     is touched only when a route writes or reads a file. `control_probe` tells whether the control API answers and may
     be replaced in tests. With `worker` and an `engine`, the application's lifespan runs the job worker; without them
-    queued jobs wait. `app.state.events` is
+    queued jobs wait. With `daily_backup`, kept in `app.state.daily_backup`, the lifespan also writes the daily
+    backup of the data volume; tests leave it out. `app.state.events` is
     the EventHub that `/ws` serves. The OpenAPI document is served at /api/v1/openapi.json. The interactive
     documentation pages are disabled, because they load scripts from a CDN and the application works offline.
 
@@ -147,6 +168,7 @@ def create_app(
     app.state.boot_id = str(uuid.uuid4())
     app.state.events = EventHub(app.state.boot_id)
     app.state.worker = worker
+    app.state.daily_backup = daily_backup
     app.state.scheduler = None
     app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
     app.include_router(health.router, prefix=API_PREFIX)
@@ -181,8 +203,8 @@ def main() -> int:
     becomes ready on a database it cannot trust. Otherwise empties the media staging folder and serves on port 8000
     with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
     returns 0. The job worker streams
-    replies from KoboldCpp under leases of the control API. The access log is off, because request paths and queries
-    can carry user text.
+    replies from KoboldCpp under leases of the control API, and DailyBackup writes one backup of /data a day while
+    the backend is idle. The access log is off, because request paths and queries can carry user text.
     """
     try:
         settings = load_settings()
@@ -215,8 +237,9 @@ def main() -> int:
     except OSError:
         logger.warning("media_staging_cleanup_failed", exc_info=True)
     worker = Worker(text_runtime=KoboldCppRuntime, leases=OrchestratorClient(settings.control_token))
+    daily_backup = DailyBackup(DATA_ROOT, settings.zone)
     uvicorn.run(
-        create_app(settings, engine, worker=worker, media_store=media_store),
+        create_app(settings, engine, worker=worker, media_store=media_store, daily_backup=daily_backup),
         host=LISTEN_HOST,
         port=LISTEN_PORT,
         log_config=None,

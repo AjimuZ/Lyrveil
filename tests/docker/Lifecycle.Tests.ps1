@@ -113,11 +113,15 @@ Describe 'Lifecycle commands against a test project (T-DCK-01 to T-DCK-05)' {
         $installation = Join-Path $TestDrive 'installation'
         $null = New-Item -ItemType Directory -Force -Path $installation
         $script:EnvPath = Join-Path $installation '.env'
+        # Setup writes the .env from the template, whose empty LYRVEIL_BACKUP_DIR means the Documents folder, so start
+        # and stop get the test's own backup folder instead.
+        $script:BackupFolder = Join-Path $TestDrive 'backups'
         $script:Common = @{
             Root = $script:RepositoryRoot; ProjectName = $script:ProjectName; ComposeFile = $script:ComposeFile
             EnvPath = $script:EnvPath; ExamplePath = $script:Example
         }
-        $script:StartParameters = $script:Common + @{ PreflightFact = $script:PassingFact; SkipGpuPreflight = $true }
+        $script:StopParameters = $script:Common + @{ BackupFolder = $script:BackupFolder }
+        $script:StartParameters = $script:StopParameters + @{ PreflightFact = $script:PassingFact; SkipGpuPreflight = $true }
         Clear-LifecycleTestProject
     }
 
@@ -147,6 +151,9 @@ Describe 'Lifecycle commands against a test project (T-DCK-01 to T-DCK-05)' {
         $run.Text | Should -Match 'WARNING  Model files: not checked, because the model catalog is not available yet'
         $run.Text | Should -Match 'WARNING  Text model: not started, because the model catalog and the runtimes are not available yet'
         $run.Text | Should -Match 'WARNING  lyrveil-orchestrator: not started'
+        $run.Text | Should -Match ([regex]::Escape("PASS     Backups: every backup of the data volume is in $script:BackupFolder"))
+        $run.Text | Should -Not -Match 'WARNING  Backups'
+        Test-Path -LiteralPath $script:BackupFolder -PathType Container | Should -BeTrue
         $run.Last | Should -BeExactly $script:ReadyLine
     }
 
@@ -210,15 +217,16 @@ Describe 'Lifecycle commands against a test project (T-DCK-01 to T-DCK-05)' {
     }
 
     It 'stops the services and keeps containers and volumes, also when already stopped (T-DCK-02)' {
-        $first = Invoke-Captured -Name 'Invoke-LyrveilStop' -Parameters $script:Common
+        $first = Invoke-Captured -Name 'Invoke-LyrveilStop' -Parameters $script:StopParameters
         $first.Status | Should -Be 0 -Because $first.Text
         $first.Text | Should -Match 'Lyrveil is stopped'
+        $first.Text | Should -Match 'PASS     Backups: every backup of the data volume is in'
         # A stopped container keeps its last health status, so only the state is compared.
         $health = (Get-ServiceHealth) -join "`n"
         $health | Should -Match '(?m)^lyrveil-lifecycle-test-lyrveil-backend-1 exited'
         $health | Should -Match '(?m)^lyrveil-lifecycle-test-lyrveil-frontend-1 exited'
 
-        $second = Invoke-Captured -Name 'Invoke-LyrveilStop' -Parameters $script:Common
+        $second = Invoke-Captured -Name 'Invoke-LyrveilStop' -Parameters $script:StopParameters
         $second.Status | Should -Be 0 -Because $second.Text
         foreach ($name in $script:VolumeNames) { Test-TestVolume -Name $name | Should -BeTrue }
 
