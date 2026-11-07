@@ -60,7 +60,7 @@ Evidence:
 - [x] P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client.
 - [x] P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`.
 - [x] P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers.
-- [ ] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
+- [x] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
 
 Exit: T-ORC-01, T-ORC-07, T-ORC-10, T-SEC-01, T-SEC-02, T-SEC-09, T-DCK-01 to T-DCK-11, T-DCK-13 pass. `.\start.cmd` opens an empty app at `http://localhost:4200`, and `status.cmd` reports it. FTS5 and WAL are verified in the real image.
 

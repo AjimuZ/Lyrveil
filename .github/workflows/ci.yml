@@ -1,0 +1,183 @@
+# Continuous integration of Lyrveil: every push runs the levels of docs/testing.md that need no GPU.
+# Each job runs the commands of the matching local level (docs/testing.md, Continuous integration, lists which job
+# runs what). Hosted runners have no GPU, so the gpu and quality levels never run here and CI never claims them.
+# Linux containers need a Linux runner, so only the PowerShell script checks run on Windows, with Windows PowerShell 5.1
+# as on the owner's machine.
+name: CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  # Local level: the documentation checks and PSScriptAnalyzer of "lint", and the Pester tests of the scripts in "unit".
+  scripts:
+    name: Documentation checks, PowerShell lint and script tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Documentation checks and PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Import-Module .\scripts\lib\TestCommand.psm1 -Force
+          exit ([int](Invoke-ScriptLint -Root $PWD.Path))
+      - name: Pester tests of the scripts
+        shell: powershell
+        run: |
+          Import-Module .\scripts\lib\TestCommand.psm1 -Force
+          $files = @(Get-ChildItem -LiteralPath tests\scripts -Filter '*.Tests.ps1' | ForEach-Object { "tests/scripts/$($_.Name)" })
+          exit ([int](Invoke-PesterUnitTest -Root $PWD.Path -File $files))
+
+  # Local levels: the Python part of "lint", "unit" and "integration", in the test stage of each component's image,
+  # without network access, as scripts/lib/PythonComponents.psm1 runs them.
+  python:
+    name: Python ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, orchestrator]
+    env:
+      IMAGE: lyrveil/${{ matrix.component }}-test:local
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the test stage
+        run: docker build --quiet --file ${{ matrix.component }}/Dockerfile --target test --tag "$IMAGE" .
+      - name: ruff check
+        run: docker run --rm --network none "$IMAGE" ruff check .
+      - name: ruff format --check
+        run: docker run --rm --network none "$IMAGE" ruff format --check .
+      - name: mypy --strict
+        run: docker run --rm --network none "$IMAGE" mypy --strict src tests
+      - name: Unit tests
+        run: docker run --rm --network none "$IMAGE" pytest tests/unit
+      # The backend's Schemathesis contract tests on its OpenAPI document join tests/integration, so this step runs them.
+      - name: Integration tests
+        run: docker run --rm --network none "$IMAGE" pytest tests/integration
+
+  # Local levels: the frontend part of "lint" and "unit", with Node.js as on the host.
+  frontend:
+    name: Frontend lint, build and unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test
+
+  # Local level: "e2e", Playwright against compose.test.yaml and the fake runtimes, as scripts/lib/EndToEnd.psm1 does.
+  e2e:
+    name: End-to-end tests with fakes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Start the test project
+        run: >
+          docker compose -p lyrveil-test -f compose.test.yaml up --build --detach --wait
+          lyrveil-frontend lyrveil-llm lyrveil-image
+      - name: Playwright
+        working-directory: tests/e2e
+        run: npx playwright test
+      - name: Show the logs of a failed run
+        if: failure()
+        run: docker compose -p lyrveil-test -f compose.test.yaml logs --tail 80
+      - name: Remove the test project
+        if: always()
+        run: docker compose -p lyrveil-test -f compose.test.yaml down --volumes --remove-orphans --timeout 10
+      - name: Keep the Playwright report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/test-results
+          if-no-files-found: ignore
+
+  # The production image of each core service builds, as "docker compose build" builds it (target: runtime).
+  images:
+    name: Image ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [frontend, backend, orchestrator]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --file ${{ matrix.service }}/Dockerfile --target runtime --tag lyrveil/${{ matrix.service }}:ci .
+
+  # Secret scan of the commits of the push. A push that creates a branch, or whose earlier commit is gone after a force
+  # push, scans the whole history of the pushed commit.
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" "$base/$archive"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/checksums.txt" "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          (cd "$RUNNER_TEMP" && grep " $archive\$" checksums.txt | sha256sum --check --strict -)
+          tar --extract --gzip --file "$RUNNER_TEMP/$archive" --directory "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" version
+      - name: Scan the pushed commits
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          range="$AFTER"
+          if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..$AFTER"
+          fi
+          echo "Scanning $range"
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose --log-opts="$range" .
+
+  # The Mermaid check of the documentation. The links, anchors, requirement coverage and the other documentation checks
+  # run in the "scripts" job, as part of "lint".
+  mermaid:
+    name: Mermaid diagrams
+    runs-on: ubuntu-latest
+    env:
+      MERMAID_CLI_VERSION: 11.12.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test the extraction of diagrams
+        run: node --test "scripts/ci/*.test.mjs"
+      - name: Install the Mermaid command line
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: |
+          npm install --prefix "$RUNNER_TEMP/mermaid-cli" --no-audit --no-fund "@mermaid-js/mermaid-cli@${MERMAID_CLI_VERSION}"
+          chrome="$(command -v google-chrome)"
+          printf '{"executablePath": "%s", "args": ["--no-sandbox"]}\n' "$chrome" > "$RUNNER_TEMP/puppeteer.json"
+      - name: Parse every diagram of the tracked Markdown
+        env:
+          MERMAID_CLI: ${{ runner.temp }}/mermaid-cli/node_modules/.bin/mmdc
+          PUPPETEER_CONFIG: ${{ runner.temp }}/puppeteer.json
+        run: node scripts/ci/check-mermaid.mjs

@@ -37,15 +37,16 @@ function Write-CheckLine {
     }
 }
 
-function Invoke-LintLevel {
+function Invoke-ScriptLint {
     <#
-    Runs the lint level: the documentation checks on the Git-tracked Markdown, the pinned PSScriptAnalyzer on every
-    Git-tracked .ps1 and .psm1 with scripts/PSScriptAnalyzerSettings.psd1, then ruff check, ruff format --check and
-    mypy --strict in the test stage of each Python component present, then, when frontend/ is present, ESLint, the
-    token color check and the strict production ng build with Node.js on the host. Returns 0 when everything passes
-    and 1 otherwise. Every part always runs, so one report shows every problem. Not exported.
+    Runs the parts of the lint level that need no container: the documentation checks on the Git-tracked Markdown,
+    then the pinned PSScriptAnalyzer on every Git-tracked .ps1 and .psm1 with scripts/PSScriptAnalyzerSettings.psd1.
+    Returns 0 when both pass and 1 otherwise. Invoke-LintLevel runs it first, and the Windows job of the CI workflow
+    runs it alone, because a hosted Windows runner cannot start the Linux containers of the other parts.
     #>
-    param([string]$Root)
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
 
     $failed = $false
 
@@ -75,6 +76,21 @@ function Invoke-LintLevel {
     Write-CheckLine -Name 'PowerShell scripts analyzed' -Checked $scripts.Length -Failed $scriptFailures.Length -Unit 'findings' -Failures $scriptFailures
     if ($scriptFailures.Length -gt 0) { $failed = $true }
 
+    if ($failed) { return 1 }
+    return 0
+}
+
+function Invoke-LintLevel {
+    <#
+    Runs the lint level: Invoke-ScriptLint (documentation checks and PSScriptAnalyzer), then ruff check, ruff format
+    --check and mypy --strict in the test stage of each Python component present, then, when frontend/ is present,
+    ESLint, the token color check and the strict production ng build with Node.js on the host. Returns 0 when
+    everything passes and 1 otherwise. Every part always runs, so one report shows every problem. Not exported.
+    #>
+    param([string]$Root)
+
+    $failed = $false
+    if ((Invoke-ScriptLint -Root $Root) -ne 0) { $failed = $true }
     if ((Invoke-PythonLint -Root $Root) -gt 0) { $failed = $true }
     if ((Invoke-FrontendLint -Root $Root) -gt 0) { $failed = $true }
 
@@ -229,4 +245,4 @@ function Invoke-LyrveilTest {
     return 0
 }
 
-Export-ModuleMember -Function Invoke-LyrveilTest
+Export-ModuleMember -Function Invoke-LyrveilTest, Invoke-ScriptLint, Invoke-PesterUnitTest

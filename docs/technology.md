@@ -101,6 +101,7 @@ single-user app.
 | PSScriptAnalyzer | Pinned at P01 | MIT | Linting of the Windows scripts. Development only. |
 | Pester | Pinned at P01 | Apache-2.0 | Tests of the Windows scripts. Development only. |
 | gitleaks | v8.30.1 | MIT | Secret scan. |
+| Mermaid CLI (`@mermaid-js/mermaid-cli`) | 11.12.0 | MIT | Syntax check of every Mermaid diagram in CI. Development only. Its version is unverified: the workflow has not run. |
 | pip-audit | 2.10.1 | Apache-2.0 | Python advisories. |
 | pip-licenses | 5.5.5 | MIT | Python license report. |
 | license-checker-rseidelsohn | 5.0.1 | BSD-3-Clause | npm license report. |

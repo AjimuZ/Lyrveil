@@ -57,6 +57,8 @@
 - Prove that a container has no way out without needing the Internet: check that /proc/net/route and /proc/net/ipv6_route (ignoring lo) have no default route, and use a container on a bridge network as the positive control.
 - Pass Python one-liners to docker from Windows PowerShell with single quotes only inside the code, so the native argument is not mangled.
 - Resolve compose.yaml with `--env-file <empty file in TestDrive>` and with the interpolated variables removed from the process environment, so a test judges the file's defaults and never reads a real .env.
+- Each CI job runs the commands of the matching local level. A job that cannot call scripts\lyrveil.cmd (Windows-only) calls an exported function of the same module instead.
+- Third-party release binaries fetched in CI are checked against the release's checksum file before use.
 
 ---
 
@@ -416,4 +418,14 @@ Checks:
   - The orchestrator container exits at once until P02, so `up --wait` must leave it out. A one-off `compose run --rm --no-deps -T --entrypoint python lyrveil-orchestrator -c ...` still joins its networks, with its user, for probes.
   - When P02/P05 add the real lyrveil-llm and lyrveil-image to compose.yaml, the production-config checks in Security.Tests.ps1 already cover them, through `--profile ai`: user 10001:10001 and internal networks only.
   - compose.lifecycle-test.yaml and compose.data-test.yaml do not set LYRVEIL_HTTP_PORT to their test port. They only work as long as their tests never call /api through nginx (see the P01.7a learnings).
+---
+
+## 2026-11-07T01:15:35Z - P01.8d
+- Fixed the `lint` failure left by attempt 1: `mypy --strict` rejected two lines of backend/tests/integration/test_contract.py. The workflow `.github/workflows/ci.yml` (jobs `scripts`, `python`, `frontend`, `e2e`, `images`, `gitleaks` v8.30.1, `mermaid`), `scripts/ci/check-mermaid.mjs` with its tests, `schemathesis==4.33.0` in the backend `dev` group with the regenerated `uv.lock`, the `Invoke-ScriptLint` split and the docs were already in place. `scripts/lyrveil.cmd test lint` now passes in full. Nothing else ran. The CI workflow, the Schemathesis contract test (its run and its API calls), the Mermaid check and `node --test` on `scripts/ci/check-mermaid.test.mjs` are all unobserved.
+- Files changed: .github/workflows/ci.yml, backend/pyproject.toml, backend/uv.lock, backend/tests/integration/test_contract.py, scripts/ci/check-mermaid.mjs, scripts/ci/check-mermaid.test.mjs, scripts/lib/TestCommand.psm1, docs/testing.md, docs/technology.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The CI workflow has never run on a hosted runner. Check its first run for: the gitleaks download and checksum step, `@mermaid-js/mermaid-cli` 11.12.0 with the runner's Chrome, `npm ci` in tests/e2e, and the Schemathesis contract test.
+  - Schemathesis 4 types: `get_all_operations()` yields Ok/Err results that mypy does not give a shared `.ok()`, and `Case` is generic. The test types both as `Any`. If the first real run shows a different API, fix test_contract.py.
+  - Shell access to run code inside the backend test image (`docker run`) was denied in this session, so the installed Schemathesis API could not be inspected.
+  - Invoke-ScriptLint in scripts/lib/TestCommand.psm1 is exported so the Windows CI job can run the documentation checks and PSScriptAnalyzer without Linux containers.
 ---
