@@ -1110,8 +1110,8 @@
         "T-CHR-09 passes: a locked trait survives a draft and a proposal."
       ],
       "priority": 47,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Card versions, field-level diff, restore and locks are implemented in the backend. Saving a card with PUT /characters/{id} adds a version only when something changed. The four version routes (list, one snapshot, diff, restore) are new, and restore always appends a new version. Migration 0007 adds the append-only `character_versions` table and backfills a version 1 for every existing character. Locked traits and locked visual fields are enforced by `keep_locked`, which `CharacterService.apply_proposal` applies. There is no route for proposals or drafts yet. The user's own PUT can change locked items because it carries the lock flags itself. Checks I ran and saw pass: `test unit` on test_card_locks.py, test_characters.py and test_migrations.py (48 passed) and `test lint` (all green). I did not run the full unit, integration, e2e or docker levels. The roadmap checkbox is untouched.",
       "dependsOn": [
         "P03.1a"
       ],

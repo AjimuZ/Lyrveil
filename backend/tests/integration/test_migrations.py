@@ -1,5 +1,6 @@
 """Checks that `alembic upgrade head` builds the schema on an empty database, and that the code can do the same."""
 
+import json
 import sqlite3
 import subprocess
 import sys
@@ -21,7 +22,8 @@ JOBS = "0002"
 CONVERSATIONS = "0003"
 MESSAGES = "0004"
 SEARCH = "0005"
-HEAD = "0006"
+CARD = "0006"
+HEAD = "0007"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 # An FTS5 table is stored as a virtual table plus these shadow tables.
@@ -31,7 +33,8 @@ SEARCH_TABLES = {
     for suffix in ("", "_data", "_idx", "_content", "_docsize", "_config")
 }
 CARD_TABLES = {"character_traits", "character_visual_profiles"}
-TABLES = {*MESSAGE_TABLES, *SEARCH_TABLES, *CARD_TABLES}
+CARD_TABLES_WITH_VERSIONS = {*CARD_TABLES, "character_versions"}
+TABLES = {*MESSAGE_TABLES, *SEARCH_TABLES, *CARD_TABLES_WITH_VERSIONS}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -54,7 +57,7 @@ def user_tables(database_path: Path) -> set[str]:
 
 def test_the_revisions_follow_one_another() -> None:
     assert head_revision() == HEAD
-    assert known_revisions() == {BASELINE, JOBS, CONVERSATIONS, MESSAGES, SEARCH, HEAD}
+    assert known_revisions() == {BASELINE, JOBS, CONVERSATIONS, MESSAGES, SEARCH, CARD, HEAD}
 
 
 def test_upgrade_head_creates_the_schema_on_an_empty_database(database_path: Path, tmp_path: Path) -> None:
@@ -85,6 +88,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", CARD, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == {*MESSAGE_TABLES, *SEARCH_TABLES, *CARD_TABLES}
     assert alembic(database_path, "downgrade", SEARCH, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == {*MESSAGE_TABLES, *SEARCH_TABLES}
     assert alembic(database_path, "downgrade", MESSAGES, cwd=tmp_path).returncode == 0
@@ -97,6 +102,40 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert user_tables(database_path) == {"alembic_version", "application_settings"}
     assert alembic(database_path, "downgrade", "base", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == {"alembic_version"}
+
+
+def test_existing_characters_get_their_first_version_and_versions_are_append_only(
+    database_path: Path, tmp_path: Path
+) -> None:
+    assert alembic(database_path, "upgrade", CARD, cwd=tmp_path).returncode == 0
+    now = "2026-11-07T10:00:00.000Z"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO characters (id, first_name, age, created_at, updated_at) VALUES ('c', 'Alba', 30, ?, ?)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO character_visual_profiles (character_id, hair, updated_at) VALUES ('c', 'Rossi', ?)", (now,)
+        )
+        connection.execute(
+            "INSERT INTO character_traits (id, character_id, category, description, sort_order, locked, "
+            "created_at, updated_at) VALUES ('t2', 'c', 'fear', 'Il buio', 1, 0, ?, ?), "
+            "('t1', 'c', 'main_trait', 'Ironica', 0, 1, ?, ?)",
+            (now, now, now, now),
+        )
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute("SELECT version_no, actor, snapshot_json FROM character_versions").fetchall()
+        assert [(number, actor) for number, actor, _ in row] == [(1, "user")]
+        snapshot = json.loads(row[0][2])
+        assert snapshot["identity"]["first_name"] == "Alba"
+        assert snapshot["traits"] == [
+            {"category": "main_trait", "description": "Ironica", "locked": True},
+            {"category": "fear", "description": "Il buio", "locked": False},
+        ]
+        assert snapshot["visual"]["hair"] == "Rossi"
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute("UPDATE character_versions SET change_summary = 'x'")
 
 
 def test_the_job_table_refuses_unknown_values_and_duplicate_idempotency_keys(

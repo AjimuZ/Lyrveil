@@ -102,6 +102,9 @@ conversations. When extraction finds something that seems to change the card, it
 Conversations always use the current version, and each reply records the version it used in
 `generation_params_json`.
 
+Delivered in P03.1b: versions, diff, restore and the locks against proposals
+([Versions and locks](character-system.md#versions-and-locks)). Recording the version in each reply is not delivered.
+
 ## Reply normalization
 
 `ReplyNormalizer` gives every profile the same surface form

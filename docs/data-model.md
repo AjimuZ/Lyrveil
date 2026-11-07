@@ -630,8 +630,14 @@ filter them out. `memory_fts`, `episode_fts` and `rebuild-search` are not delive
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON
 column, and an empty profile row for each character that already existed. `primary_avatar_asset_id` is a plain column until
-`character_assets` exists. `character_versions` and `character_assets` are not delivered. The age bound is
-`CHECK (age >= 18)` on `characters` (revision `0003`); the upper limit of 120 is the card's.
+`character_assets` exists. `character_assets` is not delivered. The age bound is `CHECK (age >= 18)` on `characters`
+(revision `0003`); the upper limit of 120 is the card's.
+
+Delivered in P03.1b (revision `0007`): `character_versions` as in [Character tables](#character-tables), with a unique
+`(character_id, version_no)`, CHECKs on the version number, the actor and `json_valid(snapshot_json)`, and a trigger that
+refuses any UPDATE. The snapshot is the card as `CharacterCard.model_dump_json` writes it. The migration gives every
+existing character a version 1, actor `user`, built in SQL from its current rows. Each character creation writes version
+1, and each saved change or restore writes version `current_version_no + 1` in the same transaction as the card.
 
 ## Deletion policy
 

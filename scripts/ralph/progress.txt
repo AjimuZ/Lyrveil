@@ -98,6 +98,9 @@
 - Record an exit as a dated docs/verification file: exact commands, versions printed by the commands, result counts per level, a test-to-file table, and an explicit Not run section. Link it under the phase's Evidence list and never edit an item line.
 - Add a new table in its own Alembic revision, back-fill a default child row for existing parents in the same migration, and make the reader tolerate a missing child row.
 - Keep a data file such as the tag vocabulary beside the code that uses it, with a loader that refuses malformed entries, so a packaging mistake fails in a unit test.
+- A migration that must populate a new table from existing rows builds the data in SQL, using SQLite JSON functions such as json_object and json_group_array. It does not import application code, which will change after the migration is written.
+- An append-only table gets a BEFORE UPDATE trigger that raises ABORT, plus a test that proves the update is refused. Foreign keys with RESTRICT already protect against deletes.
+- Services compare the validated new value with the stored one inside the write transaction and skip the write when they are equal. That is how a 'save with no change' creates no version.
 
 ---
 
@@ -810,4 +813,18 @@ Not verified: the docker level (`test docker`) and the integration level were no
   - P03.1b still needs `character_versions`, `PUT /characters/{id}`, diff, restore and the lock handling. `character_assets` does not exist, so `primary_avatar_asset_id` is a plain column. `persistence/characters.insert` writes only version 1 and no version row.
   - The sanitizer keeps periods, so `(Brass:1.5)` becomes `brass1.5`.
   - docs/testing.md rows for T-CHR-01, T-CHR-02, T-CHR-07 and T-CHR-14 were not touched. The T-CHR-14 export round trip is left for P03.5.
+---
+
+## 2026-11-07T05:04:58Z - P03.1b
+- Card versions, field-level diff, restore and locks are implemented in the backend. Saving a card with PUT /characters/{id} adds a version only when something changed. The four version routes (list, one snapshot, diff, restore) are new, and restore always appends a new version. Migration 0007 adds the append-only `character_versions` table and backfills a version 1 for every existing character. Locked traits and locked visual fields are enforced by `keep_locked`, which `CharacterService.apply_proposal` applies. There is no route for proposals or drafts yet. The user's own PUT can change locked items because it carries the lock flags itself. Checks I ran and saw pass: `test unit` on test_card_locks.py, test_characters.py and test_migrations.py (48 passed) and `test lint` (all green). I did not run the full unit, integration, e2e or docker levels. The roadmap checkbox is untouched.
+- Files changed: backend/migrations/versions/0007_character_versions.py, backend/src/lyrveil/domain/card_locks.py, backend/src/lyrveil/domain/card_diff.py, backend/src/lyrveil/domain/characters.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/api/characters.py, backend/tests/unit/test_card_locks.py, backend/tests/integration/test_characters.py, backend/tests/integration/test_migrations.py, CHANGELOG.md, docs/api.md, docs/data-model.md, docs/character-system.md, docs/consistency-engine.md
+- **Learnings for future iterations:**
+  - `CharacterService._save` is the one write path for update, apply_proposal and restore. It takes a `build(current_card)` callable, so a later duplicate or import can reuse it. The actor and the force-version flag are parameters, and `create` writes version 1 itself.
+  - `persistence/characters.replace_card` rewrites traits whole, so trait ids change on every save. Nothing references them yet. The visual profile uses an upsert that leaves the avatar, `prompt_source_hash`, LoRA and reference columns alone, so P03.3 and P05 can own those.
+  - `keep_locked` is the single lock rule. The tag translation job (P05) and the assisted draft job must call it. The slot mapping is in `domain/card_locks.PROTECTED_SLOTS`.
+  - Traits have no id, so a lock matches by category and description.
+  - Replies do not record the character version in `generation_params_json`. docs/consistency-engine.md says this is not delivered.
+  - The docs/testing.md rows for T-CHR-03, T-CHR-08 and T-CHR-09 are not changed; the file has no status column. The export round trip (T-CHR-14), duplicate, archive and purge remain for later P03 tasks.
+  - The test runner's `unit` level takes pytest paths relative to `backend/`, e.g. `tests/integration/test_characters.py`. A compound shell command (`&&`, `;` or a pipe) is denied as a whole, so run one command at a time.
+  - ruff format also reformats a long `assert (...) == (...)` tuple comparison into one element per line. Split such asserts into two statements.
 ---

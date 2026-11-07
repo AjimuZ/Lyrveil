@@ -42,6 +42,24 @@ class StoredCharacter:
 
 
 @dataclass(frozen=True)
+class VersionSummary:
+    """One row of a character's version list. `actor` is `user`, `import`, `restore`, `duplicate` or `proposal`."""
+
+    version_no: int
+    change_summary: str
+    actor: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class StoredVersion:
+    """A version with the whole card it holds."""
+
+    summary: VersionSummary
+    card: CharacterCard
+
+
+@dataclass(frozen=True)
 class CharacterSummary:
     """A character as the list and the new-chat picker show it. `status` is `active` or `archived`."""
 

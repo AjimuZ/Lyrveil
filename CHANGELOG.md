@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Saving a character card and its history in the backend: `PUT /api/v1/characters/{id}` saves the whole card and
+  records a version only when something changed, `GET .../versions` lists the versions, `GET .../versions/{n}` returns
+  one, `GET .../versions/{a}/diff/{b}` compares two field by field, and `POST .../versions/{n}/restore` adds a new
+  version holding the old content without rewriting history. Locked traits and locked visual fields are kept when an
+  automatic proposal is applied; the user's own save can still change them. Migration `0007` adds `character_versions`
+  and gives every existing character its version 1. The Creator screens, duplicate, archive, purge and export are not
+  delivered yet, and the new routes are not in `backend/openapi.json`.
 - The character card in the backend: `POST /api/v1/characters` now takes the whole card (identity, personality traits,
   communication with *tu* or *Lei*, narration, emoji, example exchanges and phrases to avoid, and the visual profile
   with its English identity slots, usual outfit and up to 5 named outfits), and `GET /api/v1/characters/{id}` returns

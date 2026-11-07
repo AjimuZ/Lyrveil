@@ -1,7 +1,8 @@
-"""Character routes of docs/api.md (Characters): list, create with the whole card, and read the card.
+"""Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, and its
+versions with diff and restore.
 
-Save, versions, archive, purge and the exchange routes of that section arrive with the rest of the Creator (P03). Not in
-the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
+Duplicate, archive, purge and the exchange routes of that section arrive with the rest of the Creator (P03). Not in the
+committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
 from typing import Annotated, Any
@@ -11,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 
 from lyrveil.domain.card import CharacterCard
-from lyrveil.domain.characters import CharacterSummary, StoredCharacter
+from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
 from lyrveil.services.characters import CharacterService
 
 router = APIRouter(prefix="/characters", tags=["characters"], include_in_schema=False)
@@ -46,6 +47,42 @@ class CharacterDetail(BaseModel):
     created_at: str
     updated_at: str
     card: CharacterCard
+
+
+class VersionOut(BaseModel):
+    version_no: int
+    change_summary: str
+    actor: str
+    created_at: str
+
+
+class VersionList(BaseModel):
+    items: list[VersionOut]
+
+
+class VersionDetail(VersionOut):
+    card: CharacterCard
+
+
+class FieldChangeOut(BaseModel):
+    field: str
+    before: Any
+    after: Any
+
+
+class VersionDiff(BaseModel):
+    from_version_no: int
+    to_version_no: int
+    changes: list[FieldChangeOut]
+
+
+def _version_out(version: VersionSummary) -> VersionOut:
+    return VersionOut(
+        version_no=version.version_no,
+        change_summary=version.change_summary,
+        actor=version.actor,
+        created_at=version.created_at,
+    )
 
 
 def _out(character: CharacterSummary) -> CharacterOut:
@@ -120,3 +157,45 @@ def create_character(body: Annotated[dict[str, Any], Body()], service: Character
 def read_character(character_id: str, service: CharacterService = Service) -> CharacterDetail:
     """Returns the character with its whole card. Answers 404 `NOT_FOUND` when no character has that id."""
     return _detail(service.get(character_id))
+
+
+@router.put("/{character_id}", response_model=CharacterDetail)
+def save_character(
+    character_id: str, body: Annotated[dict[str, Any], Body()], service: CharacterService = Service
+) -> CharacterDetail:
+    """Saves the whole card, in the same two forms as the create route. It creates a version when anything changed and
+    answers the character; a card equal to the stored one creates none. The locks in the body are the new locks. Answers
+    404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` as the create route does."""
+    return _detail(service.update(character_id, _as_card(body)))
+
+
+@router.get("/{character_id}/versions", response_model=VersionList)
+def list_versions(character_id: str, service: CharacterService = Service) -> VersionList:
+    """Lists the versions, newest first. Answers 404 `NOT_FOUND` for an unknown character."""
+    return VersionList(items=[_version_out(item) for item in service.list_versions(character_id)])
+
+
+@router.get("/{character_id}/versions/{version_no}", response_model=VersionDetail)
+def read_version(character_id: str, version_no: int, service: CharacterService = Service) -> VersionDetail:
+    """Returns one version with its card. Answers 404 `NOT_FOUND` for an unknown character or version."""
+    found = service.get_version(character_id, version_no)
+    return VersionDetail(**_version_out(found.summary).model_dump(), card=found.card)
+
+
+@router.get("/{character_id}/versions/{from_no}/diff/{to_no}", response_model=VersionDiff)
+def diff_versions(character_id: str, from_no: int, to_no: int, service: CharacterService = Service) -> VersionDiff:
+    """Compares two versions field by field: `changes` lists each dotted field path with its value in `from_no` and in
+    `to_no`. Answers 404 `NOT_FOUND` for an unknown character or version."""
+    changes = service.diff(character_id, from_no, to_no)
+    return VersionDiff(
+        from_version_no=from_no,
+        to_version_no=to_no,
+        changes=[FieldChangeOut(field=item.field, before=item.before, after=item.after) for item in changes],
+    )
+
+
+@router.post("/{character_id}/versions/{version_no}/restore", response_model=CharacterDetail)
+def restore_version(character_id: str, version_no: int, service: CharacterService = Service) -> CharacterDetail:
+    """Appends a new version holding the card of `version_no` and answers the character. Answers 404 `NOT_FOUND` for an
+    unknown character or version."""
+    return _detail(service.restore(character_id, version_no))

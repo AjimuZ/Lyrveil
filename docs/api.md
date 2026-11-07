@@ -127,9 +127,25 @@ that contain it, ignoring case; newest update first), `POST /characters` and `GE
   seed policy without `base_seed`. Tags are sanitized before they are stored.
 - `GET /characters/{id}` answers the summary fields plus `card`, the whole card as stored, or `404 NOT_FOUND`. A character
   made before the card existed reads with the default sections.
-- No version row is written: the version table arrives with P03.1b, so `current_version_no` is 1 and nothing records
-  changes yet. Every other route of this table is planned. These routes are not in `backend/openapi.json` until it is next
-  regenerated with Docker.
+
+Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
+
+- `PUT` takes the same body as `POST`, nested or flat, and answers `200` with the character as `GET` does. A card equal
+  to the stored one writes nothing and keeps `current_version_no`; any other change replaces the card and appends a
+  version, actor `user`, whose `change_summary` names the sections that changed (`Modificati: identità, aspetto`).
+  The locks in the body are the new locks, so the user's own save can change a locked trait or field. It answers `404
+  NOT_FOUND` for an unknown character and `422 VALIDATION_ERROR` for what `POST` refuses; nothing is written then.
+- `GET /characters/{id}/versions` answers `{"items": [{"version_no", "change_summary", "actor", "created_at"}]}`, newest
+  first. `GET .../versions/{n}` adds `card`, the snapshot.
+- `GET .../versions/{a}/diff/{b}` answers `{"from_version_no", "to_version_no", "changes": [{"field", "before",
+  "after"}]}`. `field` is a dotted path such as `identity.age` or `visual.identity_en.hair_color`, in card order. A list
+  (traits, interests, examples, outfits) is one field and compares whole. Equal versions give an empty list.
+- `POST .../versions/{n}/restore` always appends a version, actor `restore`, summary `Ripristinata la versione n`,
+  holding the card of version `n`, and answers the character. Versions are never changed or removed.
+- The three routes on a version answer `404 NOT_FOUND` for an unknown character or version.
+- Automatic sources are not routes yet. The service applies a proposal with `CharacterService.apply_proposal`, which
+  keeps locked traits and locked visual fields and records actor `proposal`. Every other route of this table is
+  planned. These routes are not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ### Assets
 

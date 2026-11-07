@@ -1,6 +1,6 @@
-"""SQL of the character card: the `characters` table, its traits and its visual profile.
+"""SQL of the character card: the `characters` table, its traits, its visual profile and its versions.
 
-Every function works on a connection the caller owns and never commits. Versions arrive with P03.1b.
+Every function works on a connection the caller owns and never commits.
 """
 
 import json
@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.card import CharacterCard
-from lyrveil.domain.characters import CharacterSummary, StoredCharacter
+from lyrveil.domain.characters import CharacterSummary, StoredCharacter, StoredVersion, VersionSummary
 from lyrveil.domain.identifiers import new_id
 
 _COLUMNS = "id, first_name, last_name, age, grammatical_gender, primary_language, status, created_at, updated_at"
@@ -33,35 +33,25 @@ def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def insert(connection: Connection, *, character_id: str, card: CharacterCard, now: str) -> None:
-    """Inserts an active character at version 1 with its whole card: the `characters` row, its traits in saved order
-    and its visual profile. The age CHECK of the table is the second line of defence behind the card's own bound."""
-    identity, visual = card.identity, card.visual
-    connection.execute(
-        text(
-            "INSERT INTO characters (id, first_name, last_name, age, grammatical_gender, narrative_identity, "
-            "biography, background, setting, occupation, interests_json, primary_language, communication_json, "
-            "status, created_at, updated_at) "
-            "VALUES (:id, :first_name, :last_name, :age, :gender, :narrative_identity, :biography, :background, "
-            ":setting, :occupation, :interests, :language, :communication, 'active', :now, :now)"
-        ),
-        {
-            "id": character_id,
-            "first_name": identity.first_name,
-            "last_name": identity.last_name,
-            "age": identity.age,
-            "gender": identity.grammatical_gender,
-            "narrative_identity": identity.narrative_identity,
-            "biography": identity.biography,
-            "background": identity.background,
-            "setting": identity.setting,
-            "occupation": identity.occupation,
-            "interests": _json(identity.interests),
-            "language": identity.primary_language,
-            "communication": card.communication.model_dump_json(),
-            "now": now,
-        },
-    )
+def _identity_params(card: CharacterCard) -> dict[str, Any]:
+    identity = card.identity
+    return {
+        "first_name": identity.first_name,
+        "last_name": identity.last_name,
+        "age": identity.age,
+        "gender": identity.grammatical_gender,
+        "narrative_identity": identity.narrative_identity,
+        "biography": identity.biography,
+        "background": identity.background,
+        "setting": identity.setting,
+        "occupation": identity.occupation,
+        "interests": _json(identity.interests),
+        "language": identity.primary_language,
+        "communication": card.communication.model_dump_json(),
+    }
+
+
+def _write_traits(connection: Connection, character_id: str, card: CharacterCard, now: str) -> None:
     for order, trait in enumerate(card.traits):
         connection.execute(
             text(
@@ -79,6 +69,12 @@ def insert(connection: Connection, *, character_id: str, card: CharacterCard, no
                 "now": now,
             },
         )
+
+
+def _write_visual(connection: Connection, character_id: str, card: CharacterCard, now: str) -> None:
+    """Writes the visual profile, replacing the one the character has. The avatar, the translation hash and the prepared
+    LoRA and reference columns belong to other features and are left as they are."""
+    visual = card.visual
     connection.execute(
         text(
             "INSERT INTO character_visual_profiles (character_id, face, hair, eyes, body, clothing, accessories, "
@@ -86,7 +82,12 @@ def insert(connection: Connection, *, character_id: str, card: CharacterCard, no
             "persistent_negative_en, locked_fields_json, seed_policy, base_seed, updated_at) "
             "VALUES (:character_id, :face, :hair, :eyes, :body, :clothing, :accessories, :marks, :art_style, "
             ":subject_tag, :identity_en, :usual_outfit_en, :outfits, :negative, :locked_fields, :seed_policy, "
-            ":base_seed, :now)"
+            ":base_seed, :now) "
+            "ON CONFLICT (character_id) DO UPDATE SET face = :face, hair = :hair, eyes = :eyes, body = :body, "
+            "clothing = :clothing, accessories = :accessories, distinctive_marks = :marks, art_style = :art_style, "
+            "subject_tag = :subject_tag, identity_en_json = :identity_en, usual_outfit_en_json = :usual_outfit_en, "
+            "outfits_json = :outfits, persistent_negative_en = :negative, locked_fields_json = :locked_fields, "
+            "seed_policy = :seed_policy, base_seed = :base_seed, updated_at = :now"
         ),
         {
             "character_id": character_id,
@@ -109,6 +110,110 @@ def insert(connection: Connection, *, character_id: str, card: CharacterCard, no
             "now": now,
         },
     )
+
+
+def insert(connection: Connection, *, character_id: str, card: CharacterCard, now: str) -> None:
+    """Inserts an active character at version 1 with its whole card: the `characters` row, its traits in saved order
+    and its visual profile. The version row is the caller's (`insert_version`). The age CHECK of the table is the second
+    line of defence behind the card's own bound."""
+    connection.execute(
+        text(
+            "INSERT INTO characters (id, first_name, last_name, age, grammatical_gender, narrative_identity, "
+            "biography, background, setting, occupation, interests_json, primary_language, communication_json, "
+            "status, created_at, updated_at) "
+            "VALUES (:id, :first_name, :last_name, :age, :gender, :narrative_identity, :biography, :background, "
+            ":setting, :occupation, :interests, :language, :communication, 'active', :now, :now)"
+        ),
+        {"id": character_id, "now": now, **_identity_params(card)},
+    )
+    _write_traits(connection, character_id, card, now)
+    _write_visual(connection, character_id, card, now)
+
+
+def replace_card(connection: Connection, *, character_id: str, card: CharacterCard, version_no: int, now: str) -> None:
+    """Replaces the stored card of an existing character with `card`, sets `current_version_no` and `updated_at`, and
+    leaves status, creation time and assets alone. Traits are rewritten whole, so they get new ids."""
+    connection.execute(
+        text(
+            "UPDATE characters SET first_name = :first_name, last_name = :last_name, age = :age, "
+            "grammatical_gender = :gender, narrative_identity = :narrative_identity, biography = :biography, "
+            "background = :background, setting = :setting, occupation = :occupation, interests_json = :interests, "
+            "primary_language = :language, communication_json = :communication, current_version_no = :version_no, "
+            "updated_at = :now WHERE id = :id"
+        ),
+        {"id": character_id, "version_no": version_no, "now": now, **_identity_params(card)},
+    )
+    connection.execute(text("DELETE FROM character_traits WHERE character_id = :id"), {"id": character_id})
+    _write_traits(connection, character_id, card, now)
+    _write_visual(connection, character_id, card, now)
+
+
+def insert_version(
+    connection: Connection,
+    *,
+    character_id: str,
+    version_no: int,
+    card: CharacterCard,
+    change_summary: str,
+    actor: str,
+    now: str,
+) -> None:
+    """Appends the snapshot of `card` as version `version_no`. The table is append-only and refuses a number it
+    already holds."""
+    connection.execute(
+        text(
+            "INSERT INTO character_versions (id, character_id, version_no, snapshot_json, change_summary, actor, "
+            "created_at) VALUES (:id, :character_id, :version_no, :snapshot, :summary, :actor, :now)"
+        ),
+        {
+            "id": new_id(),
+            "character_id": character_id,
+            "version_no": version_no,
+            "snapshot": card.model_dump_json(),
+            "summary": change_summary,
+            "actor": actor,
+            "now": now,
+        },
+    )
+
+
+def _version_summary(row: RowMapping) -> VersionSummary:
+    return VersionSummary(
+        version_no=row["version_no"],
+        change_summary=row["change_summary"],
+        actor=row["actor"],
+        created_at=row["created_at"],
+    )
+
+
+def list_versions(connection: Connection, character_id: str) -> list[VersionSummary]:
+    """Returns the versions of a character, newest first."""
+    rows = connection.execute(
+        text(
+            "SELECT version_no, change_summary, actor, created_at FROM character_versions "
+            "WHERE character_id = :id ORDER BY version_no DESC"
+        ),
+        {"id": character_id},
+    ).mappings()
+    return [_version_summary(row) for row in rows]
+
+
+def get_version(connection: Connection, character_id: str, version_no: int) -> StoredVersion | None:
+    """Returns the version with its card, or None when the character has no such version."""
+    row = (
+        connection.execute(
+            text(
+                "SELECT version_no, change_summary, actor, created_at, snapshot_json FROM character_versions "
+                "WHERE character_id = :id AND version_no = :version_no"
+            ),
+            {"id": character_id, "version_no": version_no},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    return StoredVersion(_version_summary(row), CharacterCard.model_validate_json(row["snapshot_json"]))
 
 
 def get_card(connection: Connection, character_id: str) -> StoredCharacter | None:

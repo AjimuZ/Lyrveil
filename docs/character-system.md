@@ -2,8 +2,10 @@
 
 Status: accepted (2026-11-01), revised 2026-11-06 for the voice fields and the structured visual identity. Implementation:
 phase P03. Delivered in P03.1a: the card model (`lyrveil.domain.card`), its validation against the tag vocabulary
-(`lyrveil.services.card_rules`), storage, and `POST /characters` and `GET /characters/{id}`. Planned: saving, versions,
-locks in the translation job, the Creator screens, assets, assisted creation, and the exchange format.
+(`lyrveil.services.card_rules`), storage, and `POST /characters` and `GET /characters/{id}`. Delivered in P03.1b: saving
+with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks against drafts and proposals
+([Versions and locks](#versions-and-locks)). Planned: locks in the translation job, the Creator screens, assets,
+assisted creation, and the exchange format.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -130,6 +132,23 @@ Rules:
   English tag translation for the slots that are not locked, and shows the rendered identity as **Prompt persistente**.
   A warning appears when the identity would not fit in the first prompt chunk.
 - Saving creates version 1 and an empty visual profile if none exists.
+
+## Versions and locks
+
+Delivered in P03.1b; see [Versioning](consistency-engine.md#versioning) for the rules and [API](api.md#characters) for
+the routes.
+
+- Creation writes version 1. A save writes a new version only if the validated card differs from the stored one, so a
+  save with no change creates none. Restore always writes one, with the old content.
+- The diff compares two snapshots field by field (`lyrveil.domain.card_diff`). Lists compare whole.
+- `keep_locked` (`lyrveil.domain.card_locks`) is the rule for anything automatic, a draft over an existing character or
+  a proposal. A locked trait stays, first and unchanged; the proposed traits follow, always unlocked, and a repeat of a
+  locked trait is dropped. A locked visual field keeps its Italian text and the slots it protects (ADR 0035: `hair`
+  holds `hair_color`, `hair_length` and `hairstyle`; `eyes` holds `eye_color`; `face` holds `face` and `skin`;
+  `clothing` holds `usual_outfit_en`), and the list of locks does not change. Traits have no identifier, so a lock
+  matches by category and description.
+- The user's own save carries the locks it wants, so it can change a locked item by unlocking it in the same save.
+- Locks in the translation job are not delivered; the job does not exist yet.
 
 ## Assisted creation
 

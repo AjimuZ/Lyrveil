@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from lyrveil.main import create_app
 from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import upgrade_to_head
+from lyrveil.services.characters import CharacterService
 from lyrveil.settings import Settings
 
 URL = "/api/v1/characters"
@@ -299,6 +300,145 @@ def test_a_character_made_before_the_card_reads_with_a_default_profile(client: T
         "Vecchio",
         "1other",
         "raramente",
+    )
+
+
+def edited(**identity: object) -> dict[str, Any]:
+    return {**FULL_CARD, "identity": {**FULL_CARD["identity"], **identity}}
+
+
+def versions(client: TestClient, character_id: str) -> list[dict[str, Any]]:
+    response = client.get(f"{URL}/{character_id}/versions")
+    assert response.status_code == 200, response.text
+    return list(response.json()["items"])
+
+
+def test_creating_a_character_records_version_1(client: TestClient) -> None:
+    items = versions(client, create_full(client))
+    assert [(item["version_no"], item["actor"], item["change_summary"]) for item in items] == [(1, "user", "Creazione")]
+
+
+def test_an_edit_creates_a_version_and_a_save_with_no_change_creates_none(client: TestClient) -> None:
+    """T-CHR-03."""
+    character_id = create_full(client)
+    same = client.put(f"{URL}/{character_id}", json=FULL_CARD)
+    assert (same.status_code, same.json()["current_version_no"]) == (200, 1)
+    assert len(versions(client, character_id)) == 1
+
+    changed = client.put(f"{URL}/{character_id}", json=edited(age=28, occupation="Cartografa di corte"))
+    assert (changed.status_code, changed.json()["current_version_no"]) == (200, 2)
+    assert changed.json()["card"]["identity"]["age"] == 28
+    assert client.get(f"{URL}/{character_id}").json()["card"]["identity"]["occupation"] == "Cartografa di corte"
+    latest = versions(client, character_id)[0]
+    assert (latest["version_no"], latest["actor"], latest["change_summary"]) == (2, "user", "Modificati: identità")
+
+    repeated = client.put(f"{URL}/{character_id}", json=edited(age=28, occupation="Cartografa di corte"))
+    assert repeated.json()["current_version_no"] == 2
+    assert len(versions(client, character_id)) == 2
+
+
+def test_a_save_accepts_the_flat_form_and_refuses_what_create_refuses(client: TestClient) -> None:
+    character_id = str(client.post(URL, json={"first_name": "Alba", "age": 30}).json()["id"])
+    flat = client.put(f"{URL}/{character_id}", json={"first_name": "Alba", "last_name": "Rossi", "age": 31})
+    assert (flat.status_code, flat.json()["full_name"], flat.json()["current_version_no"]) == (200, "Alba Rossi", 2)
+    refused = client.put(f"{URL}/{character_id}", json={"first_name": "Alba", "age": 17})
+    assert (refused.status_code, refused.json()["detail"]) == (422, "L'età deve essere almeno 18.")
+    assert client.get(f"{URL}/{character_id}").json()["current_version_no"] == 2
+    missing = client.put(f"{URL}/missing", json={"first_name": "Alba", "age": 30})
+    assert (missing.status_code, missing.json()["code"]) == (404, "NOT_FOUND")
+
+
+def test_a_save_replaces_traits_and_visual_profile_whole(client: TestClient) -> None:
+    character_id = create_full(client)
+    card = {**FULL_CARD, "traits": [{"category": "humor", "description": "Asciutto."}], "visual": {"hair": "Neri"}}
+    stored = client.put(f"{URL}/{character_id}", json=card).json()["card"]
+    assert stored["traits"] == [{"category": "humor", "description": "Asciutto.", "locked": False}]
+    assert stored["visual"]["hair"] == "Neri"
+    assert (stored["visual"]["outfits"], stored["visual"]["locked_fields"]) == ([], [])
+
+
+def test_the_version_list_the_diff_and_a_restore_that_adds_a_version(client: TestClient) -> None:
+    """T-CHR-08."""
+    character_id = create_full(client)
+    client.put(f"{URL}/{character_id}", json=edited(age=28))
+    third = {**edited(age=29), "traits": [{"category": "humor", "description": "Asciutto."}]}
+    client.put(f"{URL}/{character_id}", json=third)
+    assert [item["version_no"] for item in versions(client, character_id)] == [3, 2, 1]
+
+    snapshot = client.get(f"{URL}/{character_id}/versions/1").json()
+    assert (snapshot["version_no"], snapshot["card"]["identity"]["age"]) == (1, 27)
+
+    diff = client.get(f"{URL}/{character_id}/versions/1/diff/3").json()
+    assert (diff["from_version_no"], diff["to_version_no"]) == (1, 3)
+    assert [(change["field"], change["before"], change["after"]) for change in diff["changes"]] == [
+        ("identity.age", 27, 29),
+        ("traits", FULL_CARD["traits"], [{"category": "humor", "description": "Asciutto.", "locked": False}]),
+    ]
+    assert client.get(f"{URL}/{character_id}/versions/2/diff/2").json()["changes"] == []
+
+    restored = client.post(f"{URL}/{character_id}/versions/1/restore")
+    assert (restored.status_code, restored.json()["current_version_no"]) == (200, 4)
+    assert restored.json()["card"]["identity"]["age"] == 27
+    assert restored.json()["card"]["traits"] == FULL_CARD["traits"]
+    items = versions(client, character_id)
+    latest = items[0]
+    assert (latest["version_no"], latest["actor"]) == (4, "restore")
+    assert latest["change_summary"] == "Ripristinata la versione 1"
+    assert len(items) == 4
+    assert client.get(f"{URL}/{character_id}/versions/3").json()["card"]["identity"]["age"] == 29
+
+
+def test_unknown_characters_and_versions_are_not_found(client: TestClient) -> None:
+    character_id = create_full(client)
+    for method, path in (
+        ("get", f"{URL}/missing/versions"),
+        ("get", f"{URL}/{character_id}/versions/9"),
+        ("get", f"{URL}/{character_id}/versions/1/diff/9"),
+        ("get", f"{URL}/missing/versions/1"),
+        ("post", f"{URL}/{character_id}/versions/9/restore"),
+        ("post", f"{URL}/missing/versions/1/restore"),
+    ):
+        response = client.request(method, path)
+        assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND"), path
+    assert len(versions(client, character_id)) == 1
+
+
+def test_a_locked_trait_and_field_survive_a_proposal_but_not_the_users_own_edit(
+    client: TestClient, engine: Engine
+) -> None:
+    """T-CHR-09 through the service and the database; the pure rules are in tests/unit/test_card_locks.py."""
+    character_id = create_full(client)
+    service = CharacterService(engine)
+    proposal = {
+        **FULL_CARD,
+        "traits": [{"category": "humor", "description": "Asciutto."}],
+        "visual": {
+            "hair": "Neri",
+            "eyes": "Grigi",
+            "face": "Viso nuovo.",
+            "identity_en": {"hair_color": "black hair", "eye_color": "grey eyes"},
+        },
+    }
+    saved = service.apply_proposal(character_id, proposal)
+    assert saved.current_version_no == 2
+    assert [(trait.description, trait.locked) for trait in saved.card.traits] == [
+        ("Perdersi in un posto noto.", True),
+        ("Asciutto.", False),
+    ]
+    visual = saved.card.visual
+    assert (visual.hair, visual.eyes, visual.face) == ("Capelli rossi corti.", "", "Viso nuovo.")
+    assert (visual.identity_en.hair_color, visual.identity_en.eye_color) == ("red hair", "green eyes")
+    assert visual.locked_fields == ["hair", "eyes"]
+    assert versions(client, character_id)[0]["actor"] == "proposal"
+
+    unchanged = service.apply_proposal(character_id, proposal)
+    assert unchanged.current_version_no == 2
+
+    unlocked = {**proposal, "visual": {**proposal["visual"], "locked_fields": []}}
+    edited_by_user = client.put(f"{URL}/{character_id}", json=unlocked).json()["card"]
+    assert (edited_by_user["visual"]["hair"], edited_by_user["traits"][0]["description"]) == (
+        "Neri",
+        "Asciutto.",
     )
 
 
