@@ -54,9 +54,9 @@ describe('routes', () => {
     TestBed.configureTestingModule({ providers: [provideRouter(routes, withComponentInputBinding())] });
     const harness = await RouterTestingHarness.create();
 
-    await harness.navigateByUrl('/characters/abc/memory');
+    await harness.navigateByUrl('/gallery');
     const heading = harness.routeNativeElement?.querySelector('h1');
-    expect(heading?.textContent?.trim()).toBe('Memoria del personaggio');
+    expect(heading?.textContent?.trim()).toBe('Galleria');
     expect(harness.routeNativeElement?.textContent).toContain('Questa schermata non è ancora disponibile.');
   });
 });

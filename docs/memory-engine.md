@@ -346,7 +346,7 @@ deduplication, what the relation and guard 3 ask of each existing memory, then t
   least 3. The job's result adds `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items`
   now counts only relationship events. Since P04.6 relationship events are applied, `state_events` counts the state
   rows a run wrote, and `deferred_items` counts only a proposed `current_topic`.
-- **Not delivered.** `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
+- **Not delivered.** `POST /memories/{id}/resolve`; the Memory Studio shows a contradiction since P04.9a; the labels of the
   reply prompt, which needs retrieval and the context builder (P04.3, P04.5). Invalidation came with P04.7. Only Italian has
   change cues, so in another language a changed single-valued value always becomes a contradiction. Tombstones came
   with P04.2c.
@@ -374,7 +374,7 @@ User edits and deletions (`MemoryService`, `services/memories.py`) and guard 6 i
   source is at or before `source_max_seq`, or has a content hash the tombstone lists (`consistency.is_blocked`); a
   single source that is newer and has new content lets it through. A blocked item writes nothing and is counted in
   `blocked_items` of the job result; nothing else is returned to the model.
-- **Not delivered.** Routes (P04.9), tombstones for shared memories (the scope is not written yet), and tombstones for
+- **Not delivered.** Tombstones for shared memories (the scope is not written yet), and tombstones for
   episodes. A window never holds a message at or before the cursor, so in the running pipeline a block shows up
   when the model restates a deleted fact from a message with the same content, or when a re-evaluation (P04.7)
   analyzes old messages again; the same-source case is covered by calling `apply` directly.
@@ -888,13 +888,34 @@ re-evaluation is `MemoryExtractionService`, registered for `memory_reevaluation`
   way. A tombstone still blocks either.
 - **Result.** Every extraction result adds `memories_reactivated` and `episodes_reactivated`; a re-evaluation also
   adds `state_skipped` and `state_update_skipped`. Each invalidation logs `derived_data_invalidated` with counts.
-- **Not delivered.** The Memory Studio's view of `needs_review` and of invalidated memories (P04.9). Rollups that were
+- **Not delivered.** A Studio view that groups the memories marked `needs_review` for a decision: the Studio shows the
+  **Da rivedere** pill and the **Da rivalutare** status, and lists invalidated memories with the **Stato** filter
+  ([Delivered in P04.9a](#delivered-in-p049a)). Rollups that were
   not the newest of their level stay invalidated, and the prompt covers their range with other checkpoints or leaves a
   logged gap. A re-evaluation reads at most 12 messages, so with 13 readable ones in the range the newest is not read
   again. Relationship events of the invalidated rows outside the range are not proposed again.
 
 `tests/integration/test_memory_invalidation.py` holds T-MEM-18, T-MEM-19, T-MEM-20 and T-CON-04;
 `tests/unit/test_memory_consistency.py` the age check and `after_source_change` ([Testing](testing.md#memory)).
+
+### Delivered in P04.9a
+
+The Memory Studio reads and corrects this layer through `MemoryStudioService` (`services/memory_studio.py`), with
+`MemoryService` for edits and deletions ([API](api.md#memory), [Frontend](frontend.md#5-character-memory-studio)).
+
+- **Reads.** Memories of a character with filters, by-stem search and paging; one memory with its source messages (valid
+  while the message exists and still shows the variant read), its conflict group and its revisions; the character's
+  episodes with sources and links; a chat's summary checkpoints, relationship state and change log. Every read names its
+  owner, so a chat's data never mixes with another's.
+- **Writes.** Lock and unlock (no revision), confirm (a revision by `user` with reason `confirm`, then `user_confirmed`
+  at confidence 1.0, the review flag cleared; only for a memory in use), and a manual memory (`user_confirmed`, 1.0,
+  lasting, active, in the chat's language, no source, indexed in the same transaction; a text equal to a memory in use is
+  refused).
+- **Not delivered.** `POST /memories/{id}/resolve` (so a contradiction can only be seen and labeled, not settled, from
+  the Studio), sharing, applying an `identity_candidate` to the profile, edits of episodes and of the relationship
+  (`user_correction` rows), the `memory.updated` event and the diagnostic mode (P04.9b).
+
+`tests/integration/test_memory_studio_api.py` holds the API half of T-MEM-08 and T-MEM-11 ([Testing](testing.md#memory)).
 
 ## Settings
 

@@ -10,6 +10,17 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The Memory Studio. A character's profile has a **Memoria** link to a screen with four tabs. **Ricordi** lists what the
+  character remembers, with search and filters (chat, status, type, origin, locked). Each memory shows its text, where
+  it came from (stated, inferred, narrative or confirmed), its importance and confidence, and when it changed; you can
+  edit it (the earlier text is kept in its history), lock or unlock it, confirm it, or delete it after a confirmation,
+  and open its source messages, the memory it contradicts and its history. Two memories in an unresolved contradiction
+  are both labeled "Incerto" with a note. You can also add a memory by hand through the API. **Eventi** shows the
+  remembered events with the people involved, their links and the messages they rest on. **Rapporto** describes the
+  relationship in words, with the change log (reason and source messages) and the numbers only in an advanced section.
+  **Riassunti** shows the summary checkpoints with their message range, version, status and source messages. Not yet:
+  resolving a contradiction, sharing a memory, applying a proposal to the profile, correcting events or the
+  relationship, and the diagnostic mode.
 - Replies are now checked as they stream. If the character gives itself another name, states another age, or speaks
   of itself in the wrong grammatical gender (Italian), the reply stops, the bubble clears, and the reply is written
   once more with a reminder in its prompt; if the second reply makes the same mistake, it is kept. Text the model
@@ -34,8 +45,8 @@ No application exists yet. This section records the design documentation.
   only marked for your review. The messages around the change are then read again in the background, so what still
   holds comes back on its original memory, and a relationship change is never counted twice. Deleting the message
   where you said something changed (for example a new job) brings the earlier fact back. The summaries covering the
-  message are written again. Re-reading old messages never lets an old message undo a newer fact. Not yet: the Memory
-  Studio view of memories marked for review.
+  message are written again. Re-reading old messages never lets an old message undo a newer fact. The Memory Studio
+  shows the memories marked for review.
 - Relationship state per chat. Each memory extraction now also records how the relationship moved (familiarity, trust,
   confidence and tension), the character's current mood, the topics left open and closed, goals and changes in the
   story, each with the reason and the messages it came from. Changes are small and bounded: at most 8 points per

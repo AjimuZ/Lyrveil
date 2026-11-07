@@ -249,8 +249,8 @@ Delivered in P03.2b (`character-profile-screen.*`, route `/characters/:id`):
   preview before sending, crop of a variant by size and position sliders (a new 512 x 512 variant; the original stays),
   variant list and **Rendi principale**. Errors show the catalog text of the code. The conversation list shows the
   primary avatar. Deleting a variant is not offered.
-- **Not delivered, so no control is drawn for it:** image generation (P05), the **Memoria** link (the memory
-  studio is a placeholder), and the proposals for the profile.
+- **Memoria** opens the [Memory Studio](#5-character-memory-studio) of the character.
+- **Not delivered, so no control is drawn for it:** image generation (P05) and the proposals for the profile.
 - **Tests:** `character-profile-screen.spec.ts` and `version-diff.spec.ts` (unit), and
   `tests/e2e/specs/character-profile.spec.mjs` (T-CHR-04, T-CHR-08). The end-to-end spec was written but not run in this
   change.
@@ -268,6 +268,38 @@ Tabs:
 | **Riassunti** | Checkpoints with ranges, status and version. |
 | **Proposte** | `identity_candidate` memories, with "Applica al profilo" and "Ignora". |
 | **Diagnostica** | Visible only when diagnostic mode is on. For a chosen reply it shows blocks, tokens, memories with score parts, and summaries. |
+
+Delivered in P04.9a (`features/memory/`): the route `/characters/:id/memory` loads `memory-studio-screen.ts`, and the
+profile's **Memoria** link goes to it. Four tabs are drawn, **Ricordi**, **Eventi**, **Rapporto** and **Riassunti**;
+**Conflitti**, **Proposte** and **Diagnostica** are not (their routes and the diagnostic mode are P04.9b and later), and
+no control is drawn for them. A **Conversazione** choice at the top limits the memories and events to one chat (the
+`conversation` query parameter chooses it on entry); **Rapporto** and **Riassunti** need one chat and say so
+otherwise. The state lives in `memory-store.ts`; every action calls the REST API and reads the list again.
+
+- **Ricordi.** Search (debounced 250 ms, by stem) and the filters **Stato** (default **In uso**, active and uncertain),
+  **Tipo**, **Origine** and **Blocco**; pages of 50 with **Mostra altri ricordi**. A card shows the text, pills for the
+  kind, origin and any state other than active (**Incerto**, **Sostituito**, **Scaduto**, **Da rivalutare**), **Bloccato**,
+  **Da rivedere** and **Temporaneo**, then the importance, the confidence in percent, the number of source messages and the
+  time of the last change. A memory in an unresolved contradiction (`uncertain` with a conflict group) also says so in a
+  note. **Modifica** opens the text (1 to 280 characters) and the importance in place; **Blocca**/**Sblocca**;
+  **Conferma** for a memory in use that is not confirmed; **Elimina** asks for an inline confirmation first.
+  **Fonti e cronologia** opens, under the card, the source messages (number, the start of the text read, a flag when the
+  message was changed or deleted, and a link to the chat), the memories it contradicts, and its history from the
+  revisions (version, who, why, when, and the text it had). A refused action shows the server's reason and changes
+  nothing. Not drawn: **Condividi** (shared memories are not written yet) and manual creation (the API has it).
+- **Eventi.** The character's episodes, newest first, with the date, participants, importance, links to other episodes
+  (**Ha causato**, **Causato da**, **Viene dopo**, **È seguito da**, **Collegato a**) and source messages.
+- **Rapporto.** The description in words first (the narrative, or the four bands), then expectations, limits, mood,
+  topic, open threads, goals, changes of the story and recent events when they exist, then the change log with each
+  reason, kind and source messages. The four numbers are in a `details` section labeled **Valori numerici (avanzato)**.
+  A chat whose state was never written says so. Corrections are not drawn (the route is not delivered).
+- **Riassunti.** Every checkpoint, oldest range first: message range, level, version, status, text, its lists (events,
+  decisions, relationship changes, open questions, key facts) and the messages it rests on.
+- **Tests:** `memory-store.spec.ts` and `memory-studio-screen.spec.ts` (unit), and `tests/e2e/specs/memory-studio.spec.mjs`
+  (memories written by hand: list, filter, search, edit with a new revision, lock, delete, and the empty states). The
+  end-to-end spec was written but not run in this change; the fake runtime never produces extraction output, so
+  sources, events, state changes, summaries and a contradiction are covered by the backend integration test
+  (T-MEM-08, T-MEM-11) and the unit specs.
 
 ### 6. Gallery
 

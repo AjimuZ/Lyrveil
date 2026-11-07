@@ -58,7 +58,8 @@ function labelOf(options: readonly Option[], value: string): TextKey | null {
  * server's explanation and changes nothing.
  *
  * The avatar tools (`lyr-avatar-tools`) upload, crop and choose the primary avatar. Not delivered here, so no control
- * is drawn for it: image generation and variants made by it (P05), the memory studio and the proposals for the profile.
+ * is drawn for it: image generation and variants made by it (P05) and the proposals for the profile. **Memoria** opens
+ * the Memory Studio.
  */
 @Component({
   selector: 'lyr-character-profile',

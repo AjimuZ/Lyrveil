@@ -52,7 +52,12 @@ export const routes: Routes = [
     data: { screen: 'screen.characterProfile' satisfies TextKey },
   },
   creator('characters/:id/edit', 'screen.characterEdit'),
-  unavailable('characters/:id/memory', 'screen.characterMemory'),
+  {
+    path: 'characters/:id/memory',
+    loadComponent: () =>
+      import('./features/memory/memory-studio-screen').then((module) => module.MemoryStudioScreen),
+    data: { screen: 'screen.characterMemory' satisfies TextKey },
+  },
   unavailable('gallery', 'screen.gallery'),
   {
     path: 'scenarios',

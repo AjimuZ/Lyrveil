@@ -379,6 +379,22 @@ reworded memory with the same subject and value are blocked; a later source with
 tests/unit/test_memory_consistency.py tests/integration/test_memory_extraction.py` passed (24 tests); the full levels
 were not run.
 
+Delivered in P04.9a: `backend/tests/integration/test_memory_studio_api.py` drives the Memory Studio routes over data the
+real extraction pipeline wrote (it reuses the `Chat` helper of `test_memory_extraction.py`). It covers the memory list
+with its filters, search and pages; one memory with its source message and confidence; lock, unlock, confirm and delete;
+T-MEM-08 through the API (an edit moves the memory to version 2 and the history lists the text it replaced, with a
+duplicate refused with `409` and an importance of 9 with `422`); T-MEM-11 through the API (both memories `uncertain` in
+one conflict group, each listing the other, and a `contradiction` revision); the episode with its sources and links, the
+relationship state in words with the numbers apart, its change log with reason and source seq, and a summary
+checkpoint with its `source_seqs`; and an empty state and a manual memory. `memory-store.spec.ts` and
+`memory-studio-screen.spec.ts` (frontend unit) cover the requests of each filter and action, the label of a
+contradiction, the sources and history under a card, and the three data tabs, and `tests/e2e/specs/memory-studio.spec.mjs`
+runs the hand-written-memory flow in the browser (the fake runtime produces no extraction output, so the end-to-end spec
+cannot show sources, events, summaries or a contradiction). In this change `scripts/lyrveil.cmd test unit
+tests/integration/test_memory_studio_api.py` passed (4 tests) and `scripts/lyrveil.cmd test lint` passed (it includes the
+strict frontend build). The frontend unit specs and the end-to-end spec were written but not run: no allowed command
+runs one frontend spec alone, and the full levels were not run.
+
 Delivered in P04.3: `backend/tests/integration/test_memory_retrieval.py` runs `FtsMemoryRetriever` on a migrated SQLite
 file. T-MEM-05: the order follows the weighted score, whose parts each item keeps (two matches normalized to 0.5 and
 1.0, a locked memory joining with no match, an unrelated one never a candidate); the topic and the previous selection

@@ -31,6 +31,14 @@ describe('ApiClient with provideApi', () => {
     expect(report).toEqual({ status: 'alive' });
   });
 
+  it('repeats a parameter once per item of a list and leaves an empty list out', () => {
+    client.get<unknown>('/memories', { status: ['active', 'uncertain'], kind: [] }).subscribe();
+    const request = backend.expectOne((candidate) => candidate.url === '/api/v1/memories');
+    expect(request.request.params.getAll('status')).toEqual(['active', 'uncertain']);
+    expect(request.request.params.has('kind')).toBe(false);
+    request.flush({});
+  });
+
   it('sends JSON bodies with the write methods', () => {
     client.post<unknown>('/characters', { name: 'Ada' }).subscribe();
     const created = backend.expectOne('/api/v1/characters');

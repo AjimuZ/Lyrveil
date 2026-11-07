@@ -6,13 +6,22 @@ import { Observable } from 'rxjs';
 /** The base path of every REST route (docs/api.md). nginx proxies it to the backend. */
 export const API_BASE_PATH = '/api/v1';
 
-/** Query values; `null` and `undefined` are left out, so an unset filter does not reach the URL. */
-export type ApiQuery = Readonly<Record<string, string | number | boolean | null | undefined>>;
+/**
+ * Query values; `null` and `undefined` are left out, so an unset filter does not reach the URL. A list repeats the
+ * parameter once per item (`status=a&status=b`) and an empty list leaves it out.
+ */
+export type ApiQuery = Readonly<
+  Record<string, string | number | boolean | null | undefined | readonly (string | number)[]>
+>;
 
 function toParams(query: ApiQuery | undefined): HttpParams {
   let params = new HttpParams();
   for (const [name, value] of Object.entries(query ?? {})) {
-    if (value !== null && value !== undefined) {
+    if (Array.isArray(value)) {
+      for (const item of value as readonly (string | number)[]) {
+        params = params.append(name, String(item));
+      }
+    } else if (value !== null && value !== undefined) {
       params = params.set(name, String(value));
     }
   }

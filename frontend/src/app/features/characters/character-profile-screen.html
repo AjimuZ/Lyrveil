@@ -45,6 +45,7 @@
         {{ 'profile.newChat' | t }}
       </button>
       <a class="button" [routerLink]="['/characters', c.id, 'edit']">{{ 'profile.edit' | t }}</a>
+      <a class="button" [routerLink]="['/characters', c.id, 'memory']">{{ 'profile.memory' | t }}</a>
       <button type="button" class="button" [disabled]="busy()" (click)="duplicate()">{{ 'profile.duplicate' | t }}</button>
       <button type="button" class="button" [disabled]="busy()" (click)="toggleArchive()">
         {{ (archived() ? 'profile.unarchive' : 'profile.archive') | t }}

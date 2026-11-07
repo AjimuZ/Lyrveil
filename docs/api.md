@@ -379,8 +379,11 @@ live asset, or whose stored path leaves the media root, answers `404 NOT_FOUND`.
 
 ### Memory
 
-Not routed yet. P04.2c delivers the service behind `PATCH` and `DELETE /memories/{id}` (`MemoryService.edit` and
-`delete`); the routes come with the Memory Studio (P04.9).
+Delivered in P04.9a: `GET` and `POST /memories`, `GET`, `PATCH` and `DELETE /memories/{id}`, `lock`, `unlock`,
+`confirm` and `revisions`, `GET /episodes`, and `GET /conversations/{id}/summaries`, `/relationship` and
+`/relationship/history`. Not routed yet: `resolve`, `share`, `unshare`, `apply-to-profile`, `PATCH` and `DELETE
+/episodes/{id}`, `PATCH /conversations/{id}/relationship` and `memory/reprocess`. Like the conversation routes, the
+delivered ones stay out of `backend/openapi.json` until it is next regenerated with Docker.
 
 | Method and path | Purpose |
 | --- | --- |
@@ -402,6 +405,38 @@ Not routed yet. P04.2c delivers the service behind `PATCH` and `DELETE /memories
 | `PATCH /conversations/{id}/relationship` | Correct the narrative, expectations or limits. Records `user_correction`. |
 | `GET /conversations/{id}/relationship/history` | Change log with reasons. |
 | `POST /conversations/{id}/memory/reprocess` | Re-runs extraction on the whole conversation. |
+
+What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persistence/memory_studio.py`):
+
+- **List.** `GET /memories` answers `{"items": [], "next_cursor": null}`, the most recently changed first, 50 per page
+  (`limit` up to 200). `status` can be repeated and no `status` lists every status; `kind`, `provenance`, `scope`,
+  `conversation_id` and `locked` filter exactly; `q` is plain text matched by stem in every language the character's
+  memories use, and text with no searchable word matches nothing. Each item has the memory's columns, `confidence`,
+  `locked`, `needs_review`, `conflict_group_id`, `version` and `source_count`. `404` for an unknown character and `422`
+  for a `cursor` the server did not give.
+- **One memory.** `GET /memories/{id}` adds `sources` (message id, conversation, `seq`, author, the start of the text the
+  memory read, and `valid`, false once the message was deleted or shows another variant) and `conflict`, the other
+  memories of its conflict group. `POST /memories` takes `{"conversation_id", "content", "kind", "importance"}` and writes
+  a lasting, active memory in the conversation's language, `user_confirmed` with confidence 1.0 and no source (`404`,
+  `409` for the same content as a memory in use, `422` for text outside 1 to 280 characters); shared memories are not
+  written yet. `PATCH` takes `content`, `subject`, `value` and `importance`, answers the memory, and records a revision
+  (`409` for a duplicate, `422` for a bad value). `DELETE` answers `204`.
+- **Lock and confirm.** `lock` and `unlock` write no revision and keep the version. `confirm` records a revision (actor
+  `user`, reason `confirm`) and sets provenance `user_confirmed` and confidence 1.0; confirming a confirmed memory
+  changes nothing, and `409` answers a memory that is not active or uncertain.
+- **History.** `GET /memories/{id}/revisions` answers `{"items": []}`, newest first: `version`, `actor`, `reason`,
+  `created_at` and the text, subject, value, status, provenance, confidence and importance the memory had under that
+  version.
+- **Episodes.** `GET /episodes` takes `character_id` (required), `conversation_id`, `q` and `status` (`active`, the
+  default, or `invalidated`) and answers the newest 200 with `participants`, `sources` and `links` (`direction`,
+  `relation`, the other episode's id and title).
+- **Chat data.** `summaries` lists every checkpoint in any status with `level`, `from_seq`, `to_seq`, `version`, `status`,
+  `text` and `content` (its lists and `source_seqs`). `relationship` answers `written` (false before a run wrote the
+  state), `description` (the narrative, or the four bands in words), the narrative, expectations, boundaries, mood, topic,
+  threads, goals, story changes, `recent_events`, `bands` and `values`, the four numbers, which a screen shows only as
+  advanced. `relationship/history` answers the newest 200 change rows with `event_kind`, `dimension`, `reason`, `status`
+  and `sources`. All three answer `404` for an unknown or deleted chat.
+- **Events.** The WebSocket event `memory.updated` is not published by these routes yet.
 
 ### Jobs, scheduling, notifications, settings, data
 

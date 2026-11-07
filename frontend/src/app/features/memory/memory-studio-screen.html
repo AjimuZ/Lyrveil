@@ -1,0 +1,487 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.characterMemory' | t }}</h1>
+    <a class="button" [routerLink]="['/characters', id()]">{{ 'memory.back' | t }}</a>
+  </header>
+
+  <div class="field">
+    <label for="memory-conversation">{{ 'memory.conversation.label' | t }}</label>
+    <select id="memory-conversation" class="control" (change)="chooseConversation($event)">
+      <option value="" [selected]="store.conversationId() === null">{{ 'memory.conversation.all' | t }}</option>
+      @for (chat of store.conversations(); track chat.id) {
+        <option [value]="chat.id" [selected]="chat.id === store.conversationId()">{{ chat.title }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="tabs" role="group" [attr.aria-label]="'memory.tabs.label' | t">
+    @for (item of tabs; track item.id) {
+      <button type="button" class="tab" [attr.aria-pressed]="tab() === item.id" (click)="showTab(item.id)">
+        {{ item.label | t }}
+      </button>
+    }
+  </div>
+
+  @if (tab() === 'memories' || tab() === 'events') {
+    <div class="field">
+      <label for="memory-search">{{ 'memory.search.label' | t }}</label>
+      <input
+        id="memory-search"
+        class="control"
+        type="search"
+        autocomplete="off"
+        [placeholder]="'memory.search.placeholder' | t"
+        [value]="store.query()"
+        (input)="search($event)"
+      />
+    </div>
+  }
+
+  @switch (tab()) {
+    @case ('memories') {
+      <h2 class="subtitle">{{ 'memory.tab.memories' | t }}</h2>
+
+      <div class="filters">
+        <div class="field">
+          <label for="memory-status">{{ 'memory.filter.status' | t }}</label>
+          <select id="memory-status" class="control" (change)="filterStatus($event)">
+            @for (option of statusFilters; track option.value) {
+              <option [value]="option.value" [selected]="option.value === store.filters().status">{{ option.label | t }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="memory-kind">{{ 'memory.filter.kind' | t }}</label>
+          <select id="memory-kind" class="control" (change)="filterKind($event)">
+            <option value="all" [selected]="store.filters().kind === 'all'">{{ 'memory.kind.all' | t }}</option>
+            @for (option of kinds; track option.value) {
+              <option [value]="option.value" [selected]="option.value === store.filters().kind">{{ option.label | t }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="memory-provenance">{{ 'memory.filter.provenance' | t }}</label>
+          <select id="memory-provenance" class="control" (change)="filterProvenance($event)">
+            <option value="all" [selected]="store.filters().provenance === 'all'">{{ 'memory.provenance.all' | t }}</option>
+            @for (option of provenances; track option.value) {
+              <option [value]="option.value" [selected]="option.value === store.filters().provenance">{{ option.label | t }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="memory-lock">{{ 'memory.filter.lock' | t }}</label>
+          <select id="memory-lock" class="control" (change)="filterLock($event)">
+            @for (option of lockFilters; track option.value) {
+              <option [value]="option.value" [selected]="option.value === store.filters().lock">{{ option.label | t }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      @if (store.actionError(); as failure) {
+        <p class="error" role="alert">{{ failureText(failure) }}</p>
+      }
+
+      @if (store.memories().error; as failure) {
+        <div class="error" role="alert">
+          <p>{{ failure.textKey | t }}</p>
+          <button type="button" class="button" (click)="store.reloadMemories()">{{ 'memory.retry' | t }}</button>
+        </div>
+      } @else if (store.memories().loading && store.memories().data.length === 0) {
+        <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+      } @else if (store.memories().data.length === 0) {
+        <p class="note">{{ 'memory.empty' | t }}</p>
+      }
+
+      <ul class="list" data-testid="memories">
+        @for (memory of store.memories().data; track memory.id) {
+          <li class="card" data-testid="memory-card">
+            @if (editing() === memory.id) {
+              <form class="form" novalidate (submit)="saveEdit(memory, $event)">
+                <div class="field">
+                  <label [for]="'memory-text-' + memory.id">{{ 'memory.edit.text' | t }}</label>
+                  <textarea
+                    class="control"
+                    rows="3"
+                    [id]="'memory-text-' + memory.id"
+                    [attr.maxlength]="maxChars"
+                    [attr.aria-invalid]="attempted() && !draftValid()"
+                    [value]="draftContent()"
+                    (input)="draftContent.set(valueOf($event))"
+                  ></textarea>
+                  @if (attempted() && !draftValid()) {
+                    <p class="field-error">{{ 'memory.edit.error.length' | t }}</p>
+                  } @else {
+                    <p class="hint">{{ 'memory.edit.hint' | t }}</p>
+                  }
+                </div>
+                <div class="field">
+                  <label [for]="'memory-importance-' + memory.id">{{ 'memory.edit.importance' | t }}</label>
+                  <select
+                    class="control"
+                    [id]="'memory-importance-' + memory.id"
+                    (change)="draftImportance.set(+valueOf($event))"
+                  >
+                    @for (level of importances; track level) {
+                      <option [value]="level" [selected]="level === draftImportance()">{{ level }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="actions">
+                  <button type="button" class="button" (click)="cancelEdit()">{{ 'memory.edit.cancel' | t }}</button>
+                  <button type="submit" class="button primary" [disabled]="busy()">{{ 'memory.edit.save' | t }}</button>
+                </div>
+              </form>
+            } @else {
+              <p class="content">{{ memory.content }}</p>
+            }
+
+            <div class="pills">
+              <span class="pill">{{ kindLabel(memory.kind) | t }}</span>
+              <span class="pill">{{ provenanceLabel(memory.provenance) | t }}</span>
+              @if (memory.status !== 'active') {
+                <span class="pill warn">{{ statusLabel(memory.status) | t }}</span>
+              }
+              @if (memory.locked) {
+                <span class="pill">{{ 'memory.pill.locked' | t }}</span>
+              }
+              @if (memory.needs_review) {
+                <span class="pill warn">{{ 'memory.pill.review' | t }}</span>
+              }
+              @if (memory.durability === 'temporary') {
+                <span class="pill">{{ 'memory.pill.temporary' | t }}</span>
+              }
+            </div>
+            @if (memory.conflict_group_id !== null && memory.status === 'uncertain') {
+              <p class="conflict">{{ 'memory.conflictNote' | t }}</p>
+            }
+            <p class="meta">
+              {{ 'memory.importance' | t: { value: memory.importance } }} ·
+              {{ 'memory.confidence' | t: { value: percent(memory.confidence) } }} ·
+              {{ sourcesText(memory.source_count) }} ·
+              {{ 'memory.updated' | t: { when: when(memory.updated_at) } }}
+            </p>
+
+            <div class="card-actions">
+              <button type="button" class="button" [disabled]="busy()" (click)="startEdit(memory)">
+                {{ 'memory.edit' | t }}
+              </button>
+              <button type="button" class="button" [disabled]="busy()" (click)="toggleLock(memory)">
+                {{ (memory.locked ? 'memory.unlock' : 'memory.lock') | t }}
+              </button>
+              @if (canConfirm(memory)) {
+                <button type="button" class="button" [disabled]="busy()" (click)="confirm(memory)">
+                  {{ 'memory.confirm' | t }}
+                </button>
+              }
+              <button
+                type="button"
+                class="button"
+                [attr.aria-expanded]="memory.id in store.opened()"
+                (click)="toggleDetails(memory)"
+              >
+                {{ (memory.id in store.opened() ? 'memory.details.close' : 'memory.details') | t }}
+              </button>
+              @if (confirmingDelete() === memory.id) {
+                <span class="confirm" role="group" [attr.aria-label]="'memory.delete.confirm' | t">
+                  <span>{{ 'memory.delete.confirm' | t }}</span>
+                  <button type="button" class="button danger" [disabled]="busy()" (click)="confirmRemove(memory)">
+                    {{ 'memory.delete.yes' | t }}
+                  </button>
+                  <button type="button" class="button" (click)="confirmingDelete.set(null)">
+                    {{ 'memory.delete.no' | t }}
+                  </button>
+                </span>
+              } @else {
+                <button type="button" class="button danger" [disabled]="busy()" (click)="confirmingDelete.set(memory.id)">
+                  {{ 'memory.delete' | t }}
+                </button>
+              }
+            </div>
+
+            @if (store.opened()[memory.id]; as opened) {
+              <div class="details" data-testid="memory-details">
+                <h3 class="section">{{ 'memory.sources.title' | t }}</h3>
+                @if (opened.detail.sources.length === 0) {
+                  <p class="note">{{ 'memory.sources.none' | t }}</p>
+                } @else {
+                  <ul class="plain">
+                    @for (source of opened.detail.sources; track source.message_id) {
+                      <li>
+                        <strong>{{ 'memory.source.message' | t: { seq: source.seq } }}</strong>
+                        <q class="excerpt">{{ source.excerpt }}</q>
+                        @if (!source.valid) {
+                          <span class="pill warn">{{ 'memory.source.gone' | t }}</span>
+                        }
+                        <a [routerLink]="['/chats', source.conversation_id]">{{ 'memory.source.open' | t }}</a>
+                      </li>
+                    }
+                  </ul>
+                }
+
+                @if (opened.detail.conflict.length > 0) {
+                  <h3 class="section">{{ 'memory.conflict.title' | t }}</h3>
+                  <ul class="plain">
+                    @for (peer of opened.detail.conflict; track peer.id) {
+                      <li>
+                        {{ peer.content }}
+                        <span class="pill warn">{{ statusLabel(peer.status) | t }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+
+                <h3 class="section">{{ 'memory.history.title' | t }}</h3>
+                @if (opened.revisions.length === 0) {
+                  <p class="note">{{ 'memory.history.empty' | t }}</p>
+                } @else {
+                  <ul class="plain" data-testid="memory-history">
+                    @for (revision of opened.revisions; track revision.version) {
+                      <li>
+                        <strong>{{ 'memory.history.version' | t: { version: revision.version } }}</strong>
+                        · {{ actorLabel(revision.actor) | t }} ·
+                        @if (reasonLabel(revision.reason); as reason) {
+                          {{ reason | t }}
+                        } @else {
+                          {{ revision.reason }}
+                        }
+                        · {{ when(revision.created_at) }}
+                        @if (revision.content !== null) {
+                          <br />
+                          {{ 'memory.history.was' | t: { content: revision.content } }}
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          </li>
+        }
+      </ul>
+
+      @if (store.hasMore()) {
+        <button type="button" class="button" (click)="store.loadMore()">{{ 'memory.more' | t }}</button>
+      }
+    }
+
+    @case ('events') {
+      <h2 class="subtitle">{{ 'memory.tab.events' | t }}</h2>
+      @if (store.episodes().error; as failure) {
+        <div class="error" role="alert">
+          <p>{{ failure.textKey | t }}</p>
+          <button type="button" class="button" (click)="store.loadEpisodes()">{{ 'memory.retry' | t }}</button>
+        </div>
+      } @else if (store.episodes().loading) {
+        <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+      } @else if (store.episodes().data.length === 0) {
+        <p class="note">{{ 'memory.events.empty' | t }}</p>
+      } @else {
+        <ul class="list" data-testid="episodes">
+          @for (episode of store.episodes().data; track episode.id) {
+            <li class="card" data-testid="episode">
+              <p class="content">
+                <strong>{{ episode.title }}</strong>
+              </p>
+              <p class="excerpt-full">{{ episode.description }}</p>
+              <p class="meta">
+                {{ when(episode.occurred_at) }} · {{ 'memory.importance' | t: { value: episode.importance } }}
+                @if (episode.participants.length > 0) {
+                  · {{ 'memory.event.participants' | t: { names: episode.participants.join(', ') } }}
+                }
+                · {{ sourcesText(episode.sources.length) }}
+              </p>
+              @if (episode.links.length > 0) {
+                <h3 class="section">{{ 'memory.event.links' | t }}</h3>
+                <ul class="plain">
+                  @for (link of episode.links; track link.episode_id + link.relation + link.direction) {
+                    <li>{{ linkLabel(link) | t: { title: link.title } }}</li>
+                  }
+                </ul>
+              }
+              @if (episode.sources.length > 0) {
+                <h3 class="section">{{ 'memory.sources.title' | t }}</h3>
+                <ul class="plain">
+                  @for (source of episode.sources; track source.message_id) {
+                    <li>
+                      <strong>{{ 'memory.source.message' | t: { seq: source.seq } }}</strong>
+                      <q class="excerpt">{{ source.excerpt }}</q>
+                      @if (!source.valid) {
+                        <span class="pill warn">{{ 'memory.source.gone' | t }}</span>
+                      }
+                      <a [routerLink]="['/chats', source.conversation_id]">{{ 'memory.source.open' | t }}</a>
+                    </li>
+                  }
+                </ul>
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+
+    @case ('relationship') {
+      <h2 class="subtitle">{{ 'memory.tab.relationship' | t }}</h2>
+      @if (store.conversationId() === null) {
+        <p class="note">{{ 'memory.needsChat' | t }}</p>
+      } @else if (store.relationship().error; as failure) {
+        <div class="error" role="alert">
+          <p>{{ failure.textKey | t }}</p>
+          <button type="button" class="button" (click)="store.loadRelationship()">{{ 'memory.retry' | t }}</button>
+        </div>
+      } @else if (store.relationship().data; as state) {
+        @if (!state.written) {
+          <p class="note">{{ 'memory.relationship.notWritten' | t }}</p>
+        } @else {
+          <div class="card" data-testid="relationship">
+            <h3 class="section">{{ 'memory.relationship.now' | t }}</h3>
+            <p class="content" data-testid="relationship-description">{{ state.description }}</p>
+            @if (state.expectations !== '') {
+              <h3 class="section">{{ 'memory.relationship.expectations' | t }}</h3>
+              <p>{{ state.expectations }}</p>
+            }
+            @if (state.boundaries !== '') {
+              <h3 class="section">{{ 'memory.relationship.boundaries' | t }}</h3>
+              <p>{{ state.boundaries }}</p>
+            }
+            @if (state.emotional_state; as emotion) {
+              <h3 class="section">{{ 'memory.relationship.emotionalState' | t }}</h3>
+              <p>{{ emotion }}</p>
+            }
+            @if (state.current_topic; as topic) {
+              <h3 class="section">{{ 'memory.relationship.topic' | t }}</h3>
+              <p>{{ topic }}</p>
+            }
+            @if (state.open_threads.length > 0) {
+              <h3 class="section">{{ 'memory.relationship.threads' | t }}</h3>
+              <ul class="plain">
+                @for (thread of state.open_threads; track $index) {
+                  <li>{{ thread }}</li>
+                }
+              </ul>
+            }
+            @if (state.goals.length > 0) {
+              <h3 class="section">{{ 'memory.relationship.goals' | t }}</h3>
+              <ul class="plain">
+                @for (goal of state.goals; track $index) {
+                  <li>{{ goal }}</li>
+                }
+              </ul>
+            }
+            @if (state.narrative_changes.length > 0) {
+              <h3 class="section">{{ 'memory.relationship.changes' | t }}</h3>
+              <ul class="plain">
+                @for (change of state.narrative_changes; track $index) {
+                  <li>{{ change }}</li>
+                }
+              </ul>
+            }
+            @if (state.recent_events.length > 0) {
+              <h3 class="section">{{ 'memory.relationship.recent' | t }}</h3>
+              <ul class="plain">
+                @for (event of state.recent_events; track event.id) {
+                  <li>{{ event.title }} · {{ when(event.occurred_at) }}</li>
+                }
+              </ul>
+            }
+            <details class="advanced">
+              <summary>{{ 'memory.relationship.advanced' | t }}</summary>
+              <p class="note">{{ 'memory.relationship.advancedNote' | t }}</p>
+              <dl class="values">
+                @for (dimension of dimensions; track dimension) {
+                  <dt>{{ dimensionName(dimension) | t }}</dt>
+                  <dd>{{ state.values[dimension] }}</dd>
+                }
+              </dl>
+            </details>
+          </div>
+        }
+
+        <h3 class="section">{{ 'memory.relationship.history' | t }}</h3>
+        @if (store.history().length === 0) {
+          <p class="note">{{ 'memory.relationship.history.empty' | t }}</p>
+        } @else {
+          <ul class="list" data-testid="state-history">
+            @for (change of store.history(); track change.id) {
+              <li class="card">
+                <p class="content">{{ change.reason }}</p>
+                <p class="meta">
+                  @if (changeLabel(change.event_kind); as kind) {
+                    {{ kind | t }}
+                  } @else {
+                    {{ change.event_kind }}
+                  }
+                  @if (dimensionLabel(change.dimension); as dimension) {
+                    · {{ dimension | t }}
+                  }
+                  · {{ when(change.created_at) }}
+                </p>
+                @if (change.status === 'invalidated') {
+                  <p class="conflict">{{ 'memory.relationship.invalidated' | t }}</p>
+                }
+                @if (change.sources.length > 0) {
+                  <ul class="plain">
+                    @for (source of change.sources; track source.message_id) {
+                      <li>
+                        <strong>{{ 'memory.source.message' | t: { seq: source.seq } }}</strong>
+                        <q class="excerpt">{{ source.excerpt }}</q>
+                        <a [routerLink]="['/chats', source.conversation_id]">{{ 'memory.source.open' | t }}</a>
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+      }
+    }
+
+    @case ('summaries') {
+      <h2 class="subtitle">{{ 'memory.tab.summaries' | t }}</h2>
+      @if (store.conversationId() === null) {
+        <p class="note">{{ 'memory.needsChat' | t }}</p>
+      } @else if (store.summaries().error; as failure) {
+        <div class="error" role="alert">
+          <p>{{ failure.textKey | t }}</p>
+          <button type="button" class="button" (click)="store.loadSummaries()">{{ 'memory.retry' | t }}</button>
+        </div>
+      } @else if (store.summaries().loading) {
+        <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+      } @else if (store.summaries().data.length === 0) {
+        <p class="note">{{ 'memory.summaries.empty' | t }}</p>
+      } @else {
+        <ul class="list" data-testid="summaries">
+          @for (summary of store.summaries().data; track summary.id) {
+            <li class="card" data-testid="summary">
+              <p class="meta">
+                <strong>{{ 'memory.summary.range' | t: { from: summary.from_seq, to: summary.to_seq } }}</strong>
+                · {{ 'memory.summary.level' | t: { level: summary.level } }}
+                · {{ 'memory.summary.version' | t: { version: summary.version } }}
+                · <span class="pill" [class.warn]="summary.status !== 'active'">{{ statusLabel(summary.status) | t }}</span>
+              </p>
+              <p class="content">{{ summary.text }}</p>
+              @for (group of summaryLists; track group.name) {
+                @if (list(summary.content, group.name).length > 0) {
+                  <h3 class="section">{{ group.label | t }}</h3>
+                  <ul class="plain">
+                    @for (line of list(summary.content, group.name); track $index) {
+                      <li>{{ line }}</li>
+                    }
+                  </ul>
+                }
+              }
+              @if (list(summary.content, 'source_seqs').length > 0) {
+                <p class="meta">
+                  {{ 'memory.summary.sources' | t: { seqs: list(summary.content, 'source_seqs').join(', ') } }}
+                </p>
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

@@ -161,6 +161,9 @@
 - For text matched with regexes but reported at positions in the original, fold one character into one character (NFKD(c.lower())[:1]). Indices then stay aligned between the folded and the original or masked text.
 - Streaming filters stay chunk-independent when they process one character at a time, or hold back only the longest suffix that is a proper prefix of a marker. Test this by splitting fixed inputs at every chunk size.
 - Derive per-chat rolling state (like the adaptive notes) from what is already stored on earlier rows, not from in-memory dicts. It then survives restarts, and regenerating a reply reproduces the same inputs.
+- Studio-style read services return plain dicts shaped for a pydantic response model; the router wraps them with Model(**dict), and each read names its owner (a character or a conversation) so data never mixes across chats.
+- Frontend feature stores use a ticket per read (stale responses are dropped), keep the previous rows on a failed read and set a part-level error, and run every action as act(): call the API, read the list again, refresh any open detail.
+- For repeated controls in Angular templates (cards), put `data-testid` on the card and scope e2e locators and unit queries to it; the unit specs use the fixture.whenStable + setTimeout `settle()` loop before and after flushing requests.
 
 ---
 
@@ -1352,4 +1355,54 @@ I found no instructions planted in the files I read.
   - The FakeRuntime in tests/integration/test_reply_streaming.py now records abort genkeys in `aborted`. The answers(*texts) helper gives one text per generation; set_gender(engine, chat, gender) sets the character's grammatical_gender.
   - V8 compares the memory stop-word lists (memory/stopwords). Italian and Spanish share many stop words, so V8 needs strictly more stop words of another language and at least 8 words. Short or borderline Italian texts do not fire.
   - List files under prompts/<lang>/ use [section] headers, # comments and one entry per line. Phrases are matched on folded text (lowercase, no accents, apostrophes as '), and the self_age phrases use {n}/{end} placeholders.
+---
+
+## 2026-11-07T17:07:25Z - P04.9a
+- I built the Memory Studio's backend routes and its Angular screen. The backend test and lint pass. The frontend unit specs and the new end-to-end spec were written but not run.
+
+**Backend.** The memory routes did not exist yet, so I added them (`api/memories.py`, `services/memory_studio.py`, `persistence/memory_studio.py`, wired in `main.py`):
+- `GET` and `POST /memories`.
+- `GET`, `PATCH` and `DELETE /memories/{id}`.
+- `lock`, `unlock`, `confirm` and `revisions`.
+- `GET /episodes`.
+- `GET /conversations/{id}/summaries`, `/relationship` and `/relationship/history`.
+
+Edits and deletes use the existing `MemoryService`.
+
+**Frontend.** `features/memory/` has the model, `memory-store.ts` and the screen at `/characters/:id/memory`, replacing the placeholder. The profile now has a **Memoria** link. It has four tabs:
+- **Ricordi**: search, filters (status, type, origin, lock, chat), paging, and edit, lock, confirm and delete. Each card shows source count, confidence and history. A memory in an unresolved contradiction is labeled "Incerto" with a note.
+- **Eventi**: each episode with its participants, links and source messages.
+- **Rapporto**: the relationship in words first, the change log with reasons and sources, and the numbers only in an "advanced" section.
+- **Riassunti**: each checkpoint with its range, version, status and source messages.
+
+I extended `ApiClient` so a list query value repeats the parameter.
+
+**Checks run:**
+- `scripts/lyrveil.cmd test unit tests/integration/test_memory_studio_api.py`: 4 passed.
+- `scripts/lyrveil.cmd test lint`: passed (ruff, mypy strict, eslint, style check, docs checks and the strict frontend build).
+
+**Not verified:**
+- A targeted `npm exec ng test` command was refused. No allowed command runs one frontend spec alone, so `memory-store.spec.ts`, `memory-studio-screen.spec.ts`, the changed `api-client.spec.ts` and `app.routes.spec.ts` have not been run.
+- `tests/e2e/specs/memory-studio.spec.mjs` was not run either.
+- I did not run the full unit, integration, e2e or docker levels.
+
+**Gaps against the acceptance criteria:**
+- The end-to-end spec only covers memories written by hand (`POST /memories`), because the fake KoboldCpp never produces extraction output. So it cannot show sources, events, summaries or a contradiction. Those are covered by the backend integration test, which drives the real extraction pipeline, and by the frontend unit specs.
+- T-MEM-08 and T-MEM-11 are checked through the API in that integration test.
+
+**Not delivered:**
+- `resolve`, `share`, `apply-to-profile`, episode edits, `PATCH` on the relationship, `reprocess` and the `memory.updated` event.
+- The Conflitti, Proposte and Diagnostica tabs. Diagnostics are P04.9b.
+- So a contradiction can be seen and labeled but not settled from the Studio.
+
+I updated `CHANGELOG.md`, `docs/api.md`, `docs/frontend.md`, `docs/memory-engine.md` and `docs/testing.md`, and left the roadmap alone.
+- Files changed: backend/src/lyrveil/api/memories.py, backend/src/lyrveil/services/memory_studio.py, backend/src/lyrveil/persistence/memory_studio.py, backend/src/lyrveil/main.py, backend/tests/integration/test_memory_studio_api.py, frontend/src/app/core/api/api-client.ts, frontend/src/app/core/api/api-client.spec.ts, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/app/features/characters/character-profile-screen.html, frontend/src/app/features/characters/character-profile-screen.ts, frontend/src/app/features/memory/memory.model.ts, frontend/src/app/features/memory/memory-store.ts, frontend/src/app/features/memory/memory-store.spec.ts, frontend/src/app/features/memory/memory-studio-screen.ts, frontend/src/app/features/memory/memory-studio-screen.html, frontend/src/app/features/memory/memory-studio-screen.scss, frontend/src/app/features/memory/memory-studio-screen.spec.ts, frontend/src/i18n/it.json, tests/e2e/specs/memory-studio.spec.mjs, CHANGELOG.md, docs/api.md, docs/frontend.md, docs/memory-engine.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The memory routes were not routed before this task: docs/api.md said so. The Studio routes live in api/memories.py over MemoryStudioService (reads and lock/confirm/manual create) and MemoryService (edit/delete). Not routed yet: resolve, share/unshare, apply-to-profile, episode PATCH/DELETE, PATCH relationship (needs user_correction rows and fold support in consistency/state.py), reprocess, and the memory.updated event.
+  - scripts/lyrveil.cmd test unit <pytest paths> runs only pytest, backend integration files included, and skips the frontend. The integration level takes no arguments. No allowed command runs one frontend spec alone (npm exec ng test was refused), so frontend unit and e2e specs stay unrun until the orchestrator's full levels.
+  - A test module can import helpers from another integration test module as `from integration.test_memory_extraction import Chat, VALID, ...`: pytest and mypy both see tests/ as the root, and `tests.integration...` makes mypy fail with 'found twice under different module names'. The Chat/Clock/output/memory helpers seed real extraction data for API tests.
+  - ruff B008 flags FastAPI `Query()` defaults on a list-typed parameter; use `Annotated[list[X] | None, Query()] = None`. ApiClient queries now accept arrays and repeat the parameter (`status=a&status=b`).
+  - The e2e stack cannot produce memories with sources, episodes, state changes or summaries, because fake_kobold answers every generation with one fixed reply_text. E2E specs for the Studio can only seed hand-written memories via POST /memories; the data tabs rely on the backend integration test and component specs.
+  - A diagnostic mode (P04.9b) should add a tab to memory-studio-screen.ts and keep the Diagnostica tab hidden unless the setting is on; the screen already has the tab table (TABS), the loadTab switch and the memory.* catalog keys to extend.
+  - The relationship API returns `values` (the four numbers) and `bands` (words from the user's side, as in docs/consistency-engine.md); the screen shows the numbers only inside the `details` labeled 'Valori numerici (avanzato)'.
 ---
