@@ -71,6 +71,7 @@ Operational codes, reported in logs, in `last_error` of the state document and i
 | `RUNTIME_CONTAINER_MISSING` | A runtime container does not exist. Run `.\setup.cmd`. |
 | `RUNTIME_CONFIG_INVALID` | A runtime exited with status 78 because of its launch file. |
 | `DOCKER_UNAVAILABLE` | The Docker Engine does not answer. |
+| `GPU_RELEASE_UNVERIFIED` | After a stop, the runtime container did not end, or the GPU memory did not settle or could not be read. |
 
 ## REST endpoints
 
@@ -316,16 +317,42 @@ Between backend and orchestrator only. Internal network, port 8100. Every reques
 except `GET /v1/health` needs `Authorization: Bearer <LYRVEIL_CONTROL_TOKEN>`. Requests carry
 only enums, identifiers and numbers, never user text.
 
-Implementation: partial, in `orchestrator/src/lyrveil_orchestrator/api.py` (P01.4c). The
-token check, `GET /v1/health` and `GET /v1/preflight` are delivered and tested by T-ORC-10.
+Implementation: partial, in `orchestrator/src/lyrveil_orchestrator/api.py`. The token
+check, `GET /v1/health` and `GET /v1/preflight` came in P01.4c and are tested by T-ORC-10.
 The check runs before routing, so a missing or wrong token gets the same `401` on every
 path, whether or not a route exists there: `application/problem+json` with code
 `UNAUTHORIZED` and `WWW-Authenticate: Bearer`. The scheme is case-insensitive, and the
 token is compared with `hmac.compare_digest`. The application refuses to start with a
-token that is not 64 hexadecimal characters. With the right token, a route not yet
-delivered answers `404`. No OpenAPI document is served: this table is the contract. The
-other routes come with the lifecycle manager in P02 and P06, and serving on port 8100 comes
-with the orchestrator service in Compose.
+token that is not 64 hexadecimal characters. With the right token, an unknown path
+answers `404`. No OpenAPI document is served: this table is the contract.
+
+Every other route of the table came in P02.2, served by `ModelLifecycleManager`
+(`lifecycle.py`), whose run loop the application's lifespan starts. The text path is
+covered: start from mode `llm`, readiness, leases, drain and release verification. The
+VRAM check before a load, so `blocked_reason` too, and the image flow come in P06.
+`blocked_reason` is always `null` until then. Not delivered yet: `lyrveil_orchestrator.main`,
+which serves the application on port 8100, so the Compose service does not serve it yet.
+
+Rules of the delivered routes:
+
+- Refusals are `application/problem+json` with `code`: `409 NOT_READY` when the state is
+  not the ready state of the lease's mode, or a mode change or a drain is pending;
+  `409 LEASE_HELD`; `410 LEASE_EXPIRED`; `409 CONFLICT` for a mode change while draining
+  and for `POST /v1/recover` outside `ERROR`. A body that breaks the schema gets FastAPI's `422`.
+- `job_id` is 1 to 64 letters, digits, `-` or `_`. `ttl_s` is 1 to 120, default 30. A body
+  with any other field is refused.
+- The lease document is `{"id", "mode", "job_id", "ttl_s", "expires_in_s"}`.
+  `expires_in_s` is the time left when the answer was sent, so the two containers'
+  clocks never need to agree.
+- `DELETE /v1/leases/{id}` answers `410 LEASE_EXPIRED` when the lease is no longer the
+  current one, and changes nothing. `ok` returns to the ready state, `oom` and
+  `runtime_error` go to `RECOVERING`.
+- `POST /v1/drain` answers at once. The runtime stops when the current lease ends;
+  poll `GET /v1/state` until `IDLE`. The state document adds `draining`.
+- `GET /v1/events` answers `{"boot_id", "events"}`. Each event has `seq`, `at`, `from`,
+  `to`, `reason`, `job_id`, `code` and `details`. `details` holds only VRAM values in MiB
+  and exit codes. For another `boot_id`, every buffered event is returned.
+- `ERROR` is left only through `POST /v1/recover`. The timed retry comes in P06.
 
 `GET /v1/preflight` answers `200` with `ok`, the rows of [Preflight checks](operations.md#preflight-checks)
 that the orchestrator judges, and the facts read through NVML. A failing row is in the
@@ -373,6 +400,7 @@ State document:
   "seq": 128,
   "state": "LLM_READY",
   "desired_mode": "llm",
+  "draining": false,
   "lease": null,
   "blocked_reason": null,
   "vram": {"total_mib": 12282, "used_mib": 10400, "free_mib": 1882},

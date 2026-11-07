@@ -66,6 +66,9 @@
 - Entrypoints that validate config can offer a --print-command mode that runs every check and prints the argv, so the command logic is testable with no GPU or model.
 - Strict, frozen, extra=forbid Pydantic models for config files. `parse_catalog` turns the ValidationError into one CatalogError that lists every problem with its field location.
 - A test that parses a documentation table and compares it with a shipped data file keeps the docs and the data from drifting. Copy the page into the test stage and use `.dockerignore` negations, as docs/runtime-contracts.md already does.
+- Mutate shared asyncio state only from synchronous methods that never await. Before each await in a long operation, enter a state that refuses concurrent requests (LOADING or UNLOADING) so those requests see consistent state.
+- Map port errors (gate, NVML) to the documented error codes at the adapter boundary (SupervisorError.code), so callers report `last_error` without parsing messages.
+- Mypy strict flags a repeated `assert obj.prop is X` after a mutation as non-overlapping. Compare a tuple such as `(obj.state, obj.lease) == (...)` instead.
 
 ---
 
@@ -483,4 +486,33 @@ Checks:
   - Setup (steps 5 to 7) and the status script still say the catalog is not available. Wiring them to the catalog belongs to later P02 work. tests/docker/Lifecycle.Tests.ps1 asserts the 'not available yet' warning, so it must change together with that script.
   - `test unit -k <name>` reports FAILED when the orchestrator component has no matching test (pytest exit 5). That is harmless noise for a targeted run.
   - The Edit tool drops a trailing space in `old_string`/`new_string` ('Tier = ' became 'Tier =Literal'), and ruff format caught it. Prefer anchoring edits on a whole token.
+---
+
+## 2026-11-07T02:07:41Z - P02.2
+- The orchestrator can now start and stop the text runtime and hand out leases. The backend has a client that uses those leases. Lint passes and the new unit tests pass. The new integration test that covers the second acceptance criterion has not run yet.
+
+What was built:
+- **`supervisor.py`** (`ProcessSupervisor`): refuses to start a runtime while the other one runs (exclusivity rule 3). It starts `lyrveil-llm` through `ContainerGate` and polls Docker health until `healthy`, failing with `LLM_LOAD_FAILED`, or `RUNTIME_CONFIG_INVALID` when the runtime exits with status 78. On stop it uses the 20 s grace period, then checks `State.Running`, the exit code and `top`. It then samples NVML every 500 ms until three samples lie within 64 MiB, for at most 60 s. The VRAM growth at load and the drop at release are measured; they are recorded but never fail a check.
+- **`lifecycle.py`** (`ModelLifecycleManager`): owns the state, the desired mode (default `llm`), the single lease, drain/resume, recover, the event buffer of 5000 and a reduced recovery. It applies one `state_machine.py` transition per step. Lease rules: one at a time (`LEASE_HELD`), mode match with no pending mode change or drain (`NOT_READY`), 30 s ttl renewed by heartbeat, and expiry moves to `RECOVERING` with `LEASE_LOST`. A release with `oom` or `runtime_error` goes to `RECOVERING`. A runtime that loses health ends the lease. A failed load is retried after 5 s and 20 s, and the third failure ends in `ERROR`.
+- **`api.py`**: now serves every control route: state with long poll, desired-mode, leases (acquire, heartbeat, release), recover, drain, resume and events. The app's lifespan runs the manager loop. The signature is now `create_app(token, monitor, lifecycle)`, so the existing T-ORC-10 test was updated; its 404 check now targets an unknown path.
+- **Backend `OrchestratorClient`** (`lyrveil/orchestration/client.py`): uses only the standard library and ignores proxy settings. `acquire_lease` raises `LeaseRefusedError` with `NOT_READY` or `LEASE_HELD`. `renew_lease` raises `LeaseLostError` on 410. `release_lease` returns False on 410. Anything else raises `OrchestratorUnavailableError`.
+
+**Checks run:**
+- `test lint`: passed for backend, orchestrator, frontend and docs.
+- `test unit -k "test_leases or test_supervisor or test_orchestrator_client or test_socket_confinement"`: orchestrator 46 passed, including 11 T-ORC-03 tests and 10 supervisor tests; backend 10 passed.
+
+**Not checked:**
+- The `integration` level cannot be filtered, so `tests/integration/test_text_lifecycle.py` (start from mode `llm` → `LLM_READY` → lease → `POST /v1/drain` → `IDLE`) and the updated `test_control_api.py` have not run.
+- The VRAM check before a load (`blocked_reason` is always null), the timed retry out of `ERROR`, launch-level fallbacks, log classification and the image flow are left for P06.
+- There is still no `lyrveil_orchestrator.main`, so the real Compose service does not serve the API yet. Serving it needs Uvicorn added to the orchestrator lock.
+- Files changed: orchestrator/src/lyrveil_orchestrator/supervisor.py, orchestrator/src/lyrveil_orchestrator/lifecycle.py, orchestrator/src/lyrveil_orchestrator/api.py, orchestrator/tests/integration/test_control_api.py, orchestrator/tests/integration/test_text_lifecycle.py, orchestrator/tests/unit/test_leases.py, orchestrator/tests/unit/test_supervisor.py, backend/src/lyrveil/orchestration/client.py, backend/tests/unit/test_orchestrator_client.py, docs/api.md, docs/backend.md, docs/gpu-orchestration.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `create_app(control_token, monitor, lifecycle)` now requires a ModelLifecycleManager, and its lifespan runs `lifecycle.run()`. Tests build one with `ModelLifecycleManager(ProcessSupervisor(FakeContainerGate(), monitor))`.
+  - `lyrveil_orchestrator.main` still does not exist, and Uvicorn is not in the orchestrator's dependencies. Serving the API in Compose needs Uvicorn added to orchestrator/pyproject.toml and uv.lock regenerated through the Dockerfile lockfile stage.
+  - `ModelLifecycleManager.step()` returns True when the state changed. Unit tests loop it until False (`settle`) and drive a fake monotonic clock; `ProcessSupervisor` accepts `sleep` and `clock` for the same purpose.
+  - Lifecycle routes in api.py must be `async def`: the manager is not thread-safe, and a plain `def` route would run in FastAPI's thread pool.
+  - The backend's `OrchestratorClient` is blocking (urllib with no proxy), so the P02.4 job queue must call it from a worker thread and heartbeat every `HEARTBEAT_INTERVAL_S` = 10.
+  - A new operational code, GPU_RELEASE_UNVERIFIED, is documented in docs/api.md. The state document gained `draining`, and DELETE of a lease that is not current answers 410.
+  - `scripts/lyrveil.cmd test integration` takes no arguments, so integration tests cannot be targeted. Only `test unit -k` can be.
+  - Shell pipes to grep are denied, but `| head` and `| tail` on the test command work.
 ---

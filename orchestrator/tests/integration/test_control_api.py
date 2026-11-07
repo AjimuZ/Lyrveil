@@ -10,8 +10,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from fakes.fake_docker import FakeContainerGate
 from lyrveil_orchestrator.api import create_app
 from lyrveil_orchestrator.gpu_monitor import CudaVersion, GpuFacts, GPUResourceMonitor, VramReading
+from lyrveil_orchestrator.lifecycle import ModelLifecycleManager
+from lyrveil_orchestrator.supervisor import ProcessSupervisor
 
 TOKEN = "ab" * 32
 # Every route of docs/api.md, Control API, delivered or not, plus paths no phase defines.
@@ -59,9 +62,14 @@ class FakeProbe:
         pass
 
 
+def lifecycle(monitor: GPUResourceMonitor) -> ModelLifecycleManager:
+    return ModelLifecycleManager(ProcessSupervisor(FakeContainerGate(), monitor))
+
+
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(TOKEN, GPUResourceMonitor(FakeProbe()))
+    monitor = GPUResourceMonitor(FakeProbe())
+    return create_app(TOKEN, monitor, lifecycle(monitor))
 
 
 @pytest.fixture
@@ -107,9 +115,9 @@ def test_the_right_token_reaches_the_preflight(client: TestClient, authorization
     ]
 
 
-def test_the_right_token_on_an_undelivered_route_gets_404_and_no_schema_is_served(client: TestClient) -> None:
+def test_the_right_token_on_an_unknown_route_gets_404_and_no_schema_is_served(client: TestClient) -> None:
     authorized = {"Authorization": "Bearer " + TOKEN}
-    assert client.get("/v1/state", headers=authorized).status_code == 404
+    assert client.get("/v1/unknown", headers=authorized).status_code == 404
     assert client.get("/openapi.json", headers=authorized).status_code == 404
     assert client.get("/docs", headers=authorized).status_code == 404
 
@@ -130,6 +138,8 @@ def test_tokens_are_compared_in_constant_time(client: TestClient, monkeypatch: p
 
 @pytest.mark.parametrize("token", ["", "generated-by-setup", "ab" * 31, "zz" * 32, "ab" * 33])
 def test_an_unusable_token_is_refused_without_its_value(token: str) -> None:
+    monitor = GPUResourceMonitor(FakeProbe())
+    manager = lifecycle(monitor)
     with pytest.raises(ValueError, match="64 hexadecimal characters") as raised:
-        create_app(token, GPUResourceMonitor(FakeProbe()))
+        create_app(token, monitor, manager)
     assert not token or token not in str(raised.value)

@@ -365,9 +365,29 @@ message that only names Docker, such as `Docker did not answer`, is not reported
 calls of [Runtime contracts](runtime-contracts.md#nvml-and-wsl2), on device 0, and raises
 `GpuProbeError` for any NVML failure, a missing library included. `GPUResourceMonitor`
 returns `GpuFacts`, with the device name, the driver and CUDA driver versions and a
-`VramReading` in MiB, or a fresh `VramReading` alone. Release verification and the VRAM
-checks before a load come with the lifecycle manager. `preflight.py` judges the facts at the
+`VramReading` in MiB, or a fresh `VramReading` alone. `preflight.py` judges the facts at the
 thresholds of [Operations](operations.md#preflight-checks), and `api.py` builds the
-[control API](api.md#control-api) with `create_app(control_token, monitor)`.
+[control API](api.md#control-api) with `create_app(control_token, monitor, lifecycle)`.
 `tests/unit/test_gpu_monitor.py` and `tests/unit/test_preflight.py` test both with fakes,
 and `tests/integration/test_control_api.py` holds T-ORC-10.
+
+`supervisor.py` holds `ProcessSupervisor`, the only caller of the gate's start and stop.
+`start` refuses to start a runtime while the other one runs, then polls Docker health
+until it reads `healthy`, every 2 s, within the load timeout. `stop` stops with the
+runtime's grace period, then checks `State.Running`, the exit code and `top`, and samples
+NVML every 500 ms until three samples lie within 64 MiB, for at most 60 s. Each failure is
+a `SupervisorError` whose `code` comes from [Errors](api.md#errors). `lifecycle.py` holds
+`ModelLifecycleManager`, which owns the state, the desired mode, the single lease and the
+event buffer. It applies one transition of `state_machine.py` per step, and the lifespan of
+`create_app` runs its loop. `tests/unit/test_supervisor.py` tests the supervisor, and
+`tests/unit/test_leases.py` holds T-ORC-03. Both use the fakes of `tests/fakes/`.
+`tests/integration/test_text_lifecycle.py` drives the control API from mode `llm` to
+`LLM_READY`, through a lease, and back to `IDLE` on `POST /v1/drain`.
+
+On the backend side, `lyrveil/orchestration/client.py` holds `OrchestratorClient`, which
+uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedError` with
+`NOT_READY` or `LEASE_HELD`. `renew_lease` raises `LeaseLostError` on `410`.
+`release_lease` returns `False` on `410`, when nothing is left to release. Any other
+failure raises `OrchestratorUnavailableError`. The client blocks, so callers run it in a
+worker thread. The job queue that heartbeats every 10 s comes with P02.4.
+`tests/unit/test_orchestrator_client.py` tests it against a local HTTP server.
