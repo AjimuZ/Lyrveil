@@ -8,7 +8,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P01 | Foundations: empty app starts, stops and restarts cleanly | Done |
 | P02 | A real streaming chat with the default text profile | In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending |
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | In progress: automated exit passed; hardware and manual part (P03.EXIT-HW) pending |
-| P04 | Memory and consistency | Planned |
+| P04 | Memory and consistency | In progress: automated exit passed; quality part (P04.10) pending |
 | P05 | Images in messages | Planned |
 | P06 | Automatic GPU orchestration and recovery | Planned |
 | P07 | Proactive messages and messaging details | Planned |
@@ -131,6 +131,10 @@ Evidence:
   `quality_evidence` ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).
 
 Exit: T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06, T-CON-08 to T-CON-11 pass. T-QLT-01 meets its targets or records the tuning and repeat. T-QLT-05 and T-QLT-06 meet their hard targets on every profile that stays in the catalog. AC-11 and AC-12 hold.
+
+Evidence:
+
+- [P04 automated exit: the `unit`, `integration`, `e2e` and `lint` levels, with T-MEM-01 to T-MEM-23, T-CON-01 to T-CON-06 and T-CON-08 to T-CON-11, and AC-11 and AC-12 through their tests](verification/2026-11-07-p04-exit.md). The `docker` level was not run there. The quality part (T-QLT-01, T-QLT-05, T-QLT-06 on the catalog profiles) is pending with P04.10, so the phase is not done.
 
 ## P05: Images
 

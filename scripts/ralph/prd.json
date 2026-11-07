@@ -1727,8 +1727,8 @@
         "The P04 section lists the evidence, and the phase table shows the automated part as passed and the quality part (P04.10) as pending, so the phase is not marked done."
       ],
       "priority": 73,
-      "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "passes": true,
+      "notes": "Ran the unit, integration, e2e and lint levels for the P04 exit. Everything passed after fixing one axe finding (scrollable-region-focusable on the prompt <pre> in the Memory Studio diagnostics tab). Recorded dated evidence in docs/verification/2026-11-07-p04-exit.md, listed it under P04 in the roadmap, and set the P04 phase state to \"In progress: automated exit passed; quality part (P04.10) pending\". The docker level was not run (no P04 exit test belongs to it); T-QLT-01/05/06 are pending with P04.10.",
       "dependsOn": [
         "P04.1",
         "P04.2a",

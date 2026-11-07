@@ -385,6 +385,7 @@ No application exists yet. This section records the design documentation.
 
 ### Changed
 
+- In the Memory Studio's **Diagnostica** tab, the stored prompt text can be reached and scrolled with the keyboard.
 - The web interface's container now runs as UID and GID 10001, like every other
   service, instead of the nginx image's own user. Docker tests check that
   only `127.0.0.1:4200` is published, that the backend and the runtimes have no

@@ -631,7 +631,14 @@
             <details class="advanced">
               <summary>{{ 'memory.diag.promptText' | t }}</summary>
               @if (assembly.prompt_text !== null) {
-                <pre class="prompt" data-testid="diagnostics-prompt">{{ assembly.prompt_text }}</pre>
+                <pre
+                  class="prompt"
+                  tabindex="0"
+                  role="region"
+                  [attr.aria-label]="'memory.diag.promptText' | t"
+                  data-testid="diagnostics-prompt"
+                >{{ assembly.prompt_text }}</pre
+                >
               } @else {
                 <p class="note">{{ 'memory.diag.promptText.none' | t }}</p>
               }

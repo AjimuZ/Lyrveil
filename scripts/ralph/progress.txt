@@ -167,6 +167,7 @@
 - To test a flow that spans the reply handler and the API, reuse `FakeRuntime`, `new_chat`, `worker_for` and `Ticks` from `integration.test_reply_streaming`, send with `MessageService(engine).send`, and run the job with `scheduler.run_once()`. A `TestClient` without a context manager does not run the app's worker.
 - Anything written as a side effect of a reply goes in its own short transaction after the reply is stored, with a try/except that logs and continues, so it can never turn the reply into a failed job.
 - Show stored memory text by reading it by id when it is displayed (nothing is copied into the diagnostic row), and say so in the UI when the row is gone.
+- Record exit evidence in docs/verification/<date>-<phase>-exit.md with versions printed by the commands, exact commands, last-run counts, a test-to-file table, what failed and changed, and a Not run section; link it under an Evidence: list in the phase section without editing item lines.
 
 ---
 
@@ -1421,4 +1422,15 @@ I updated `CHANGELOG.md`, `docs/api.md`, `docs/frontend.md`, `docs/memory-engine
   - The Studio store's `open()` now also calls `GET /settings`, so any spec that opens the store must flush `/api/v1/settings`.
   - httpx request URLs are logged by the test client, so a test that checks for a text marker in the logs must not put the marker in a URL.
   - Not delivered: a switch for the mode in the interface (General settings screen), the per-reply diagnostic link in the conversation's context panel, and storing the prompt of failed or blocked replies.
+---
+
+## 2026-11-07T17:29:10Z - P04.EXIT
+- Ran the unit, integration, e2e and lint levels for the P04 exit. Everything passed after fixing one axe finding (scrollable-region-focusable on the prompt <pre> in the Memory Studio diagnostics tab). Recorded dated evidence in docs/verification/2026-11-07-p04-exit.md, listed it under P04 in the roadmap, and set the P04 phase state to "In progress: automated exit passed; quality part (P04.10) pending". The docker level was not run (no P04 exit test belongs to it); T-QLT-01/05/06 are pending with P04.10.
+- Files changed: frontend/src/app/features/memory/memory-studio-screen.html, docs/verification/2026-11-07-p04-exit.md, docs/roadmap.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Levels at the P04 exit: unit (Pester 39, backend 663, orchestrator 555, Vitest 104 tests in 18 files, Node 11), integration (backend 286, orchestrator 200), e2e (28), lint all pass.
+  - Scrollable <pre> or overflow regions in the frontend need tabindex=0, a role and an accessible name or axe fails with scrollable-region-focusable in the e2e specs.
+  - T-MEM-22 is a Quality-level catalog test but runs in the backend integration level on a synthetic fixture; its recall figure only prints with pytest -s, so the evidence file records the assertion, not the number.
+  - The e2e memory-studio spec labels its diagnostic test T-MEM-21, which the catalog assigns to ContextBuilder; left as written.
+  - P04.10 (quality protocols on real profiles) and the docker level for P04 remain unrun; the orchestrator runs the full plan at the end.
 ---
