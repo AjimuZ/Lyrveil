@@ -37,6 +37,7 @@ from lyrveil.jobs.queue import JobQueue, QueueFullError
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence.search import match_query, search_messages
 
 _NO_CHAT = "Conversazione non trovata."
 _NO_MESSAGE = "Messaggio non trovato."
@@ -146,6 +147,23 @@ class MessageService:
             more = len(rows) > limit
             items = list(reversed(rows[:limit]))
             return Page(items=items, next_before_seq=items[0].seq if more else None)
+
+        return read(self._engine, load)
+
+    def search(self, conversation_id: str, q: str, limit: int = DEFAULT_PAGE_SIZE) -> list[Message]:
+        """Returns up to `limit` messages of the chat, not deleted, whose text contains every word of `q` with accents
+        ignored, newest first. `q` is plain text and never acts as search syntax; one with no letter or digit finds
+        nothing.
+
+        Raises ValueError for a `limit` outside 1 to MAX_PAGE_SIZE and NotFoundError for a missing or deleted chat.
+        """
+        if not 1 <= limit <= MAX_PAGE_SIZE:
+            raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+        match = match_query(q)
+
+        def load(connection: Connection) -> list[Message]:
+            _visible_conversation(connection, conversation_id)
+            return [] if match is None else search_messages(connection, conversation_id, match, limit)
 
         return read(self._engine, load)
 

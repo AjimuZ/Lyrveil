@@ -124,11 +124,23 @@ def get(connection: Connection, conversation_id: str) -> Conversation | None:
     return None if row is None else _conversation(row)
 
 
-def list_all(connection: Connection, status: ConversationStatus, character_id: str | None) -> list[Conversation]:
+def list_all(
+    connection: Connection, status: ConversationStatus, character_id: str | None, match: str | None = None
+) -> list[Conversation]:
     """Returns the conversations in `status`, optionally of one character, in list order: pinned first, then by
-    activity."""
+    activity.
+
+    A `match` (from lyrveil.persistence.search.match_query) keeps the conversations whose title matches or that hold a
+    message, not deleted, that matches.
+    """
     clause = "WHERE c.status = :status" + ("" if character_id is None else " AND c.character_id = :character_id")
-    params = {"status": status.value, "character_id": character_id}
+    if match is not None:
+        clause += (
+            " AND (c.id IN (SELECT conversation_id FROM conversation_fts WHERE conversation_fts MATCH :match)"
+            " OR c.id IN (SELECT m.conversation_id FROM messages AS m WHERE m.deleted_at IS NULL AND m.id IN"
+            " (SELECT message_id FROM message_fts WHERE message_fts MATCH :match)))"
+        )
+    params = {"status": status.value, "character_id": character_id, "match": match}
     rows = connection.execute(text(f"{_SELECT} {clause} {_ORDER}"), params).mappings().all()
     return [_conversation(row) for row in rows]
 

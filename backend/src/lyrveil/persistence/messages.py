@@ -144,6 +144,13 @@ def update_variant(connection: Connection, variant_id: str, **columns: object) -
     connection.execute(text(f"UPDATE message_variants SET {assignments} WHERE id = :id"), {**columns, "id": variant_id})
 
 
+def message_rows(connection: Connection, clause: str, params: dict[str, object]) -> list[Message]:
+    """Returns the messages selected by the SQL `clause` (WHERE, ORDER BY and LIMIT over alias `m`) with `params`.
+    The clause comes from persistence code, never from a request."""
+    rows = connection.execute(text(f"{_MESSAGE_SELECT} {clause}"), params).mappings().all()
+    return [_message(row) for row in rows]
+
+
 def get_message(connection: Connection, message_id: str) -> Message | None:
     """Returns the message in any state, deleted included, or None when no row has that id."""
     row = connection.execute(text(f"{_MESSAGE_SELECT} WHERE m.id = :id"), {"id": message_id}).mappings().first()

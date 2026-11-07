@@ -83,6 +83,8 @@
 - A job handler that owns domain state settles it on failure itself, using the queue's retry rule (retryable and job.attempt < job.max_attempts), inside `anyio.CancelScope(shield=True)`, then re-raises so the scheduler stores the job outcome.
 - Test WebSocket streams with raw ASGI messages on the test's own event loop and `anyio.fail_after`, not Starlette's blocking test session, so a missing frame fails instead of hanging.
 - Keep one shared dict builder for public documents, such as `message_document`, and have REST models validate from it (`Model.model_validate(...)`), so REST and events never disagree on shape.
+- Turn user text into FTS5 queries by extracting \w+ words and double-quoting each one. Never pass raw user text to MATCH.
+- Keep FTS tables in step with their source rows through SQL triggers in the same transaction while no application-side transformation (such as stemming) is needed.
 
 ---
 
@@ -690,4 +692,15 @@ Doc findings: the retry table gives extraction three waits but only 3 attempts, 
   - ruff E501 counts docstring lines too: two module docstrings of 121 and 122 characters failed `test lint`. `ruff format` joins any signature or call that fits in exactly 120 characters.
   - `websockets` is still missing from pyproject.toml and uv.lock, so the backend image cannot serve /ws yet.
   - In this session Bash refused `git status`; `scripts/lyrveil.cmd test ...` commands were allowed.
+---
+
+## 2026-11-07T03:20:31Z - P02.5d
+- Added message and conversation search with FTS5. Migration 0005 creates message_fts and conversation_fts, kept current by SQL triggers. A query's words are each quoted, so FTS operators, quotes and parentheses are plain words. The new routes are GET /conversations/{id}/search and the q filter on GET /conversations. `scripts/lyrveil.cmd test integration` passed (91 backend tests, 200 orchestrator tests), as did `scripts/lyrveil.cmd test lint`. Unit, e2e and docker levels were not run.
+- Files changed: backend/migrations/versions/0005_chat_search.py, backend/src/lyrveil/persistence/search.py, backend/src/lyrveil/persistence/messages.py, backend/src/lyrveil/persistence/conversations.py, backend/src/lyrveil/services/conversations.py, backend/src/lyrveil/services/messages.py, backend/src/lyrveil/api/conversations.py, backend/src/lyrveil/api/messages.py, backend/tests/integration/test_messages.py, backend/tests/integration/test_migrations.py, docs/api.md, docs/data-model.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Search indexes are maintained by SQL triggers in migration 0005, so message and conversation writes need no extra code. The *_stem columns hold unstemmed text until the memory engine's stemmer exists.
+  - Soft-deleted rows stay in the FTS tables, so every search query must join back to messages and filter deleted_at IS NULL.
+  - persistence/search.py match_query is the only place user text becomes an FTS5 MATCH expression. Reuse it for memory search (T-MEM-07).
+  - Adding a migration means updating tests/integration/test_migrations.py: HEAD, known_revisions and the table sets. FTS5 adds shadow tables (_data, _idx, _content, _docsize, _config) to sqlite_master.
+  - The new routes are not in backend/openapi.json until it is regenerated with Docker. `rebuild-search`, memory_fts and episode_fts are not delivered.
 ---

@@ -10,6 +10,9 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Search in the backend: `GET /api/v1/conversations/{id}/search?q=` over message text and `q` on the chat list over
+  titles and messages, with FTS5 (migration `0005`). Accents are ignored ("perche" finds "perché"); search text is
+  plain words, so operators, quotes and parentheses never raise or change a query. No stemming yet.
 - Conversations in the backend: create a chat for a character, list (pinned first, then by activity), pin, archive,
   soft-delete and restore within 30 days, through `/api/v1/conversations`. Migration `0003` adds the `conversations`
   table and the minimal `characters` table it refers to. The routes are not in `backend/openapi.json` yet.

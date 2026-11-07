@@ -15,6 +15,7 @@ from lyrveil.domain.errors import ConflictError, NotFoundError
 from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as repository
+from lyrveil.persistence.search import match_query
 
 # The fields PATCH may change (docs/api.md, Conversations).
 PATCHABLE = frozenset({"title", "pinned", "archived", "language", "shares_memory"})
@@ -78,10 +79,20 @@ class ConversationService:
         return write(self._engine, work)
 
     def list_conversations(
-        self, status: ConversationStatus = ConversationStatus.ACTIVE, character_id: str | None = None
+        self,
+        status: ConversationStatus = ConversationStatus.ACTIVE,
+        character_id: str | None = None,
+        q: str | None = None,
     ) -> list[Conversation]:
-        """Returns the conversations in `status`, pinned first and then by latest activity."""
-        return read(self._engine, lambda connection: repository.list_all(connection, status, character_id))
+        """Returns the conversations in `status`, pinned first and then by latest activity.
+
+        A non-blank `q` keeps those whose title or message text contains every word of it, with accents ignored. `q`
+        is plain text: it never acts as search syntax. A `q` with no letter or digit matches nothing.
+        """
+        match = None if q is None or not q.strip() else match_query(q)
+        if q is not None and q.strip() and match is None:
+            return []
+        return read(self._engine, lambda connection: repository.list_all(connection, status, character_id, match))
 
     def get(self, conversation_id: str) -> Conversation:
         """Returns the conversation unless it is deleted; raises NotFoundError otherwise."""

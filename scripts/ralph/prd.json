@@ -909,8 +909,8 @@
         "FTS operators, quotes and parentheses in a query never raise or change its meaning."
       ],
       "priority": 39,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Added message and conversation search with FTS5. Migration 0005 creates message_fts and conversation_fts, kept current by SQL triggers. A query's words are each quoted, so FTS operators, quotes and parentheses are plain words. The new routes are GET /conversations/{id}/search and the q filter on GET /conversations. `scripts/lyrveil.cmd test integration` passed (91 backend tests, 200 orchestrator tests), as did `scripts/lyrveil.cmd test lint`. Unit, e2e and docker levels were not run.",
       "dependsOn": [
         "P02.5b"
       ],

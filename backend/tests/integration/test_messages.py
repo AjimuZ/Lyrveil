@@ -263,3 +263,53 @@ def test_history_pages_newest_first_without_gaps_and_shows_pending_replies(
     assert history(client, chat)["items"][0]["seq"] == 11
     assert client.get(f"{API}/conversations/{chat}/messages", params={"limit": 201}).status_code == 422
     assert client.get(f"{API}/conversations/{chat}/messages", params={"limit": 0}).status_code == 422
+
+
+def search(client: TestClient, chat: str, q: str) -> list[str]:
+    response = client.get(f"{API}/conversations/{chat}/search", params={"q": q})
+    assert response.status_code == 200, response.text
+    return [item["id"] for item in response.json()["items"]]
+
+
+def listed_for(client: TestClient, q: str) -> list[str]:
+    response = client.get(f"{API}/conversations", params={"q": q})
+    assert response.status_code == 200, response.text
+    return [item["id"] for item in response.json()["items"]]
+
+
+def test_search_finds_messages_ignoring_accents_and_follows_edits_and_deletes(client: TestClient, chat: str) -> None:
+    first = send(client, chat, "Perché non ci vediamo più al porto?")["message"]
+    second = send(client, chat, "La città è bellissima")["message"]
+    assert search(client, chat, "perche") == [first["id"]]
+    assert search(client, chat, "PERCHÉ porto") == [first["id"]]
+    assert search(client, chat, "citta bellissima") == [second["id"]]
+    assert search(client, chat, "porto bellissima") == []
+    assert client.patch(f"{API}/messages/{first['id']}", json={"content": "Domani al mercato"}).status_code == 200
+    assert search(client, chat, "porto") == []
+    assert search(client, chat, "mercato") == [first["id"]]
+    assert client.delete(f"{API}/messages/{first['id']}").status_code == 204
+    assert search(client, chat, "mercato") == []
+
+
+def test_search_text_is_never_fts_syntax(client: TestClient, chat: str) -> None:
+    sent = send(client, chat, "porto AND mare")["message"]
+    hostile = ['"', '"porto', "porto OR", "NOT", "(", "porto)", "porto*", "^porto", "col:porto", "-porto", "NEAR(a b)"]
+    for query in hostile:
+        assert client.get(f"{API}/conversations/{chat}/search", params={"q": query}).status_code == 200, query
+    assert search(client, chat, "porto OR nave") == []
+    assert search(client, chat, "porto AND mare") == [sent["id"]]
+    assert search(client, chat, '"porto" (mare)') == [sent["id"]]
+    assert search(client, chat, "!!!") == []
+    assert client.get(f"{API}/conversations/{chat}/search").status_code == 422
+
+
+def test_search_refuses_a_missing_chat_and_the_chat_list_filters_by_q(
+    client: TestClient, engine: Engine, chat: str
+) -> None:
+    assert client.get(f"{API}/conversations/{new_id()}/search", params={"q": "x"}).status_code == 404
+    other = ConversationService(engine).create(add_character(engine), title="Gita a Perché")
+    send(client, chat, "Il faro")
+    assert listed_for(client, "faro") == [chat]
+    assert listed_for(client, "perche") == [other.id]
+    assert listed_for(client, "(") == []
+    assert set(listed_for(client, "")) == {chat, other.id}

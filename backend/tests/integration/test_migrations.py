@@ -19,9 +19,17 @@ from lyrveil.persistence.migrations import (
 BASELINE = "0001"
 JOBS = "0002"
 CONVERSATIONS = "0003"
-HEAD = "0004"
+MESSAGES = "0004"
+HEAD = "0005"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
-TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
+MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
+# An FTS5 table is stored as a virtual table plus these shadow tables.
+SEARCH_TABLES = {
+    f"{name}{suffix}"
+    for name in ("message_fts", "conversation_fts")
+    for suffix in ("", "_data", "_idx", "_content", "_docsize", "_config")
+}
+TABLES = {*MESSAGE_TABLES, *SEARCH_TABLES}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -44,7 +52,7 @@ def user_tables(database_path: Path) -> set[str]:
 
 def test_the_revisions_follow_one_another() -> None:
     assert head_revision() == HEAD
-    assert known_revisions() == {BASELINE, JOBS, CONVERSATIONS, HEAD}
+    assert known_revisions() == {BASELINE, JOBS, CONVERSATIONS, MESSAGES, HEAD}
 
 
 def test_upgrade_head_creates_the_schema_on_an_empty_database(database_path: Path, tmp_path: Path) -> None:
@@ -75,6 +83,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", MESSAGES, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == MESSAGE_TABLES
     assert alembic(database_path, "downgrade", CONVERSATIONS, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == CONVERSATION_TABLES
     assert alembic(database_path, "downgrade", JOBS, cwd=tmp_path).returncode == 0

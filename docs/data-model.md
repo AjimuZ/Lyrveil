@@ -622,6 +622,11 @@ CREATE VIRTUAL TABLE message_fts USING fts5(
 
 A maintenance command rebuilds all three: `python -m lyrveil.cli rebuild-search`.
 
+Delivered in P02.5d (revision `0005`): `message_fts` as above and `conversation_fts(conversation_id UNINDEXED,
+title_stem)`. They are kept by SQL triggers on `messages.content` and `conversations.title`, not by application code,
+because no stemmer exists yet and the columns hold the text as written. Soft-deleted rows stay indexed and queries
+filter them out. `memory_fts`, `episode_fts` and `rebuild-search` are not delivered.
+
 ## Deletion policy
 
 Ordinary deletion never removes rows from durable history. A foreign key is `RESTRICT`

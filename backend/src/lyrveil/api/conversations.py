@@ -98,11 +98,13 @@ Service = Depends(get_service)
 def list_conversations(
     status: ConversationStatus = ConversationStatus.ACTIVE,
     character_id: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
     service: ConversationService = Service,
 ) -> ConversationList:
     """Lists the conversations in `status` (default active), pinned first and then by latest activity. Deleted ones
-    are listed only with `status=deleted`, for the restore screen."""
-    return ConversationList(items=[_out(item) for item in service.list_conversations(status, character_id)])
+    are listed only with `status=deleted`, for the restore screen. `q` keeps the chats whose title or messages contain
+    every word of it; it is plain text, never search syntax."""
+    return ConversationList(items=[_out(item) for item in service.list_conversations(status, character_id, q)])
 
 
 @router.post("", response_model=ConversationOut, status_code=201)

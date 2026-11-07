@@ -144,11 +144,19 @@ All paths are under `/api/v1`.
 | `GET`, `PATCH /conversations/{id}/proactive` | Proactive settings. |
 
 Delivered in P02.5a: `GET` and `POST /conversations`, `GET`, `PATCH` and `DELETE /conversations/{id}`, and `undelete`.
-`GET` takes `status` (default `active`) and `character_id`; `q` comes with search (P02.5d). A deleted chat answers `404`
+`GET` takes `status` (default `active`), `character_id` and `q`. A deleted chat answers `404`
 everywhere except `undelete`, which answers `409` when the chat is not deleted or 30 days have passed. `POST` answers
 `201`, `404` for an unknown character or any `scenario_id` (no scenarios exist yet) and `409` for an archived
 character. A row lacks the last message, avatar and typing flag until messages and assets exist. These routes are not
 in `backend/openapi.json` until it is next regenerated with Docker.
+
+Delivered in P02.5d: search. `q` (on the list) keeps the chats whose title or non-deleted messages contain every word
+of it. `GET /conversations/{id}/search?q=&limit=` answers `{"items": [message, ...]}`, newest first, `limit` as for
+history, `422` without `q` and `404` for a missing or deleted chat. Matching ignores case and accents ("perche" finds
+"perché"; the FTS5 `unicode61 remove_diacritics 2` tokenizer). `q` is plain text: only its letters and digits are used,
+each as a quoted FTS5 string, so `AND`, `OR`, `NOT`, `NEAR`, quotes, parentheses and `*` are ordinary words and never
+raise or change the query. A `q` with no letter or digit finds nothing; a blank `q` on the list filters nothing. No
+stemming yet: a word matches only itself.
 
 ### Messages
 

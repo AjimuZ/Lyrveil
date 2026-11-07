@@ -41,6 +41,12 @@ class MessagePage(BaseModel):
     next_before_seq: int | None
 
 
+class MessageSearch(BaseModel):
+    """`items` are the matching messages, newest first."""
+
+    items: list[MessageOut]
+
+
 class JobOut(BaseModel):
     id: str
     kind: str
@@ -141,6 +147,18 @@ def list_messages(
     chat."""
     page = service.history(conversation_id, before_seq, limit)
     return MessagePage(items=[_message(item) for item in page.items], next_before_seq=page.next_before_seq)
+
+
+@router.get("/conversations/{conversation_id}/search", response_model=MessageSearch)
+def search_messages(
+    conversation_id: str,
+    q: str = Query(max_length=200),
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    service: MessageService = Service,
+) -> MessageSearch:
+    """Returns the messages of one chat that contain every word of `q`, accents ignored, newest first. `q` is plain
+    text, never search syntax. 404 for a missing or deleted chat."""
+    return MessageSearch(items=[_message(item) for item in service.search(conversation_id, q, limit)])
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=SendResult, status_code=202)
