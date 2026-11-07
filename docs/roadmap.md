@@ -141,7 +141,7 @@ Evidence:
 **Depends on:** P04. **Areas:** ComfyUI, visual pipeline, gallery.
 
 - [x] P05.1 `docker/image` from the pinned commit, with a lock file.
-- [ ] P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes.
+- [x] P05.2 `ComfyUiRuntime`, workflow templates for **Alta** and **Rapida** and their tiled variants, and progress for both passes.
 - [ ] P05.3 `VisualConsistencyService`, the tag vocabulary with token counts, the sanitizer, structured profile translation and the scene filter ([ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md)).
 - [ ] P05.4 `image_request` job with `ImageScene`, the caption in the character's voice and aspect `auto`, persistence, thumbnails and message integration ([ADR 0036](decisions/0036-structured-image-scenes-and-measured-levers.md)).
 - [ ] P05.5 Manual mode, detector, contextual mode switched off, character mode and avatar generation.

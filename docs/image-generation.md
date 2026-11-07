@@ -376,6 +376,8 @@ text, so a prompt cannot change the graph.
 - Both passes share the seed. Final width and height are the first-pass size times 1.5, rounded to a multiple of 8.
 - If PAG is adopted, new workflow versions insert `PerturbedAttentionGuidance` between node 1 and the first `KSampler`. The
   versions in this table stay valid for stored images.
+- Delivered in P05.2b: the four files exist, and `lyrveil.images.workflows` builds them ([Backend](backend.md#workflow-templates)).
+  T-IMG-14 passes at the unit level; render time and VRAM per preset are not measured yet.
 - Lyrveil only submits its own files. The API offers no way to send a custom workflow.
 - `/system_stats` is read at readiness and `comfyui_version` is stored with each image.
 

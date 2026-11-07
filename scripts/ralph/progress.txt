@@ -173,6 +173,8 @@
 - Pester docker tests pass shell and Python scripts to containers in base64 arguments, and keep scripts free of double quotes, so Windows PowerShell 5.1 passes them unchanged.
 - Runtime adapters list every endpoint in an ENDPOINTS frozenset. Their unit test reads the matching section of docs/runtime-contracts.md and AST-scans the module for path-like string constants that are not in the table.
 - Use a TypeGuard[int] helper that excludes bool when narrowing JSON integers under mypy strict.
+- Fill workflow templates by node id and check each node's class_type before setting an input. Prompt text goes in as data only, so it cannot change the graph.
+- Keep one file per template version, registered in a table. A test compares the folder with the table and loads every file.
 
 ---
 
@@ -1504,4 +1506,35 @@ Docs updated: backend.md has a new Image runtime section. runtime-contracts.md n
   - The websockets 17.4 client works against scripted_server's WebSocket with ping_interval=None and proxy=None. On close it returns quickly, because the fake closes TCP after it sees the client's close frame.
   - Error codes: a refused workflow and a node failure other than memory map to INTERNAL. GPU-suite readings still open: the 400 body, the order of execution_success and the history entry, and the OOM text in execution_error.
   - Nothing uses ComfyUiRuntime yet. Wiring it into the image job, and storing info().version as comfyui_version, are left for later P05 tasks.
+---
+
+## 2026-11-07T18:02:32Z - P05.2b
+- I added the four ComfyUI workflow templates and a builder, `build_workflow`. Alta and Rapida build the documented graphs, in plain and tiled form.
+
+Checks I ran:
+- `scripts/lyrveil.cmd test unit tests/unit/test_workflows.py` passed: 37 tests.
+- `scripts/lyrveil.cmd test lint` passed.
+- I did not run the full suites or the docker level.
+- Nothing has run these workflows against real ComfyUI, and render time and VRAM per preset are not measured.
+
+What changed:
+- **Templates:** `workflows/comfyui/` now holds `sdxl_base.v2.json`, `sdxl_base_tiled.v2.json`, `sdxl_hires.v1.json` and `sdxl_hires_tiled.v1.json`, as in the docs.
+- **Builder:** `backend/src/lyrveil/images/workflows.py` holds `WorkflowSpec`, `build_workflow`, `final_size` and `load_template`.
+  - It sets only typed values on the parsed JSON: `ckpt_name`, clip skip, both prompt texts, first-pass size, seed, steps, CFG, sampler and scheduler.
+  - The second pass of Alta reuses the seed and CFG.
+  - It checks each node's class before setting it.
+  - It raises `WorkflowError` for any value outside the documented ranges.
+- **Sampler check:** the sampler name is checked for shape only, not against ComfyUI's `KSAMPLER_NAMES`. An unknown name is left for ComfyUI to refuse at validation.
+- **Tests:** `backend/tests/unit/test_workflows.py` loads every template on disk and checks it is registered, versioned and has valid links.
+  - It also checks node classes, links, shared seed and CFG, final sizes (a multiple of 8), and `ckpt_name` from the spec only.
+  - It covers tiled node replacement, phases through the existing `ProgressMap`, and the range limits.
+- **Dockerfile:** `backend/Dockerfile` copies `workflows/comfyui` into the test and runtime stages.
+- **Docs:** `docs/backend.md` has a new "Workflow templates" section, and `docs/image-generation.md` and `docs/testing.md` point to the new code and tests.
+- **Not touched:** I left the roadmap checkbox alone as instructed. I did not change the changelog, because nothing user-visible changed.
+- Files changed: workflows/comfyui/sdxl_base.v2.json, workflows/comfyui/sdxl_base_tiled.v2.json, workflows/comfyui/sdxl_hires.v1.json, workflows/comfyui/sdxl_hires_tiled.v1.json, backend/src/lyrveil/images/workflows.py, backend/tests/unit/test_workflows.py, backend/Dockerfile, docs/backend.md, docs/image-generation.md, docs/testing.md
+- **Learnings for future iterations:**
+  - Node ids are shared by all four templates: 1 loader, 2 CLIPSetLastLayer, 3 positive, 4 negative, 5 EmptyLatentImage, 6 first KSampler, 7 first decode, 8 SaveImage, 9 ImageScaleBy, 10 encode, 11 second KSampler, 12 second decode. A new template version must keep them, or the builder raises WorkflowError.
+  - workflows_dir() looks in <repo>/workflows/comfyui and /app/workflows/comfyui. The backend Dockerfile test and runtime stages now copy the folder, and .dockerignore does not exclude it.
+  - The sampler is checked for shape only. A real ComfyUI 400 for an unknown sampler name would arrive as WorkflowRejectedError.
+  - Still open for later P05 tasks: the image job calling build_workflow, the OOM retry chain using the tiled flag, and measuring time and VRAM per preset on a real GPU (the other half of T-IMG-14).
 ---

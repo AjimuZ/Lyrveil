@@ -232,6 +232,19 @@ its progress and download, an interrupt, out of memory in the render and in the 
 workflow, a stall and the total timeout. It holds T-IMG-05 for both passes of the documented **Alta** graph, and it
 reads the contract page and fails when the adapter's module names a path missing from the ComfyUI endpoint table.
 
+#### Workflow templates
+
+Delivered in P05.2b: the four versioned files of [Workflow](image-generation.md#workflow) in `workflows/comfyui/`, and
+`images/workflows.py`, which fills them. `build_workflow(WorkflowSpec)` loads the file for the preset and the tiled
+flag, then sets typed values on the parsed JSON: `ckpt_name`, `stop_at_clip_layer`, both prompt texts, the first-pass
+size, and seed, steps, CFG, sampler and scheduler. The seed and CFG also go to the second pass of **Alta**, which
+takes its own steps and `denoise`. Each node is checked for its class before it is set, and a value outside the
+documented range raises `WorkflowError`. `final_size` gives the saved size: the first-pass size, times 1.5 for **Alta**,
+a multiple of 8.
+
+The sampler name is checked for shape only, not against ComfyUI's `KSAMPLER_NAMES`; ComfyUI refuses an unknown name
+at validation. The backend and test images copy `workflows/` to `/app/workflows/comfyui`. No job calls the builder yet.
+
 ### Prompt formatter
 
 Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.

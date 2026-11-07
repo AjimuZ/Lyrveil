@@ -43,6 +43,8 @@ COPY backend/tests ./tests
 # The catalog and the page it must match, which tests/unit/test_catalog.py compares.
 COPY config/model-catalog.json ./config/model-catalog.json
 COPY docs/models.md ./docs/models.md
+# The workflow templates that lyrveil.images.workflows fills and tests/unit/test_workflows.py loads.
+COPY workflows/comfyui ./workflows/comfyui
 # The fakes of tests/fakes and the contract page that the runtime adapter's tests read. Only this test stage holds them.
 COPY tests/fakes/*.py ./fakes/
 COPY docs/runtime-contracts.md ./docs/runtime-contracts.md
@@ -63,6 +65,8 @@ COPY backend/migrations ./migrations
 COPY backend/src ./src
 # The models tool reads the catalog from here (lyrveil.tools.models.DEFAULT_CATALOG).
 COPY config/model-catalog.json ./config/model-catalog.json
+# The image job fills these templates (lyrveil.images.workflows.workflows_dir).
+COPY workflows/comfyui ./workflows/comfyui
 RUN python -m compileall -q src
 # A new named volume takes the owner of the folder it is mounted on, so /data must exist and belong to the service user
 # in the image; otherwise the volume is owned by root and the backend cannot create /data/db.
