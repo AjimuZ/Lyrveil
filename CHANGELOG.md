@@ -10,6 +10,23 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Text profile changes and custom model files, in the backend (the **Impostazioni > Modelli** screen is P06.6b).
+  `GET /api/v1/settings/models` lists every catalog profile with its tier, license, size and local state (present,
+  wrong size or missing, with the download command), the registered custom profiles, the unregistered files in the two
+  model folders and the launch values. `PATCH /api/v1/settings/models` with `llm_profile_id` changes the text profile:
+  a profile above the machine's tier (from the memory Docker sees, 20 GiB for the target tier) or whose file is missing
+  or of the wrong size is refused with `MODEL_PROFILE_UNAVAILABLE`, changing nothing; otherwise the whole
+  `runtime/llm-launch.env` is written at level A, which is also the way back to A after a lowering.
+  `POST /api/v1/settings/models/apply` (**Applica ora**) queues the reload ahead of replies: once the running job ends,
+  the text model stops, the GPU release is verified, and the new file loads. `POST /api/v1/settings/models/custom`
+  registers a file already imported with `import-model`, by name only: only `.gguf` in `llm/` and `.safetensors` in
+  `image/checkpoints/`, never a path, a link, `.ckpt` or `.pt`; a background job computes its SHA-256 and stores it as
+  `custom-<12 hex>`, marked not verified. `DELETE /api/v1/settings/models/custom/{id}` removes a registration, never
+  the file. A first start writes the launch file of the active profile when none exists. Not delivered yet: choosing
+  the image profile and the quality preset, and the prompt template and sampler preset following the active text
+  profile, which stay those of Gemma 4 (so a Mistral Nemo or ChatML profile is not yet prompted in its own format).
+  Not verified yet: a reload against the real runtime and GPU.
+
 - A safer `stop.cmd`. Before it stops the containers, it pauses the job queue and lets a running reply or image step
   finish, for up to 60 s, then asks the orchestrator to stop the model and verify that the GPU memory is free. A job
   still running after 60 s is cut by the stop: a reply keeps the text written so far as interrupted, and an image picks

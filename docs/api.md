@@ -54,7 +54,9 @@ Job errors, reported through `job.updated`:
 | --- | --- |
 | `GPU_INSUFFICIENT_VRAM` | Other programs hold too much VRAM. Since P06.2, the job that needs the held-back mode fails after `vram.wait_seconds`, not retried, and `error_detail` names the free and the required MiB. |
 | `LLM_LOAD_FAILED`, `IMAGE_LOAD_FAILED` | A runtime did not reach readiness. Since P06.4 an image job fails with `IMAGE_LOAD_FAILED`, not retried, once the image runtime has failed its third load in a row for it. |
-| `MODEL_FILE_MISSING` | The active profile's file is absent or has the wrong size. Checked before any mode change. |
+| `MODEL_FILE_MISSING` | The active profile's file is absent or has the wrong size. Checked before any mode change. Since P06.6a it ends a `model_reload` job, and a `custom_model_hash` job whose file is gone, changed while hashed, or was replaced by a link. |
+| `GPU_RELEASE_UNVERIFIED` | Since P06.6a: a `model_reload` job found the GPU in `ERROR`, or not `IDLE` within 180 s, after asking for mode `none`. |
+| `ORCHESTRATOR_UNAVAILABLE` | Since P06.6a: a `model_reload` job got no answer from the control API, or found it draining. |
 | `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. Since P06.4 an image ends with `IMAGE_OOM` only after its tiled retry and, for **Alta**, one **Rapida** try. |
 | `GENERATION_TIMEOUT`, `GENERATION_STALLED` | Over the total time, or no progress. |
 | `STRUCTURED_OUTPUT_INVALID` | JSON failed validation after all attempts. |
@@ -511,6 +513,26 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
 | `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "gemma4"}`. The file must already be in its models folder. Starts the hash job and returns `202`. |
 | `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
 | `POST /backups`, `GET /backups` | Create and list. Restore is `scripts\lyrveil.cmd restore`, because it stops services. |
+
+Delivered in P06.6a: the five `/settings/models` routes (`lyrveil/api/model_settings.py`, [Model
+catalog](models.md#delivered-in-p066a)), not in the committed OpenAPI document yet:
+
+- `GET /settings/models` answers `{"tier", "active": {"text", "image"}, "text", "image", "local_files", "launch"}`.
+  Each profile has `id`, `display_name`, `file`, `bytes`, `license`, `license_url` (null for a custom one),
+  `min_tier`, `custom`, `state` and `download_command` (null when the file is verified, and for a custom profile); a
+  text profile adds `template`, `selectable` (runs on the tier and verified) and `quality_evidence`, and a custom one
+  `sha256`. `active.image` is the default of the tier. `local_files` lists `{"kind", "file", "bytes"}` for the
+  unregistered files that registration would accept. `launch` holds the launch file's known keys, or null.
+- `PATCH /settings/models` takes only `{"llm_profile_id"}`; another key is `422`. It answers like `GET`, or `409
+  MODEL_PROFILE_UNAVAILABLE` with an Italian `detail` that names the download command, the tier or the import command.
+- `POST /settings/models/apply` and `POST /settings/models/custom` answer `202` with `{"id", "kind", "status",
+  "queue_position"}` of the `maintenance` job, the one already queued when the same request waits. Apply answers `409
+  MODEL_PROFILE_UNAVAILABLE` when the launch file's model is missing. Registration answers `422 VALIDATION_ERROR` for
+  a name outside the pattern, another extension, a link, a folder or a missing or unexpected `template`, `404` for a
+  file not in its folder, and `409 CONFLICT` for a catalog file, a file already registered at its size, or the active
+  profile's file. The result of the hash job is `{"profile_id", "kind", "bytes", "sha256"}`, and that of the reload
+  `{"profile_id", "model_file"}`.
+- `DELETE /settings/models/custom/{id}` answers `204`, `404` or `409 CONFLICT`.
 
 Delivered in P03.3: `GET /jobs/{id}` (`lyrveil/api/jobs.py`). It answers `{"id", "kind", "status", "stage", "attempt",
 "max_attempts", "queue_position", "error_code", "error_detail", "result", "created_at", "finished_at"}`, or `404

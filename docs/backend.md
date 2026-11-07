@@ -558,7 +558,14 @@ Since P06.5 ([Safe shutdown](gpu-orchestration.md#safe-shutdown)):
 | `proactive_message` | Stages `decide` and `generate`. See [Scheduler](scheduler.md#generation-flow). |
 | `summary_checkpoint` | Lease, structured generation, store a checkpoint. |
 | `memory_extraction`, `memory_reevaluation` | Lease, structured generation, consistency rules, commit with cursor. |
-| `maintenance` | `required_mode = none`. Retention, orphan cleanup, expiry of memories. |
+| `maintenance` | `required_mode = none`. Retention, orphan cleanup, expiry of memories. Since P06.6a the model reload and the custom file hash, told apart by `payload.operation`. |
+
+Delivered in P06.6a: `maintenance` jobs run with `ModelMaintenance` (`services/model_maintenance.py`), passed to the
+worker as `Worker.maintenance`. `operation` `model_reload`, queued by `POST /settings/models/apply` at priority 5,
+asks the orchestrator for mode `none`, waits for `IDLE` and asks for `llm`; `custom_model_hash` hashes a model file in
+a thread a shutdown abandons and stores the profile. Another operation ends the job with `INTERNAL`. Neither holds a
+lease, and the worker waits for the job like any other, so a long hash delays the jobs behind it. See [Model
+catalog](models.md#delivered-in-p066a).
 
 Delivered in P03.3: `character_draft`, run by `CharacterCreatorService` (`services/character_creator.py`), registered in
 the application's lifespan beside the reply handler. See [Assisted creation](character-system.md#assisted-creation).

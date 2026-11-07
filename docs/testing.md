@@ -97,7 +97,8 @@ pytest joins it when a Docker test needs Python. The files:
   up, changes all of them, deletes the backup from the volume, restores the copy in the Windows folder, and requires
   the same characters, conversations, assets with the SHA-256 of their files, settings and launch file as before, with
   the copy in the folder unchanged. Since the backend may add a daily backup at any idle moment, no test counts
-  backups. T-DCK-14 is completed in P06.
+  backups. Since P06.6a the three `import-model` tests are T-DCK-14, and the refusals also cover `.ckpt`, `.pt` and a
+  name of 129 characters before the extension, each with its message. This version has not run yet.
 - `tests/docker/Security.Tests.ps1` (P01.7b) holds T-DCK-08 to T-DCK-10. It resolves `compose.yaml` with both
   profiles and an empty env file, and checks that only the frontend publishes a port, `127.0.0.1:4200` to 8080, that no
   service uses the host network, that every service other than the frontend and `lyrveil-models` joins only internal
@@ -632,8 +633,8 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | --- | --- | --- | --- |
 | T-MOD-01 | `config/model-catalog.json` passes validation. Invalid identifiers, moving revisions, unknown templates or presets, invalid `swa_padding`, `smart_cache` or `quality_evidence`, and two defaults for one tier are refused. Custom profiles get the `generic` preset | Unit | P02 |
 | T-MOD-02 | Each `PromptFormatter` family produces the golden string rendered from the official template for the same turns. No family writes BOS | Unit | P02 |
-| T-MOD-03 | A text profile change writes the launch file, stops the runtime, verifies release and loads the new file. A profile above the tier or with a missing file is refused before any mode change | Integration | P06 |
-| T-MOD-04 | Custom registration accepts only file names in the two model folders and only `.gguf` and `.safetensors`. Traversal, links out of the folder and other extensions are refused. The hash job stores the profile | Integration | P06 |
+| T-MOD-03 | A text profile change writes the launch file, stops the runtime, verifies release and loads the new file. A profile above the tier or with a missing file is refused before any mode change. Backend side in `backend/tests/integration/test_model_profiles.py` (P06.6a), through the routes and the real scheduler with a fake orchestrator: the change writes every launch key at level A and asks for no mode, **Applica ora** runs ahead of a queued reply, asks for `none`, waits for `IDLE` and only then for `llm`, and the reply's lease comes after the new file loaded; a target profile on the reduced tier, a missing file and an unknown profile are refused with the launch file and the setting unchanged, and a file gone after the job was queued fails it with `MODEL_FILE_MISSING` and no mode request. Orchestrator side in `orchestrator/tests/integration/test_profile_change.py`: `none` waits for the reply's lease, the release is verified before `IDLE`, and `llm` starts the runtime again. Not run against the real runtime | Integration | P06 |
+| T-MOD-04 | Custom registration accepts only file names in the two model folders and only `.gguf` and `.safetensors`. Traversal, links out of the folder and other extensions are refused. The hash job stores the profile. In `backend/tests/integration/test_model_profiles.py` (P06.6a): traversals with `/` and `\`, a path, `.ckpt`, `.pt`, `.bin`, the other kind's extension, a link out of the folder and one inside it, a folder, a name with a space, a model folder that is a link, a missing template, a missing file and a catalog file are refused and queue nothing; the hash job stores a text and an image profile under `custom-<12 hex>`, which can be selected, cannot be removed while active, and turns `size_mismatch` after a size change; a file replaced by a link after the request fails the job and stores nothing | Integration | P06 |
 | T-MOD-05 | Prompt layout: two consecutive replies share the stable text and the history byte for byte for each family. Old turns never carry the frame. Frame markers in user text, memories and summaries are neutralized. Proactive and structured prompts follow their own layout | Unit | P02 |
 
 ### Orchestration
@@ -697,7 +698,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-DCK-11 | Model download resumes, verifies and skips valid files, with a local test server | Docker | P01 |
 | T-DCK-12 | Backup and restore round trip, including the copy to the Windows backup folder | Docker | P03 |
 | T-DCK-13 | Volumes are external and survive `docker compose down -v`. Root `.cmd` files only delegate. PSScriptAnalyzer passes | Docker | P01 |
-| T-DCK-14 | `import-model` copies a valid file and refuses other extensions, invalid names and existing names | Docker | P06 |
+| T-DCK-14 | `import-model` copies a valid file and refuses other extensions, invalid names and existing names. The three `import-model` tests of `tests/docker/Data.Tests.ps1` (P06.6a); not run in this version yet | Docker | P06 |
 
 ### Real GPU
 

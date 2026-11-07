@@ -122,6 +122,14 @@ runtime's container.
 - The runtime containers mount models read-only, have no route out and see only the launch files of the data volume, which limits what a
   hostile file could reach ([Runtime isolation](#runtime-isolation)).
 
+Delivered in P06.6a (`backend/src/lyrveil/model_files.py`): registration takes a kind and a file name. The name must
+match the pattern above and end with `.gguf` for text or `.safetensors` for an image, so a slash, a backslash and
+every traversal are refused before the file system is touched. The file must be a regular file directly in its folder.
+A symbolic link is refused wherever it points, and the resolved path must sit in the folder as seen from `/models`, so
+a model folder replaced by a link is refused too. The hash job resolves the name again before it reads the file, and a
+size change during the read fails it. The backend mounts the volume read-only and never writes to it. Tested by
+T-MOD-04 in `backend/tests/integration/test_model_profiles.py`.
+
 ## Docker socket
 
 The socket is equivalent to root on the Docker VM. The orchestrator is the only service that mounts it, and it acts as the reduced-authority controller. See [ADR 0006](decisions/0006-docker-socket-confined-to-orchestrator.md).

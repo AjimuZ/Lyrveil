@@ -1,6 +1,6 @@
 # Model catalog
 
-Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: the catalog file and its validator are delivered (P02.1a); the rest is planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
+Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: the catalog file and its validator are delivered (P02.1a), and so are the backend's text profile change and custom registration (P06.6a, [Delivered in P06.6a](#delivered-in-p066a)); the rest is planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
 
 The user chooses the active text and image models from verified profiles ([ADR 0024](decisions/0024-selectable-model-profiles.md)). One text model serves every text task, and it never shares the GPU with the image model ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -162,6 +162,45 @@ The anchor, the length bands and the reply normalizer also apply to custom profi
 the interface never shows **Qualità verificata** for them.
 
 Lyrveil never downloads, converts or edits custom files. Loading a model file runs complex parsing code in the runtime, so custom files should come from sources the user trusts. See [Security](security.md#model-files).
+
+### Delivered in P06.6a
+
+The backend side of the two sections above, in `backend/src/lyrveil/services/model_profiles.py`,
+`services/model_maintenance.py`, `model_files.py`, `orchestration/launch_file.py` and the routes of
+`api/model_settings.py` ([API](api.md#jobs-scheduling-notifications-settings-data),
+[ADR 0042](decisions/0042-profile-reload-as-a-queued-job-and-name-only-registration.md)). The screens are P06.6b.
+
+- **Tier.** The backend reads `MemTotal` of `/proc/meminfo` in its container, the memory of the Docker VM: from 20 GiB
+  the machine is on the target tier, otherwise, and when the file cannot be read, on the reduced tier, as
+  `scripts\lyrveil.cmd models` decides.
+- **Local state.** `verified` means the file is present with the catalog's size, or the size it was registered at;
+  the SHA-256 of a catalog file is checked by `scripts\lyrveil.cmd models -Verify`, not by the backend.
+- **Text profile change.** `PATCH /settings/models` checks the profile first: it must exist, run on the tier, and have
+  its file with the expected size, or it answers `MODEL_PROFILE_UNAVAILABLE` and changes nothing. It then stores
+  `llm.profile_id` and writes the whole launch file at level A in one transaction. Selecting the active profile again
+  returns it to level A. When no launch file exists, a backend start writes the active profile's.
+- **Applica ora.** `POST /settings/models/apply` checks the launch file's model file the same way, then queues a
+  `maintenance` job (`model_reload`) at priority 5, ahead of replies, or returns the one already queued. The worker
+  runs one job at a time, so the reload starts once the running reply has ended. It checks the file again
+  (`MODEL_FILE_MISSING`, no mode change), sets the desired mode to `none`, waits up to 180 s for IDLE, which the
+  orchestrator enters only after the release is verified, then sets `llm`. The job ends there; the load is followed in
+  the GPU state. A wait that ends in ERROR or runs out fails with `GPU_RELEASE_UNVERIFIED`, after `llm` was asked for
+  again.
+- **Custom profiles.** `POST /settings/models/custom` takes a kind, a file name and, for a `.gguf`, the template
+  family ([Security](security.md#model-files) lists the checks). A `maintenance` job (`custom_model_hash`) hashes the
+  file and stores `{id, kind, file, bytes, sha256, template, registered_at}` in `models.custom`. The same content
+  registered under another name keeps its first entry. A file registered again after a size change replaces its old
+  entry unless that one is active. A custom text profile takes the context, batch and cache type of the reduced-tier
+  catalog profile of its family (`gemma-4-12b`, `rocinante-x-12b`, `rocinante-12b-v1.1`), with `USE_MMAP`,
+  `SWA_PADDING` and `SMART_CACHE` at 0. Launch levels never change a custom profile's file.
+- **Not delivered.** Choosing the image profile and the quality preset (`images.profile_id` and `images.quality` are
+  not read or written). Replies, drafts, memories and summaries still use the `gemma4` template and sampler preset
+  whatever the active profile, so a `mistral_v3_tekken` or `chatml` profile, or a custom profile, is not yet prompted
+  in its own format. A hash runs in the job worker, so other jobs wait for it. Cached token counts are keyed by the
+  loaded model's name, so they follow a change by themselves.
+- **Tests.** T-MOD-03 and T-MOD-04 in `backend/tests/integration/test_model_profiles.py`, with the orchestrator's side
+  of T-MOD-03 in `orchestrator/tests/integration/test_profile_change.py`. Nothing has run against the real runtime or
+  GPU.
 
 ## Memory estimates
 

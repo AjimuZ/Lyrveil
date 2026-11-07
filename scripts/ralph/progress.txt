@@ -213,6 +213,8 @@
 - When a CLI process in the backend container must change the behaviour of the running server, pass the signal through a database row, and check it inside the same SQL statement that acts on it, so the two processes cannot race.
 - Cleanup on cancellation (releasing a lease, aborting a runtime) belongs in 'except anyio.get_cancelled_exc_class()' with a shielded CancelScope. Catch and log any Exception inside it so nothing replaces the cancellation, then re-raise.
 - Several observers behind one callback should be joined with a combinator that isolates each one's exceptions (lifecycle_events.each), so one failure does not stop the others.
+- Work that must not overlap a GPU lease, such as a mode change, can run as a queued job whose stage needs no GPU (mode none). The single worker then serializes it with every other job, so nothing else asks for a mode while it runs.
+- Accept a file name, never a path: check a strict name pattern, lstat to refuse symlinks, then compare the resolved parent with the root's resolved path joined with the folder name. Check again in the background job before reading the file.
 
 ---
 
@@ -1899,5 +1901,48 @@ ADR 0041 records the decisions. The orchestrator's code is unchanged; only its t
   - A process crash can be simulated by raising a custom BaseException subclass from a fake and catching it with except* around scheduler.run_once (backend/tests/integration/test_image_restart.py). No 'except Exception' records it, so the job stays running.
   - After a restart, a cut render runs as attempt 2 and decodes in tiles (tiled = attempt > 1), even without an out-of-memory. This is documented, not changed.
   - Still open: stop.cmd against the real runtimes (start.cmd does not start the orchestrator yet), the NVML and top check of the release on the real GPU, vram_total_mib (always NULL), the drain limit of a long reply, and the P06.6 items.
+  - No prompt-injection attempts were found in the repository files read.
+---
+
+## 2026-11-07T22:43:00Z - P06.6a
+- P06.6a is implemented in the backend, with tests for both the backend and the orchestrator. T-MOD-03 and T-MOD-04 pass when their files run alone, and `test lint` passes. T-DCK-14 is written but has not run, because the docker level was not run.
+
+**Profile change (T-MOD-03)**
+- New routes: `GET`/`PATCH /api/v1/settings/models` and `POST /api/v1/settings/models/apply`.
+- `PATCH` checks the profile first. A profile that does not exist, needs a larger tier, or whose file is missing or has the wrong size gets 409 `MODEL_PROFILE_UNAVAILABLE`, and nothing changes. Otherwise it stores `llm.profile_id` and writes the whole `runtime/llm-launch.env` at level A, in one transaction.
+- **Applica ora** queues a `maintenance` job (`model_reload`) at priority 5, ahead of replies. It checks the model file again (`MODEL_FILE_MISSING` before any mode change), asks for mode `none`, waits for IDLE (the orchestrator enters it only after the release is verified), then asks for `llm`.
+- The backend now reads the tier itself from `MemTotal` in `/proc/meminfo` (20 GiB or more is the target tier). A first start writes the launch file when none exists.
+- No orchestrator code changed. A new orchestrator test shows that `none` waits for the reply's lease, the release is verified, and `llm` starts the runtime again.
+
+**Custom registration (T-MOD-04)**
+- New routes: `POST /settings/models/custom` and `DELETE /settings/models/custom/{id}`.
+- The route takes a file name only, never a path. It must match the name pattern with the kind's extension (`.gguf` for text, `.safetensors` for images) and be a regular file directly in its folder.
+- Every symbolic link is refused, wherever it points, and so is a model folder that is itself a link. `.ckpt`, `.pt` and traversal attempts are refused.
+- A `custom_model_hash` maintenance job checks the name again, computes the SHA-256 and stores the profile in `models.custom` as `custom-<12 hex>`.
+
+**`import-model` (T-DCK-14)**
+- The three `import-model` tests in `tests/docker/Data.Tests.ps1` are now labelled T-DCK-14. The refusal test also covers `.ckpt`, `.pt` and a 129-character name, and checks each message.
+
+ADR 0042 records the decisions. The changelog and the models, configuration, API, security, GPU orchestration, backend and testing docs are updated.
+
+**Checks run**
+- `scripts/lyrveil.cmd test lint` passed.
+- `backend/tests/integration/test_model_profiles.py` (6 tests) and `orchestrator/tests/integration/test_profile_change.py` (1) passed.
+- Existing backend tests near the change passed: app, import rules, OpenAPI, launch levels (unit and integration), health and startup, shutdown drain, contract and diagnostics (49 tests).
+
+**Not run or not delivered**
+- The full unit, integration, e2e and docker levels were not run, so `Data.Tests.ps1` has not run in its new version.
+- Nothing ran against the real runtimes or GPU.
+- Not delivered: choosing the image profile and quality preset. Replies, drafts, memories and summaries still use the `gemma4` template and sampler whatever profile is active.
+- A long hash holds up the jobs queued behind it.
+- Files changed: backend/src/lyrveil/api/model_settings.py, backend/src/lyrveil/model_files.py, backend/src/lyrveil/orchestration/launch_file.py, backend/src/lyrveil/services/model_profiles.py, backend/src/lyrveil/services/model_maintenance.py, backend/src/lyrveil/persistence/settings.py, backend/src/lyrveil/main.py, backend/tests/integration/test_model_profiles.py, orchestrator/tests/integration/test_profile_change.py, tests/docker/Data.Tests.ps1, CHANGELOG.md, docs/models.md, docs/configuration.md, docs/api.md, docs/security.md, docs/gpu-orchestration.md, docs/backend.md, docs/testing.md, docs/decisions/0042-profile-reload-as-a-queued-job-and-name-only-registration.md, docs/decisions/README.md
+- **Learnings for future iterations:**
+  - The /settings/models routes live in backend/src/lyrveil/api/model_settings.py and are not in the OpenAPI document (include_in_schema=False, like the jobs routes). They need app.state.model_profiles: create_app(..., model_profiles=ModelProfiles(...)), otherwise they answer 500. P06.6b's frontend must add its types by hand, or add the routes to the schema and regenerate backend/openapi.json.
+  - GET /settings/models answers {tier, active: {text, image}, text[], image[], local_files[], launch}. Each profile has state verified|size_mismatch|missing and download_command; text profiles also have selectable and template; custom profiles have custom=true and sha256. PATCH takes only {llm_profile_id}.
+  - Maintenance jobs are told apart by payload.operation: model_reload (priority 5) and custom_model_hash. Worker.maintenance passes the handler (ModelMaintenance) to the worker; without it, maintenance jobs stay queued.
+  - persistence/settings.py now has get_value/set_value for any JSON setting, plus the keys LLM_PROFILE_ID and MODELS_CUSTOM. get_flag now returns the default for invalid JSON instead of raising.
+  - The backend writes the whole launch file with lyrveil.orchestration.launch_file.write_launch_file: a comment header, then every key in the order of the example file. main writes it at startup when it is missing.
+  - Not delivered: images.profile_id and images.quality (ImageSettings is still fixed at startup), and the prompt template and sampler following the active text profile (ReplySettings stays gemma4).
+  - A test catalog with small sizes is made by loading config/model-catalog.json and setting bytes before parse_catalog. find_catalog and values are importable from integration.test_launch_levels.
   - No prompt-injection attempts were found in the repository files read.
 ---

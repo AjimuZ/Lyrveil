@@ -3,7 +3,9 @@
 # copies it to the Windows backup folder of LYRVEIL_BACKUP_DIR; restore refuses a backup that fails restore-check and
 # changes nothing, asks first, and otherwise replaces the data and keeps the previous data in pre-restore-<time>/; and
 # T-DCK-12, a round trip of characters, conversations, assets and settings through the copy in the Windows folder,
-# which tests/docker/round_trip.py seeds and reads inside the backend container. T-DCK-14 is completed in P06.
+# which tests/docker/round_trip.py seeds and reads inside the backend container. T-DCK-14 (P06.6a) is the three
+# import-model tests: a valid file of each kind is copied, and other extensions (with the pickle formats .ckpt and .pt),
+# names outside the pattern and existing names are refused.
 # The backend's daily backup may add a backup to the test volume at any idle moment, so no test counts backups.
 # The commands run against the project "lyrveil-data-test" of tests/docker/compose.data-test.yaml, with its own volumes,
 # image tags, port 14212, and a .env and a backup folder in Pester's temporary drive, so a real installation, its
@@ -198,7 +200,7 @@ Describe 'import-model, backup and restore against a test project' {
         }
     }
 
-    It 'import-model copies a .gguf to llm/ and a .safetensors to image/checkpoints/' {
+    It 'import-model copies a .gguf to llm/ and a .safetensors to image/checkpoints/ (T-DCK-14)' {
         $gguf = Join-Path $script:ImportFolder 'custom-test.Q4_K_M.gguf'
         $safetensors = Join-Path $script:ImportFolder 'custom-test.safetensors'
         $ggufHash = Write-TestFile -Path $gguf -Size 3000000 -Seed 1
@@ -215,7 +217,7 @@ Describe 'import-model, backup and restore against a test project' {
         Get-VolumeSha256 -Volume $script:ModelsVolume -Path 'image/checkpoints/custom-test.safetensors' | Should -Be $safetensorsHash
     }
 
-    It 'import-model refuses a name already in the models volume and keeps the file' {
+    It 'import-model refuses a name already in the models volume and keeps the file (T-DCK-14)' {
         $other = Join-Path $TestDrive 'other'
         $null = New-Item -ItemType Directory -Force -Path $other
         $same = Join-Path $other 'custom-test.Q4_K_M.gguf'
@@ -229,12 +231,20 @@ Describe 'import-model, backup and restore against a test project' {
         (@(Get-VolumeFile -Volume $script:ModelsVolume) -join ',') | Should -BeExactly 'image/checkpoints/custom-test.safetensors,llm/custom-test.Q4_K_M.gguf'
     }
 
-    It 'import-model refuses another extension and a name outside the pattern' {
-        foreach ($name in @('custom-test.bin', 'custom test.gguf')) {
-            $path = Join-Path $script:ImportFolder $name
+    It 'import-model refuses another extension and a name outside the pattern (T-DCK-14)' {
+        $refusals = @(
+            @{ Name = 'custom-test.bin'; Text = 'only \.gguf and \.safetensors files can be imported' }
+            @{ Name = 'custom-test.ckpt'; Text = 'only \.gguf and \.safetensors files can be imported' }
+            @{ Name = 'custom-test.pt'; Text = 'only \.gguf and \.safetensors files can be imported' }
+            @{ Name = 'custom test.gguf'; Text = 'the name must match' }
+            @{ Name = ('a' * 129) + '.gguf'; Text = 'the name must match' }
+        )
+        foreach ($refusal in $refusals) {
+            $path = Join-Path $script:ImportFolder $refusal.Name
             $null = Write-TestFile -Path $path -Size 10 -Seed 4
             $run = Invoke-Captured -Name 'Invoke-LyrveilImportModel' -Parameters ($script:Common + @{ Argument = @($path) })
             $run.Status | Should -Be 1 -Because $run.Text
+            $run.Text | Should -Match $refusal.Text
         }
         (@(Get-VolumeFile -Volume $script:ModelsVolume) -join ',') | Should -BeExactly 'image/checkpoints/custom-test.safetensors,llm/custom-test.Q4_K_M.gguf'
     }

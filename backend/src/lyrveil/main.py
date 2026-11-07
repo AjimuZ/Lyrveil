@@ -26,6 +26,7 @@ from lyrveil.api import (
     media,
     memories,
     messages,
+    model_settings,
     scenarios,
 )
 from lyrveil.api.security import (
@@ -48,6 +49,7 @@ from lyrveil.logs import configure_logging, get_logger
 from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
 from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
+from lyrveil.model_files import DEFAULT_MODELS_ROOT, ModelFiles
 from lyrveil.orchestration.client import GpuStatus, OrchestratorClient
 from lyrveil.orchestration.gpu_state import GpuStateFollower, GpuStateSource
 from lyrveil.orchestration.health import probe_control_api
@@ -69,6 +71,8 @@ from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings,
 from lyrveil.services.daily_backup import DailyBackup
 from lyrveil.services.image_generation import ImageGenerationService, ImageSettings
 from lyrveil.services.memory_extraction import MemoryExtractionService
+from lyrveil.services.model_maintenance import ModelMaintenance
+from lyrveil.services.model_profiles import ModelProfiles, machine_tier
 from lyrveil.services.summaries import SummaryService
 from lyrveil.settings import Settings, SettingsError, load_settings
 
@@ -109,8 +113,10 @@ class Worker:
     instead of calling `current_mode` (JobScheduler). With `gpu_states`, GpuStateFollower publishes each GPU state as
     `gpu.state`. With `launch_levels`, a text run out of memory and a failed load the orchestrator classified as out
     of memory lower the launch level. With `gpu_states` and `lifecycle_events`, LifecycleEventRecorder copies the
-    orchestrator's events into `model_lifecycle_events` at each new state. `main` passes ComfyUiRuntime, the
-    OrchestratorClient for the four orchestrator ports and the LaunchLevels of the data volume; tests pass fakes.
+    orchestrator's events into `model_lifecycle_events` at each new state. With `maintenance`, the worker runs
+    `maintenance` jobs with it: the model reload and the custom file hash of ModelMaintenance. `main` passes
+    ComfyUiRuntime, the OrchestratorClient for the four orchestrator ports, the LaunchLevels of the data volume and
+    ModelMaintenance; tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
@@ -120,6 +126,7 @@ class Worker:
     gpu_states: GpuStateSource | None = None
     lifecycle_events: EventSource | None = None
     launch_levels: LaunchLevels | None = None
+    maintenance: JobHandler | None = None
     image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
     images: ImageSettings = field(default_factory=ImageSettings)
     replies: ReplySettings = field(default_factory=ReplySettings)
@@ -202,6 +209,8 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             JobKind.MEMORY_REEVALUATION: memories,
             JobKind.SUMMARY_CHECKPOINT: summaries,
         }
+        if worker.maintenance is not None:
+            handlers[JobKind.MAINTENANCE] = worker.maintenance
         if image_runtime is not None:
             handlers[JobKind.IMAGE_REQUEST] = ImageGenerationService(
                 engine,
@@ -256,8 +265,12 @@ def create_app(
     worker: Worker | None = None,
     media_store: MediaStore | None = None,
     daily_backup: DailyBackup | None = None,
+    model_profiles: ModelProfiles | None = None,
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
+
+    `model_profiles`, kept in `app.state.model_profiles`, serves the /settings/models routes; without it they answer
+    500 `INTERNAL`.
 
     `engine` is the verified and migrated database, kept in `app.state.engine`; without it `/health/ready` answers
     503. `media_store` holds the asset files, in `app.state.media`; by default it is the store at `/data/media`, which
@@ -288,6 +301,7 @@ def create_app(
     app.state.worker = worker
     app.state.daily_backup = daily_backup
     app.state.scheduler = None
+    app.state.model_profiles = model_profiles
     app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(characters.router, prefix=API_PREFIX)
@@ -299,6 +313,7 @@ def create_app(
     app.include_router(diagnostics.router, prefix=API_PREFIX)
     app.include_router(images.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
+    app.include_router(model_settings.router, prefix=API_PREFIX)
     app.include_router(events.router)
     app.include_router(media.router)
     headers = documented_headers(settings.http_port)
@@ -322,7 +337,8 @@ def main() -> int:
     (recover_interrupted_replies), requeues or fails the other jobs it interrupted (JobQueue.recover_interrupted), and
     resumes a queue that a drain paused before the last stop;
     if that fails it logs `DB_CAPABILITY_MISSING` or `database_unavailable` and returns 69, so the backend never
-    becomes ready on a database it cannot trust. Otherwise empties the media staging folder and serves on port 8000
+    becomes ready on a database it cannot trust. Otherwise empties the media staging folder, writes the launch file of
+    the active text profile when none exists (a failure is logged and does not stop the start), and serves on port 8000
     with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
     returns 0. The job worker streams
     replies from KoboldCpp and draws images with ComfyUI under leases of the control API, asking it for the GPU mode
@@ -365,12 +381,22 @@ def main() -> int:
     except OSError:
         logger.warning("media_staging_cleanup_failed", exc_info=True)
     orchestrator = OrchestratorClient(settings.control_token)
+    launch_levels: LaunchLevels | None = None
+    model_profiles: ModelProfiles | None = None
     try:
-        launch_levels: LaunchLevels | None = LaunchLevels(load_catalog(CATALOG_PATH), LAUNCH_FILE)
+        catalog = load_catalog(CATALOG_PATH)
     except CatalogError:
-        # The image ships the catalog, so this is a broken build: replies still work, at a level that never drops.
+        # The image ships the catalog, so this is a broken build: replies still work, at a level that never drops,
+        # and the model settings routes answer 500.
         logger.error("launch_levels_unavailable", error_code="CATALOG_INVALID")
-        launch_levels = None
+    else:
+        launch_levels = LaunchLevels(catalog, LAUNCH_FILE)
+        model_profiles = ModelProfiles(engine, catalog, machine_tier(), ModelFiles(DEFAULT_MODELS_ROOT), LAUNCH_FILE)
+        # The text runtime cannot start without a launch file: a first start writes the active profile's.
+        try:
+            model_profiles.ensure_launch_file()
+        except (OSError, SQLAlchemyError):
+            logger.warning("launch_file_not_written", exc_info=True)
     worker = Worker(
         text_runtime=KoboldCppRuntime,
         leases=orchestrator,
@@ -378,11 +404,19 @@ def main() -> int:
         gpu_states=orchestrator,
         lifecycle_events=orchestrator,
         launch_levels=launch_levels,
+        maintenance=None if model_profiles is None else ModelMaintenance(model_profiles, orchestrator),
         image_runtime=ComfyUiRuntime,
     )
     daily_backup = DailyBackup(DATA_ROOT, settings.zone)
     uvicorn.run(
-        create_app(settings, engine, worker=worker, media_store=media_store, daily_backup=daily_backup),
+        create_app(
+            settings,
+            engine,
+            worker=worker,
+            media_store=media_store,
+            daily_backup=daily_backup,
+            model_profiles=model_profiles,
+        ),
         host=LISTEN_HOST,
         port=LISTEN_PORT,
         log_config=None,

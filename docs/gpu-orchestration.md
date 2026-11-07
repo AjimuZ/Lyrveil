@@ -378,8 +378,9 @@ Delivered in P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-ti
   again and gets three tries of its own.
 - **Budgets.** The context builder already sizes each prompt by the context the runtime reports from
   `GET /api/extra/true_max_context_length`, so a lower level needs no other change.
-- **Not delivered.** The settings screen that shows the level and returns to A (P06.6), `MODEL_FILE_MISSING` before a
-  mode change, and the writing of a whole launch file, which nothing in the backend does yet: setup and P06.6 will.
+- **Not delivered.** The settings screen that shows the level and returns to A (P06.6b). Since P06.6a the backend
+  writes the whole launch file at a profile change, which also returns it to A, and the reload checks
+  `MODEL_FILE_MISSING` before any mode change ([Model catalog](models.md#delivered-in-p066a)).
 - **Tests.** The orchestrator side is in `orchestrator/tests/unit/test_recovery_table.py`, the backend side in
   `backend/tests/unit/test_launch_levels.py` and `backend/tests/integration/test_launch_levels.py` (T-ORC-08). The image
   tries are in `backend/tests/integration/test_image_oom.py` (T-IMG-11).

@@ -58,7 +58,13 @@ Only known keys with validated values are read. The entrypoint does not `source`
 Since P06.4 the backend lowers the level after an out of memory of the text runtime: it rewrites `CONTEXT_SIZE`,
 `BATCH_SIZE`, `GPU_LAYERS` and `LEVEL` in place, keeps every other line, and adds a comment line that names the
 orchestrator event it answered. It changes nothing at level `C` or `CUSTOM`, for a profile outside the catalog, or when
-the file is missing. Nothing in the backend writes a whole launch file yet.
+the file is missing.
+
+Since P06.6a the backend writes the whole file (`lyrveil/orchestration/launch_file.py`): at a text profile change, and at
+a start that finds no file, for the active profile. It writes every key of the table, in its order, at level `A`, after
+a comment line naming the profile, and replaces the old file in one rename with its permissions (`0644` for a new one).
+A custom profile gets the values of the reduced-tier catalog profile of its family ([Model
+catalog](models.md#delivered-in-p066a)).
 
 `runtime/image-launch.env` in the data volume:
 
@@ -93,6 +99,11 @@ with their screens.
 | `images.profile_id` | `illustrious-xl-v2.0` | An image profile |
 | `images.quality` | `alta` | `alta`, `rapida` |
 | `models.custom` | Empty list | Registered [custom profiles](models.md#custom-profiles): identifier, kind, file, size, SHA-256, template family |
+
+Delivered in P06.6a: `llm.profile_id`, written by `PATCH /settings/models` (a missing row, or one naming no known
+profile, means the default of the tier; `setup.cmd` does not write it yet), and `models.custom`, written by the
+registration job and `DELETE /settings/models/custom/{id}` ([Model catalog](models.md#delivered-in-p066a)).
+`images.profile_id` and `images.quality` are not read or written yet. `PATCH /settings` accepts none of these keys.
 
 ### Text generation
 
