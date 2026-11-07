@@ -562,12 +562,22 @@ Written by the backend from the orchestrator's event stream.
 | `seq` | INTEGER | Unique with `boot_id` |
 | `from_state`, `to_state` | TEXT | |
 | `reason` | TEXT | Short code |
+| `code` | TEXT | The failure that caused the event, NULL otherwise |
 | `job_id` | TEXT | Plain text, no FK, so pruning stays independent |
 | `vram_total_mib`, `vram_used_mib` | INTEGER | NULL when NVML is unavailable |
 | `detail_json` | TEXT | |
 | `occurred_at` | TEXT | |
 
 Retention: the newest 50,000 rows.
+
+Delivered in revision `0015` (P06.5), written by `LifecycleEventRecorder`
+([Monitoring and logs](gpu-orchestration.md#monitoring-and-logs)). `code` was added to the documented columns, because
+an event's `reason` is the orchestrator's short phrase and its error code is separate. `(boot_id, seq)` has a unique
+constraint, `seq` a `CHECK` of at least 1 and `detail_json` `json_valid`; the index `(occurred_at, seq)` serves the read
+cursor and the retention, which keeps the newest rows by `occurred_at`, then `seq`. `reason` holds the orchestrator's
+phrase, such as `release verified`. `detail_json` is the event's `details`, numbers only. `vram_used_mib` is the
+memory in use that a load or a release reports (`used_after_mib`), NULL for other events, and `vram_total_mib` is
+always NULL for now, because no event carries the card's total.
 
 ### `image_proposals`
 

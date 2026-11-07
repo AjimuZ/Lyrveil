@@ -1,11 +1,18 @@
-"""Maintenance commands of the backend image: backup, export-backups, restore-check and restore of the data volume.
+"""Maintenance commands of the backend image: backups of the data volume, and the drain before a shutdown.
 
-The Windows scripts run them in one-off containers with no network (docs/operations.md, Backup and restore):
+The Windows scripts run the backup commands in one-off containers with no network (docs/operations.md, Backup and
+restore):
 
     backup                  writes a consistent backup of the data volume to /data/backups, keeping the newest 7
     export-backups FOLDER   copies every backup of /data/backups that FOLDER lacks, by name
     restore-check FILE      verifies a backup's manifest, sizes, SHA-256 hashes and schema revision; changes nothing
     restore FILE            checks FILE, then replaces db, media and runtime of /data with its content
+
+`stop.cmd` runs the drain commands inside the running backend container (docs/gpu-orchestration.md, Safe shutdown):
+
+    drain [--timeout S]     pauses the job queue and waits up to S seconds (60) for the running job to end
+    drain-gpu [--timeout S] asks the orchestrator to drain, and waits up to S seconds (90) for IDLE
+    resume                  resumes the queue and the orchestrator after a drain that no stop followed
 
 A backup is `lyrveil-<UTC time>.tar`: `manifest.json` first, then `db/lyrveil.sqlite3`, copied with the SQLite backup
 API, and every file of `media/` (except `media/.staging`) and `runtime/`. The manifest records the format, the
@@ -13,7 +20,8 @@ creation time, the app version, the database's Alembic revision and the size and
 daily backup (lyrveil.services.daily_backup) writes the same archives with create_backup and prune_backups.
 
 Exit status 0 on success and 1 on any failure or refusal, with a FAILURE line on standard error. `restore` requires
-the backend to be stopped, because it moves the database files that a running backend keeps open.
+the backend to be stopped, because it moves the database files that a running backend keeps open. A drain that runs
+out of time also exits 1: `stop.cmd` reports it as a warning and stops the services all the same.
 """
 
 import argparse
@@ -33,8 +41,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, NoReturn
 
+from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
+
 from lyrveil import __version__
+from lyrveil.jobs.drain import drain_queue, resume_queue
+from lyrveil.jobs.queue import JobQueue
+from lyrveil.orchestration.client import OrchestratorClient, OrchestratorUnavailableError
+from lyrveil.orchestration.drain import drain_gpu
+from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import known_revisions
+from lyrveil.settings import SettingsError, load_settings
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -55,6 +72,10 @@ MAX_MANIFEST_BYTES = 64 << 20
 BACKUP_NAME = re.compile(r"^lyrveil-\d{8}T\d{6}Z\.tar$")
 # docs/operations.md (Data layout): the data volume keeps the newest 7 backups; the Windows folder keeps every copy.
 KEEP_BACKUPS = 7
+# docs/gpu-orchestration.md (Safe shutdown): a running reply gets 60 s to finish. The GPU drain covers the stop grace
+# of the image runtime (30 s) and the release verification (60 s at most).
+QUEUE_DRAIN_TIMEOUT_S = 60
+GPU_DRAIN_TIMEOUT_S = 90
 CHUNK_BYTES = 1 << 20
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -524,6 +545,80 @@ def command_restore(args: argparse.Namespace, data_root: Path, now: datetime) ->
     return EXIT_OK
 
 
+def _engine(data_root: Path) -> Engine:
+    """Returns the engine of the data volume's database. Raises CliError when the database does not exist, so a drain
+    never creates an empty one."""
+    database = data_root / DATABASE_PATH
+    if not database.is_file():
+        raise CliError(f"{DATABASE_PATH} does not exist, so no job can run.")
+    return create_database_engine(database)
+
+
+def _orchestrator() -> OrchestratorClient:
+    """Returns the control API client with the token of the backend's environment. Raises CliError, naming the
+    variable and never its value, when the settings are invalid."""
+    try:
+        return OrchestratorClient(load_settings().control_token)
+    except SettingsError as error:
+        raise CliError(str(error)) from error
+
+
+def _timeout(value: str) -> int:
+    seconds = int(value)
+    if seconds < 0:
+        raise ValueError("a timeout cannot be negative")
+    return seconds
+
+
+def command_drain(args: argparse.Namespace, data_root: Path, _now: datetime) -> int:
+    engine = _engine(data_root)
+    try:
+        result = drain_queue(engine, JobQueue(), args.timeout)
+    except SQLAlchemyError as error:
+        raise CliError(f"The job queue could not be paused: {type(error).__name__}") from error
+    finally:
+        engine.dispose()
+    if not result.drained:
+        raise CliError(
+            f"Queue drain: {result.running} job(s) still running after {args.timeout} s. The queue stays paused, and"
+            " the next start recovers them."
+        )
+    _out(f"PASS     Queue drain: the job queue is paused and no job is running (waited {result.waited_s:.0f} s)")
+    return EXIT_OK
+
+
+def command_drain_gpu(args: argparse.Namespace, _data_root: Path, _now: datetime) -> int:
+    try:
+        status = drain_gpu(_orchestrator(), args.timeout)
+    except OrchestratorUnavailableError as error:
+        raise CliError("Runtime release: the orchestrator did not answer, so it holds no runtime now.") from error
+    if status.state == "ERROR":
+        raise CliError("Runtime release: the orchestrator is in ERROR; docker compose stop stops the runtimes.")
+    if status.state != "IDLE":
+        raise CliError(f"Runtime release: the GPU is still {status.state} after {args.timeout} s.")
+    _out("PASS     Runtime release: the runtime is stopped and the release of the GPU memory is verified")
+    return EXIT_OK
+
+
+def command_resume(_args: argparse.Namespace, data_root: Path, _now: datetime) -> int:
+    engine = _engine(data_root)
+    try:
+        resume_queue(engine, JobQueue())
+    except SQLAlchemyError as error:
+        raise CliError(f"The job queue could not be resumed: {type(error).__name__}") from error
+    finally:
+        engine.dispose()
+    _out("PASS     Queue: the job queue is resumed")
+    try:
+        _orchestrator().resume()
+    except (CliError, OrchestratorUnavailableError):
+        # The drain lives in the orchestrator's memory, so its next start leaves it in any case.
+        _out("WARNING  GPU: the orchestrator did not answer; it leaves the drain when it starts again")
+        return EXIT_OK
+    _out("PASS     GPU: the orchestrator left the drain")
+    return EXIT_OK
+
+
 class _Parser(argparse.ArgumentParser):
     # argparse exits with 2 on a usage error, which docs/operations.md reserves for a failed preflight.
     def error(self, message: str) -> NoReturn:
@@ -544,6 +639,15 @@ def _parser() -> _Parser:
         command = commands.add_parser(name)
         command.add_argument("file")
         command.set_defaults(handler=handler)
+    drains: tuple[tuple[str, Handler, int], ...] = (
+        ("drain", command_drain, QUEUE_DRAIN_TIMEOUT_S),
+        ("drain-gpu", command_drain_gpu, GPU_DRAIN_TIMEOUT_S),
+    )
+    for name, drain_handler, default in drains:
+        command = commands.add_parser(name)
+        command.add_argument("--timeout", type=_timeout, default=default, metavar="SECONDS")
+        command.set_defaults(handler=drain_handler)
+    commands.add_parser("resume").set_defaults(handler=command_resume)
     return parser
 
 

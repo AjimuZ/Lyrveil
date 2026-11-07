@@ -307,8 +307,15 @@ It succeeds when services are already stopped. It never runs `down -v`, and the 
 command would keep them.
 
 Delivered in P01.6b: step 4, which keeps the containers, and in P03.7b step 3, the same copy as step 10 of start,
-which warns and never fails the stop. Steps 1 and 2 print a `WARNING` line, because the queue drain command and the
-lifecycle manager do not exist yet. Stop never runs `docker compose down` in any form. It exits
+which warns and never fails the stop. Delivered in P06.5 ([Safe shutdown](gpu-orchestration.md#safe-shutdown)): steps 1
+and 2, each with `docker compose exec -T lyrveil-backend python -m lyrveil.cli ...`. Step 2 is
+`python -m lyrveil.cli drain-gpu --timeout 90`, which sends `POST /v1/drain` with the backend's control token and
+waits for `IDLE`. Both run only while the backend is running; otherwise stop prints
+`PASS     Queue drain: the backend is not running, so no job runs`. A step that exits with another status than 0 prints
+a `WARNING` line and the stop goes on: a job still running is cut by step 4 and recovered at the next start, and the
+runtimes are stopped by step 4. Until `start.cmd` starts the orchestrator, step 2 warns that it does not answer. When
+step 4 fails after a drain, stop runs `python -m lyrveil.cli resume`, so the services that still run answer again.
+The next start resumes the queue by itself. Stop never runs `docker compose down` in any form. It exits
 0 when the services are stopped, also when they were stopped already or Docker is not running, and 1 when
 `docker compose stop` fails or an argument is given.
 

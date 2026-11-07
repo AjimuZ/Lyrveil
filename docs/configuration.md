@@ -166,6 +166,10 @@ for text, the smallest `vram_required_mib` of the catalog, whichever profile is 
 idleness, the default of `jobs.background_idle_seconds`, before soft and background work runs
 ([Selection](gpu-orchestration.md#selection)); it is not read from `application_settings` either.
 
+Since P06.5 `application_settings` also holds `jobs.paused`, which is not a setting: `python -m lyrveil.cli drain` sets
+it to `true` before a shutdown, the job worker starts nothing while it is, and every backend start sets it back to
+`false` ([Safe shutdown](gpu-orchestration.md#safe-shutdown)). `PATCH /settings` does not accept it.
+
 ### Proactive
 
 Listed in [Scheduler](scheduler.md#per-conversation-settings).

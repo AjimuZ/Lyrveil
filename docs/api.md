@@ -701,7 +701,11 @@ Rules of the delivered routes:
   and its end without a load, are events too, with `from` and `to` both `IDLE`, so `seq` moves with `blocked_reason`.
   The start has code `GPU_INSUFFICIENT_VRAM` and `details` `free_mib` and `required_mib`. A release adds
   `drop_shortfall_mib` to its `details`. Since P06.4 a failed load adds `failures`, the failed loads of that runtime in
-  a row, `oom`, 1 for an allocation failure of the text runtime, and `exit_code`.
+  a row, `oom`, 1 for an allocation failure of the text runtime, and `exit_code`. Since P06.5 the backend reads this
+  route after each new state, from the newest event it stored, and keeps the events in `model_lifecycle_events`
+  ([Monitoring and logs](gpu-orchestration.md#monitoring-and-logs)).
+- Since P06.5 `stop.cmd` reaches `POST /v1/drain` and `POST /v1/resume` through the backend's `python -m lyrveil.cli
+  drain-gpu` and `resume` ([Safe shutdown](gpu-orchestration.md#safe-shutdown)).
 - Since P06.1 the `job_id` of `PUT /v1/desired-mode` is kept: the events of the switch it causes, from the stop of
   the current runtime to the ready state of the new one, carry it. A lease's events carry the lease's job, and a drain
   or a recovery carries none.

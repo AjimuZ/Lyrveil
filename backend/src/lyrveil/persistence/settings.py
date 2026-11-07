@@ -14,6 +14,9 @@ DIAGNOSTIC_MODE = "app.diagnostic_mode"
 IMAGES_AUTO_DETECT_REQUESTS = "images.auto_detect_requests"
 # docs/configuration.md: the character may propose an image on its own, which the user must accept (off by default).
 IMAGES_CONTEXTUAL_ENABLED = "images.contextual_enabled"
+# Not a user setting: true while `python -m lyrveil.cli drain` holds the job queue for a shutdown (JobQueue.paused,
+# lyrveil.jobs.drain). The backend sets it back to false when it starts.
+JOBS_PAUSED = "jobs.paused"
 
 
 def get_flag(connection: Connection, key: str, default: bool) -> bool:

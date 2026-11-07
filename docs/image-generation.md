@@ -617,6 +617,10 @@ Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md
   [the API](api.md#images)) and the gallery screen. The regenerate route takes `keep_seed` only; the advanced dialog
   with editable prompts (`check_user_prompt`) is still to come.
 - Delivered with P05.7: the mode switch through the orchestrator ([Delivered in P05.7](#delivered-in-p057)).
+- Tested in P06.5 (T-IMG-12, `backend/tests/integration/test_image_restart.py`): a backend that dies in `prompt`, in
+  `render`, or in `persist` before or after its commit resumes at the next start in the stage it was in, with one image
+  message, one row, one original and one thumbnail. The cut run counts as an attempt of its stage, so a restarted
+  `render` is the stage's second attempt and decodes in tiles, as after an out of memory.
 - Not delivered: the `waiting` phase,
   the settings that choose the profile and the quality, and the browser test of T-IMG-07 and T-IMG-08. The retry with
   **Rapida** after a second out of memory came with P06.4 ([Failures](#failures)). The explicit request route arrived with P05.5a

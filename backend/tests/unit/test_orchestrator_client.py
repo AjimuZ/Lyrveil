@@ -1,8 +1,9 @@
-"""Tests OrchestratorClient's lease, state and mode calls against a local HTTP server that answers like the control
-API."""
+"""Tests OrchestratorClient's lease, state, mode, event and drain calls against a local HTTP server that answers like
+the control API."""
 
 import json
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 from typing import Any, ClassVar
@@ -246,6 +247,77 @@ def test_a_mode_refused_while_draining_and_a_malformed_state_are_reported(client
     for _ in range(2):
         with pytest.raises(OrchestratorUnavailableError):
             client.read_state()
+
+
+def test_the_events_are_read_after_a_sequence_and_a_malformed_event_is_left_out(client: OrchestratorClient) -> None:
+    event = {
+        "seq": 7,
+        "at": "2026-11-07T10:00:00.250+00:00",
+        "from": "UNLOADING_LLM",
+        "to": "IDLE",
+        "reason": "release verified",
+        "job_id": "job-1",
+        "code": None,
+        "details": {"exit_code": 0, "used_after_mib": 1200, "drop_shortfall_mib": None, "oom": True},
+    }
+    ControlApi.answers = [
+        (
+            200,
+            {
+                "boot_id": "orchestrator-2",
+                "events": [
+                    event,
+                    {**event, "seq": 0},
+                    {**event, "at": "2026-11-07T10:00:00"},
+                    {**event, "job_id": 5},
+                    {**event, "seq": 8, "details": {}},
+                ],
+            },
+        ),
+        (200, {"boot_id": "orchestrator-2", "events": []}),
+        (200, {"events": []}),
+    ]
+    page = client.read_events("orchestrator-1", 41)
+    assert page.boot_id == "orchestrator-2"
+    assert [item.seq for item in page.events] == [7, 8]
+    first = page.events[0]
+    assert (first.at, first.source, first.target, first.job_id, first.code) == (
+        datetime(2026, 11, 7, 10, 0, 0, 250000, tzinfo=UTC),
+        "UNLOADING_LLM",
+        "IDLE",
+        "job-1",
+        None,
+    )
+    # Only numbers and null: a boolean is not a number of the contract.
+    assert first.details == {"exit_code": 0, "used_after_mib": 1200, "drop_shortfall_mib": None}
+    assert client.read_events(None, 0).events == ()
+    with pytest.raises(OrchestratorUnavailableError):
+        client.read_events(None, 0)
+    assert [request[1] for request in ControlApi.requests] == [
+        "/v1/events?boot_id=orchestrator-1&after=41",
+        "/v1/events?after=0",
+        "/v1/events?after=0",
+    ]
+
+
+def test_the_drain_and_the_resume_are_sent(client: OrchestratorClient) -> None:
+    ControlApi.answers = [
+        (202, {"draining": True, "state": "GENERATING_TEXT"}),
+        (200, {"state": "GENERATING_TEXT", "desired_mode": "llm", "draining": True, "seq": 3, "boot_id": "b"}),
+        (202, {"draining": False, "state": "IDLE"}),
+        (401, {"code": "UNAUTHORIZED"}),
+    ]
+    status = client.drain()
+    assert (status.state, status.draining, status.seq) == ("GENERATING_TEXT", True, 3)
+    client.resume()
+    with pytest.raises(OrchestratorUnavailableError):
+        client.resume()
+    assert [request[:2] for request in ControlApi.requests] == [
+        ("POST", "/v1/drain"),
+        ("GET", "/v1/state"),
+        ("POST", "/v1/resume"),
+        ("POST", "/v1/resume"),
+    ]
 
 
 def test_an_unreachable_orchestrator_is_unavailable(server: HTTPServer) -> None:

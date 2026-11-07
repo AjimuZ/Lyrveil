@@ -11,6 +11,9 @@ lease is released, and an image job whose runtime failed its last load retry end
 While a GPU stage runs, the scheduler watches for the two reasons to stop it (P06.3): foreground work that arrives
 during background work preempts it, and the user's cancellation ends it `cancelled`. Either way it cancels the
 handler, asks the runtime to abort the run's work under the lease it still holds, then stores the outcome.
+
+Since P06.5 (docs/gpu-orchestration.md, Safe shutdown) a queue paused by the drain starts nothing and asks for no
+mode, and a run cut by the shutdown aborts its runtime work and releases its lease before the worker ends.
 """
 
 import time
@@ -252,6 +255,11 @@ class JobScheduler:
     orchestrator restarts the runtime with the new file. When the orchestrator reports that the image runtime failed
     its last load retry for a queued image job, that job ends with IMAGE_LOAD_FAILED, not retried, as the VRAM wait
     ends one; the orchestrator has already given the GPU back to mode `llm`, and the next image job asks again.
+
+    Shutdown (P06.5): while the queue is paused (JobQueue.paused), a pass does nothing. When the worker is cancelled
+    in the middle of a GPU stage, the run's work is aborted and its lease released with `ok`, shielded from the
+    cancellation, so a drain in the orchestrator does not wait for the lease's TTL. The job stays `running` in the
+    database for the next start to recover (main: recover_interrupted_replies, then recover_interrupted_jobs).
     """
 
     def __init__(
@@ -302,6 +310,8 @@ class JobScheduler:
         self._wake = anyio.Event()
         # Set by notify() while a GPU stage runs, so its watch looks at the queue at once.
         self._changed: anyio.Event | None = None
+        # Whether the last pass found the queue paused, so the pause and its end are logged once each.
+        self._paused = False
 
     def notify(self) -> None:
         """Wakes the idle worker at once, for example after a commit that queued a job, and makes a running GPU stage
@@ -331,9 +341,15 @@ class JobScheduler:
         lease or does not answer: the job stays queued and is tried again later. With a mode switch, a pass that only
         asks for a mode change also returns None, and a pass that finds the VRAM wait over ends the waiting job
         instead of running one, and returns it failed. A queued job left with a cancellation request is ended
-        `cancelled` first, and returned.
+        `cancelled` first, and returned. While the queue is paused for a shutdown, returns None at once.
         """
         kinds = tuple(self._handlers)
+        paused = await to_thread.run_sync(read, self._engine, self._queue.paused)
+        if paused != self._paused:
+            self._paused = paused
+            logger.info("job_queue_paused" if paused else "job_queue_resumed")
+        if paused:
+            return None
         pending = await to_thread.run_sync(
             read, self._engine, lambda connection: self._queue.next_cancel_pending(connection, kinds)
         )
@@ -372,7 +388,21 @@ class JobScheduler:
             return None
         logger.info("job_started", job_id=started.id, state=started.status.value)
         context = RunContext(lease=lease, genkey=genkey)
-        run = await self._execute(started, context)
+        try:
+            run = await self._execute(started, context)
+        except anyio.get_cancelled_exc_class():
+            if lease is not None:
+                # The worker is stopping (docs/backend.md, Shutdown sequence). The job stays running for the next
+                # start to queue again; only the GPU is handed back, so the orchestrator need not wait for the TTL.
+                with anyio.CancelScope(shield=True):
+                    try:
+                        await self._stop_runtime(started, genkey)
+                        await self._release(lease, "ok")
+                    except Exception:
+                        # Nothing may replace the cancellation: an unreleased lease expires by itself.
+                        logger.warning("job_lease_not_released", job_id=started.id, exc_info=True)
+                logger.info("job_cut_by_shutdown", job_id=started.id)
+            raise
         reason = context.stop.reason
         if reason is not None and lease is not None and not run.lease_lost:
             await self._stop_runtime(started, genkey)

@@ -163,7 +163,7 @@ Evidence:
 - [x] P06.2 Release verification, VRAM guards and blocked states.
 - [x] P06.3 Scheduling rules, batching, fairness, preemption and cancellation.
 - [x] P06.4 Launch levels, out-of-memory handling and recovery table.
-- [ ] P06.5 Safe shutdown, drain and event persistence.
+- [x] P06.5 Safe shutdown, drain and event persistence.
 - [ ] P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration.
 
 Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.

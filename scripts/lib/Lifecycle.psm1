@@ -24,8 +24,11 @@ $script:LogTail = 50
 # What start.cmd and stop.cmd cannot do yet, printed as warnings so that no run claims it was done.
 $script:ModelFilesPending = 'not checked, because the model catalog is not available yet (P02)'
 $script:TextModelPending = 'not started, because the model catalog and the runtimes are not available yet (P02). The app works for reading and editing'
-$script:DrainPending = 'skipped, because the job queue and its drain command come with P02'
-$script:ReleasePending = 'skipped, because the orchestrator manages no runtime until P02'
+$script:BackendService = 'lyrveil-backend'
+# docs/gpu-orchestration.md (Safe shutdown): the queue drain gives a running reply 60 s, the GPU drain covers the stop
+# grace of a runtime and the verification of its release.
+$script:QueueDrainSeconds = 60
+$script:GpuDrainSeconds = 90
 # What status.cmd cannot report yet. The keys are the JSON fields, which are null until then.
 $script:StatusPending = [ordered]@{
     gpu                = 'GPU state and VRAM: not available yet, because the orchestrator that reads them comes with P02'
@@ -446,14 +449,65 @@ function Invoke-LyrveilStart {
     return 0
 }
 
+function Invoke-BackendCommand {
+    # Runs "python -m lyrveil.cli <Command>" inside the running backend container, with its output on the console,
+    # and returns its exit status.
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory = $true)] [hashtable]$Context, [Parameter(Mandatory = $true)] [string[]]$Command)
+
+    $arguments = (Get-ComposeArgument -Context $Context) + @('exec', '-T', $script:BackendService, 'python', '-m', 'lyrveil.cli') + $Command
+    return (Invoke-NativeShown -Command 'docker' -Argument $arguments)
+}
+
+function Invoke-ShutdownDrain {
+    <#
+    Runs steps 1 and 2 of Safe shutdown (docs/gpu-orchestration.md) and returns $true when the backend was running,
+    so its queue is now paused. Step 1 pauses the job queue and lets a running job finish, for up to 60 s; step 2 asks
+    the orchestrator, through the backend that holds the control token, to stop the runtime and verify the release.
+    Both run only while the backend runs. A step that fails or runs out of time adds a warning to Collector and never
+    fails the stop: docker compose stop then ends what is left.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)] [hashtable]$Context,
+        [Parameter(Mandatory = $true)] [AllowEmptyCollection()] [System.Collections.Generic.List[string]]$Collector
+    )
+
+    Write-Host 'Drain'
+    try {
+        $backend = (Get-ServiceContainer -Context $Context)[$script:BackendService]
+    }
+    catch {
+        Write-WarningRow -Collector $Collector -Name 'Queue drain' -Detail "skipped, because the services could not be listed: $($_.Exception.Message)"
+        return $false
+    }
+    if ($null -eq $backend -or $backend.State -ne 'running') {
+        Write-Host 'PASS     Queue drain: the backend is not running, so no job runs'
+        return $false
+    }
+    $status = Invoke-BackendCommand -Context $Context -Command @('drain', '--timeout', "$script:QueueDrainSeconds")
+    if ($status -ne 0) {
+        Write-WarningRow -Collector $Collector -Name 'Queue drain' -Detail "not complete (exit status $status); a job still running is recovered at the next start"
+    }
+    $status = Invoke-BackendCommand -Context $Context -Command @('drain-gpu', '--timeout', "$script:GpuDrainSeconds")
+    if ($status -ne 0) {
+        Write-WarningRow -Collector $Collector -Name 'Runtime release' -Detail "not verified (exit status $status); docker compose stop stops the runtimes"
+    }
+    return $true
+}
+
 function Invoke-LyrveilStop {
     <#
     Runs stop.cmd and returns its exit status: 0 when every service of the project is stopped, also when they were
-    stopped already or Docker is not running, 1 on an unknown argument or when "docker compose stop" fails. It stops
-    the containers with "docker compose --profile ai stop --timeout 40" and keeps them, their volumes and their data:
-    it never runs "docker compose down", with or without -v. Before that it copies the backups that the Windows backup
-    folder lacks (Copy-BackupToWindows), which warns and never fails the stop. The queue drain and the runtime release
-    are not available yet and print warnings. The parameters after Argument are for tests (see Invoke-LyrveilStart).
+    stopped already or Docker is not running, 1 on an unknown argument or when "docker compose stop" fails. It first
+    drains the backend's job queue and the GPU (Invoke-ShutdownDrain), then copies the backups that the Windows backup
+    folder lacks (Copy-BackupToWindows); both warn and never fail the stop. Then it stops the containers with
+    "docker compose --profile ai stop --timeout 40" and keeps them, their volumes and their data: it never runs
+    "docker compose down", with or without -v. When that stop fails after a drain, the queue and the orchestrator are
+    resumed, so the services that still run keep answering. The parameters after Argument are for tests (see
+    Invoke-LyrveilStart).
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -476,8 +530,7 @@ function Invoke-LyrveilStop {
     }
 
     $warnings = New-Object System.Collections.Generic.List[string]
-    Write-WarningRow -Collector $warnings -Name 'Queue drain' -Detail $script:DrainPending
-    Write-WarningRow -Collector $warnings -Name 'Runtime release' -Detail $script:ReleasePending
+    $drained = Invoke-ShutdownDrain -Context $context -Collector $warnings
     Write-Host 'Backups'
     $backupProblem = Copy-BackupToWindows -Context $context -Folder $BackupFolder
     if ($backupProblem) { Write-WarningRow -Collector $warnings -Name 'Backups' -Detail $backupProblem }
@@ -486,6 +539,7 @@ function Invoke-LyrveilStop {
     $status = Invoke-NativeShown -Command 'docker' -Argument ((Get-ComposeArgument -Context $context) + @('--profile', 'ai', 'stop', '--timeout', "$script:StopTimeoutSeconds"))
     if ($status -ne 0) {
         Write-Host "FAILURE  Services: docker compose stop exited with $status (see the output above)"
+        if ($drained) { $null = Invoke-BackendCommand -Context $context -Command @('resume') }
         return 1
     }
     Write-Host 'Lyrveil is stopped. Containers, volumes and data are kept.'

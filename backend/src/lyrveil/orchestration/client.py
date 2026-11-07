@@ -3,9 +3,10 @@
 A lease is the global GPU lock. The job scheduler acquires one before it uses a runtime, renews it every 10 s while the
 job runs, and releases it with the job's outcome (docs/gpu-orchestration.md, Leases and the global lock). It reads the
 GPU state and asks for the mode its queue needs with PUT /v1/desired-mode, and GpuStateFollower long-polls the state
-with `wait_for_state` to announce each change on the event WebSocket. The client is blocking, like
-probe_control_api: call it from a worker thread, never on the event loop. It ignores proxy settings from the
-environment, so the token only ever travels to the orchestrator.
+with `wait_for_state` to announce each change on the event WebSocket. Since P06.5 LifecycleEventRecorder reads the
+event log with `read_events`, and the `drain-gpu` and `resume` commands of lyrveil.cli call `drain` and `resume`. The
+client is blocking, like probe_control_api: call it from a worker thread, never on the event loop. It ignores proxy
+settings from the environment, so the token only ever travels to the orchestrator.
 
 Errors never carry the token. They may carry the job id, the lease id and status codes, which hold no user data.
 """
@@ -13,8 +14,11 @@ Errors never carry the token. They may carry the job id, the lease id and status
 import http.client
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import SecretStr
@@ -106,6 +110,33 @@ class GpuStatus:
     def ready_mode(self) -> LeaseMode | None:
         """Returns the mode whose runtime is ready, or None while the GPU is loading, unloading, idle or recovering."""
         return _READY_STATES.get(self.state)
+
+
+@dataclass(frozen=True)
+class LifecycleEvent:
+    """One event of GET /v1/events: a transition from `source` to `target`, or a note in one state (a hold for VRAM).
+
+    `seq` counts the events of the orchestrator process that sent it, from 1. `at` is aware UTC. `code` is the failure
+    that caused it, if any, and `details` holds only numbers: VRAM values in MiB, exit codes and load counts.
+    """
+
+    seq: int
+    at: datetime
+    source: str
+    target: str
+    reason: str
+    job_id: str | None
+    code: str | None
+    details: Mapping[str, int | None] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EventPage:
+    """An answer of GET /v1/events: the `boot_id` of the orchestrator process, and its buffered events after the
+    requested `seq`, oldest first, or all of them when the requested boot was another process's."""
+
+    boot_id: str
+    events: tuple[LifecycleEvent, ...]
 
 
 class OrchestratorError(Exception):
@@ -201,6 +232,38 @@ class OrchestratorClient:
         if status == 409 and body.get("code") == "CONFLICT":
             raise ModeRefusedError(f"mode {mode} refused: the orchestrator is draining")
         raise OrchestratorUnavailableError(f"the control API answered {status} to desired-mode")
+
+    def read_events(self, boot_id: str | None, after: int) -> EventPage:
+        """Returns the orchestrator's buffered events with `seq` above `after`, or all of them when `boot_id` is not
+        the current process's: GET /v1/events. An event that is not of the documented form is left out.
+
+        Raises OrchestratorUnavailableError for anything but a 200 with a `boot_id` and a list of events. `after` must
+        be at least 0.
+        """
+        query = urllib.parse.urlencode({"after": after} if boot_id is None else {"boot_id": boot_id, "after": after})
+        status, body = self._send("GET", f"/v1/events?{query}", None)
+        current, events = body.get("boot_id"), body.get("events")
+        if status != 200 or not isinstance(current, str) or not isinstance(events, list):
+            raise OrchestratorUnavailableError(f"the control API answered {status} to events without events")
+        read = (_event(item) for item in events)
+        return EventPage(boot_id=current, events=tuple(event for event in read if event is not None))
+
+    def drain(self) -> GpuStatus:
+        """Starts the drain, POST /v1/drain: the orchestrator stops the runtime once the current lease ends, and
+        refuses new leases and modes until `resume`. Returns at once with the state read afterwards; poll it for IDLE.
+        Raises OrchestratorUnavailableError for anything but a 202."""
+        self._accepted("/v1/drain", "drain")
+        return self.read_state()
+
+    def resume(self) -> None:
+        """Leaves the drain, POST /v1/resume: the desired mode recorded before it applies again. Raises
+        OrchestratorUnavailableError for anything but a 202."""
+        self._accepted("/v1/resume", "resume")
+
+    def _accepted(self, path: str, operation: str) -> None:
+        status, _ = self._send("POST", path, None)
+        if status != 202:
+            raise OrchestratorUnavailableError(f"the control API answered {status} to {operation}")
 
     def acquire_lease(self, mode: LeaseMode, job_id: str, ttl_s: int = DEFAULT_LEASE_TTL_S) -> Lease:
         """Returns the granted lease. Raises LeaseRefusedError for a 409 NOT_READY or LEASE_HELD, and
@@ -312,6 +375,55 @@ def _load_failure(value: object) -> LoadFailure | None:
     ):
         return None
     return LoadFailure(seq=seq, mode=mode, code=code, oom=oom, failures=failures, final=final, job_id=job_id)
+
+
+def _optional_text(value: object) -> tuple[bool, str | None]:
+    """Returns (True, value) for a string or None, and (False, None) for anything else."""
+    return (True, value) if value is None or isinstance(value, str) else (False, None)
+
+
+def _event(value: object) -> LifecycleEvent | None:
+    """Reads one event of GET /v1/events, or returns None when it is not of the documented form. Detail values other
+    than integers and null are left out, since `details` holds only numbers."""
+    if not isinstance(value, dict):
+        return None
+    seq, at, source, target, reason = (value.get(key) for key in ("seq", "at", "from", "to", "reason"))
+    job_ok, job_id = _optional_text(value.get("job_id"))
+    code_ok, code = _optional_text(value.get("code"))
+    details = value.get("details", {})
+    if (
+        isinstance(seq, bool)
+        or not isinstance(seq, int)
+        or seq < 1
+        or not isinstance(at, str)
+        or not isinstance(source, str)
+        or not isinstance(target, str)
+        or not isinstance(reason, str)
+        or not job_ok
+        or not code_ok
+        or not isinstance(details, dict)
+    ):
+        return None
+    try:
+        moment = datetime.fromisoformat(at)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return None
+    return LifecycleEvent(
+        seq=seq,
+        at=moment.astimezone(UTC),
+        source=source,
+        target=target,
+        reason=reason,
+        job_id=job_id,
+        code=code,
+        details={
+            str(key): item
+            for key, item in details.items()
+            if item is None or (isinstance(item, int) and not isinstance(item, bool))
+        },
+    )
 
 
 def _json_object(raw: bytes) -> dict[str, Any]:

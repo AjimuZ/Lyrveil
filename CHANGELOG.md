@@ -10,6 +10,17 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- A safer `stop.cmd`. Before it stops the containers, it pauses the job queue and lets a running reply or image step
+  finish, for up to 60 s, then asks the orchestrator to stop the model and verify that the GPU memory is free. A job
+  still running after 60 s is cut by the stop: a reply keeps the text written so far as interrupted, and an image picks
+  up again after the next start from the step it was in, without a second image or message. Messages sent meanwhile
+  are saved and answered after the next start, which resumes the queue by itself. Each step prints a warning instead
+  of failing the stop; if the stop fails, the queue is resumed. New maintenance commands in the backend image:
+  `python -m lyrveil.cli drain`, `drain-gpu` and `resume`. The orchestrator's state changes are now stored in the
+  database (`model_lifecycle_events`, the newest 50,000), also across backend restarts and without duplicates, for
+  the **Risorse AI** screen of P06.6. Not verified yet: the stop against the real runtimes and GPU, because
+  `start.cmd` does not start the orchestrator yet.
+
 - Recovery from GPU out-of-memory and failed loads. An image that runs out of memory is retried with the tiled
   workflow of the same preset, and an **Alta** image that runs out again gets one last try with **Rapida**; the image
   is stored, and shown in the gallery, with the preset that actually produced it. When the text model runs out of

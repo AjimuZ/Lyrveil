@@ -7,7 +7,8 @@ JobStateError when the job is not running any more, so a stale worker cannot ove
 
 States (docs/data-model.md): queued -> running -> completed | failed, or back to queued for a retry, a new stage, a
 preemption or a recovery after a restart. A queued job can be cancelled at once; a running one gets
-`cancel_requested_at`, and the worker that runs it ends it `cancelled`.
+`cancel_requested_at`, and the worker that runs it ends it `cancelled`. While the queue is paused for a shutdown
+(lyrveil.jobs.drain), no job starts.
 """
 
 import json
@@ -20,6 +21,7 @@ from sqlalchemy import Connection, RowMapping, bindparam, text
 
 from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.jobs.policy import JobKind, JobStatus, RequiredMode, policy_for
+from lyrveil.persistence.settings import JOBS_PAUSED, get_flag, set_flag
 
 # ADR 0010: the queue holds at most this many queued and running jobs.
 MAX_ACTIVE_JOBS = 200
@@ -275,17 +277,35 @@ class JobQueue:
     def start(self, connection: Connection, job_id: str, lease_id: str | None, genkey: str) -> Job | None:
         """Marks a queued job running, counts the attempt and stores its lease and abort key; returns the job.
 
-        Returns None, and writes nothing, when the job is no longer queued or a cancellation was requested.
+        Returns None, and writes nothing, when the job is no longer queued, a cancellation was requested or the queue
+        is paused. The pause is read in the same statement, so a drain that paused the queue and then found no job
+        running never sees one start afterwards.
         """
         updated = connection.execute(
             text(
                 "UPDATE generation_jobs SET status = 'running', attempt = attempt + 1, lease_id = :lease, "
                 "genkey = :genkey, started_at = :now, not_before = NULL "
-                "WHERE id = :id AND status = 'queued' AND cancel_requested_at IS NULL"
+                "WHERE id = :id AND status = 'queued' AND cancel_requested_at IS NULL AND NOT EXISTS "
+                "(SELECT 1 FROM application_settings WHERE key = :paused AND value_json = 'true')"
             ),
-            {"id": job_id, "lease": lease_id, "genkey": genkey, "now": to_utc_text(self.now())},
+            {"id": job_id, "lease": lease_id, "genkey": genkey, "now": to_utc_text(self.now()), "paused": JOBS_PAUSED},
         )
         return self._get(connection, job_id) if updated.rowcount == 1 else None
+
+    def paused(self, connection: Connection) -> bool:
+        """Returns whether the queue is paused for a shutdown: while it is, `start` starts nothing."""
+        return get_flag(connection, JOBS_PAUSED, False)
+
+    def set_paused(self, connection: Connection, paused: bool) -> None:
+        """Pauses or resumes the queue in the caller's transaction. A running job is not touched either way."""
+        set_flag(connection, JOBS_PAUSED, paused, to_utc_text(self.now()))
+
+    def running_count(self, connection: Connection) -> int:
+        """Returns the number of running jobs, which a drain waits for."""
+        running: int = connection.execute(
+            text("SELECT count(*) FROM generation_jobs WHERE status = 'running'")
+        ).scalar_one()
+        return running
 
     def complete(self, connection: Connection, job_id: str, result: Mapping[str, Any] | None = None) -> Job:
         """Ends a running job as completed with `result`. Raises JobStateError when it is not running."""

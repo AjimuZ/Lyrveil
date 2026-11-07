@@ -16,7 +16,8 @@ backend/
     settings.py          Typed environment settings
     logs.py              JSON logging with the field allowlist
     catalog.py           Validator of config/model-catalog.json and the tier defaults (P02.1a)
-    cli.py               backup, export-backups, restore-check, restore (P01.6d); rebuild-search, drain (planned)
+    cli.py               backup, export-backups, restore-check, restore (P01.6d); drain, drain-gpu, resume (P06.5);
+                         rebuild-search (planned)
                          The daily backup, services/daily_backup.py (P03.7b), writes the same archive
     tools/               One-shot tools: models.py (downloads), import_model.py (copies a custom model file)
     api/                 Routers, request and response schemas, error mapping, WebSocket
@@ -467,6 +468,12 @@ because they end their own jobs. A failure of either recovery stops startup like
 `database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with
 `database_unavailable` when the file cannot be opened or migrated, so the server never starts on a database it cannot trust.
 
+Since P06.5 step 5 also resumes a queue that the drain of the last stop paused ([Shutdown
+sequence](#shutdown-sequence)), and step 6 is delivered as the follower's first state read with the event copy behind
+it: the GPU state follower reads the state without waiting, and its observer stores every event the orchestrator still
+buffers after the newest stored one ([Monitoring and logs](gpu-orchestration.md#monitoring-and-logs)). Both run with
+the job worker, not before it.
+
 ### Database and health
 
 `persistence/database.py` builds the synchronous engine for `/data/db/lyrveil.sqlite3`
@@ -523,6 +530,21 @@ WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quic
 
 Delivered in P02.5c: the lifespan stops the job worker and the running reply flushes its text and stays `streaming`,
 for the next start to mark `interrupted`. Its lease is not released: it expires after its TTL.
+
+Since P06.5 ([Safe shutdown](gpu-orchestration.md#safe-shutdown)):
+
+- **Stop accepting jobs.** `python -m lyrveil.cli drain` pauses the queue first: `JobQueue.set_paused` writes the
+  `jobs.paused` row of `application_settings`, `JobScheduler.run_once` does nothing while `JobQueue.paused` is true,
+  and `JobQueue.start` refuses in the statement that marks a job running. `lyrveil/jobs/drain.py` holds `drain_queue`,
+  which pauses and waits for `JobQueue.running_count` to reach 0, for up to its timeout. The routes still accept
+  messages; their jobs wait.
+- **Release the lease.** A GPU stage cut by the shutdown aborts its runtime work, as a preemption does, and releases its
+  lease with `ok` under a shielded scope. A failure there is logged and never replaces the cancellation. The reply still
+  stays `streaming` for the next start.
+- **The next start** clears `jobs.paused` after the job recovery of step 5, so a stop followed by a start needs nothing
+  else. `python -m lyrveil.cli resume` clears it, and sends `POST /v1/resume`, after a stop that did not happen.
+- **Tests.** `tests/integration/test_shutdown_drain.py` (T-ORC-09, backend side) and
+  `tests/integration/test_image_restart.py` (T-IMG-12).
 
 ## Job handlers
 
@@ -877,4 +899,19 @@ Since P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-timed-rec
   the lease with `oom`. It ends the queued image job that a final image `load_failure` names with `IMAGE_LOAD_FAILED`,
   not retried, through `AbandoningHandler.abandon`, before it decides anything else in that pass.
 - Tests: `tests/unit/test_launch_levels.py`, `tests/integration/test_launch_levels.py` (T-ORC-08, backend side) and
+  `tests/unit/test_orchestrator_client.py`.
+
+Since P06.5 ([ADR 0041](decisions/0041-shutdown-drain-and-stored-lifecycle-events.md)):
+
+- `OrchestratorClient.read_events(boot_id, after)` reads `GET /v1/events` as an `EventPage` of `LifecycleEvent`s, and
+  leaves out an event that is not of the documented form and any `details` value that is not an integer or null.
+  `drain()` sends `POST /v1/drain` and returns the state read afterwards; `resume()` sends `POST /v1/resume`.
+- `lyrveil/orchestration/lifecycle_events.py` holds `LifecycleEventRecorder`, which stores the events in
+  `model_lifecycle_events` through `lyrveil/persistence/lifecycle_events.py`
+  ([Monitoring and logs](gpu-orchestration.md#monitoring-and-logs)), and `each`, which joins several `on_state`
+  observers so that one that fails does not stop the others. `Worker.lifecycle_events` names the event source; `main`
+  passes the OrchestratorClient, and the follower then calls `LaunchLevels.observe` and the recorder for each new state.
+- `lyrveil/orchestration/drain.py` holds `drain_gpu`, which `python -m lyrveil.cli drain-gpu` runs: the drain, then long
+  polls until `IDLE` or `ERROR`, each no longer than the time left.
+- Tests: `tests/integration/test_lifecycle_events.py` (T-ORC-11), `tests/integration/test_shutdown_drain.py` and
   `tests/unit/test_orchestrator_client.py`.

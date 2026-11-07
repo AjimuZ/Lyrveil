@@ -39,6 +39,7 @@ from lyrveil.catalog import CatalogError, load_catalog
 from lyrveil.context.builder import ContextSettings
 from lyrveil.domain.errors import DomainError
 from lyrveil.events.hub import EventHub
+from lyrveil.jobs.drain import resume_queue
 from lyrveil.jobs.handlers import JobHandler
 from lyrveil.jobs.policy import JobKind, RequiredMode
 from lyrveil.jobs.queue import JobQueue
@@ -47,10 +48,11 @@ from lyrveil.logs import configure_logging, get_logger
 from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
 from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
-from lyrveil.orchestration.client import OrchestratorClient
+from lyrveil.orchestration.client import GpuStatus, OrchestratorClient
 from lyrveil.orchestration.gpu_state import GpuStateFollower, GpuStateSource
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.orchestration.launch_levels import LaunchLevels
+from lyrveil.orchestration.lifecycle_events import EventSource, LifecycleEventRecorder, each
 from lyrveil.persistence.database import (
     DEFAULT_DATABASE_PATH,
     DatabaseCapabilityError,
@@ -106,8 +108,9 @@ class Worker:
     `mode_switch`, the scheduler reads the GPU mode from the orchestrator and asks for the mode its queue needs,
     instead of calling `current_mode` (JobScheduler). With `gpu_states`, GpuStateFollower publishes each GPU state as
     `gpu.state`. With `launch_levels`, a text run out of memory and a failed load the orchestrator classified as out
-    of memory lower the launch level. `main` passes ComfyUiRuntime, the OrchestratorClient for all three and the
-    LaunchLevels of the data volume; tests pass fakes.
+    of memory lower the launch level. With `gpu_states` and `lifecycle_events`, LifecycleEventRecorder copies the
+    orchestrator's events into `model_lifecycle_events` at each new state. `main` passes ComfyUiRuntime, the
+    OrchestratorClient for the four orchestrator ports and the LaunchLevels of the data volume; tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
@@ -115,6 +118,7 @@ class Worker:
     current_mode: Callable[[], RequiredMode] = _llm_mode
     mode_switch: ModeSwitch | None = None
     gpu_states: GpuStateSource | None = None
+    lifecycle_events: EventSource | None = None
     launch_levels: LaunchLevels | None = None
     image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
     images: ImageSettings = field(default_factory=ImageSettings)
@@ -148,9 +152,10 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
     image runtime, and is kept in `app.state.scheduler` meanwhile. The scheduler aborts a stopped run's work through
     the same runtimes (preemption and cancellation). When the Worker has `gpu_states`, the
-    GpuStateFollower runs beside it and reports the depth of the same queue. On shutdown the running reply keeps its
-    flushed text and stays `streaming` for the next start to mark `interrupted`; its lease is not released and expires
-    by itself.
+    GpuStateFollower runs beside it and reports the depth of the same queue, and with `lifecycle_events` it also has
+    LifecycleEventRecorder store the orchestrator's events. On shutdown the running reply keeps its flushed text and
+    stays `streaming` for the next start to mark `interrupted`; since P06.5 the scheduler aborts the run's generation
+    and releases its lease first.
     """
     worker: Worker | None = app.state.worker
     engine: Engine | None = app.state.engine
@@ -223,11 +228,16 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
             if worker.gpu_states is not None:
+                observers: list[Callable[[GpuStatus], object]] = []
+                if worker.launch_levels is not None:
+                    observers.append(worker.launch_levels.observe)
+                if worker.lifecycle_events is not None:
+                    observers.append(LifecycleEventRecorder(engine, worker.lifecycle_events).observe)
                 follower = GpuStateFollower(
                     worker.gpu_states,
                     app.state.events,
                     lambda: read(engine, queue.depth),
-                    on_state=None if worker.launch_levels is None else worker.launch_levels.observe,
+                    on_state=each(*observers) if observers else None,
                 )
                 group.start_soon(follower.run_forever)
             app.state.scheduler = scheduler
@@ -309,13 +319,15 @@ def main() -> int:
 
     Returns 78 with a message on stderr naming each invalid setting, before logging or the server starts. Then opens
     the database, verifies WAL and FTS5, applies the migrations, marks the replies a restart cut `interrupted`
-    (recover_interrupted_replies), and requeues or fails the other jobs it interrupted (JobQueue.recover_interrupted);
+    (recover_interrupted_replies), requeues or fails the other jobs it interrupted (JobQueue.recover_interrupted), and
+    resumes a queue that a drain paused before the last stop;
     if that fails it logs `DB_CAPABILITY_MISSING` or `database_unavailable` and returns 69, so the backend never
     becomes ready on a database it cannot trust. Otherwise empties the media staging folder and serves on port 8000
     with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
     returns 0. The job worker streams
     replies from KoboldCpp and draws images with ComfyUI under leases of the control API, asking it for the GPU mode
-    its queue needs and publishing each GPU state it reports, and DailyBackup writes one backup of /data a day while
+    its queue needs, publishing each GPU state it reports and storing the orchestrator's events, and DailyBackup
+    writes one backup of /data a day while
     the backend is idle. The access log is off, because request paths and queries can carry user text.
     """
     try:
@@ -335,6 +347,10 @@ def main() -> int:
         queue = JobQueue()
         recover_interrupted_replies(engine, queue)
         recover_interrupted_jobs(engine, queue)
+        # A drain before the last stop paused the queue (docs/gpu-orchestration.md, Safe shutdown): a start resumes it.
+        if read(engine, queue.paused):
+            resume_queue(engine, queue)
+            logger.info("job_queue_resumed")
     except DatabaseCapabilityError as error:
         logger.error("database_capability_missing", error_code=error.code)
         return EXIT_DATABASE_UNAVAILABLE
@@ -360,6 +376,7 @@ def main() -> int:
         leases=orchestrator,
         mode_switch=orchestrator,
         gpu_states=orchestrator,
+        lifecycle_events=orchestrator,
         launch_levels=launch_levels,
         image_runtime=ComfyUiRuntime,
     )
