@@ -69,6 +69,8 @@
 - Mutate shared asyncio state only from synchronous methods that never await. Before each await in a long operation, enter a state that refuses concurrent requests (LOADING or UNLOADING) so those requests see consistent state.
 - Map port errors (gate, NVML) to the documented error codes at the adapter boundary (SupervisorError.code), so callers report `last_error` without parsing messages.
 - Mypy strict flags a repeated `assert obj.prop is X` after a mutation as non-overlapping. Compare a tuple such as `(obj.state, obj.lease) == (...)` instead.
+- Adapters list every path they call in a module-level ENDPOINTS constant, and a unit test parses the docs/runtime-contracts.md tables and fails on any '/api/' string constant in the module that the contract does not list.
+- Bound streaming reads with anyio.fail_after around each `anext()` call, never around a `yield`, so one wait can tell a stall from the total deadline.
 
 ---
 
@@ -515,4 +517,42 @@ What was built:
   - A new operational code, GPU_RELEASE_UNVERIFIED, is documented in docs/api.md. The state document gained `draining`, and DELETE of a lease that is not current answers 410.
   - `scripts/lyrveil.cmd test integration` takes no arguments, so integration tests cannot be targeted. Only `test unit -k` can be.
   - Shell pipes to grep are denied, but `| head` and `| tail` on the test command work.
+---
+
+## 2026-11-07T02:17:34Z - P02.3a
+- I added the `TextRuntime` port and the `KoboldCppRuntime` adapter, and tested the adapter against `fake_kobold`. Lint passes, and the targeted unit run passed: all 19 new adapter tests plus the related backend tests.
+
+What changed:
+- **The port** (`backend/src/lyrveil/ports/text_runtime.py`): the `TextRuntime` protocol, the request, chunk and info types, and the typed errors. Each error has a `code` that matches docs/api.md:
+  - `RuntimeUnavailableError` (`RUNTIME_UNAVAILABLE`), with two subclasses: `RuntimeStreamDroppedError` and `RuntimeResponseInvalidError`.
+  - `RuntimeOutOfMemoryError` (`LLM_OOM`).
+  - `GenerationStalledError` (`GENERATION_STALLED`).
+  - `GenerationTimeoutError` (`GENERATION_TIMEOUT`).
+- **The adapter** (`backend/src/lyrveil/runtimes/koboldcpp.py`) calls only seven documented endpoints, listed in its `ENDPOINTS`. It does not call `perf`.
+  - **Streaming:** tokens come in order, then a final chunk with the finish reason and the whole text.
+  - **Abort:** `abort(genkey)` ends a running stream, and its final chunk then reports "aborted".
+  - **Token counts:** these come only from `POST /api/extra/tokencount`.
+  - **Timeouts:** 180 s in total and 60 s without a stream line, from docs/gpu-orchestration.md. Past either one, the adapter aborts the generation before it raises. Other calls wait 10 s; that value is my own choice because the timeout table has none.
+- **The tests** (`tests/unit/test_koboldcpp_runtime.py`) cover:
+  - streaming, abort, a dropped stream, a stall and the total timeout;
+  - token counts, generate and info;
+  - out-of-memory, invalid JSON and crash replies on all three POST endpoints;
+  - a check that reads docs/runtime-contracts.md and fails if the adapter's module names an `/api/` path missing from the KoboldCpp endpoint table (with a test showing the check catches one), or if a request sends a field outside the GenerationInput table.
+- **Dependencies and build:** HTTPX 0.28.1 moved from the backend's dev group to its runtime dependencies. I edited `uv.lock` by hand to match, because uv is not available on Windows. The lint build ran `uv sync --locked` on it without error. The backend test stage now copies `tests/fakes` and the contract page, and pytest, mypy and ruff now include ".".
+- **Docs:** docs/backend.md has a new Text runtime section and updated port signatures; docs/testing.md now says the backend test stage copies the fakes.
+
+Assumptions and decisions:
+- Treating an error answer that says "out of memory", or a closing stream event with `finish_reason` "error", as out of memory is an assumption shared with the fake. Any closing "error" counts as out of memory.
+- The field name `value` for the context size comes from the fake, not from the contract.
+- I changed `abort` to return a bool instead of None, and renamed the errors with an `Error` suffix to match the lint rules.
+
+Not run: the integration and end-to-end levels, and anything against a real KoboldCpp. I left CHANGELOG.md alone because nothing calls the adapter yet, so users would not notice the change.
+- Files changed: backend/src/lyrveil/ports/__init__.py, backend/src/lyrveil/ports/text_runtime.py, backend/src/lyrveil/runtimes/__init__.py, backend/src/lyrveil/runtimes/koboldcpp.py, backend/tests/unit/test_koboldcpp_runtime.py, backend/tests/unit/test_locked_environment.py, backend/pyproject.toml, backend/uv.lock, backend/Dockerfile, docs/backend.md, docs/testing.md
+- **Learnings for future iterations:**
+  - KoboldCppRuntime is async (HTTPX AsyncClient with trust_env=False). Use it as `async with KoboldCppRuntime(url)`. Its default URL is http://lyrveil-llm:5001. Nothing calls it yet; the P02.4 job queue should.
+  - TextRuntime.abort returns bool. A stream whose genkey was aborted ends with finish_reason 'aborted'. Every TextRuntimeError subclass has a class-level `code` that matches the docs/api.md job error codes.
+  - The backend test stage now holds /app/fakes and /app/docs/runtime-contracts.md. Backend tests can `from fakes.fake_kobold import FakeKobold`. Async backend tests use `@pytest.mark.anyio` with an `anyio_backend` fixture returning 'asyncio'.
+  - A small uv.lock change, such as moving a package already in the lock from dev to runtime, can be hand-edited in the root package's dependencies, dev-dependencies, requires-dist and requires-dev. `test lint` builds the test stage with `uv sync --locked` and so checks the edit.
+  - Ruff PT012 is active: a `pytest.raises` block must hold one simple statement, so move loops and branches into helper functions.
+  - Two assumptions are still unconfirmed until the GPU suite: the field name `value` for /api/extra/true_max_context_length, and the out-of-memory detection (body text 'out of memory', or a closing stream event with 'error').
 ---

@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -90,14 +90,14 @@ implement them in tests.
 class TextRuntime(Protocol):
     """Generates text with the currently loaded model.
 
-    Callers must hold a valid llm lease. Raises RuntimeUnavailable when the runtime
-    does not respond and RuntimeOutOfMemory on a CUDA allocation failure.
+    Callers must hold a valid llm lease. Raises RuntimeUnavailableError when the runtime
+    does not respond and RuntimeOutOfMemoryError on a CUDA allocation failure.
     """
 
     async def count_tokens(self, text: str, *, special: bool = False) -> int: ...
     def stream(self, request: TextRequest) -> AsyncIterator[TextChunk]: ...
     async def generate(self, request: TextRequest) -> str: ...
-    async def abort(self, genkey: str) -> None: ...
+    async def abort(self, genkey: str) -> bool: ...
     async def info(self) -> TextRuntimeInfo: ...
 
 
@@ -126,6 +126,46 @@ Other ports: `MemoryRetriever`
 `EventPublisher`, `UnitOfWork`.
 
 Adding a model means writing a new adapter or changing a model file. No service changes.
+
+### Text runtime
+
+Delivered in P02.3a: `ports/text_runtime.py` holds `TextRuntime` with its types and errors, and
+`runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Nothing calls the adapter yet: the job queue of P02.4 will.
+
+- `TextRequest` carries only the [GenerationInput fields](runtime-contracts.md#generationinput-fields-used).
+  A field left at `None` is not sent, so the runtime's default applies. `genkey` is required.
+- `stream` yields each non-empty token in order as a `TextChunk`. The last chunk has `finish_reason`
+  `stop`, `length` or `aborted`, and `text`, the whole reply. `aborted` means `abort` named the
+  generation's `genkey` while it ran.
+- `count_tokens` returns `value` of `POST /api/extra/tokencount`, with `special` false by default, so
+  no start token is counted. It never estimates.
+- `info` returns the model name without `koboldcpp/`, the reported version and the context size read
+  from `value` of `GET /api/extra/true_max_context_length`. The contract does not name that field: the
+  name comes from the fake and is unconfirmed until the GPU suite. Comparing the version with the pin
+  is the caller's job.
+- The adapter calls only the paths in its `ENDPOINTS`, all from [Runtime contracts](runtime-contracts.md#endpoints),
+  and not `GET /api/extra/perf`. The client ignores proxy settings and follows no redirect.
+
+Timeouts are the [GPU orchestration](gpu-orchestration.md#timeouts) defaults: 180 s in total for a
+generation, and 60 s without a stream line. Past either one, the adapter aborts the generation's `genkey`,
+then raises. Other calls, and connecting, wait 10 s. That value is the adapter's own, because the table has none.
+
+| Failure | Error | `code` |
+| --- | --- | --- |
+| No answer, refused or dropped connection, undocumented status | `RuntimeUnavailableError` | `RUNTIME_UNAVAILABLE` |
+| Stream ends or breaks before its closing event | `RuntimeStreamDroppedError`, a subclass of the above | `RUNTIME_UNAVAILABLE` |
+| Invalid JSON, or an answer without the documented fields | `RuntimeResponseInvalidError`, a subclass of the above | `RUNTIME_UNAVAILABLE` |
+| Error answer whose body says "out of memory", or a closing event with `finish_reason` `error` | `RuntimeOutOfMemoryError` | `LLM_OOM` |
+| No stream line within the stall timeout | `GenerationStalledError` | `GENERATION_STALLED` |
+| Past the total timeout | `GenerationTimeoutError` | `GENERATION_TIMEOUT` |
+
+The out-of-memory row is an assumption shared with `fake_kobold` ([Testing](testing.md#fake-runtimes)).
+The contract does not record how KoboldCpp reports it, and any closing `error` counts as out of memory.
+Error messages hold paths, status codes and reasons, never prompt or reply text.
+
+`tests/unit/test_koboldcpp_runtime.py` runs the adapter against `fake_kobold` over real HTTP. It also
+reads the contract page and fails when the adapter's module names an `/api/` path missing from the
+KoboldCpp endpoint table, or when a request sends a field outside the GenerationInput table.
 
 ## Concurrency model
 
@@ -324,7 +364,10 @@ The stages of `backend/Dockerfile`, all on `python:3.12.16-slim-trixie`:
 | `runtime` | The `deps` environment, `alembic.ini`, `migrations/` and the sources only, user `10001`, port 8000. The default target |
 
 A unit test of the test stage checks that every installed distribution has the version
-`uv.lock` pins.
+`uv.lock` pins. Since P02.3a, HTTPX 0.28.1 is a runtime dependency, the runtimes' client, and its AnyIO
+gives the generation timeouts. Before that it was in the `dev` group only. The test stage also copies
+`tests/fakes/` to `/app/fakes` and `docs/runtime-contracts.md`, and `"."` on the pytest path and the
+mypy path makes `fakes` importable there.
 
 ### Orchestrator package
 

@@ -24,6 +24,7 @@ def test_every_installed_distribution_is_pinned_by_the_lock() -> None:
 def test_the_direct_dependencies_have_the_documented_versions() -> None:
     expected = {
         "fastapi": "0.162.0",
+        "httpx": "0.28.1",
         "pydantic": "2.14.2",
         "pydantic-settings": "2.16.2",
         "structlog": "26.1.0",

@@ -43,6 +43,9 @@ COPY backend/tests ./tests
 # The catalog and the page it must match, which tests/unit/test_catalog.py compares.
 COPY config/model-catalog.json ./config/model-catalog.json
 COPY docs/models.md ./docs/models.md
+# The fakes of tests/fakes and the contract page that the runtime adapter's tests read. Only this test stage holds them.
+COPY tests/fakes/*.py ./fakes/
+COPY docs/runtime-contracts.md ./docs/runtime-contracts.md
 CMD ["pytest"]
 
 # Writes the OpenAPI document of the sources, not the committed one, so the output reflects the current API.

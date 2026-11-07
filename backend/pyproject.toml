@@ -7,9 +7,11 @@ version = "0.0.0"
 description = "Lyrveil backend: API, services and job worker."
 license = "Apache-2.0"
 requires-python = "==3.12.*"
+# HTTPX is the client of the runtimes (lyrveil/runtimes/), with AnyIO, which it brings, for the generation timeouts.
 dependencies = [
     "alembic==1.20.1",
     "fastapi==0.162.0",
+    "httpx==0.28.1",
     "pydantic==2.14.2",
     "pydantic-settings==2.16.2",
     "sqlalchemy==2.1.6",
@@ -20,7 +22,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx==0.28.1",
     "mypy==2.4.1",
     "pytest==9.2.0",
     "ruff==0.17.3",
@@ -36,7 +37,7 @@ environments = ["sys_platform == 'linux'"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "."]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
@@ -44,7 +45,8 @@ select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "C4", "PT", "RUF"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-mypy_path = "src"
+# "." makes the `fakes` package of tests/fakes importable in the test stage, where it is copied to /app/fakes.
+mypy_path = "src:."
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
@@ -52,6 +54,6 @@ init_forbid_extra = true
 init_typed = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "-p", "no:cacheprovider"]
