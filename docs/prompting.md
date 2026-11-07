@@ -382,7 +382,7 @@ lower the score of the [extraction evaluation](consistency-engine.md#extraction-
 | Summary checkpoint | `summary.v1.j2` (Python, `lyrveil/prompts/summary.py`, since P04.4) | `SummaryResult` | 700 |
 | Character draft | `character_draft.v1.j2` | `CharacterDraft` | 1500 |
 | Visual identity | `visual_profile.v1.j2` (Python, `lyrveil/prompts/visual_profile.py`, since P05.3b) | `VisualIdentityResult` | 600 |
-| Image scene | `image_scene.v1.j2` | `ImageScene` | 400 |
+| Image scene | `image_scene.v1.j2` (Python, `lyrveil/prompts/image_scene.py`, since P05.4a) | `ImageScene` | 400 |
 | Image proposal | `image_proposal.v1.j2` | `ImageProposalResult` | 200 |
 | Proactive decision | `proactive_decision.v1.j2` | `ProactiveDecision` | 150 |
 

@@ -267,6 +267,28 @@ def _failure(error: Exception) -> tuple[str, bool]:
     return INTERNAL, False
 
 
+def reply_request(assembly: Assembly, formatter: PromptFormatter, settings: ReplySettings, genkey: str) -> TextRequest:
+    """Returns the runtime request of a built reply prompt, with the reply settings' samplers and the family's stop
+    sequences. Replies and image captions share it, so a caption is sampled as the character's replies are."""
+    return TextRequest(
+        prompt=assembly.prompt.text,
+        max_context_length=assembly.context_limit,
+        max_length=assembly.max_length,
+        genkey=genkey,
+        temperature=settings.temperature,
+        top_p=settings.top_p,
+        top_k=settings.top_k,
+        min_p=settings.min_p,
+        rep_pen=settings.rep_pen,
+        dry_multiplier=settings.dry_multiplier,
+        dry_base=settings.dry_base,
+        dry_allowed_length=settings.dry_allowed_length,
+        dry_penalty_last_n=settings.dry_penalty_last_n,
+        dry_sequence_breakers=settings.dry_sequence_breakers,
+        stop_sequence=formatter.stop_sequences(settings.user.display_name),
+    )
+
+
 def load_context_request(
     connection: Connection,
     conversation_id: str,
@@ -610,26 +632,7 @@ class ChatInferenceService:
         return assembly
 
     def _request(self, assembly: Assembly, formatter: PromptFormatter, genkey: str) -> TextRequest:
-        """Returns the runtime request of a built prompt, with the reply settings' samplers and the family's stop
-        sequences."""
-        settings = self._settings
-        return TextRequest(
-            prompt=assembly.prompt.text,
-            max_context_length=assembly.context_limit,
-            max_length=assembly.max_length,
-            genkey=genkey,
-            temperature=settings.temperature,
-            top_p=settings.top_p,
-            top_k=settings.top_k,
-            min_p=settings.min_p,
-            rep_pen=settings.rep_pen,
-            dry_multiplier=settings.dry_multiplier,
-            dry_base=settings.dry_base,
-            dry_allowed_length=settings.dry_allowed_length,
-            dry_penalty_last_n=settings.dry_penalty_last_n,
-            dry_sequence_breakers=settings.dry_sequence_breakers,
-            stop_sequence=formatter.stop_sequences(settings.user.display_name),
-        )
+        return reply_request(assembly, formatter, self._settings, genkey)
 
     async def _stream(
         self,

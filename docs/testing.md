@@ -622,8 +622,8 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied. The unit part is `backend/tests/unit/test_workflows.py` (P05.2b) | Unit, real GPU | P05 |
 | T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps. In `backend/tests/unit/test_visual_consistency.py`, with one scene per template family written by hand (P05.3b) | Unit | P05 |
 | T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5. The unit part is `backend/tests/unit/test_tag_vocabulary.py`, the tokenizer match is in `tests/docker/ImageRuntime.Tests.ps1` (P05.3a) | Unit, Docker | P05 |
-| T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene | Unit | P05 |
-| T-IMG-18 | The caption is written through the chat path before the scene, with the normalizer and checks. A failed caption sends the image without text | Integration | P05 |
+| T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene. In `backend/tests/unit/test_image_scene.py` (P05.4a) | Unit | P05 |
+| T-IMG-18 | The caption is written through the chat path before the scene, with the normalizer and checks. A failed caption sends the image without text. In `backend/tests/integration/test_image_caption.py`, on the prompt stage with a fake runtime (P05.4a) | Integration | P05 |
 
 ### Models
 

@@ -258,7 +258,26 @@ lists every dropped tag with the step that dropped it. Both are pure and read no
 vocabulary and the card, merges the result with `apply_identity_result`, which keeps the locked slots, and validates the
 merged card with `validate_card`, with one repair. `prompts/gbnf.py` gained `json_schema_to_gbnf` for such narrowed
 schemas. Not delivered: the `visual_profile_translate` handler, the save path that queues it, and the write of the
-translated slots. No job calls the builder yet; `image_request` (P05.4) will.
+translated slots. No job calls the builder yet; `image_request` (P05.4b) will.
+
+#### Image prompt stage
+
+Delivered in P05.4a: `services/image_prompt.py` holds `ImagePromptStage`, the work of the `prompt` stage of
+[Job stages](image-generation.md#job-stages). `run(image, chat, genkey)` takes an `ImagePromptRequest` (card, request,
+image preset, quality, requested aspect, the outfit picked in the form) and the image message's reply context, loaded
+with `load_context_request` at the message's seq, or None outside a chat. It returns `PreparedImage`:
+
+- `caption`: `write_caption` builds the chat's reply prompt with `ContextRequest.extra_line` set to
+  `image_caption_line` and the band capped at 120, samples it with `reply_request` (the reply settings, shared with
+  `ChatInferenceService`), and streams one generation through `TurnCutoff`, `ReplyNormalizer` and the reply checks,
+  publishing nothing. `Caption.text` is None when the caption failed, and `failure` says why.
+- `scene`: `generate_scene` runs `generate_structured` under `scene_grammar` (`prompts/image_scene.py`) and falls back
+  to `fallback_scene` when the output and its repair are refused. `GeneratedScene.fallback` records it.
+- `prompt`: `VisualConsistencyService.build` on the scene.
+- `aspect`, `width`, `height`: `resolve_aspect` and `final_size` of `images/workflows.py`.
+
+The caption call always comes before the scene call. Not delivered: the `image_request` handler that runs the stage
+under a lease, the seed and the storage of the result (P05.4b).
 
 ### Prompt formatter
 

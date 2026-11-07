@@ -120,7 +120,8 @@ class ContextRequest:
     `history` holds the readable messages before `current`, oldest first, with no system message and no empty text;
     `current` is the user message the reply answers. `summaries` are the conversation's active checkpoints. `now` must
     be aware. `notes` are the corrective notes of the anchor (at most two are used); `previous_memory_ids` the memory
-    selection of the previous reply, which keeps block 5 stable.
+    selection of the previous reply, which keeps block 5 stable. `extra_line`, when not empty, is one more line of the
+    dynamic context after the anchor, never reduced: the image caption's request (image_caption_line).
     """
 
     character_id: str
@@ -138,6 +139,7 @@ class ContextRequest:
     topic: str | None = None
     notes: Sequence[str] = ()
     previous_memory_ids: frozenset[str] = frozenset()
+    extra_line: str = ""
 
 
 @dataclass(frozen=True)
@@ -259,7 +261,9 @@ class _Run:
         self._overhead = 0
         self._global = global_instructions(request.card, request.user, request.language)
         self._scenario = scenario_block(request.scenario)
-        self._anchor = anchor(request.card, request.user, request.notes)
+        # The extra line closes the dynamic context, so it is counted with the anchor, which is never reduced either.
+        extra = " ".join(request.extra_line.split())
+        self._anchor = "\n".join(part for part in (anchor(request.card, request.user, request.notes), extra) if part)
 
     async def assemble(self, limit: int, llm_max_length: int) -> Assembly:
         request, settings = self._request, self._settings

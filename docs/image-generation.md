@@ -103,6 +103,22 @@ Rules:
 - `expression`, `pose` and `lighting` accept vocabulary tags only. The other lists accept free tags of at most 4 words.
 - The template is `image_scene.v1.j2`, with one worked example.
 
+Delivered in P05.4a, in `lyrveil.prompts.image_scene` and `lyrveil.services.image_prompt`
+([Backend](backend.md#image-prompt-stage)):
+
+- `outfit_choices` gives `usual`, the card's keys in saved order, then `scene` unless `clothing` is locked. An outfit
+  picked in the form must be one of them, and is then the only value. `scene_grammar` narrows `ImageScene`'s schema to
+  these values, puts the vocabulary's tags in `expression`, `pose` and `lighting`, and allows only an empty
+  `scene_clothing` when `scene` is not offered.
+- The prompt is Python, `image_scene.v1` at temperature 0.3 and `max_length` 400. It holds the rules, the tags of the
+  three vocabulary lists with their Italian words, the values of `framing`, `angle` and `time_of_day`, and the worked
+  example. Then come the data: the visual descriptions, the allowed outfits with their meaning, the setting, the last
+  6 messages of the chat (each cut at 300 characters), the request (cut at 300) and the conversation's language.
+- An output must validate as `ImageScene` and name an allowed outfit. Its tags then pass the [scene filter](#scene-filter).
+- The fallback scene's request words are the tags of `expression`, `pose` and `lighting` whose English tag or Italian
+  alias appears in the request as whole words, a longer phrase winning over one it contains, each list within its
+  bound. It keeps the outfit picked in the form, if any, instead of the usual one.
+
 ### Caption
 
 The caption becomes the text of the message when the image is ready. It is written in the `prompt` stage, before the scene,
@@ -115,6 +131,23 @@ Stai per mandare a {{ user.display_name }} un'immagine: {{ request }}. Scrivi so
 
 The reply checks and the [normalizer](consistency-engine.md#reply-normalization) apply. `max_length` is the band's value, at
 most 120. If the caption fails, the image is sent without text. Both calls happen before the GPU changes hands.
+
+Delivered in P05.4a (`ImagePromptStage.write_caption`):
+
+- The line follows the anchor, as the last line of the dynamic context. The request is put on one line and cut at
+  300 characters.
+- One generation, sampled like a reply, goes through the V2 and V3 cut, the normalizer and the reply checks. Nothing
+  is streamed to the client.
+- The caption fails, and the image gets no text, when:
+  - a sentence breaks V4, V6, V10 or V11, which aborts the generation;
+  - the normalized text is empty (V1);
+  - someone else aborted the generation;
+  - there is no chat, or the chat has no user message.
+
+  There is no corrective generation, because the image does not need a caption. The other checks are only recorded,
+  as for a reply.
+- A runtime error is not a caption failure. It fails the stage, which the scheduler retries, since the scene needs
+  the same runtime.
 
 ### Final prompt
 
@@ -342,6 +375,9 @@ The aspect `auto`, the default for chat images, follows the scene's framing:
 | `wide shot` | Wide |
 
 Avatars use square. The user can choose any aspect in the form.
+
+Delivered in P05.4a: `resolve_aspect` and `FRAMING_ASPECTS` in `lyrveil.images.workflows`. A fixed aspect is kept as
+asked, whatever the framing.
 
 ### Quality presets
 

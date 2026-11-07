@@ -23,6 +23,10 @@ EXAMPLES_HEADER = "Esempi di stile, non cose successe:"
 # The anchor holds the first sentence of this many main traits and at most this many corrective notes (ADR 0031).
 ANCHOR_TRAITS = 2
 MAX_NOTES = 2
+# docs/image-generation.md (Caption): the extra line of a caption's dynamic context, and how much of the request it
+# quotes.
+CAPTION_LINE = "Stai per mandare a {user} un'immagine: {request}. Scrivi solo il messaggio che la accompagna."
+CAPTION_REQUEST_CHARS = 300
 
 
 @dataclass(frozen=True)
@@ -286,6 +290,13 @@ def anchor(card: CharacterCard, user: UserProfile, notes: Sequence[str] = ()) ->
         *notes[:MAX_NOTES],
     ]
     return "\n".join(line for line in lines if line)
+
+
+def image_caption_line(user: UserProfile, request: str) -> str:
+    """Returns the extra line of the dynamic context that asks for an image's caption (docs/image-generation.md,
+    Caption): the request on one line, cut at CAPTION_REQUEST_CHARS, without its final period, which the line adds."""
+    flat = " ".join(request.split())[:CAPTION_REQUEST_CHARS].rstrip(" .")
+    return CAPTION_LINE.format(user=user.display_name, request=flat)
 
 
 def stable_text(*blocks: str) -> str:

@@ -12,8 +12,12 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Final, Literal
 
+from lyrveil.images.visual_consistency import Framing
+
 QualityPreset = Literal["alta", "rapida"]
 Aspect = Literal["square", "portrait", "landscape", "tall", "wide"]
+# What a request may ask for: a fixed aspect, or `auto`, which the scene's framing resolves (resolve_aspect).
+RequestedAspect = Literal["auto", "square", "portrait", "landscape", "tall", "wide"]
 
 
 class WorkflowError(Exception):
@@ -37,6 +41,16 @@ FIRST_PASS_SIZES: Final[dict[Aspect, tuple[int, int]]] = {
     "landscape": (1216, 832),
     "tall": (768, 1344),
     "wide": (1344, 768),
+}
+# ADR 0036 (Aspect `auto`): the aspect each framing of ImageScene gets. Close framings are portrait, a full figure is
+# tall so it is not drawn small, and a wide shot is wide.
+FRAMING_ASPECTS: Final[dict[Framing, Aspect]] = {
+    "close-up": "portrait",
+    "portrait": "portrait",
+    "upper body": "portrait",
+    "cowboy shot": "portrait",
+    "full body": "tall",
+    "wide shot": "wide",
 }
 # ADR 0026: the Alta pixel upscale. The template's `ImageScaleBy` holds the same factor.
 ALTA_SCALE: Final = 1.5
@@ -112,6 +126,16 @@ def load_template(name: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise WorkflowError(f"template {name} is not an object")
     return parsed
+
+
+def resolve_aspect(requested: RequestedAspect, framing: Framing) -> Aspect:
+    """Returns the aspect to render: `requested` itself when it is fixed, or for `auto` the aspect FRAMING_ASPECTS
+    gives `framing`. Avatars ask for `square` and so never depend on the scene."""
+    if requested == "auto":
+        return FRAMING_ASPECTS[framing]
+    # A lookup rather than `return requested`, which mypy cannot narrow from the wider literal.
+    fixed: dict[str, Aspect] = {aspect: aspect for aspect in FIRST_PASS_SIZES}
+    return fixed[requested]
 
 
 def final_size(preset: QualityPreset, aspect: Aspect) -> tuple[int, int]:
