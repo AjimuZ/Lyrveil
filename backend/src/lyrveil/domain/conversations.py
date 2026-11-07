@@ -47,6 +47,7 @@ class Conversation:
     created_at: str
     updated_at: str
     deleted_at: str | None
+    avatar_asset_id: str | None = None
 
     @property
     def pinned(self) -> bool:

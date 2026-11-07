@@ -215,7 +215,7 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
   kept the locked traits and fields. A failed draft shows the server's Italian reason, such as "L'età deve essere almeno
   18.", and leaves the form as it was. The draft replaces what the form held; there is no merge. The job is followed by
   polling, because the backend does not publish `job.updated` yet.
-- **Not delivered, so no control is drawn for it:** import and export, the avatar actions, the counter of how many examples enter the prompt, the first-chunk warning of
+- **Not delivered, so no control is drawn for it:** import and export, avatar generation, the counter of how many examples enter the prompt, the first-chunk warning of
   **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
   the locks' effect on a tag translation (there is no such job yet). The characters list is still a
   placeholder; the new-chat dialog links to the Creator.
@@ -245,7 +245,11 @@ Delivered in P03.2b (`character-profile-screen.*`, route `/characters/:id`):
   Duplicazione, Importazione, Proposta), the summary and the time. Every version but the current one has **Confronta**,
   which shows a table of the fields that differ from the current version (Italian field names from the Creator's
   labels, `version-diff.ts`), and **Ripristina**, which adds a new version and reads the character again.
-- **Not delivered, so no control is drawn for it:** the avatar and its variants (P03.3), the **Memoria** link (the memory
+- **Avatar tools** (`avatar-tools.ts`, also in the Creator's Images tab for a saved character): file choice with a
+  preview before sending, crop of a variant by size and position sliders (a new 512 x 512 variant; the original stays),
+  variant list and **Rendi principale**. Errors show the catalog text of the code. The conversation list shows the
+  primary avatar. Deleting a variant is not offered.
+- **Not delivered, so no control is drawn for it:** image generation (P05), the **Memoria** link (the memory
   studio is a placeholder), and the proposals for the profile.
 - **Tests:** `character-profile-screen.spec.ts` and `version-diff.spec.ts` (unit), and
   `tests/e2e/specs/character-profile.spec.mjs` (T-CHR-04, T-CHR-08). The end-to-end spec was written but not run in this

@@ -59,7 +59,13 @@
       @for (conversation of store.items(); track conversation.id) {
         <li class="row">
           <a class="chat" [routerLink]="['/chats', conversation.id]">
-            <span class="avatar" aria-hidden="true">{{ initial(conversation) }}</span>
+            <span class="avatar" aria-hidden="true">
+              @if (conversation.avatar_url; as avatarUrl) {
+                <img class="avatar-image" [src]="avatarUrl" alt="" />
+              } @else {
+                {{ initial(conversation) }}
+              }
+            </span>
             <span class="text">
               <span class="name">{{ conversation.title }}</span>
               <span class="meta">{{ conversation.character_name }}</span>

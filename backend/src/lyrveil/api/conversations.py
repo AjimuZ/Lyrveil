@@ -18,7 +18,8 @@ router = APIRouter(prefix="/conversations", tags=["conversations"], include_in_s
 class ConversationOut(BaseModel):
     """A conversation as the chat list and the chat header show it.
 
-    The last-message preview, the avatar and the typing flag join it with streaming (P02.5c) and assets (P03).
+    `avatar_url` is the thumbnail route of the character's primary avatar, null while it has none. The last-message
+    preview and the typing flag join it with streaming (P02.5c).
     """
 
     id: str
@@ -35,6 +36,7 @@ class ConversationOut(BaseModel):
     last_message_at: str | None
     created_at: str
     updated_at: str
+    avatar_url: str | None = None
 
 
 class ConversationList(BaseModel):
@@ -80,6 +82,9 @@ def _out(conversation: Conversation) -> ConversationOut:
         last_message_at=conversation.last_message_at,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
+        avatar_url=(
+            None if conversation.avatar_asset_id is None else f"/media/assets/{conversation.avatar_asset_id}/thumbnail"
+        ),
     )
 
 

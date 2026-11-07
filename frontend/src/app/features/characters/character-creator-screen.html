@@ -586,6 +586,12 @@
           {{ 'creator.outfit.add' | t }}
         </button>
 
+        @if (id(); as characterId) {
+          <lyr-avatar-tools [characterId]="characterId" />
+        } @else {
+          <p class="note">{{ 'avatar.afterSave' | t }}</p>
+        }
+
         <h2 class="section">{{ 'creator.images' | t }}</h2>
         <lyr-field [label]="'creator.negative' | t" fid="creator-negative" [field]="f.visual.persistentNegative">
           <input id="creator-negative" class="control" type="text" autocomplete="off" [formField]="f.visual.persistentNegative" />

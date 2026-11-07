@@ -12,7 +12,10 @@ from lyrveil.domain.conversations import CharacterRef, Conversation, Conversatio
 _SELECT = """
 SELECT c.id, c.character_id, ch.first_name, ch.last_name, c.title, c.language, ch.primary_language, c.status,
        c.pinned_at, c.shares_memory, c.next_seq, c.last_read_seq, c.last_message_at, c.created_at, c.updated_at,
-       c.deleted_at
+       c.deleted_at,
+       (SELECT a.id FROM character_assets AS a
+        WHERE a.character_id = c.character_id AND a.kind = 'avatar' AND a.is_primary = 1 AND a.deleted_at IS NULL
+        LIMIT 1) AS avatar_asset_id
 FROM conversations AS c JOIN characters AS ch ON ch.id = c.character_id
 """
 # Pinned chats first (newest pin first), then by the latest activity; a chat with no message counts from its creation.
@@ -39,6 +42,7 @@ def _conversation(row: RowMapping) -> Conversation:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         deleted_at=row["deleted_at"],
+        avatar_asset_id=row["avatar_asset_id"],
     )
 
 

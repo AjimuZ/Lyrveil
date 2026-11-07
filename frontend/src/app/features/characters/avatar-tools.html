@@ -1,0 +1,101 @@
+<section class="tools" aria-labelledby="avatar-title">
+  <h2 class="section" id="avatar-title">{{ 'avatar.title' | t }}</h2>
+  <p class="note">{{ 'avatar.note' | t }}</p>
+
+  @if (error(); as failure) {
+    <p class="banner error" role="alert">{{ failure.textKey | t }}</p>
+  }
+
+  <label class="label" for="avatar-file">{{ 'avatar.choose' | t }}</label>
+  <input
+    id="avatar-file"
+    class="control"
+    type="file"
+    accept="image/png,image/jpeg,image/webp"
+    [disabled]="busy()"
+    (change)="choose($event)"
+  />
+
+  @if (pending(); as chosen) {
+    <div class="panel" role="group" aria-labelledby="avatar-preview-title">
+      <h3 class="subsection" id="avatar-preview-title">{{ 'avatar.preview' | t }}</h3>
+      <img class="preview" [src]="chosen.previewUrl" [alt]="'avatar.preview.alt' | t" />
+      <div class="actions">
+        <button type="button" class="button primary" [disabled]="busy()" (click)="upload()">{{ 'avatar.upload' | t }}</button>
+        <button type="button" class="button" [disabled]="busy()" (click)="cancelUpload()">{{ 'avatar.cancel' | t }}</button>
+      </div>
+    </div>
+  }
+
+  @if (cropping(); as source) {
+    <div class="panel" role="group" aria-labelledby="avatar-crop-title">
+      <h3 class="subsection" id="avatar-crop-title">{{ 'avatar.crop.title' | t }}</h3>
+      <div class="frame">
+        <img class="preview" [src]="source.url" [alt]="'avatar.crop.alt' | t" />
+        @if (cropRect(); as box) {
+          <svg
+            class="square"
+            aria-hidden="true"
+            preserveAspectRatio="none"
+            [attr.viewBox]="'0 0 ' + source.width + ' ' + source.height"
+          >
+            <rect
+              class="square-rect"
+              [attr.x]="box.x"
+              [attr.y]="box.y"
+              [attr.width]="box.width"
+              [attr.height]="box.height"
+            />
+          </svg>
+        }
+      </div>
+      <label class="label" for="avatar-crop-size">{{ 'avatar.crop.size' | t }}</label>
+      <input id="avatar-crop-size" type="range" min="10" max="100" [value]="cropSize()" (input)="cropSize.set(numberOf($event))" />
+      <label class="label" for="avatar-crop-x">{{ 'avatar.crop.x' | t }}</label>
+      <input id="avatar-crop-x" type="range" min="0" max="100" [value]="cropX()" (input)="cropX.set(numberOf($event))" />
+      <label class="label" for="avatar-crop-y">{{ 'avatar.crop.y' | t }}</label>
+      <input id="avatar-crop-y" type="range" min="0" max="100" [value]="cropY()" (input)="cropY.set(numberOf($event))" />
+      <div class="actions">
+        <button type="button" class="button primary" [disabled]="busy()" (click)="applyCrop()">{{ 'avatar.crop.apply' | t }}</button>
+        <button type="button" class="button" [disabled]="busy()" (click)="cancelCrop()">{{ 'avatar.cancel' | t }}</button>
+      </div>
+    </div>
+  }
+
+  @if (avatars().length === 0) {
+    <p class="note">{{ 'avatar.empty' | t }}</p>
+  } @else {
+    <ul class="variants" data-testid="avatar-variants">
+      @for (avatar of avatars(); track avatar.id) {
+        <li class="variant">
+          <img class="thumb" [src]="avatar.thumbnail_url" [alt]="'avatar.variant.alt' | t: { n: $index + 1 }" />
+          @if (avatar.is_primary) {
+            <span class="pill">{{ 'avatar.primary' | t }}</span>
+          }
+          <div class="actions">
+            @if (!avatar.is_primary) {
+              <button
+                type="button"
+                class="button"
+                [disabled]="busy()"
+                [attr.aria-label]="'avatar.makePrimary.aria' | t: { n: $index + 1 }"
+                (click)="makePrimary(avatar)"
+              >
+                {{ 'avatar.makePrimary' | t }}
+              </button>
+            }
+            <button
+              type="button"
+              class="button"
+              [disabled]="busy()"
+              [attr.aria-label]="'avatar.cropButton.aria' | t: { n: $index + 1 }"
+              (click)="startCrop(avatar)"
+            >
+              {{ 'avatar.cropButton' | t }}
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

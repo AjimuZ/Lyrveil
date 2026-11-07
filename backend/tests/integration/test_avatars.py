@@ -199,6 +199,22 @@ def test_a_character_has_a_single_primary_avatar(client: TestClient, character_i
     assert_refused(client.delete(f"{CHARACTERS}/{character_id}/assets/{first['id']}"), 404, "NOT_FOUND")
 
 
+def test_the_conversation_list_carries_the_thumbnail_of_the_primary_avatar(
+    client: TestClient, character_id: str
+) -> None:
+    chat = client.post("/api/v1/conversations", json={"character_id": character_id}).json()
+    assert chat["avatar_url"] is None
+
+    first = upload(client, character_id, png_with_metadata()).json()
+    second = upload(client, character_id, png_with_metadata(40, 40)).json()
+    listed = client.get("/api/v1/conversations").json()["items"]
+    assert [item["avatar_url"] for item in listed if item["id"] == chat["id"]] == [first["thumbnail_url"]]
+
+    client.post(f"{CHARACTERS}/{character_id}/assets/{second['id']}/primary")
+    listed = client.get("/api/v1/conversations").json()["items"]
+    assert [item["avatar_url"] for item in listed if item["id"] == chat["id"]] == [second["thumbnail_url"]]
+
+
 def test_assets_of_another_character_are_not_found(client: TestClient, character_id: str) -> None:
     asset = upload(client, character_id, png_with_metadata()).json()
     other = client.post(CHARACTERS, json={"first_name": "Bruno", "age": 40}).json()["id"]

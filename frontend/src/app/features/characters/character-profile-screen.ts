@@ -19,6 +19,7 @@ import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, TextParams, Translator } from '../../core/i18n/translator';
 import { Conversation } from '../chats/chats.model';
 import { GENDER_OPTIONS, LANGUAGE_OPTIONS } from '../chats/new-chat-dialog';
+import { AvatarTools } from './avatar-tools';
 import { PurgePreview, StoredCharacter, VersionDiff, VersionSummary } from './card.model';
 import { CharactersStore } from './characters-store';
 import { Option, TRAIT_OPTIONS } from './creator-options';
@@ -56,12 +57,12 @@ function labelOf(options: readonly Option[], value: string): TextKey | null {
  * first name typed after a preview of what it deletes; the server checks the name again. A refused action shows the
  * server's explanation and changes nothing.
  *
- * Not delivered here, so no control is drawn for it: the avatar and its variants (P03.3), the memory studio and the
- * proposals for the profile.
+ * The avatar tools (`lyr-avatar-tools`) upload, crop and choose the primary avatar. Not delivered here, so no control
+ * is drawn for it: image generation and variants made by it (P05), the memory studio and the proposals for the profile.
  */
 @Component({
   selector: 'lyr-character-profile',
-  imports: [TranslatePipe, RouterLink],
+  imports: [TranslatePipe, RouterLink, AvatarTools],
   templateUrl: './character-profile-screen.html',
   styleUrl: './character-profile-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

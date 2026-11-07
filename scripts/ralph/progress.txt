@@ -112,6 +112,8 @@
 - Routes that queue a job call `lyrveil.api.jobs.wake_worker(request)` after the commit; job details are read with `GET /jobs/{id}`, which never returns the payload.
 - Do not guard tests with pytest.skip for platform features; tests run in the Linux backend container.
 - Write files before their DB row and delete files after the row is gone, so a crash leaves at most an orphan file.
+- Shared screen widgets that act on a stored entity take the entity id as a required input and reload from the server after each action.
+- Show the catalog text of an ApiError code (`failure.textKey`) when the criterion demands Italian catalog messages, and do not fall back to `detail`.
 
 ---
 
@@ -928,4 +930,15 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - MediaStore (lyrveil/media/store.py) takes root-relative paths built from generated ids only; resolve() is the single check, and save() writes via .staging plus os.replace.
   - images.prepare_upload / images.crop are reusable for P05 generated images: they return EncodedImage with data, a WebP thumbnail and sha256.
   - Media routes say the image routes arrive with P05; the purge and duplicate behaviour for avatars is partly noted as not delivered in CHANGELOG.
+---
+
+## 2026-11-07T06:13:07Z - P03.4b
+- I added avatar tools to the profile and to the Creator's Images tab, and the conversation list now shows the primary avatar. `scripts/lyrveil.cmd test lint` passes. I did not run any unit, integration or e2e test, so the new e2e spec, the new backend test and the Angular spec are unrun. The tools are a new `lyr-avatar-tools` component. It lets you choose a file and see a preview before sending it. It crops a variant to a square with size and position sliders, and the crop is saved as a new variant. It lists the variants, marks the primary one and has a "Rendi principale" button. A refused upload or crop shows the Italian catalog text for its error code (for example `error.unsupportedMedia`), not the raw server text. For the conversation list, the backend now returns `avatar_url` on each conversation (null until the character has a primary avatar). Deleting a variant is not offered in the screen. A new character gets the tools only after its first save, because assets belong to a stored character; before that the Creator shows a note saying so. I added `tests/e2e/specs/avatar.spec.mjs`, which covers a refused file, upload with preview, crop, making the cropped variant primary, and the avatar in the chat list. I also added a backend test for `avatar_url` and an Angular spec for the crop-square helper `squareCrop`. The changelog, `docs/api.md`, `docs/frontend.md` and `docs/testing.md` are updated, and `docs/testing.md` says the e2e spec has not been run.
+- Files changed: backend/src/lyrveil/api/conversations.py, backend/src/lyrveil/domain/conversations.py, backend/src/lyrveil/persistence/conversations.py, backend/tests/integration/test_avatars.py, frontend/src/app/features/characters/asset.model.ts, frontend/src/app/features/characters/asset.model.spec.ts, frontend/src/app/features/characters/avatar-tools.ts, frontend/src/app/features/characters/avatar-tools.html, frontend/src/app/features/characters/avatar-tools.scss, frontend/src/app/features/characters/characters-store.ts, frontend/src/app/features/characters/character-profile-screen.ts, frontend/src/app/features/characters/character-profile-screen.html, frontend/src/app/features/characters/character-creator-screen.ts, frontend/src/app/features/characters/character-creator-screen.html, frontend/src/app/features/chats/chats.model.ts, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/chats/chat-list-screen.html, frontend/src/app/features/chats/chat-list-screen.scss, frontend/src/i18n/it.json, tests/e2e/specs/avatar.spec.mjs, CHANGELOG.md, docs/api.md, docs/frontend.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The conversation list gets its avatar from `avatar_url` (a thumbnail route) on ConversationOut, set by a subquery on the primary avatar in persistence/conversations.py.
+  - The frontend lint rejects inline `style` bindings and color literals outside tokens.scss; the crop overlay is therefore an SVG rect with attr bindings.
+  - The e2e spec avatar.spec.mjs builds a PNG with node:zlib (`crc32` needs Node 22 or later) and is unrun; check it when the orchestrator runs the e2e level.
+  - Deleting an avatar variant has an API route but no UI control yet.
+  - Assets belong to a stored character, so the Creator shows the tools only in edit mode.
 ---

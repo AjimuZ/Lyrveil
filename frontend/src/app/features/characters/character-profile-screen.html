@@ -78,6 +78,8 @@
       </form>
     }
 
+    <lyr-avatar-tools [characterId]="c.id" />
+
     <h2 class="section">{{ 'profile.identity' | t }}</h2>
     <dl class="facts">
       @for (row of identityRows(); track row.label) {

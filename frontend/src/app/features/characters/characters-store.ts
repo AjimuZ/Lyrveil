@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api-client';
 import { Character, Conversation, ConversationList } from '../chats/chats.model';
+import { AssetList, CharacterAsset, CropRect } from './asset.model';
 import {
   DraftResult,
   JobDetail,
@@ -119,6 +120,34 @@ export class CharactersStore {
   /** Deletes the character for good. The server refuses unless `confirmName` equals the first name. */
   async purge(id: string, confirmName: string): Promise<void> {
     await firstValueFrom(this.api.post<null>(`${this.path(id)}/purge`, { confirm_name: confirmName }));
+  }
+
+  /** Lists the live avatars of a character, newest first. */
+  async avatars(id: string): Promise<readonly CharacterAsset[]> {
+    const list = await firstValueFrom(this.api.get<AssetList>(`${this.path(id)}/assets`, { kind: 'avatar' }));
+    return list.items;
+  }
+
+  /** Uploads an image as an avatar (multipart). The first avatar becomes the primary one on the server. */
+  uploadAvatar(id: string, file: File): Promise<CharacterAsset> {
+    const body = new FormData();
+    body.append('kind', 'avatar');
+    body.append('file', file, file.name);
+    return firstValueFrom(this.api.post<CharacterAsset>(`${this.path(id)}/assets`, body));
+  }
+
+  /** Saves a square of an avatar as a new 512 x 512 avatar; the original stays. */
+  cropAvatar(id: string, assetId: string, rect: CropRect): Promise<CharacterAsset> {
+    return firstValueFrom(
+      this.api.post<CharacterAsset>(`${this.path(id)}/assets/${encodeURIComponent(assetId)}/crop`, rect),
+    );
+  }
+
+  /** Makes the avatar the only primary one. */
+  setPrimaryAvatar(id: string, assetId: string): Promise<CharacterAsset> {
+    return firstValueFrom(
+      this.api.post<CharacterAsset>(`${this.path(id)}/assets/${encodeURIComponent(assetId)}/primary`),
+    );
   }
 
   private path(id: string): string {

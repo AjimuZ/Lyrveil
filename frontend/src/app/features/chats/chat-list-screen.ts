@@ -15,7 +15,7 @@ interface Tab {
 }
 
 /**
- * The list of conversations. Each row links to its chat, shows the avatar initial, the title, the character, the time
+ * The list of conversations. Each row links to its chat, shows the primary avatar (the initial while it has none), the title, the character, the time
  * of the last activity and whether it is pinned, and has a menu with pin, archive and delete. Loading, empty and error
  * states are shown. Unread counts, previews and typing flags stay out until the services behind them exist (P07, P05).
  */

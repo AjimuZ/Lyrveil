@@ -17,6 +17,7 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
+import { AvatarTools } from './avatar-tools';
 import { creatorSchema, emptyModel, renderIdentity, toCard, toModel, CreatorModel } from './card-form';
 import {
   MAX_AVOIDED,
@@ -75,12 +76,13 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
  * fields the model filled are listed, and only **Salva personaggio** stores it. Over an existing character the server
  * keeps its locks.
  *
- * Not delivered here, so no control is drawn for it: import and export, the avatar actions, the token counter of the
+ * The Images tab holds the avatar tools of an existing character; a new one gets them after its first save, because
+ * assets belong to a stored character. Not delivered here, so no control is drawn for it: import and export, the token counter of the
  * examples and the first-chunk warning of the persistent prompt.
  */
 @Component({
   selector: 'lyr-character-creator',
-  imports: [FormField, FieldShell, TagPicker, TranslatePipe, RouterLink],
+  imports: [FormField, FieldShell, TagPicker, TranslatePipe, RouterLink, AvatarTools],
   templateUrl: './character-creator-screen.html',
   styleUrl: './character-creator-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

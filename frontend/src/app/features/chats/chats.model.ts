@@ -20,6 +20,8 @@ export interface Conversation {
   readonly last_message_at: string | null;
   readonly created_at: string;
   readonly updated_at: string;
+  /** The thumbnail route of the character's primary avatar; null (or absent) while it has none. */
+  readonly avatar_url?: string | null;
 }
 
 export interface ConversationList {

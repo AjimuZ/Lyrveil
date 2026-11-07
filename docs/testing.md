@@ -246,7 +246,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-CHR-08 | Version list, diff and restore. Restore creates a new version | Integration | P03 |
 | T-CHR-09 | A locked trait survives a draft and a proposal | Unit | P03 |
 | T-CHR-10 | Assisted draft: valid output, repaired output, repeated failure | Integration | P03 |
-| T-CHR-11 | Upload: valid, wrong bytes, too large. Metadata removed, crop, single primary avatar. Delivered: `backend/tests/integration/test_avatars.py` (PNG text and EXIF, JPEG EXIF, thumbnail, crop inside and outside the image, primary switch, primary delete refused, purge removes the files) | Integration | P03 |
+| T-CHR-11 | Upload: valid, wrong bytes, too large. Metadata removed, crop, single primary avatar. Delivered: `backend/tests/integration/test_avatars.py` (PNG text and EXIF, JPEG EXIF, thumbnail, crop inside and outside the image, primary switch, primary delete refused, purge removes the files, `avatar_url` on the conversation list) and, in the browser, `tests/e2e/specs/avatar.spec.mjs` (refused file with the Italian message, upload with preview, crop, primary choice, avatar in the chat list; written in P03.4b and not run yet) and `asset.model.spec.ts` | Integration, E2E | P03 |
 | T-CHR-12 | Avatar generation through the shared image job | Integration, GPU | P05 |
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
 | T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |

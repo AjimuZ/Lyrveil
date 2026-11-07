@@ -233,7 +233,8 @@ Delivered in P02.5a: `GET` and `POST /conversations`, `GET`, `PATCH` and `DELETE
 `GET` takes `status` (default `active`), `character_id` and `q`. A deleted chat answers `404`
 everywhere except `undelete`, which answers `409` when the chat is not deleted or 30 days have passed. `POST` answers
 `201`, `404` for an unknown character or any `scenario_id` (no scenarios exist yet) and `409` for an archived
-character. A row lacks the last message, avatar and typing flag until messages and assets exist. These routes are not
+character. A row holds `avatar_url`, the thumbnail route of the character's primary avatar (null while it has none),
+and lacks the last message and typing flag until messages exist. These routes are not
 in `backend/openapi.json` until it is next regenerated with Docker.
 
 Delivered in P02.5d: search. `q` (on the list) keeps the chats whose title or non-deleted messages contain every word

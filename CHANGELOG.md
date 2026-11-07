@@ -10,6 +10,11 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Avatar tools in the Character Creator (Images tab, for a saved character) and in the profile: choose an image and
+  see a preview before it is sent, crop a variant to a square (saved as a new variant, the original stays), choose the
+  primary avatar among the variants. A refused upload shows the Italian message of its error code. The conversation list
+  now shows the primary avatar instead of the initial (`avatar_url` on conversations). Deleting a variant from the
+  screen is not offered yet.
 - Character avatars and pictures, backend only: `POST /api/v1/characters/{id}/assets` uploads a PNG, JPEG or WebP image
   (`avatar`, `profile` or `reference`) up to 15 MB and 8192 x 8192 pixels. Every upload is decoded and re-encoded, so
   location, camera and editor metadata never reach the stored file, and gets a WebP thumbnail. The first avatar becomes
