@@ -55,6 +55,11 @@ Only known keys with validated values are read. The entrypoint does not `source`
 | `SMART_CACHE` | `0` | `0`, `2`. Above 0 adds `--smartcache`. Target tier only. P04 decides per profile |
 | `LEVEL` | `A` | `A`, `B`, `C`, `CUSTOM`. See [launch levels](gpu-orchestration.md#load-failures-and-launch-levels) |
 
+Since P06.4 the backend lowers the level after an out of memory of the text runtime: it rewrites `CONTEXT_SIZE`,
+`BATCH_SIZE`, `GPU_LAYERS` and `LEVEL` in place, keeps every other line, and adds a comment line that names the
+orchestrator event it answered. It changes nothing at level `C` or `CUSTOM`, for a profile outside the catalog, or when
+the file is missing. Nothing in the backend writes a whole launch file yet.
+
 `runtime/image-launch.env` in the data volume:
 
 | Key | Default | Allowed |

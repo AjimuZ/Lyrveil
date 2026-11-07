@@ -289,8 +289,9 @@ worker registers no handler and such jobs wait). Each stage hands the next one t
   `seq`) and chooses the seed unless the request gave one. The payload then holds the caption and its checks, the scene,
   the final prompts, the outfit key, the aspect and the size.
 - `render` (image): `build_workflow` with the quality preset and the profile's checkpoint; the second attempt uses the
-  tiled file. `ComfyUiRuntime.render` publishes `image.progress`, and the file is staged at `.staging/<job id>/render`
-  (`MediaStore.stage_job_file`, which `clear_staging` leaves alone).
+  tiled file. Since P06.4 a second out of memory on **Alta** gets one tiled **Rapida** try (`render_retry`,
+  [Failures](image-generation.md#failures)). `ComfyUiRuntime.render` publishes `image.progress`, and the file is staged
+  at `.staging/<job id>/render` (`MediaStore.stage_job_file`, which `clear_staging` leaves alone).
 - `persist` (none): Pillow validates the staged file (`prepare_upload`), the thumbnail and the original are written under
   names derived from the job id, then one transaction inserts `generated_images`, links the variant, writes the caption
   as the variant's text, sets the message `complete` (`kind` `mixed`, or `image` without a caption) and its
@@ -582,7 +583,7 @@ passed queues its re-evaluation from `ChatInferenceService`, in the transaction 
 | Failure | Attempts | Backoff |
 | --- | --- | --- |
 | `chat_reply`: runtime failure, `LEASE_LOST` | 2 | 5 s |
-| `image_request`: render failure | 2, the second with tiled decode | 10 s |
+| `image_request`: render failure | 2, the second with tiled decode. Since P06.4 an out of memory of the tiled **Alta** try adds one **Rapida** try | 10 s |
 | Structured output invalid | 2 within the same job, then the job retry policy | None |
 | Extraction and summaries | 3 | 1 min, 5 min, 30 min |
 | Preemption of background work | No attempt consumed | None |
@@ -601,7 +602,7 @@ rules, preempts background work and stops cancelled jobs ([ADR 0039](decisions/0
 | --- | --- |
 | `jobs/policy.py` | `JobKind`, `JobStatus`, `RequiredMode`, `JobClass`, and per kind the priority, class, maximum attempts, backoff and stages of [Job kinds and priorities](gpu-orchestration.md#job-kinds-and-priorities) |
 | `jobs/queue.py` | `JobQueue`: every read and state change of `generation_jobs`, on a connection the caller owns |
-| `jobs/handlers.py` | The handler contract: `RunContext` with its `stop` (`StopReason`), the outcomes `JobDone` and `NextStage`, `JobFailedError`, `JobPreemptedError`, since P06.2 `AbandoningHandler` for a failure before the stage runs, and since P06.3 `CancellingHandler` for a cancelled job's placeholder |
+| `jobs/handlers.py` | The handler contract: `RunContext` with its `stop` (`StopReason`), the outcomes `JobDone` and `NextStage`, `JobFailedError` (since P06.4 with `fallback`), `JobPreemptedError`, since P06.2 `AbandoningHandler` for a failure before the stage runs, and since P06.3 `CancellingHandler` for a cancelled job's placeholder |
 | `jobs/selection.py` | Since P06.3: the pure selection rules (`decide`, `preempts`) and their settings (`SchedulingRules`) |
 | `jobs/scheduler.py` | `JobScheduler`, the single worker, and `recover_interrupted_jobs` for startup step 5 |
 | `services/job_control.py` | Since P06.3: `JobControlService.cancel` for the cancel route, and `remove_placeholder`, which the reply and image handlers share |
@@ -625,7 +626,9 @@ Behavior:
   is not used up by its `prompt` stage. `JobPreemptedError` queues it again at once and gives the attempt back.
 - **Retries.** `JobFailedError(code, detail, retryable=...)` and a `TextRuntimeError`, which is retryable with its `code`,
   record a failed attempt. While attempts remain, a retryable failure queues the job again after the kind's backoff for
-  that attempt; otherwise the job ends `failed`. `error_code` and `error_detail`, cut to 500 characters, keep the last
+  that attempt; otherwise the job ends `failed`. Since P06.4 a retryable `JobFailedError` with `fallback`, a payload,
+  queues the job again in its stage with that payload and the attempt count reset, after the same backoff, whatever
+  attempts remain; the handler decides when its fallback is used up. `error_code` and `error_detail`, cut to 500 characters, keep the last
   reason in both cases. Any other exception ends the job at once with `INTERNAL`, because a bug does not heal on retry.
 - **Restart.** At startup, before any worker, every `running` job is queued again at once in the stage it was running,
   with `JOB_INTERRUPTED` as its reason and its lease cleared. The interrupted run counts as an attempt, so a job that
@@ -820,7 +823,11 @@ event buffer. It applies one transition of `state_machine.py` per step, and the 
 `LLM_READY`, through a lease, and back to `IDLE` on `POST /v1/drain`. Since P06.1
 `tests/integration/test_image_lifecycle.py` holds T-IMG-04, the 18 steps of an image request through the control API,
 and `tests/unit/test_exclusivity_property.py` holds T-ORC-02, the property over random event sequences. A
-`PUT /v1/desired-mode` keeps its `job_id`, which the events of the switch it causes carry.
+`PUT /v1/desired-mode` keeps its `job_id`, which the events of the switch it causes carry. Since P06.4 the supervisor
+classifies a failed text load as out of memory (`LoadFailedError.oom`) and has `await_ready` for a runtime recovery
+finds starting, and the manager applies the whole [recovery table](gpu-orchestration.md#recovery), restarts a runtime
+after an `oom` release, reports `load_failure`, returns to text after three failed image loads, and retries `ERROR`
+on a timer. `tests/unit/test_recovery_table.py` holds T-ORC-06 and the orchestrator side of T-ORC-08.
 
 On the backend side, `lyrveil/orchestration/client.py` holds `OrchestratorClient`, which
 uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedError` with
@@ -854,3 +861,20 @@ touching a runtime. `ChatInferenceService` sets the reply and its variant `faile
 queue only. ADR [0038](decisions/0038-vram-hold-in-the-orchestrator-wait-in-the-backend.md) records the split.
 `tests/integration/test_image_mode_switch.py` and `tests/integration/test_reply_streaming.py` test it (T-ORC-05,
 backend side). The orchestrator's `tests/unit/test_vram_guard.py` holds T-ORC-04 and the orchestrator side of T-ORC-05.
+
+Since P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-timed-recovery.md),
+[Load failures](gpu-orchestration.md#load-failures-and-launch-levels)):
+
+- `GpuStatus.load_failure` is a `LoadFailure` (`seq`, `mode`, `code`, `oom`, `failures`, `final`, `job_id`) when the
+  state document carries a valid one.
+- `lyrveil/orchestration/launch_levels.py` holds `LaunchLevels` and `level_values`. `main` builds it from the catalog
+  the image ships (`/app/config/model-catalog.json`) over `/data/runtime/llm-launch.env`, as `Worker.launch_levels`; a
+  catalog that does not load is logged and leaves the level as it is. `lower()` moves the file to the next level,
+  `observe(status)` does so once for a text `load_failure` with `oom`, and `current()` reads the level.
+- `GpuStateFollower` takes `on_state`, a blocking callable that receives each new state before it is published, in a
+  worker thread; `main` passes `LaunchLevels.observe`. An exception it raises is logged.
+- `JobScheduler` takes `launch_levels` and calls `lower()` after a run that ends with `LLM_OOM`, before it releases
+  the lease with `oom`. It ends the queued image job that a final image `load_failure` names with `IMAGE_LOAD_FAILED`,
+  not retried, through `AbandoningHandler.abandon`, before it decides anything else in that pass.
+- Tests: `tests/unit/test_launch_levels.py`, `tests/integration/test_launch_levels.py` (T-ORC-08, backend side) and
+  `tests/unit/test_orchestrator_client.py`.

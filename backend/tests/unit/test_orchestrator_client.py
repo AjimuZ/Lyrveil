@@ -15,6 +15,7 @@ from lyrveil.orchestration.client import (
     Lease,
     LeaseLostError,
     LeaseRefusedError,
+    LoadFailure,
     ModeRefusedError,
     OrchestratorClient,
     OrchestratorUnavailableError,
@@ -204,6 +205,31 @@ def test_the_numbers_of_a_vram_hold_are_read_and_a_malformed_hold_is_ignored(cli
     assert client.read_state().blocked_vram == BlockedVram(mode="image", free_mib=5282, required_mib=6500)
     assert client.read_state().blocked_vram is None
     assert client.read_state().blocked_vram is None
+
+
+def test_the_last_failed_load_is_read_and_a_malformed_one_is_ignored(client: OrchestratorClient) -> None:
+    failure = {
+        "seq": 41,
+        "mode": "llm",
+        "code": "LLM_LOAD_FAILED",
+        "oom": True,
+        "failures": 2,
+        "final": False,
+        "job_id": None,
+    }
+    failing = {"state": "RECOVERING", "desired_mode": "llm", "draining": False, "load_failure": failure}
+    ControlApi.answers = [
+        (200, failing),
+        (200, {**failing, "load_failure": {**failure, "oom": "yes"}}),
+        (200, {**failing, "load_failure": {**failure, "mode": "none"}}),
+        (200, {**failing, "load_failure": None}),
+    ]
+    assert client.read_state().load_failure == LoadFailure(
+        seq=41, mode="llm", code="LLM_LOAD_FAILED", oom=True, failures=2, final=False, job_id=None
+    )
+    assert client.read_state().load_failure is None
+    assert client.read_state().load_failure is None
+    assert client.read_state().load_failure is None
 
 
 def test_a_mode_refused_while_draining_and_a_malformed_state_are_reported(client: OrchestratorClient) -> None:

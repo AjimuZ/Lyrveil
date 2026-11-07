@@ -5,7 +5,8 @@ registered; anything else waits in the queue. With a ModeSwitch (P05.7), the sch
 the mode its queue needs. Since P06.3 it follows the rules of docs/gpu-orchestration.md (Selection) through
 lyrveil.jobs.selection: images in batches, the image wait limit, the cap on images in a row, and soft and background
 work only once the user is idle. Since P06.2 it ends the job that waits for that mode once the orchestrator has held
-the load back for VRAM during `vram_wait_s`.
+the load back for VRAM during `vram_wait_s`. Since P06.4 a text run out of memory lowers the launch level before its
+lease is released, and an image job whose runtime failed its last load retry ends with IMAGE_LOAD_FAILED.
 
 While a GPU stage runs, the scheduler watches for the two reasons to stop it (P06.3): foreground work that arrives
 during background work preempts it, and the user's cancellation ends it `cancelled`. Either way it cancels the
@@ -74,6 +75,10 @@ IDLE_POLL_S = 1.0
 # docs/configuration.md, `vram.wait_seconds`: how long the job that needs a mode waits while the orchestrator holds its
 # load back for VRAM. The default only: the setting is not read from application_settings yet.
 VRAM_WAIT_S = 120.0
+# docs/gpu-orchestration.md (Load failures): the job error of an image whose runtime failed its last load retry, and
+# the Italian reason shown with it. It names no private text.
+IMAGE_LOAD_FAILED = "IMAGE_LOAD_FAILED"
+_IMAGE_LOAD_DETAIL = "Il generatore di immagini non è riuscito a partire. Riprova più tardi."
 # Lease outcomes the orchestrator acts on (docs/gpu-orchestration.md, Load failures): "oom" moves to the next launch
 # level, "runtime_error" makes it check the runtime.
 _OOM_CODES = frozenset({"LLM_OOM", "IMAGE_OOM"})
@@ -96,6 +101,13 @@ class ModeSwitch(Protocol):
 
     def read_state(self) -> GpuStatus: ...
     def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None: ...
+
+
+class LaunchLevelLowering(Protocol):
+    """LaunchLevels.lower: moves the text runtime's launch file to the next level. It blocks, so the scheduler runs it
+    in a worker thread; it reports its own failures and never raises for them."""
+
+    def lower(self) -> object: ...
 
 
 @dataclass
@@ -140,6 +152,22 @@ def _vram_detail(blocked: BlockedVram | None) -> str:
         f"Servono {blocked.required_mib} MiB liberi sulla scheda video, ma ne restano {blocked.free_mib}: "
         "altri programmi la stanno usando. Chiudili e riprova."
     )
+
+
+def _image_load_failed(status: GpuStatus, images: Sequence[Job]) -> _Overdue | None:
+    """Returns the queued image job to end because the orchestrator reports that the image runtime failed its last
+    load retry for it (a final `load_failure` of mode `image` naming the job), with IMAGE_LOAD_FAILED; None otherwise.
+
+    The orchestrator keeps reporting the failure until the image runtime next loads, so a job that already ended is
+    simply not found among `images`: each job ends once, also across a backend restart.
+    """
+    failure = status.load_failure
+    if failure is None or failure.mode != "image" or not failure.final or failure.job_id is None:
+        return None
+    job = next((job for job in images if job.id == failure.job_id), None)
+    if job is None:
+        return None
+    return _Overdue(job, JobFailedError(IMAGE_LOAD_FAILED, _IMAGE_LOAD_DETAIL, retryable=False))
 
 
 def _lease_outcome(code: str | None) -> LeaseOutcome:
@@ -218,6 +246,12 @@ class JobScheduler:
     and a cancellation requested with JobQueue.request_cancel ends it `cancelled`. The handler is cancelled with
     `context.stop` telling why, then `text_runtime.abort(genkey)` or `image_runtime.interrupt()` ends the runtime's
     work before the lease is released. A CancellingHandler then removes what the job showed.
+
+    Out of memory (P06.4, docs/gpu-orchestration.md, Load failures and launch levels): a text run that ends with
+    LLM_OOM first lowers the launch level through `launch_levels`, then releases its lease with `oom`, after which the
+    orchestrator restarts the runtime with the new file. When the orchestrator reports that the image runtime failed
+    its last load retry for a queued image job, that job ends with IMAGE_LOAD_FAILED, not retried, as the VRAM wait
+    ends one; the orchestrator has already given the GPU back to mode `llm`, and the next image job asks again.
     """
 
     def __init__(
@@ -232,6 +266,7 @@ class JobScheduler:
         rules: SchedulingRules | None = None,
         text_runtime: TextRuntime | None = None,
         image_runtime: ImageRuntime | None = None,
+        launch_levels: LaunchLevelLowering | None = None,
         heartbeat_interval_s: float = HEARTBEAT_INTERVAL_S,
         idle_poll_s: float = IDLE_POLL_S,
         vram_wait_s: float = VRAM_WAIT_S,
@@ -246,6 +281,7 @@ class JobScheduler:
         self._rules = rules or SchedulingRules()
         self._text_runtime = text_runtime
         self._image_runtime = image_runtime
+        self._launch_levels = launch_levels
         kinds = tuple(self._handlers)
         self._foreground_kinds = tuple(kind for kind in kinds if policy_for(kind).job_class is JobClass.FOREGROUND)
         self._other_kinds = tuple(kind for kind in kinds if kind not in self._foreground_kinds)
@@ -344,7 +380,10 @@ class JobScheduler:
             write, self._engine, lambda connection: self._store(connection, started, run, reason)
         )
         if lease is not None and not run.lease_lost:
-            await self._release(lease, _lease_outcome(finished.error_code))
+            outcome = _lease_outcome(finished.error_code)
+            if outcome == "oom" and lease.mode == "llm":
+                await self._lower_launch_level(started)
+            await self._release(lease, outcome)
         self._ran(started)
         if finished.status is JobStatus.CANCELLED:
             await self._announce_cancelled(finished)
@@ -384,6 +423,10 @@ class JobScheduler:
         try:
             status = await to_thread.run_sync(switch.read_state)
             self._desired = status.desired_mode
+            failed = _image_load_failed(status, groups.images)
+            if failed is not None:
+                # Before any decision: the job would otherwise ask for the image mode again.
+                return _Plan(overdue=failed)
             self._see_text_mode(status, now)
             decision = self._decide(status, groups, now)
             if status.desired_mode != decision.mode and not status.draining:
@@ -605,11 +648,23 @@ class JobScheduler:
         if reason is StopReason.PREEMPTED or isinstance(error, JobPreemptedError):
             return self._queue.requeue_preempted(connection, job.id)
         if isinstance(error, JobFailedError):
-            return self._queue.fail(connection, job.id, error.code, error.detail, retryable=error.retryable)
+            return self._queue.fail(
+                connection, job.id, error.code, error.detail, retryable=error.retryable, fallback=error.fallback
+            )
         if isinstance(error, TextRuntimeError):
             return self._queue.fail(connection, job.id, error.code, None, retryable=True)
         logger.error("job_handler_failed", job_id=job.id, exc_info=error)
         return self._queue.fail(connection, job.id, INTERNAL, None, retryable=False)
+
+    async def _lower_launch_level(self, job: Job) -> None:
+        """Lowers the launch level after a text run that ran out of memory, before its lease is released, so the
+        orchestrator's restart reads the new file. Without `launch_levels` nothing changes."""
+        if self._launch_levels is None:
+            return
+        try:
+            await to_thread.run_sync(self._launch_levels.lower)
+        except Exception:
+            logger.error("launch_level_not_lowered", job_id=job.id, exc_info=True)
 
     async def _release(self, lease: Lease, outcome: LeaseOutcome) -> None:
         try:

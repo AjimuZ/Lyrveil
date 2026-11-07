@@ -229,6 +229,7 @@ async def test_three_failed_loads_end_in_error_until_recover(
     clock.now += 20
     assert await settle(manager) is GpuState.ERROR
     assert manager.last_error == "LLM_LOAD_FAILED"
+    # Since P06.4 ERROR retries by itself 300 s later with one more load, which fails again and returns to ERROR.
     clock.now += 3600
     assert await settle(manager) is GpuState.ERROR
     gate.containers[LLM].health_after_start = HealthStatus.HEALTHY
@@ -237,8 +238,8 @@ async def test_three_failed_loads_end_in_error_until_recover(
         manager.recover()
     assert await settle(manager) is GpuState.LLM_READY
     # Each failed start left a running container without a health check, and recovery stopped each one.
-    assert [call for call in gate.calls if call[0] == "start"] == [("start", LLM)] * 4
-    assert [call for call in gate.calls if call[0] == "stop"] == [("stop", LLM)] * 3
+    assert [call for call in gate.calls if call[0] == "start"] == [("start", LLM)] * 5
+    assert [call for call in gate.calls if call[0] == "stop"] == [("stop", LLM)] * 4
 
 
 @pytest.mark.anyio

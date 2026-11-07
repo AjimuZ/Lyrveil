@@ -5,6 +5,7 @@ through the OrchestratorClient, so it hears of a transition as soon as the orche
 state, the key of its Italian label in frontend/src/i18n/it.json, the queue depth and the blocked reason. Transitions
 closer together than one answer are folded into the latest one: the momentary IDLE between the stop of one runtime and
 the start of the other is usually not published. Like every event, `gpu.state` is a hint, and losing one loses no data.
+Since P06.4 each new state also goes to an observer, which lowers the launch level after a failed load.
 """
 
 from collections.abc import Callable, Mapping
@@ -87,6 +88,10 @@ class GpuStateFollower:
     queued and running jobs; it blocks, so it runs in a worker thread. The first read, and the first after a failure,
     does not wait, since the orchestrator may have restarted with a `seq` below the last one seen; later reads wait up
     to `wait_s` for the next transition.
+
+    `on_state`, when given, receives each new state before it is published, such as LaunchLevels.observe, which lowers
+    the launch level after a failed load (docs/gpu-orchestration.md, Load failures and launch levels). It blocks, so it
+    runs in a worker thread; an exception it raises is logged and the state is still published.
     """
 
     def __init__(
@@ -95,12 +100,14 @@ class GpuStateFollower:
         events: EventPublisher,
         queue_depth: Callable[[], int],
         *,
+        on_state: Callable[[GpuStatus], object] | None = None,
         wait_s: float = MAX_STATE_WAIT_S,
         retry_s: float = RETRY_S,
     ) -> None:
         self._source = source
         self._events = events
         self._queue_depth = queue_depth
+        self._on_state = on_state
         self._wait_s = wait_s
         self._retry_s = retry_s
         # (boot_id, seq) of the last state published, None before the first.
@@ -135,6 +142,11 @@ class GpuStateFollower:
         self._resync = False
         seen = (status.boot_id, status.seq)
         if seen != self._published:
+            if self._on_state is not None:
+                try:
+                    await to_thread.run_sync(self._on_state, status)
+                except Exception:
+                    logger.error("gpu_state_observer_failed", exc_info=True)
             queue = await to_thread.run_sync(self._queue_depth)
             self._events.publish(
                 GPU_STATE,

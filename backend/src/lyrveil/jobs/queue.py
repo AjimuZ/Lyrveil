@@ -314,15 +314,35 @@ class JobQueue:
             {"stage": stage, "mode": policy.required_mode(stage).value, "payload": _json(payload)},
         )
 
-    def fail(self, connection: Connection, job_id: str, code: str, detail: str | None, *, retryable: bool) -> Job:
+    def fail(
+        self,
+        connection: Connection,
+        job_id: str,
+        code: str,
+        detail: str | None,
+        *,
+        retryable: bool,
+        fallback: Mapping[str, Any] | None = None,
+    ) -> Job:
         """Records a failed attempt of a running job and returns the job.
 
         When `retryable` and attempts remain, the job is queued again after the kind's backoff for this attempt;
-        otherwise it ends as failed. Either way `error_code` and `error_detail` (cut to MAX_ERROR_DETAIL_CHARS) hold
-        the reason. Raises JobStateError when the job is not running.
+        otherwise it ends as failed. A retryable failure with a `fallback` payload is queued again in its stage with
+        that payload and the attempt count reset to 0, after the same backoff, whatever attempts remain
+        (JobFailedError.fallback). Either way `error_code` and `error_detail` (cut to MAX_ERROR_DETAIL_CHARS) hold the
+        reason. Raises JobStateError when the job is not running.
         """
         job = self._running(connection, job_id)
         reason = {"code": code, "detail": None if detail is None else detail[:MAX_ERROR_DETAIL_CHARS]}
+        if retryable and fallback is not None:
+            delay = timedelta(seconds=policy_for(job.kind).retry_delay_s(job.attempt))
+            return self._change_running(
+                connection,
+                job_id,
+                "status = 'queued', not_before = :not_before, lease_id = NULL, attempt = 0, "
+                "payload_json = :payload, error_code = :code, error_detail = :detail",
+                {**reason, "not_before": to_utc_text(self.now() + delay), "payload": _json(fallback)},
+            )
         if retryable and job.attempt < job.max_attempts:
             delay = timedelta(seconds=policy_for(job.kind).retry_delay_s(job.attempt))
             return self._change_running(

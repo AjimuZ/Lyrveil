@@ -1,6 +1,6 @@
 # GPU orchestration: Model Lifecycle Manager
 
-Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Delivered in P06.2: the VRAM check before a load, the hold in `IDLE` with `blocked_reason`, the end of the waiting job after `vram.wait_seconds`, and the expected drop of a release in the event log ([Verifying GPU release](#verifying-gpu-release), T-ORC-04, T-ORC-05). Delivered in P06.3, in the backend's `JobScheduler`: the [selection rules](#selection) with batches, the image wait limit and the cap on images in a row, [preemption](#preemption) of background work, [cancellation](#cancellation) and the queue note of a reply that waits for an image (T-ORC-12, T-ORC-13, T-IMG-10, [ADR 0039](decisions/0039-scheduling-clocks-batches-and-stops.md)). Still planned: the drain limit of a long foreground reply, the preferred-VRAM warning and the active profile's own requirement (P06.6), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Delivered in P06.2: the VRAM check before a load, the hold in `IDLE` with `blocked_reason`, the end of the waiting job after `vram.wait_seconds`, and the expected drop of a release in the event log ([Verifying GPU release](#verifying-gpu-release), T-ORC-04, T-ORC-05). Delivered in P06.3, in the backend's `JobScheduler`: the [selection rules](#selection) with batches, the image wait limit and the cap on images in a row, [preemption](#preemption) of background work, [cancellation](#cancellation) and the queue note of a reply that waits for an image (T-ORC-12, T-ORC-13, T-IMG-10, [ADR 0039](decisions/0039-scheduling-clocks-batches-and-stops.md)). Delivered in P06.4: the whole [recovery table](#recovery) with the timed retry out of `ERROR` (T-ORC-06), the classification of a failed text load from its exit status and logs, the [launch levels](#load-failures-and-launch-levels) the backend lowers after an out of memory (T-ORC-08), the runtime restart after an `oom` release, the return to text after three failed image loads, and the tiled and **Rapida** tries of an image out of memory (T-IMG-11, [ADR 0040](decisions/0040-load-failures-launch-levels-and-timed-recovery.md)). Still planned: the drain limit of a long foreground reply, the preferred-VRAM warning and the active profile's own requirement, the settings screen that shows the launch level and returns to A (P06.6), and `MODEL_FILE_MISSING` before a mode change.
 
 The text model and the image model never share the GPU, whichever [profiles](models.md) are active. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
 job queue and asks the orchestrator for a mode and a lease
@@ -349,6 +349,41 @@ These launch levels are separate from model profiles. Each level derives from th
 | Model file missing or with the wrong size | `MODEL_FILE_MISSING` before any mode change. Nothing is stopped. The settings screen shows the download command. |
 | `IMAGE_LOAD_FAILED` | Retry after 5 s and 20 s. Then the job fails, and the mode returns to text. |
 
+Delivered in P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-timed-recovery.md)):
+
+- **Classification.** When the text runtime does not become ready, `ProcessSupervisor.start` marks the failure `oom`
+  for exit status 3, or when the tail of its log matches `ALLOCATION_FAILURE` in `supervisor.py`: `out of memory`,
+  `cudaMalloc failed`, `failed to allocate`, `unable to allocate` or `alloc_buffer: allocating ... failed`. The patterns
+  are an assumption until the GPU suite records a real failure. The log is only matched, never stored or logged. Exit
+  status 78 stays `RUNTIME_CONFIG_INVALID`. The image runtime's failures are not classified.
+- **The record.** The event of a failed load has `failures`, `oom` (1 or 0) and `exit_code` in its `details`. The state
+  document's `load_failure` gives the event's `seq`, `mode`, `code`, `oom`, `failures`, `final` (no retry follows) and
+  the `job_id` of the mode request. It stays until that runtime is next ready. Failures count in a row for one
+  runtime: a load of the other starts the count again.
+- **Levels.** `lyrveil/orchestration/launch_levels.py` in the backend derives each level from the catalog profile that
+  `MODEL_PROFILE` names. B and C round three quarters and half of the profile's context down to an allowed
+  `CONTEXT_SIZE`, so a profile grown to 24576 runs 16384 and 12288. C takes the profile's batch, at most 256. Every
+  level sets `GPU_LAYERS=-1`. The backend changes only `CONTEXT_SIZE`, `BATCH_SIZE`, `GPU_LAYERS` and `LEVEL`, keeps
+  every other line and the file's permissions, and replaces the file in one rename. It never goes below C, and leaves
+  alone a file at level `CUSTOM`, a profile outside the catalog (a custom profile) and a missing file.
+- **Lowering.** `GpuStateFollower` passes each new state to `LaunchLevels.observe`, which lowers the level once for a
+  `load_failure` of mode `llm` with `oom`. A comment line in the file names the event it answered, so a restarted
+  backend does not lower twice. `JobScheduler` lowers the level after a run that ends with `LLM_OOM`, before it releases
+  the lease with `oom`. The job retries as before.
+- **Restart.** A lease released with `oom` makes recovery stop its runtime even when it is healthy, verify the release
+  and load it again, so the new launch file or a tiled image retry runs on a fresh process.
+- **Images.** After the third failed image load in a row the orchestrator rests in `IDLE`, sets the desired mode to
+  `llm` and loads the text runtime. `load_failure` keeps the failure with `final` and the job's id, and the scheduler
+  ends that job with `IMAGE_LOAD_FAILED`, not retried, with an Italian detail. The next image job asks for the mode
+  again and gets three tries of its own.
+- **Budgets.** The context builder already sizes each prompt by the context the runtime reports from
+  `GET /api/extra/true_max_context_length`, so a lower level needs no other change.
+- **Not delivered.** The settings screen that shows the level and returns to A (P06.6), `MODEL_FILE_MISSING` before a
+  mode change, and the writing of a whole launch file, which nothing in the backend does yet: setup and P06.6 will.
+- **Tests.** The orchestrator side is in `orchestrator/tests/unit/test_recovery_table.py`, the backend side in
+  `backend/tests/unit/test_launch_levels.py` and `backend/tests/integration/test_launch_levels.py` (T-ORC-08). The image
+  tries are in `backend/tests/integration/test_image_oom.py` (T-IMG-11).
+
 ### Measuring and tuning
 
 The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4-26b-a4b`, `gemma-4-12b` and
@@ -412,6 +447,24 @@ layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
 | Stopped | Stopped | `IDLE` |
 | Container missing | Any | `ERROR` with `RUNTIME_CONTAINER_MISSING`. The message says to run `.\setup.cmd` |
 | Docker unreachable | Docker unreachable | `ERROR` with `DOCKER_UNAVAILABLE`, automatic retry |
+
+Delivered in P06.4 in `ModelLifecycleManager._reconcile` (T-ORC-06, `orchestrator/tests/unit/test_recovery_table.py`).
+What the table leaves open:
+
+- **Running** in the first column means healthy or still starting. A runtime found starting, for example after an
+  orchestrator restart during a load, is kept if it turns healthy within its load timeout, and stopped like an
+  unhealthy one otherwise. A runtime without a health check is stopped.
+- When the image runtime is unhealthy and the text runtime healthy, both run: the row of both running applies, and the
+  text runtime is kept.
+- Recovery also stops the runtime whose lease ended with `oom`, and the one whose load just failed, so a load that
+  timed out is not waited for twice.
+- With nothing kept, three failed text loads in a row end in `ERROR`, and three failed image loads return to text
+  ([Load failures](#load-failures-and-launch-levels)).
+- **Timed retry.** `ERROR` moves to `RECOVERING` 300 s after it was entered, at most three times in an hour, with one
+  more load attempt. The fourth waits until the first of the three is an hour old. `RUNTIME_CONTAINER_MISSING` waits
+  for the user's `POST /v1/recover` alone, since `.\setup.cmd` must run first. Every other code retries, because its
+  cause can pass: Docker unreachable, three failed loads, and a release that could not be verified. The user's recover
+  works at any time and gives the next load its full retries.
 
 ## Safe shutdown
 

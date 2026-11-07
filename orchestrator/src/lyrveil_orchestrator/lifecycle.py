@@ -8,8 +8,11 @@ tested with the exclusivity rules, and recovery verifies the release before IDLE
 the 18 steps of an image request, with the job that asked for a mode named on the events of the switch it causes,
 tested step by step (T-IMG-04) and by a property over random event sequences (T-ORC-02). Delivered in P06.2: the VRAM
 check before a load, which holds the GPU in IDLE with `blocked_reason` GPU_INSUFFICIENT_VRAM while other programs hold
-the memory, and checks again every few seconds (T-ORC-05). Not delivered yet (P06.4): the timed retry out of ERROR and
-launch-level fallbacks.
+the memory, and checks again every few seconds (T-ORC-05). Delivered in P06.4: the whole recovery table (T-ORC-06),
+including a runtime found still starting; a restart of the runtime after a lease released with `oom`; the record of
+the last failed load in the state document, with `oom` for an allocation failure, from which the backend lowers the
+launch level (T-ORC-08); the return to mode `llm` after three failed image loads in a row; and the timed retry out of
+ERROR.
 
 Everything runs on one asyncio event loop. The lease and mode methods never await, so each sees and changes the state
 in one piece. `step` awaits container work, and before each await it enters a LOADING or UNLOADING state, in which no
@@ -34,6 +37,7 @@ from lyrveil_orchestrator.container_gate import ContainerStatus, HealthStatus
 from lyrveil_orchestrator.state_machine import INITIAL_STATE, GpuState, Runtime, transition
 from lyrveil_orchestrator.supervisor import (
     InsufficientVram,
+    LoadFailedError,
     LoadReport,
     ProcessSupervisor,
     ReleaseReport,
@@ -51,6 +55,14 @@ EVENT_BUFFER = 5000
 # in ERROR.
 MAX_LOAD_FAILURES = 3
 LOAD_RETRY_DELAYS_S = (5.0, 20.0)
+# docs/gpu-orchestration.md, Load failures: ERROR retries every 300 s, at most 3 times an hour, or on the user's action.
+ERROR_RETRY_S = 300.0
+ERROR_RETRIES_PER_HOUR = 3
+_HOUR_S = 3600.0
+# ERROR codes that wait for the user's action alone: a missing container needs `.\setup.cmd` first (Recovery). Every
+# other ERROR (Docker unreachable, three failed loads, a release not verified) retries on the timer, since its cause
+# can pass by itself.
+_WAITS_FOR_USER = frozenset({"RUNTIME_CONTAINER_MISSING"})
 # How often a ready runtime's health is read, and the longest wait of the run loop between steps.
 HEALTH_INTERVAL_S = 5.0
 TICK_S = 1.0
@@ -101,6 +113,8 @@ _READY = MappingProxyType({Runtime.LLM: GpuState.LLM_READY, Runtime.IMAGE: GpuSt
 _GENERATING = MappingProxyType({Runtime.LLM: GpuState.GENERATING_TEXT, Runtime.IMAGE: GpuState.GENERATING_IMAGE})
 _UNLOADING = MappingProxyType({Runtime.LLM: GpuState.UNLOADING_LLM, Runtime.IMAGE: GpuState.UNLOADING_IMAGE})
 _OOM_CODE = MappingProxyType({Runtime.LLM: "LLM_OOM", Runtime.IMAGE: "IMAGE_OOM"})
+# The health of a running runtime that recovery keeps: healthy, or still starting and possibly about to be.
+_KEPT_HEALTH = frozenset({HealthStatus.HEALTHY, HealthStatus.STARTING})
 
 
 @dataclass(frozen=True)
@@ -143,6 +157,37 @@ class LifecycleEvent:
             "job_id": self.job_id,
             "code": self.code,
             "details": dict(self.details),
+        }
+
+
+@dataclass(frozen=True)
+class LoadFailure:
+    """The last failed load since a runtime was last ready, as the state document's `load_failure` reports it.
+
+    `seq` is the event of the failure, so a reader acts once on each. `oom` is True for an allocation failure of the
+    text runtime, after which the backend lowers the launch level before the retry. `failures` counts the failed loads
+    of `runtime` in a row, and `final` is True when no retry follows: the text runtime then waits in ERROR, and the
+    image runtime gives the GPU back to mode `llm`, so the backend ends `job_id`, the job the mode was asked for.
+    """
+
+    seq: int
+    runtime: Runtime
+    code: str
+    oom: bool
+    failures: int
+    final: bool
+    job_id: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Returns the JSON form, with the runtime as `mode`."""
+        return {
+            "seq": self.seq,
+            "mode": self.runtime.value,
+            "code": self.code,
+            "oom": self.oom,
+            "failures": self.failures,
+            "final": self.final,
+            "job_id": self.job_id,
         }
 
 
@@ -202,7 +247,15 @@ class ModelLifecycleManager:
         self._seq = 0
         self._events: deque[LifecycleEvent] = deque(maxlen=EVENT_BUFFER)
         self._load_failures = 0
+        self._load_failure: LoadFailure | None = None
         self._retry_at = 0.0
+        # The runtime that recovery must stop even when it is healthy or starting: its lease ended with `oom`, so the
+        # restart frees its memory and reads the launch file again, or its load just failed.
+        self._restart: Runtime | None = None
+        # When ERROR retries by itself, None when it waits for the user; and the times of the timed retries made, for
+        # the hourly limit.
+        self._error_retry_at: float | None = None
+        self._timed_retries: deque[float] = deque()
         self._next_health_check = 0.0
         self._wake = asyncio.Event()
         self._changed = asyncio.Event()
@@ -231,6 +284,17 @@ class ModelLifecycleManager:
     def blocked(self) -> InsufficientVram | None:
         """The check that holds the load back in IDLE, or None when no load waits for VRAM."""
         return self._blocked
+
+    @property
+    def load_failure(self) -> LoadFailure | None:
+        """The last failed load since a runtime was last ready, or None."""
+        return self._load_failure
+
+    @property
+    def error_retry_at(self) -> float | None:
+        """When ERROR moves to RECOVERING by itself, on the manager's clock; None outside ERROR or when it waits for
+        the user."""
+        return self._error_retry_at
 
     @property
     def seq(self) -> int:
@@ -269,7 +333,9 @@ class ModelLifecycleManager:
 
     def release(self, lease_id: str, outcome: LeaseOutcome) -> None:
         """Ends the current lease. `ok` returns to the ready state; `oom` and `runtime_error` go to RECOVERING with
-        the matching code. Raises LeaseExpiredError, changing nothing, when `lease_id` is not the current lease."""
+        the matching code. After `oom` recovery restarts the runtime, healthy or not, so its memory is freed and the
+        launch file read again (docs/gpu-orchestration.md, Load failures). Raises LeaseExpiredError, changing
+        nothing, when `lease_id` is not the current lease."""
         self._expire_overdue()
         lease = self._current(lease_id)
         runtime = _MODE_RUNTIME[lease.mode]
@@ -279,6 +345,8 @@ class ModelLifecycleManager:
             self._move(_READY[runtime], "lease released", job_id=lease.job_id)
         else:
             code = _OOM_CODE[runtime] if outcome is LeaseOutcome.OOM else "RUNTIME_UNAVAILABLE"
+            if outcome is LeaseOutcome.OOM:
+                self._restart = runtime
             self._move(GpuState.RECOVERING, f"lease released with {outcome}", job_id=lease.job_id, code=code)
         self._wake.set()
 
@@ -305,7 +373,8 @@ class ModelLifecycleManager:
         self._wake.set()
 
     def recover(self) -> None:
-        """Leaves ERROR for RECOVERING and forgets earlier load failures.
+        """Leaves ERROR for RECOVERING and forgets earlier load failures, so the next load has its full retries. The
+        timed retries made in the last hour still count toward their limit.
 
         Raises LifecycleConflictError, changing nothing, in any other state.
         """
@@ -313,6 +382,7 @@ class ModelLifecycleManager:
             raise LifecycleConflictError("the state is not ERROR")
         self._load_failures = 0
         self._retry_at = 0.0
+        self._error_retry_at = None
         self._move(GpuState.RECOVERING, "user action")
         self._wake.set()
 
@@ -333,7 +403,8 @@ class ModelLifecycleManager:
         null; it never raises for a Docker or NVML failure.
 
         While a load is held back, `blocked_reason` is GPU_INSUFFICIENT_VRAM and `blocked_vram` gives the mode and
-        the numbers of the last check; both are null otherwise.
+        the numbers of the last check; both are null otherwise. `load_failure` is the last failed load since a
+        runtime was last ready (LoadFailure), null otherwise.
         """
         self._expire_overdue()
         vram = await self._supervisor.read_memory()
@@ -358,6 +429,7 @@ class ModelLifecycleManager:
             "vram": None if vram is None else asdict(vram),
             "runtimes": runtimes,
             "last_error": self._last_error,
+            "load_failure": None if self._load_failure is None else self._load_failure.to_dict(),
         }
 
     async def wait_for_change(self, since: int, wait_s: float) -> None:
@@ -406,14 +478,40 @@ class ModelLifecycleManager:
             return True
         if state is GpuState.IDLE:
             return await self._step_idle()
+        if state is GpuState.ERROR:
+            return self._retry_from_error()
         for runtime in Runtime:
             if state is _READY[runtime] and self._target_runtime() is not runtime:
                 await self._unload(runtime, "drain" if self._draining else "mode changed")
                 return True
             if state in (_READY[runtime], _GENERATING[runtime]):
                 return await self._watch_health(runtime)
-        # ERROR waits for recover. LOADING and UNLOADING states begin and end inside one step.
+        # LOADING and UNLOADING states begin and end inside one step.
         return False
+
+    def _retry_from_error(self) -> bool:
+        """Leaves ERROR for RECOVERING once the timed retry is due and fewer than ERROR_RETRIES_PER_HOUR timed retries
+        were made in the last hour; otherwise moves the retry to the moment the oldest of them is an hour old. Returns
+        True when it left ERROR.
+
+        The retry leaves one more load attempt: a load that fails again returns to ERROR, with the next retry
+        ERROR_RETRY_S later.
+        """
+        due = self._error_retry_at
+        now = self._clock()
+        if due is None or now < due:
+            return False
+        while self._timed_retries and now - self._timed_retries[0] >= _HOUR_S:
+            self._timed_retries.popleft()
+        if len(self._timed_retries) >= ERROR_RETRIES_PER_HOUR:
+            self._error_retry_at = self._timed_retries[0] + _HOUR_S
+            return False
+        self._timed_retries.append(now)
+        self._error_retry_at = None
+        self._load_failures = min(self._load_failures, MAX_LOAD_FAILURES - 1)
+        self._retry_at = 0.0
+        self._move(GpuState.RECOVERING, "timed retry")
+        return True
 
     async def _step_idle(self) -> bool:
         """Loads the runtime of the desired mode once the retry delay has passed and the card has the free VRAM it
@@ -480,7 +578,15 @@ class ModelLifecycleManager:
         return True
 
     async def _load(self, runtime: Runtime) -> None:
+        """Starts `runtime` and enters its ready state, or RECOVERING with the failure recorded in `load_failure`.
+
+        Failures count in a row for one runtime: a load of the other runtime starts the count again. The retry waits
+        LOAD_RETRY_DELAYS_S, during which the backend lowers the launch level after an allocation failure. The event of
+        a failure carries `failures`, `oom` (1 or 0) and the exit code in its details.
+        """
         job_id = self._mode_job
+        if self._load_failure is not None and self._load_failure.runtime is not runtime:
+            self._load_failures = 0
         self._move(_LOADING[runtime], f"mode {runtime}", job_id=job_id)
         try:
             report = await self._supervisor.start(runtime)
@@ -488,7 +594,26 @@ class ModelLifecycleManager:
             self._load_failures += 1
             delay = LOAD_RETRY_DELAYS_S[min(self._load_failures, len(LOAD_RETRY_DELAYS_S)) - 1]
             self._retry_at = self._clock() + delay
-            self._move(GpuState.RECOVERING, "failed or timed out", job_id=job_id, code=error.code)
+            oom = isinstance(error, LoadFailedError) and error.oom
+            exit_code = error.exit_code if isinstance(error, LoadFailedError) else None
+            # A load that timed out leaves the container starting: recovery stops it rather than wait for it again.
+            self._restart = runtime
+            self._move(
+                GpuState.RECOVERING,
+                "failed or timed out",
+                job_id=job_id,
+                code=error.code,
+                details={"failures": self._load_failures, "oom": int(oom), "exit_code": exit_code},
+            )
+            self._load_failure = LoadFailure(
+                seq=self._seq,
+                runtime=runtime,
+                code=error.code,
+                oom=oom,
+                failures=self._load_failures,
+                final=self._load_failures >= MAX_LOAD_FAILURES,
+                job_id=job_id,
+            )
             return
         self._load_failures = 0
         self._next_health_check = self._clock() + self._health_interval_s
@@ -529,50 +654,99 @@ class ModelLifecycleManager:
         return True
 
     async def _reconcile(self) -> None:
-        """The reduced recovery table: keep one healthy runtime, stop anything else, and end in a stable state.
+        """Applies the recovery table of docs/gpu-orchestration.md (Recovery) to what Docker reports, and ends in a
+        stable state.
 
-        Both running stops the image runtime with EXCLUSIVITY_VIOLATION. A missing container or an unreachable Docker
-        ends in ERROR, and so does a state with nothing running after MAX_LOAD_FAILURES failed loads in a row. IDLE
-        is entered only once the release is verified: by the stops made here, or else by the memory settling; memory
-        that does not settle ends in ERROR with GPU_RELEASE_UNVERIFIED, which only `recover` leaves until P06.
+        - A healthy runtime with the other stopped is kept: its ready state. One still starting is kept once it turns
+          healthy within its load timeout, and stopped like an unhealthy one otherwise.
+        - Both running logs EXCLUSIVITY_VIOLATION and stops the image runtime; the text runtime is then kept as above.
+        - An unhealthy runtime, one without a health check, the runtime whose lease ended with `oom` and the one whose
+          load just failed are stopped.
+        - A missing container (RUNTIME_CONTAINER_MISSING) or an unreachable Docker (DOCKER_UNAVAILABLE) ends in ERROR.
+        - With nothing kept: MAX_LOAD_FAILURES failed text loads in a row end in ERROR; failed image loads give the GPU
+          back to mode `llm`; otherwise IDLE.
+
+        IDLE is entered only once the release is verified: by the stops made here, or else by the memory settling;
+        memory that does not settle ends in ERROR with GPU_RELEASE_UNVERIFIED. ERROR retries on a timer unless it
+        waits for the user (`_enter_error`).
         """
+        restart, self._restart = self._restart, None
         try:
             statuses = {runtime: await self._supervisor.inspect(runtime) for runtime in Runtime}
         except SupervisorError as error:
-            self._move(GpuState.ERROR, "not recoverable", code=error.code)
+            self._enter_error(error.code)
             return
         running = {runtime for runtime, status in statuses.items() if status.running}
-        healthy = {runtime for runtime in running if _healthy(statuses[runtime])}
-        to_stop = running - healthy
+        kept = {runtime for runtime in running if statuses[runtime].health in _KEPT_HEALTH}
         if running == set(Runtime):
             self._last_error = "EXCLUSIVITY_VIOLATION"
             logger.error("EXCLUSIVITY_VIOLATION: both runtimes were running")
-            to_stop.add(Runtime.IMAGE)
-        for runtime in sorted(to_stop, key=lambda item: item is Runtime.LLM):
-            try:
-                await self._supervisor.stop(runtime)
-            except SupervisorError as error:
-                self._move(GpuState.ERROR, "not recoverable", code=error.code)
-                return
-        kept = healthy - to_stop
+            kept.discard(Runtime.IMAGE)
+        if restart is not None:
+            kept.discard(restart)
+        stopped = running - kept
+        if not await self._stop_each(stopped):
+            return
         if kept:
+            # At most one runtime is kept: with both running, the image runtime was dropped above.
             runtime = kept.pop()
-            self._next_health_check = self._clock() + self._health_interval_s
-            self._move(_READY[runtime], f"{runtime} healthy")
+            if statuses[runtime].health is HealthStatus.HEALTHY or await self._became_ready(runtime):
+                self._next_health_check = self._clock() + self._health_interval_s
+                self._move(_READY[runtime], f"{runtime} healthy")
+                return
+            if not await self._stop_each({runtime}):
+                return
+            stopped.add(runtime)
+        failure = self._load_failure
+        image_failed = failure is not None and failure.runtime is Runtime.IMAGE
+        if self._load_failures >= MAX_LOAD_FAILURES and not image_failed:
+            self._enter_error(failure.code if failure is not None else self._last_error)
             return
-        if self._load_failures >= MAX_LOAD_FAILURES:
-            self._move(GpuState.ERROR, "not recoverable", code=self._last_error)
-            return
-        if not to_stop:
+        if not stopped:
             # Exclusivity rule 2: IDLE only after a verified release. Each stop above verified its own; with nothing
             # stopped here, a runtime may have exited on its own or a stop may have timed out while the card still
             # held its memory, so the memory must settle before IDLE allows the next load.
             try:
                 await self._supervisor.verify_settled()
             except SupervisorError as error:
-                self._move(GpuState.ERROR, "not recoverable", code=error.code)
+                self._enter_error(error.code)
                 return
+        if self._load_failures >= MAX_LOAD_FAILURES:
+            # docs/gpu-orchestration.md, Load failures: after the image's last retry the job fails and the mode returns
+            # to text. The backend ends the job that `load_failure` names; its next image job asks for the mode again.
+            self._load_failures = 0
+            self._retry_at = 0.0
+            self._desired = Mode.LLM
+            self._mode_job = None
+            self._move(GpuState.IDLE, "image load failed, mode llm")
+            return
         self._move(GpuState.IDLE, "nothing running")
+
+    async def _stop_each(self, runtimes: set[Runtime]) -> bool:
+        """Stops `runtimes`, the image runtime first, each with its release verified. Returns False after entering
+        ERROR when a stop fails."""
+        for runtime in sorted(runtimes, key=lambda item: item is Runtime.LLM):
+            try:
+                await self._supervisor.stop(runtime)
+            except SupervisorError as error:
+                self._enter_error(error.code)
+                return False
+        return True
+
+    async def _became_ready(self, runtime: Runtime) -> bool:
+        """Waits for a runtime that recovery found still starting. Returns whether it turned healthy."""
+        try:
+            await self._supervisor.await_ready(runtime)
+        except SupervisorError as error:
+            logger.warning("%s found starting did not become ready: %s", runtime, error.code)
+            return False
+        return True
+
+    def _enter_error(self, code: str | None) -> None:
+        """Enters ERROR with `code` and schedules the timed retry ERROR_RETRY_S later, unless `code` waits for the
+        user's action (`_WAITS_FOR_USER`)."""
+        self._move(GpuState.ERROR, "not recoverable", code=code)
+        self._error_retry_at = None if code in _WAITS_FOR_USER else self._clock() + ERROR_RETRY_S
 
     def _move(
         self,
@@ -585,16 +759,23 @@ class ModelLifecycleManager:
         """Applies one transition of the table, records and logs its event and wakes long polls.
 
         Raises IllegalTransition, changing nothing, for a move the table does not hold. A ready state clears
-        `last_error`; a failure code replaces it. Leaving IDLE ends any hold for VRAM.
+        `last_error`; a failure code replaces it. Leaving IDLE ends any hold for VRAM. The ready state of the runtime
+        whose load failed last clears `load_failure`; the other runtime's leaves it, so the backend still sees a final
+        image failure once the text runtime is back. Leaving ERROR cancels its timed retry.
         """
         source = self._state
         self._state = transition(source, target)
         if target is not GpuState.IDLE:
             self._blocked = None
+        if target is not GpuState.ERROR:
+            self._error_retry_at = None
         if code is not None:
             self._last_error = code
         elif target in _READY.values():
             self._last_error = None
+        failure = self._load_failure
+        if failure is not None and target is _READY[failure.runtime]:
+            self._load_failure = None
         self._record(source, target, reason, job_id, code, details)
 
     def _note(

@@ -6,7 +6,8 @@ chooses the seed, unless the request gave one, so a retried `render` reproduces 
 workflow of the quality preset, follows ComfyUI's progress under the image lease and stages the file at
 `.staging/<job id>/render`. `persist` validates the staged file with Pillow, writes the thumbnail and the original,
 then stores `generated_images`, links the variant and completes the message in one transaction. Each stage hands the
-next one the whole payload, so a restart continues from the last finished stage.
+next one the whole payload, so a restart continues from the last finished stage. Since P06.4 an out of memory on Alta
+that the tiled retry did not cure gets one last tiled try with Rapida (render_retry).
 
 The message stays `queued` while its job works, so the startup rule that interrupts `streaming` messages never touches
 it. Persistence is idempotent: `generated_images.job_id` is unique and the file names derive from the job id, so a
@@ -181,6 +182,29 @@ def job_error(error: Exception) -> Exception:
     return error
 
 
+def render_retry(job: Job, error: Exception) -> Exception:
+    """Returns the failure to record for a `render` run of `job`, following docs/image-generation.md (Failures).
+
+    An out of memory on **Alta** with the kind's attempts used up, the second being the tiled retry of the same preset,
+    becomes one last try with **Rapida**: a retryable failure whose fallback payload sets `quality` to `rapida` and
+    `fallback_from` to `alta`, so the preset stored with the image is the one that produced the file. That try runs
+    once: any failure of it is not retried. Every other failure, and every other stage, passes through.
+    """
+    if job.stage != STAGE_RENDER or not isinstance(error, JobFailedError):
+        return error
+    payload = job.payload
+    if payload.get("fallback_from") is not None:
+        return JobFailedError(error.code, error.detail, retryable=False) if error.retryable else error
+    if (
+        error.code == ImageOutOfMemoryError.code
+        and payload.get("quality") == "alta"
+        and job.attempt >= job.max_attempts
+    ):
+        fallback = {**payload, "quality": "rapida", "fallback_from": "alta"}
+        return JobFailedError(error.code, error.detail, retryable=True, fallback=fallback)
+    return error
+
+
 class ImageGenerationService:
     """Runs one stage of an `image_request` job per call, as the JobHandler of that kind (lyrveil.jobs.handlers).
 
@@ -238,7 +262,7 @@ class ImageGenerationService:
         except JobPreemptedError:
             raise
         except Exception as error:
-            converted = job_error(error)
+            converted = render_retry(job, job_error(error))
             await self._failed(job, converted)
             if converted is error:
                 raise
@@ -333,8 +357,9 @@ class ImageGenerationService:
         settings = self._settings
         steps, cfg = _sampling(payload, settings)
         # The second attempt follows an out-of-memory failure or a stall, so it decodes in tiles (docs/backend.md,
-        # Retry policy). The preset used is the one stored with the image.
-        tiled = job.attempt > 1
+        # Retry policy), and so does the Rapida try after a second out of memory on Alta (render_retry), since the
+        # card has already run out twice. The preset used is the one stored with the image.
+        tiled = job.attempt > 1 or payload.get("fallback_from") is not None
         workflow = build_workflow(
             WorkflowSpec(
                 preset=quality,
@@ -354,7 +379,9 @@ class ImageGenerationService:
             )
         )
         version = (await self._images.info()).version
-        prompt_id = str(uuid.uuid5(uuid.UUID(job.id), f"render-{job.attempt}"))
+        # The Rapida try counts its attempts from 1 again, so its name differs from the first attempt's.
+        fallback = "" if payload.get("fallback_from") is None else f"-{quality}"
+        prompt_id = str(uuid.uuid5(uuid.UUID(job.id), f"render-{job.attempt}{fallback}"))
         finished: RenderFinished | None = None
         async for event in self._images.render(ImageRequest(workflow=workflow, prompt_id=prompt_id)):
             if isinstance(event, ImageProgress):
@@ -499,11 +526,13 @@ class ImageGenerationService:
     async def _failed(self, job: Job, error: Exception) -> None:
         """Marks the message and its variant `failed` and announces it, unless the scheduler will run the stage again.
 
-        A retry is expected for a retryable error with attempts left. The staged file is removed with the last
-        attempt. A failure while recording is logged and never replaces the original error.
+        A retry is expected for a retryable error with attempts left, and for one with a fallback payload. The staged
+        file is removed with the last attempt. A failure while recording is logged and never replaces the original
+        error.
         """
         retryable = isinstance(error, TextRuntimeError) or (isinstance(error, JobFailedError) and error.retryable)
-        if retryable and job.attempt < job.max_attempts:
+        fallback = isinstance(error, JobFailedError) and error.retryable and error.fallback is not None
+        if fallback or (retryable and job.attempt < job.max_attempts):
             return
         code = error.code if isinstance(error, JobFailedError | TextRuntimeError) else INTERNAL
         try:

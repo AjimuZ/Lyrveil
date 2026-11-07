@@ -10,6 +10,18 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Recovery from GPU out-of-memory and failed loads. An image that runs out of memory is retried with the tiled
+  workflow of the same preset, and an **Alta** image that runs out again gets one last try with **Rapida**; the image
+  is stored, and shown in the gallery, with the preset that actually produced it. When the text model runs out of
+  memory while loading or replying, the next load uses a lower launch level (B, then C: three quarters, then half of the
+  profile's context, and a smaller batch at C) written to `runtime/llm-launch.env`, and the reply is retried. A model
+  that ran out of memory is restarted before the retry. When ComfyUI fails to start three times in a row, the image
+  fails with `IMAGE_LOAD_FAILED` and chat comes back; the next image request tries again. The GPU's error state now
+  retries by itself every 5 minutes, at most three times an hour, except when a runtime container is missing, which
+  still waits for `.\setup.cmd` and the user's action. Recovery after a restart keeps a runtime that is still starting
+  once it turns healthy. Not delivered yet: showing the launch level in the settings and returning to level A (P06.6), and the
+  real-GPU check of the out-of-memory log patterns.
+
 - Fair scheduling between replies and images, and cancellation. Replies still go first, but an image that has waited
   60 s while the text model was ready takes its turn, and images run in batches of at most 4 while other text work
   waits. Memory extraction, summaries and other background work wait until the user has been idle for 20 s, and a new

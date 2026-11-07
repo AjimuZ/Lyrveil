@@ -63,13 +63,34 @@ class BlockedVram:
 
 
 @dataclass(frozen=True)
+class LoadFailure:
+    """The orchestrator's last failed load since that runtime was last ready (docs/gpu-orchestration.md, Load failures
+    and launch levels).
+
+    `seq` is the event of the failure, so the backend acts once on each. `oom` marks an allocation failure of the text
+    runtime, after which the backend lowers the launch level before the retry. `failures` counts the failed loads in a
+    row, and `final` is True when no retry follows: the text runtime waits in ERROR, and after the image runtime the
+    GPU returns to mode `llm`, so the backend ends `job_id`, the job the image mode was asked for.
+    """
+
+    seq: int
+    mode: LeaseMode
+    code: str
+    oom: bool
+    failures: int
+    final: bool
+    job_id: str | None
+
+
+@dataclass(frozen=True)
 class GpuStatus:
     """The part of the state document the backend acts on. `state` is the GPU state name, `desired_mode` the mode
     the orchestrator is moving to, and `draining` whether it refuses new modes.
 
     `seq` counts the orchestrator's events since the process named `boot_id` started: its transitions, and the start
     and end of a load held back for VRAM. `blocked_reason` is the code that holds a load back, such as
-    GPU_INSUFFICIENT_VRAM, and `blocked_vram` the numbers of that hold. Each is None when the answer did not carry it.
+    GPU_INSUFFICIENT_VRAM, and `blocked_vram` the numbers of that hold. `load_failure` is the last failed load. Each is
+    None when the answer did not carry it.
     """
 
     state: str
@@ -79,6 +100,7 @@ class GpuStatus:
     boot_id: str | None = None
     blocked_reason: str | None = None
     blocked_vram: BlockedVram | None = None
+    load_failure: LoadFailure | None = None
 
     @property
     def ready_mode(self) -> LeaseMode | None:
@@ -144,9 +166,9 @@ class OrchestratorClient:
         return status
 
     def _state(self, path: str, timeout_s: float) -> GpuStatus:
-        """Reads the state document at `path`. `seq`, `boot_id`, `blocked_reason` and `blocked_vram` are None when
-        absent or of another type; the other fields must have their documented types, or OrchestratorUnavailableError
-        is raised."""
+        """Reads the state document at `path`. `seq`, `boot_id`, `blocked_reason`, `blocked_vram` and `load_failure`
+        are None when absent or of another form; the other fields must have their documented types, or
+        OrchestratorUnavailableError is raised."""
         status, body = self._send("GET", path, None, timeout_s)
         state, desired, draining = body.get("state"), body.get("desired_mode"), body.get("draining")
         if (
@@ -165,6 +187,7 @@ class OrchestratorClient:
             boot_id=boot_id if isinstance(boot_id, str) else None,
             blocked_reason=blocked if isinstance(blocked, str) else None,
             blocked_vram=_blocked_vram(body.get("blocked_vram")),
+            load_failure=_load_failure(body.get("load_failure")),
         )
 
     def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None:
@@ -269,6 +292,26 @@ def _blocked_vram(value: object) -> BlockedVram | None:
     if mode not in ("llm", "image") or free is None or required is None:
         return None
     return BlockedVram(mode=mode, free_mib=free, required_mib=required)
+
+
+def _load_failure(value: object) -> LoadFailure | None:
+    """Reads `load_failure` of the state document, or returns None when it is absent or not of the documented form."""
+    if not isinstance(value, dict):
+        return None
+    seq, failures = _mib(value.get("seq")), _mib(value.get("failures"))
+    mode, code = value.get("mode"), value.get("code")
+    oom, final, job_id = value.get("oom"), value.get("final"), value.get("job_id")
+    if (
+        seq is None
+        or mode not in ("llm", "image")
+        or not isinstance(code, str)
+        or failures is None
+        or not isinstance(oom, bool)
+        or not isinstance(final, bool)
+        or not (job_id is None or isinstance(job_id, str))
+    ):
+        return None
+    return LoadFailure(seq=seq, mode=mode, code=code, oom=oom, failures=failures, final=final, job_id=job_id)
 
 
 def _json_object(raw: bytes) -> dict[str, Any]:

@@ -53,9 +53,9 @@ Job errors, reported through `job.updated`:
 | Code | Meaning |
 | --- | --- |
 | `GPU_INSUFFICIENT_VRAM` | Other programs hold too much VRAM. Since P06.2, the job that needs the held-back mode fails after `vram.wait_seconds`, not retried, and `error_detail` names the free and the required MiB. |
-| `LLM_LOAD_FAILED`, `IMAGE_LOAD_FAILED` | A runtime did not reach readiness. |
+| `LLM_LOAD_FAILED`, `IMAGE_LOAD_FAILED` | A runtime did not reach readiness. Since P06.4 an image job fails with `IMAGE_LOAD_FAILED`, not retried, once the image runtime has failed its third load in a row for it. |
 | `MODEL_FILE_MISSING` | The active profile's file is absent or has the wrong size. Checked before any mode change. |
-| `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. |
+| `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. Since P06.4 an image ends with `IMAGE_OOM` only after its tiled retry and, for **Alta**, one **Rapida** try. |
 | `GENERATION_TIMEOUT`, `GENERATION_STALLED` | Over the total time, or no progress. |
 | `STRUCTURED_OUTPUT_INVALID` | JSON failed validation after all attempts. |
 | `REPLY_EMPTY` | A reply was empty again after its retry (check V1). Not retried; the interface offers regeneration. |
@@ -696,15 +696,25 @@ Rules of the delivered routes:
 - `POST /v1/drain` answers at once. The runtime stops when the current lease ends;
   poll `GET /v1/state` until `IDLE`. The state document adds `draining`.
 - `GET /v1/events` answers `{"boot_id", "events"}`. Each event has `seq`, `at`, `from`,
-  `to`, `reason`, `job_id`, `code` and `details`. `details` holds only VRAM values in MiB
-  and exit codes. For another `boot_id`, every buffered event is returned. Since P06.2 the start of a hold for VRAM,
+  `to`, `reason`, `job_id`, `code` and `details`. `details` holds only numbers: VRAM values in MiB,
+  exit codes and, since P06.4, a failed load's counts. For another `boot_id`, every buffered event is returned. Since P06.2 the start of a hold for VRAM,
   and its end without a load, are events too, with `from` and `to` both `IDLE`, so `seq` moves with `blocked_reason`.
   The start has code `GPU_INSUFFICIENT_VRAM` and `details` `free_mib` and `required_mib`. A release adds
-  `drop_shortfall_mib` to its `details`.
+  `drop_shortfall_mib` to its `details`. Since P06.4 a failed load adds `failures`, the failed loads of that runtime in
+  a row, `oom`, 1 for an allocation failure of the text runtime, and `exit_code`.
 - Since P06.1 the `job_id` of `PUT /v1/desired-mode` is kept: the events of the switch it causes, from the stop of
   the current runtime to the ready state of the new one, carry it. A lease's events carry the lease's job, and a drain
   or a recovery carries none.
-- `ERROR` is left only through `POST /v1/recover`. The timed retry comes in P06.
+- `ERROR` is left through `POST /v1/recover`, and since P06.4 by a timed retry every 300 s, at most three an hour,
+  except with `RUNTIME_CONTAINER_MISSING` ([Recovery](gpu-orchestration.md#recovery)).
+- Since P06.4 a lease released with `oom` restarts its runtime: recovery stops it, verifies the release and the desired
+  mode loads it again.
+- Since P06.4 the state document adds `load_failure`, the last failed load since that runtime was last ready, or
+  `null`: `{"seq", "mode", "code", "oom", "failures", "final", "job_id"}`. `seq` is the failure's event, `oom` marks an
+  allocation failure of the text runtime, after which the backend lowers the launch level, and `final` means no retry
+  follows. A final image failure names the `job_id` the mode was asked for, which the backend ends with
+  `IMAGE_LOAD_FAILED`, and the desired mode returns to `llm`
+  ([Load failures](gpu-orchestration.md#load-failures-and-launch-levels)).
 
 `GET /v1/preflight` answers `200` with `ok`, the rows of [Preflight checks](operations.md#preflight-checks)
 that the orchestrator judges, and the facts read through NVML. A failing row is in the
@@ -761,6 +771,7 @@ State document:
     "llm": {"container": "running", "health": "healthy", "exit_code": null},
     "image": {"container": "exited", "health": null, "exit_code": 0}
   },
-  "last_error": null
+  "last_error": null,
+  "load_failure": null
 }
 ```

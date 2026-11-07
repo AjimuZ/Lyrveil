@@ -618,8 +618,8 @@ Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md
   with editable prompts (`check_user_prompt`) is still to come.
 - Delivered with P05.7: the mode switch through the orchestrator ([Delivered in P05.7](#delivered-in-p057)).
 - Not delivered: the `waiting` phase,
-  the settings that choose the profile and the quality, the retry with **Rapida** after a second out of memory (P06),
-  and the browser test of T-IMG-07 and T-IMG-08. The explicit request route arrived with P05.5a
+  the settings that choose the profile and the quality, and the browser test of T-IMG-07 and T-IMG-08. The retry with
+  **Rapida** after a second out of memory came with P06.4 ([Failures](#failures)). The explicit request route arrived with P05.5a
   ([Delivered in P05.5a](#delivered-in-p055a)).
 
 ComfyUI's directories live in a tmpfs that disappears when the container stops. The backend serves `/media/...` from `data/media`, so
@@ -655,6 +655,20 @@ safety negative is always appended and the guard always runs.
 | Crash during `persist` | The job restarts from the staged file |
 
 The text model always comes back, whether the image succeeded or not.
+
+Delivered in P06.4 for `IMAGE_OOM` (T-IMG-11, `backend/tests/integration/test_image_oom.py`):
+
+- Each out of memory releases the image lease with `oom`, and the orchestrator restarts ComfyUI before the next try
+  ([Load failures](gpu-orchestration.md#load-failures-and-launch-levels)).
+- The first retry, after 10 s, uses the tiled file of the same preset, with the same seed.
+- When the tiled **Alta** try runs out of memory too, `render_retry` in `services/image_generation.py` queues one last
+  try 10 s later with `quality` `rapida` and `fallback_from` `alta` in the payload (`JobFailedError.fallback`, which
+  restarts the stage's attempt count). It uses `sdxl_base_tiled.v2.json`, since the card has already run out twice, and
+  it is never retried. A **Rapida** request gets the tiled retry and no other try.
+- The image row stores the preset and the workflow file that produced it: `quality_preset` `rapida` and
+  `workflow_id` `sdxl_base_tiled.v2.json` after the fallback, with no second-pass values. The gallery's details show
+  the preset. The conversation bubble does not name it yet.
+- A failure of the last try sets the message `failed` with `message.failed` and the job ends with `IMAGE_OOM`.
 
 ## Prepared extensions
 

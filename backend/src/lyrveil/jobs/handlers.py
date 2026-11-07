@@ -63,13 +63,26 @@ class JobFailedError(Exception):
 
     `retryable` failures are retried within the kind's attempts and backoff; others end the job at once. `detail` is
     shown to the user and must never hold private text: no message, prompt or memory content.
+
+    `fallback`, on a retryable failure, is the payload of one more run of the same stage, after the kind's backoff and
+    with a fresh attempt count, whatever attempts remain: a retry that does the stage another way, such as the
+    **Rapida** try after a second out of memory (docs/image-generation.md, Failures). The handler decides when a
+    fallback has been used, so the chain ends.
     """
 
-    def __init__(self, code: str, detail: str | None = None, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        detail: str | None = None,
+        *,
+        retryable: bool,
+        fallback: Mapping[str, Any] | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.detail = detail
         self.retryable = retryable
+        self.fallback = fallback
 
 
 class JobPreemptedError(Exception):

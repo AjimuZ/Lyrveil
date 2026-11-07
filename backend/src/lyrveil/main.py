@@ -35,6 +35,7 @@ from lyrveil.api.security import (
     domain_error_handler,
     internal_error_handler,
 )
+from lyrveil.catalog import CatalogError, load_catalog
 from lyrveil.context.builder import ContextSettings
 from lyrveil.domain.errors import DomainError
 from lyrveil.events.hub import EventHub
@@ -49,6 +50,7 @@ from lyrveil.memory.window import ExtractionSettings
 from lyrveil.orchestration.client import OrchestratorClient
 from lyrveil.orchestration.gpu_state import GpuStateFollower, GpuStateSource
 from lyrveil.orchestration.health import probe_control_api
+from lyrveil.orchestration.launch_levels import LaunchLevels
 from lyrveil.persistence.database import (
     DEFAULT_DATABASE_PATH,
     DatabaseCapabilityError,
@@ -82,6 +84,9 @@ DATABASE_PATH = DEFAULT_DATABASE_PATH
 MEDIA_ROOT = DEFAULT_MEDIA_ROOT
 # The data volume, which holds db/, media/, runtime/ and the daily backups in backups/ (docs/operations.md).
 DATA_ROOT = Path("/data")
+# The text runtime's launch file in that volume (docs/configuration.md), and the model catalog the image ships.
+LAUNCH_FILE = DATA_ROOT / "runtime" / "llm-launch.env"
+CATALOG_PATH = Path("/app/config/model-catalog.json")
 
 
 def _llm_mode() -> RequiredMode:
@@ -100,7 +105,9 @@ class Worker:
     Without `image_runtime` the worker has no `image_request` handler and such jobs wait in the queue. With
     `mode_switch`, the scheduler reads the GPU mode from the orchestrator and asks for the mode its queue needs,
     instead of calling `current_mode` (JobScheduler). With `gpu_states`, GpuStateFollower publishes each GPU state as
-    `gpu.state`. `main` passes ComfyUiRuntime and the OrchestratorClient for all three; tests pass fakes.
+    `gpu.state`. With `launch_levels`, a text run out of memory and a failed load the orchestrator classified as out
+    of memory lower the launch level. `main` passes ComfyUiRuntime, the OrchestratorClient for all three and the
+    LaunchLevels of the data volume; tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
@@ -108,6 +115,7 @@ class Worker:
     current_mode: Callable[[], RequiredMode] = _llm_mode
     mode_switch: ModeSwitch | None = None
     gpu_states: GpuStateSource | None = None
+    launch_levels: LaunchLevels | None = None
     image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
     images: ImageSettings = field(default_factory=ImageSettings)
     replies: ReplySettings = field(default_factory=ReplySettings)
@@ -210,11 +218,17 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             mode_switch=worker.mode_switch,
             text_runtime=runtime,
             image_runtime=image_runtime,
+            launch_levels=worker.launch_levels,
         )
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
             if worker.gpu_states is not None:
-                follower = GpuStateFollower(worker.gpu_states, app.state.events, lambda: read(engine, queue.depth))
+                follower = GpuStateFollower(
+                    worker.gpu_states,
+                    app.state.events,
+                    lambda: read(engine, queue.depth),
+                    on_state=None if worker.launch_levels is None else worker.launch_levels.observe,
+                )
                 group.start_soon(follower.run_forever)
             app.state.scheduler = scheduler
             try:
@@ -335,11 +349,18 @@ def main() -> int:
     except OSError:
         logger.warning("media_staging_cleanup_failed", exc_info=True)
     orchestrator = OrchestratorClient(settings.control_token)
+    try:
+        launch_levels: LaunchLevels | None = LaunchLevels(load_catalog(CATALOG_PATH), LAUNCH_FILE)
+    except CatalogError:
+        # The image ships the catalog, so this is a broken build: replies still work, at a level that never drops.
+        logger.error("launch_levels_unavailable", error_code="CATALOG_INVALID")
+        launch_levels = None
     worker = Worker(
         text_runtime=KoboldCppRuntime,
         leases=orchestrator,
         mode_switch=orchestrator,
         gpu_states=orchestrator,
+        launch_levels=launch_levels,
         image_runtime=ComfyUiRuntime,
     )
     daily_backup = DailyBackup(DATA_ROOT, settings.zone)

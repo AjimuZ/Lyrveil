@@ -5,13 +5,17 @@ and GPUResourceMonitor. It holds no GPU state: the lifecycle manager decides whe
 machine around each call. Every failure is a SupervisorError whose `code` is an operational or job code of
 docs/api.md, so the manager can report it as `last_error` without reading the message. Since P06.2 it also answers
 whether the card has the free VRAM a start needs. Memory held by other programs is only ever read: the gate can act on
-the two runtime containers alone, and the probe has no call that changes anything.
+the two runtime containers alone, and the probe has no call that changes anything. Since P06.4 a failed load of the
+text runtime is classified (docs/gpu-orchestration.md, Load failures and launch levels): an exit with status 3 or a
+log line that names an allocation failure marks it as out of memory, which makes the backend lower the launch level.
 
-Not delivered yet (P06.4): the classification of load failures from the logs.
+The logs are read only to match the allocation patterns. They come from a runtime and may echo private input, so
+their text is never stored, logged or returned.
 """
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -40,6 +44,15 @@ _OTHER: Mapping[Runtime, Runtime] = MappingProxyType({Runtime.LLM: Runtime.IMAGE
 CONFIG_INVALID_EXIT = 78
 _LOAD_FAILED: Mapping[Runtime, str] = MappingProxyType(
     {Runtime.LLM: "LLM_LOAD_FAILED", Runtime.IMAGE: "IMAGE_LOAD_FAILED"}
+)
+# docs/runtime-contracts.md (KoboldCpp source facts): a failed text model load exits with status 3.
+# docs/gpu-orchestration.md counts it as an allocation failure.
+LLM_LOAD_FAILED_EXIT = 3
+# The allocation failure patterns of the text runtime's log. An assumption from the CUDA and llama.cpp messages until
+# the GPU suite records a real failure: a line matching none of them leaves the failure at the same launch level.
+ALLOCATION_FAILURE = re.compile(
+    r"out of memory|cudaMalloc failed|failed to allocate|unable to allocate|alloc_buffer: allocating .* failed",
+    re.IGNORECASE,
 )
 
 
@@ -135,12 +148,15 @@ class ExclusivityError(SupervisorError):
 
 
 class LoadFailedError(SupervisorError):
-    """The runtime started but did not become healthy. `exit_code` is set when the container exited."""
+    """The runtime started but did not become healthy. `exit_code` is set when the container exited. `oom` is True
+    when `start` classified the failure of the text runtime as an allocation failure."""
 
     def __init__(self, runtime: Runtime, detail: str, exit_code: int | None = None) -> None:
         code = "RUNTIME_CONFIG_INVALID" if exit_code == CONFIG_INVALID_EXIT else _LOAD_FAILED[runtime]
         super().__init__(code, f"{runtime} did not become ready: {detail}")
+        self.runtime = runtime
         self.exit_code = exit_code
+        self.oom = False
 
 
 class ReleaseFailedError(SupervisorError):
@@ -200,15 +216,19 @@ class ProcessSupervisor:
 
         Raises ExclusivityError, without starting anything, when the other runtime runs (Exclusivity rule 3);
         LoadFailedError when the container exits, turns unhealthy, has no health check or is not healthy within the
-        load timeout; and SupervisorError for a gate failure. On failure the container may still run: the caller's
-        recovery stops it.
+        load timeout, with `oom` set for an allocation failure of the text runtime; and SupervisorError for a gate
+        failure. On failure the container may still run: the caller's recovery stops it.
         """
         try:
             if (await self._gate.inspect(CONTAINERS[_OTHER[runtime]])).running:
                 raise ExclusivityError(runtime)
             before = await self.read_memory()
             await self._gate.start(CONTAINERS[runtime])
-            await self._wait_ready(runtime)
+            try:
+                await self._wait_ready(runtime)
+            except LoadFailedError as error:
+                error.oom = await self._allocation_failed(error)
+                raise
         except ContainerGateError as error:
             raise _gate_failure(error) from error
         after = await self.read_memory()
@@ -284,6 +304,32 @@ class ProcessSupervisor:
         ReleaseFailedError with GPU_RELEASE_UNVERIFIED when NVML fails or the memory keeps moving past the release
         timeout."""
         return await self._settled_memory(None)
+
+    async def await_ready(self, runtime: Runtime) -> None:
+        """Returns once the running `runtime`, which recovery found still starting, reports healthy. Starts nothing.
+
+        Raises LoadFailedError when it exits, turns unhealthy, has no health check or is not healthy within its load
+        timeout, and SupervisorError for a gate failure. The failure is not classified: no start of this supervisor
+        produced it.
+        """
+        try:
+            await self._wait_ready(runtime)
+        except ContainerGateError as error:
+            raise _gate_failure(error) from error
+
+    async def _allocation_failed(self, error: LoadFailedError) -> bool:
+        """Returns whether a failed load of the text runtime ran out of memory: it exited with LLM_LOAD_FAILED_EXIT,
+        or the tail of its log matches ALLOCATION_FAILURE. Always False for the image runtime and for a launch file
+        the runtime refused. A log that cannot be read counts as no match."""
+        if error.runtime is not Runtime.LLM or error.code != _LOAD_FAILED[Runtime.LLM]:
+            return False
+        if error.exit_code == LLM_LOAD_FAILED_EXIT:
+            return True
+        try:
+            text = await self._gate.logs(CONTAINERS[Runtime.LLM])
+        except ContainerGateError:
+            return False
+        return ALLOCATION_FAILURE.search(text) is not None
 
     async def _wait_ready(self, runtime: Runtime) -> None:
         """Polls the container until it is healthy. Raises LoadFailedError as `start` describes."""
