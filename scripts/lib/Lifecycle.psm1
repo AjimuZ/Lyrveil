@@ -69,8 +69,9 @@ function Resolve-LifecycleContext {
 function Read-CommandOption {
     <#
     Returns a hashtable with one entry per name of Flag ($true when given), one per name of Valued (the next argument,
-    or $null), and Positional, the arguments that do not start with "-" when AllowPositional is set. Names match
-    without case. Returns $null after printing why when an argument is unknown or a value is missing.
+    or $null), one per name of Repeated (the values of every occurrence, as a possibly empty [string[]]), and
+    Positional, the arguments that do not start with "-" when AllowPositional is set. Names match without case. Returns
+    $null after printing why when an argument is unknown or a value is missing.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -79,12 +80,14 @@ function Read-CommandOption {
         [string[]]$Argument = @(),
         [string[]]$Flag = @(),
         [string[]]$Valued = @(),
+        [string[]]$Repeated = @(),
         [switch]$AllowPositional
     )
 
     $options = @{ Positional = [string[]]@() }
     foreach ($name in $Flag) { $options[$name.TrimStart('-')] = $false }
     foreach ($name in $Valued) { $options[$name.TrimStart('-')] = $null }
+    foreach ($name in $Repeated) { $options[$name.TrimStart('-')] = [string[]]@() }
     $items = @($Argument | Where-Object { $_ })
     for ($index = 0; $index -lt $items.Length; $index++) {
         $item = [string]$items[$index]
@@ -103,11 +106,22 @@ function Read-CommandOption {
             $options[$valueName[0].TrimStart('-')] = [string]$items[$index]
             continue
         }
+        $repeatedName = @($Repeated | Where-Object { $_ -ieq $item })
+        if ($repeatedName.Length -gt 0) {
+            if ($index + 1 -ge $items.Length) {
+                Write-Host "${Command}: $($repeatedName[0]) needs a value."
+                return $null
+            }
+            $index++
+            $key = $repeatedName[0].TrimStart('-')
+            $options[$key] = [string[]]($options[$key] + [string]$items[$index])
+            continue
+        }
         if ($AllowPositional -and -not $item.StartsWith('-')) {
             $options['Positional'] = [string[]]($options['Positional'] + $item)
             continue
         }
-        $known = @($Flag) + @($Valued)
+        $known = @($Flag) + @($Valued) + @($Repeated)
         $usage = if ($known.Length -gt 0) { "Options: $($known -join ', ')." } else { 'It takes no option.' }
         Write-Host "${Command}: unknown argument '$item'. $usage"
         return $null
@@ -658,4 +672,4 @@ function Invoke-LyrveilLog {
 }
 
 Export-ModuleMember -Function Invoke-LyrveilStart, Invoke-LyrveilStop, Invoke-LyrveilRestart, Invoke-LyrveilStatus,
-Invoke-LyrveilLog, Get-LyrveilStatus, Read-CommandOption
+Invoke-LyrveilLog, Get-LyrveilStatus, Read-CommandOption, Resolve-LifecycleContext, Test-DockerReachable

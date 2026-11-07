@@ -27,8 +27,8 @@ $script:OwnerImageService = 'lyrveil-backend'
 $script:Options = @('-Rebuild', '-SkipModels')
 # Documented options whose work is not delivered yet. They are refused, so no run claims to have done it.
 $script:PlannedOptions = @{
-    '-AcceptModelLicenses' = 'Model licenses are accepted by the models command, which is planned (P01.6c).'
-    '-VerifyModels'        = 'Model files are verified by the models command, which is planned (P01.6c).'
+    '-AcceptModelLicenses' = 'Setup downloads models once the model catalog is in the image (P02.1a). scripts\lyrveil.cmd models -AcceptModelLicenses downloads them with a catalog.'
+    '-VerifyModels'        = 'Setup verifies models once the model catalog is in the image (P02.1a). scripts\lyrveil.cmd models -Verify verifies them with a catalog.'
 }
 
 $script:Invariant = [System.Globalization.CultureInfo]::InvariantCulture
@@ -648,7 +648,7 @@ function Invoke-LyrveilSetup {
       4. the images of the ai and tools profiles, built when one is missing or with -Rebuild;
       5. the owner 10001:10001 of each volume root, set by a container with no network and only CAP_CHOWN;
       6. the runtime containers, created and not started.
-    Model licenses, downloads and launch files are not part of it yet (P01.6c and the catalog of P02).
+    Model licenses, downloads and launch files are not part of it yet: they need the model catalog of P02.1a.
 
     ProjectName, ComposeFile (relative to Root), EnvPath and ExamplePath default to the installation's own; tests
     pass their own so that no command reaches "lyrveil", its volumes or its .env. PreflightFact, for tests, replaces
@@ -712,7 +712,7 @@ function Invoke-LyrveilSetup {
     if (-not (Set-VolumeOwner -Volume $volumes -Image ([string]$ownerImage))) { return 1 }
 
     Write-Host 'Models'
-    Write-Host '  License acceptance, downloads and launch files are not available yet (P01.6c, P02); nothing was downloaded'
+    Write-Host '  License acceptance, downloads and launch files need the model catalog, which is not in the image yet (P02.1a); nothing was downloaded'
 
     Write-Host 'Runtime containers'
     if (-not (Install-RuntimeContainer -Context $context -Project $project)) { return 1 }

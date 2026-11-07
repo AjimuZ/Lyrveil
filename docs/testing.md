@@ -52,8 +52,8 @@ Every command exits 0 only when the level ran tests and all of them passed. An u
 
 ### The `docker` level
 
-Delivered with P01.8b, P01.6a and P01.6b ([setup evidence](verification/2026-11-06-setup.md),
-[lifecycle evidence](verification/2026-11-06-lifecycle.md)). It runs with the pinned Pester only;
+Delivered with P01.8b, P01.6a, P01.6b and P01.6c ([setup evidence](verification/2026-11-06-setup.md),
+[lifecycle evidence](verification/2026-11-06-lifecycle.md), [models evidence](verification/2026-11-07-models.md)). It runs with the pinned Pester only;
 pytest joins it when a Docker test needs Python. The files:
 
 - `tests/docker/TestFakes.Tests.ps1` checks that no production image holds `tests/fakes` and that `compose.test.yaml`
@@ -75,6 +75,15 @@ pytest joins it when a Docker test needs Python. The files:
   status 3 with the last logs. With a stand-in `docker.cmd` that always fails, it checks that stop exits 0 and that
   start, status and logs exit 2, and it runs each root `.cmd` with an unknown argument through `cmd.exe`. The GPU rows
   of start are skipped, so the file needs no GPU.
+- `tests/docker/Models.Tests.ps1` holds T-DCK-11. Against the project `lyrveil-models-test`, it runs the models
+  command with the real `lyrveil-models` service, a test catalog and a local HTTPS server,
+  `tests/docker/models-server/`, that serves generated files. With no console input and no `-AcceptModelLicenses` the
+  command exits 5 and the server sees no request. With the flag, the first file's connection is cut halfway and the
+  download resumes with one `Range` request; both defaults end in the volume with their catalog hashes and in
+  `/models/.verified.json`, and a second run sends no request. A wrong hash and a wrong size exit 4 and leave no file
+  and no `.part` file; a redirect to `http://` exits 1 and a redirect to HTTPS is followed. It also checks `-List`,
+  `-Verify` (exit 4 and no record for a changed file), `-Remove` (refused for an active profile, asks first, and
+  deletes nothing without an answer) and conflicting options.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
@@ -89,6 +98,13 @@ containers, the override also resets `container_name`, so no container takes the
 the app on `127.0.0.1:14210` instead of 4200; and it resets `env_file`, so no container reads the repository's `.env`.
 The file refuses to run unless the resolved configuration has the test project, the test volumes, no `container_name`
 and port 14210.
+
+The models tests use `tests/docker/compose.models-test.yaml` the same way, with the volumes
+`lyrveil-models-test-data` and `lyrveil-models-test-models`, the tag `:models-test`, no `container_name` and no
+`env_file`. The override points `lyrveil-models` at the test catalog and the test CA that `models-server` writes into
+the project's own volume, so every URL the tool opens is the test server on the download network; nothing reaches the
+Internet. The file refuses to run unless the resolved configuration has the test project, the test volumes, no
+`container_name`, and the test catalog and CA.
 
 ### The `e2e` level
 

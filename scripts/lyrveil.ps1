@@ -2,10 +2,11 @@
 #
 # Usage: scripts\lyrveil.cmd <command> [arguments]
 # Delivered commands: setup [options], start, stop, restart, status [-Json] and logs [service ...] [options], run by
-# the root .cmd files of the same names, and test <level> [pytest arguments]. models, import-model, backup and restore
-# are planned (docs/operations.md).
+# the root .cmd files of the same names, models [options] and test <level> [pytest arguments]. import-model, backup and
+# restore are planned (docs/operations.md).
 # Exit status follows docs/operations.md: 0 on success, 1 on any failure, including an unknown command or level, 2 when
-# a preflight check fails, and 3 when a health check fails or times out.
+# a preflight check fails, 3 when a health check fails or times out, 4 when a model file is missing or invalid, and 5
+# when the user declined.
 #
 # The script declares no parameters on purpose: every argument reaches $args unchanged, so pytest options such as
 # -k or -x pass through instead of being parsed as PowerShell parameters.
@@ -54,6 +55,11 @@ try {
             $status = Invoke-LyrveilLog -Root $repositoryRoot -Argument $rest
             exit ([int]$status)
         }
+        'models' {
+            Import-Module (Join-Path $PSScriptRoot 'lib\Models.psm1') -Force
+            $status = Invoke-LyrveilModel -Root $repositoryRoot -Argument $rest
+            exit ([int]$status)
+        }
         'test' {
             Import-Module (Join-Path $PSScriptRoot 'lib\TestCommand.psm1') -Force
             $status = Invoke-LyrveilTest -Root $repositoryRoot -Argument $rest
@@ -61,7 +67,7 @@ try {
         }
         default {
             Write-Host "Unknown command '$command'. Usage: scripts\lyrveil.cmd <command>, or the .cmd files in the repository root."
-            Write-Host 'Delivered: setup, start, stop, restart, status, logs and test. models, import-model, backup and restore are planned (docs/operations.md).'
+            Write-Host 'Delivered: setup, start, stop, restart, status, logs, models and test. import-model, backup and restore are planned (docs/operations.md).'
             exit 1
         }
     }

@@ -109,6 +109,15 @@ No application exists yet. This section records the design documentation.
   runs both. `status.cmd` shows each service, its health, the URL and the free
   disk, and `status.cmd -Json` gives the same report as JSON. `logs.cmd` shows the
   logs, with `-Follow`, `-Since` and `-Tail`.
+- `scripts\lyrveil.cmd models` downloads the model files of the catalog in the
+  one-shot `lyrveil-models` container: the default profiles of the machine's
+  tier, `-Model <id>` or `-All`. It shows each license and asks first, or takes
+  `-AcceptModelLicenses`; with no answer it downloads nothing and exits 5.
+  Downloads use HTTPS only, resume with range requests, and keep nothing whose
+  size or SHA-256 differs from the catalog (exit 4); verified files are skipped.
+  `-List`, `-Verify` and `-Remove <id>` list, re-hash and delete files, and
+  `-Remove` refuses an active profile and asks first. The catalog arrives with a
+  later release, so until then the command only reports that it is missing.
 
 ### Changed
 

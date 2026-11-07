@@ -114,12 +114,14 @@ passes its arguments. The bypass applies to that process only. `scripts\lyrveil.
 
 Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)),
 the six root entry points, `setup.cmd` with the parts listed under [`setup.cmd`](#setupcmd), and the lifecycle commands
-in `scripts/lib/Lifecycle.psm1` with the parts listed under each of them below. `models`, `import-model`, `backup` and
-`restore` are planned. Today, an unknown or unbuilt command exits 1 with a message, and so does an unknown argument.
+in `scripts/lib/Lifecycle.psm1` with the parts listed under each of them below, and `models` in
+`scripts/lib/Models.psm1` ([Model downloads](#model-downloads)). `import-model`, `backup` and `restore` are planned.
+Today, an unknown or unbuilt command exits 1 with a message, and so does an unknown argument.
 
 Questions go through `Read-Confirmation` in `scripts/lib/ConsolePrompt.psm1`. When standard input is not the console,
 or PowerShell runs with `-NonInteractive`, it prints the question and answers no at once, so an unattended run never
-proceeds by default and the command exits 5. Setup asks no question yet.
+proceeds by default and the command exits 5. Setup asks no question yet; `models` asks for license acceptance and before
+`-Remove`.
 
 All scripts set `$ErrorActionPreference = 'Stop'` and `Set-StrictMode -Version Latest`, check `$LASTEXITCODE` after
 every native command, are idempotent, and never delete persistent data.
@@ -166,9 +168,10 @@ Delivered in P01.6a, in `scripts/lib/Setup.psm1` ([evidence](verification/2026-1
   second container with no network, a read-only root and only `CAP_CHOWN` changes it. Files inside are never changed.
 - Step 8 creates the runtime services that the Compose file defines. `compose.yaml` has none yet (P02, P05), so setup
   says so and creates nothing.
-- Steps 5 to 7 are not delivered: licenses and downloads come with the models command (P01.6c), and launch files with
-  the catalog (P02). Setup prints that nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until
-  then, and `-SkipModels` is accepted.
+- Steps 5 to 7 are not delivered in setup: the models command does licenses and downloads (P01.6c), but it needs
+  `config/model-catalog.json`, which arrives in P02.1a, and launch files come with the catalog (P02). Setup prints that
+  nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until then and point at
+  `scripts\lyrveil.cmd models`, and `-SkipModels` is accepted.
 
 ### Model downloads
 
@@ -198,6 +201,38 @@ Behavior, in Python with the standard library only:
 
 No account or token is needed, because every catalog repository is public and not gated. Downloads are independent of
 image builds, and weights never enter an image.
+
+Delivered in P01.6c, in `scripts/lib/Models.psm1` and `backend/src/lyrveil/tools/models.py`
+([evidence](verification/2026-11-07-models.md)). `config/model-catalog.json` is not in the image until P02.1a, so on an
+installation every option except a refused argument fails with exit status 1 and a message naming the missing catalog.
+The behavior below was verified only with a test catalog and a local HTTPS server (T-DCK-11).
+
+- The command checks Docker (exit 2), then that the models volume exists with the label and the backend image is
+  present (exit 2, run `setup.cmd`). The tier is `target` when Docker sees at least 20 GiB and `reduced` otherwise,
+  also when the memory cannot be read.
+- The tool runs with `docker compose --profile tools run --rm --no-deps -T lyrveil-models`, on the network
+  `lyrveil-download` only, as `10001:10001` with a read-only root.
+- Before any download the command prints each profile still to fetch, with its size, file, license name and URL, and
+  the total, then asks once. With `-AcceptModelLicenses` it does not ask. When the answer is no, or nobody can answer,
+  it exits 5 and no request is sent. Profiles already verified need no acceptance. The tool itself refuses to download
+  without `--accept-licenses`, also with exit status 5.
+- A present file of the right size without a record is hashed and kept when it matches. Free space is compared with
+  the bytes still missing, `.part` files counted, and too little space exits 2 before any request.
+- Only `https://` URLs are opened, with certificate and host name checks; the opener has no handler for other schemes,
+  and the tool follows up to 10 redirects itself, each only to HTTPS, keeping the `Range` header. A server that
+  ignores the range restarts the file. An HTTP status other than 408, 429 or 5xx, a refused redirect or a certificate
+  error fails at once with exit status 1. Any failure deletes the `.part` file; only an interrupted process leaves it,
+  and the next run resumes from it.
+- `-List` prints every catalog profile with kind, size, state (`missing`, `present, verified`, `present, not verified`
+  or `present, wrong size`) and license, and marks the tier's defaults and the profiles above the tier. It reads the
+  sizes and `.verified.json` only and hashes nothing.
+- `-Verify` hashes every present catalog file and rewrites `.verified.json`. A file that differs loses its record, is
+  kept for the user to replace, and makes the command exit 4.
+- `-Remove <id>` refuses the active profiles with exit status 1. Until the launch file (P02) and the image setting
+  (P05) exist, the active profiles are the defaults of the tier. For any other profile with a file it asks, then
+  deletes the file, its `.part` file and its record; no answer exits 5 and deletes nothing.
+- `-List`, `-Verify`, `-Remove`, `-Model` and `-All` exclude each other, except that `-Model` can be repeated. A
+  conflict, an unknown option or an unknown profile exits 1.
 
 ### `scripts\lyrveil.cmd import-model`
 
@@ -346,9 +381,11 @@ The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That 
 ## Reference Compose file
 
 `compose.yaml` holds the three core services, the four networks of [ADR 0003](decisions/0003-service-topology-and-networks.md)
-that they use, and the two external volumes (P01.2). The services of the `ai` and `tools` profiles, the network
-`lyrveil-download` and the file below are still the specification for P02 and P05: those parts are not in `compose.yaml`
-yet. Images are built locally, and `pull_policy: never` keeps runtime fully offline.
+that they use, and the two external volumes (P01.2), and, since P01.6c, the `lyrveil-models` service of the `tools`
+profile with the network `lyrveil-download`, as below. The services of the `ai` profile and the rest of the file below
+are still the specification for P02 and P05: those parts are not in `compose.yaml` yet. Images are built locally, and
+`pull_policy: never` keeps runtime fully offline. `lyrveil-models` has run only in the T-DCK-11 test project, against
+a local HTTPS server.
 
 `docker compose config --quiet` and `docker compose build` pass for the three core services. No container has been
 started from them yet, and the health checks, the GPU reservation and the Docker socket mount have not run.

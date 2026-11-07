@@ -27,6 +27,11 @@ PyTorch and the NVIDIA CUDA libraries installed in those images keep their own l
 Weights are never in the repository or in an image. `setup.cmd` and `scripts\lyrveil.cmd models` show the notice of each profile
 they download and ask for acceptance first. Each profile's license is also in the [catalog](models.md).
 
+Delivered for `scripts\lyrveil.cmd models` (P01.6c): before any request it prints each profile to download with its
+license name and URL from the catalog, and asks once for all of them. `-AcceptModelLicenses` records acceptance without
+asking; with no answer, or no console to answer, nothing is downloaded and the command exits 5. Setup does not ask yet,
+because the catalog arrives in P02.1a.
+
 | Profile | Author | License | Base model and its license |
 | --- | --- | --- | --- |
 | `gemma-4-26b-a4b`, `gemma-4-12b` | Google | Apache 2.0 | |

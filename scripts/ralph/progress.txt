@@ -44,6 +44,9 @@
 - Keep .ps1/.psm1 files ASCII for Windows PowerShell 5.1: build non-ASCII output such as 'è' with [char]0x00E8.
 - Lifecycle commands return an [int] exit status and print only with Write-Host or Out-Host, so lyrveil.ps1 can `exit ([int]$status)` and tests can capture text with 6>&1.
 - Test helpers in tests/docker must avoid the verbs New/Remove/Set without ShouldProcess, because PSScriptAnalyzer runs on test files too.
+- Code that runs in the only container with a route out imports the standard library only, enforced by a unit test that compares its imports to sys.stdlib_module_names.
+- Docker test projects that need network fixtures share generated data (catalog, CA) through a project-owned volume and gate on it with a health check, so nothing reaches the Internet or an installation's volumes.
+- Native tools whose exit status is part of the contract avoid argparse's exit 2 by overriding ArgumentParser.error, because 2 is reserved for preflight failures.
 
 ---
 
@@ -312,4 +315,33 @@ Not run: the commands against the real `lyrveil` project, so the 4200 ready line
   - When the installation .env is missing, lifecycle commands interpolate from .env.example, so they never fail on --env-file and never read another .env.
   - Bash commands that name .env.example directly (for example `docker compose --env-file .env.example config`) are denied in task sessions; let the Pester tests exercise them instead.
   - The docker level now takes about 100 s with a warm cache; grep its output for '\[-\]|Tests Passed' and avoid filters on words like 'because' that also appear in WARNING lines.
+---
+
+## 2026-11-07T00:09:49Z - P01.6c
+- `scripts\lyrveil.cmd models` is done and verified with a test catalog and a local HTTPS test server. On a real installation it still exits 1: `config/model-catalog.json` arrives only in P02.1a, so for now the command just reports that the catalog is missing.
+
+**What was built:**
+- **Download tool** (`backend/src/lyrveil/tools/models.py`): standard library only, run by the one-shot `lyrveil-models` service. That service is now in `compose.yaml` under the `tools` profile, on its own `lyrveil-download` network, and mounts only the models volume. It has five commands: plan, download, list, verify and remove.
+- **Downloads:** HTTPS only, with certificate checks. Redirects are followed by the tool itself, only to HTTPS, and keep the Range header. An interrupted download resumes with a range request, with 5 retries 5 s apart. A wrong size or SHA-256 keeps nothing and exits 4. Any failure deletes the `.part` file, and files recorded in `/models/.verified.json` are skipped.
+- **PowerShell command** (`scripts/lib/Models.psm1`): checks Docker, the labelled models volume and the image, and picks the tier from Docker's memory. It prints each license and asks once before any request (or takes `-AcceptModelLicenses`); with no answer or no console it exits 5. It handles `-List`, `-Verify` and `-Remove <id>`; `-Remove` refuses the default (active) profiles and asks first. `Read-CommandOption` gained repeatable options for `-Model`.
+
+**Checks I ran:**
+- `test lint` passed, before and after the doc changes.
+- `test unit -k models_tool`: the 22 backend tests passed. The level as a whole reported FAILED only because no orchestrator test matched `-k` (pytest exits 5).
+- `test docker` passed: 70 tests, 0 failed. Before this task it had 57; the 13 new ones are T-DCK-11. I filtered the output, so I counted them rather than reading each line.
+
+**Not run:** any real Internet download, the real `lyrveil` project, the out-of-space exit 2 path, and a typed "yes" at the console (tests mock the answer).
+
+**Catalog format change:** docs/models.md did not say how a profile is marked as a tier's default. I added a `default_tiers` field to the spec and its examples, and the P02.1a catalog must use it.
+
+Earlier attempts had left most of the code in place. This session added the standard-library-only import test and all the docs: operations, testing, models, licensing, CHANGELOG, a verification note and the docs index entry.
+- Files changed: .dockerignore, compose.yaml, CHANGELOG.md, backend/src/lyrveil/tools/__init__.py, backend/src/lyrveil/tools/models.py, backend/tests/unit/test_models_tool.py, scripts/lib/Models.psm1, scripts/lib/Lifecycle.psm1, scripts/lib/Setup.psm1, scripts/lyrveil.ps1, tests/docker/Models.Tests.ps1, tests/docker/compose.models-test.yaml, tests/docker/models-server/Dockerfile, tests/docker/models-server/server.py, docs/operations.md, docs/testing.md, docs/models.md, docs/licensing.md, docs/README.md, docs/verification/2026-11-07-models.md
+- **Learnings for future iterations:**
+  - P02.1a's config/model-catalog.json must give each default profile `default_tiers` (the default image profile lists both tiers); the tool refuses a catalog without exactly one default text and one default image profile per tier. min_tier defaults to reduced when absent.
+  - The tool reads the catalog at /app/config/model-catalog.json in the backend image; P02.1a must COPY it there in the runtime stage of backend/Dockerfile. LYRVEIL_MODEL_CATALOG and LYRVEIL_MODELS_CA_FILE exist only for the test override.
+  - Setup.psm1 still refuses -AcceptModelLicenses and -VerifyModels ($script:PlannedOptions) and prints that models need the catalog; once P02.1a lands, setup can call Install-ModelFile / Invoke-ModelTool from Models.psm1 (not exported yet besides Invoke-LyrveilModel).
+  - Models.psm1 treats the defaults of the tier as the active profiles for -Remove ($script:ActivePending); replace with the launch file (P02) and image setting (P05).
+  - Read-CommandOption now supports -Repeated options returning [string[]]; Lifecycle.psm1 also exports Resolve-LifecycleContext and Test-DockerReachable.
+  - test docker now has 70 tests; the models test builds the backend image and a models-server image tagged :models-test.
+  - Redirecting command output to a file in Bash is denied; pipe into grep/tail instead.
 ---

@@ -1,5 +1,5 @@
-# The core services, networks and external volumes of Lyrveil. The runtime services of the "ai" profile and the
-# download tool of the "tools" profile come with P02 and P05. docs/operations.md (Reference Compose file) is the
+# The core services, networks and external volumes of Lyrveil, and the model download tool of the "tools" profile. The
+# runtime services of the "ai" profile come with P02 and P05. docs/operations.md (Reference Compose file) is the
 # specification of this file: change both together.
 #
 # Images are built locally from the repository root and never pulled, so the runtime works offline:
@@ -87,11 +87,27 @@ services:
       retries: 3
       start_period: 15s
 
+  # One-shot model downloader, run only by "scripts\lyrveil.cmd models" with "docker compose run". It reuses the
+  # backend image, is the only service with a route out, and mounts nothing but the models volume.
+  lyrveil-models:
+    <<: *common
+    profiles: [tools]
+    image: lyrveil/backend:local
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    tmpfs: [/tmp]
+    entrypoint: ["python", "-m", "lyrveil.tools.models"]
+    volumes:
+      - lyrveil-models:/models
+    networks: [lyrveil-download]
+
 networks:
   lyrveil-edge: {driver: bridge}
   lyrveil-app: {internal: true}
   lyrveil-control: {internal: true}
   lyrveil-runtime: {internal: true}
+  lyrveil-download: {driver: bridge}   # Only the one-shot download tool joins it
 
 volumes:
   lyrveil-data: {external: true}       # Created by setup.cmd, so down -v cannot remove it

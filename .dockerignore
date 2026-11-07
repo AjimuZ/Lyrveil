@@ -33,6 +33,8 @@ tests
 # Copied only into the orchestrator test stage and the image of tests/fakes/Dockerfile, never into a runtime image
 !tests/fakes
 !docs/runtime-contracts.md
+# Copied only into the HTTPS test server of tests/docker/models-server/Dockerfile
+!tests/docker/models-server
 **/*.spec.ts
 playwright-report
 test-results

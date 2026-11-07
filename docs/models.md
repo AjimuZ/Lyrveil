@@ -81,6 +81,7 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
       "license_url": "https://ai.google.dev/gemma/docs/gemma_4_license",
       "template": "gemma4",
       "min_tier": "target",
+      "default_tiers": ["target"],
       "context_size": 16384,
       "moe": true,
       "vram_required_mib": 7000,
@@ -106,7 +107,8 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
       "license_url": "https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0",
       "architecture": "sdxl",
       "prediction": "epsilon",
-      "defaults": "illustrious"
+      "defaults": "illustrious",
+      "default_tiers": ["reduced", "target"]
     }
   ]
 }
@@ -120,7 +122,13 @@ Rules checked by the validator:
 - `sampler` and `defaults` name presets defined in code, so the catalog cannot carry arbitrary parameters.
 - `swa_padding` is 0, 1024 or 2048, and above 0 only for a `gemma4` profile. `smart_cache` is 0 or 2, and 2 only for a target-tier profile.
 - `quality_evidence` is null or a path under `docs/verification/`. The P08 release check fails while a default profile has none.
-- Exactly one default text profile per tier and one default image profile exist.
+- Exactly one default text profile per tier and one default image profile exist. `default_tiers` lists the tiers
+  (`reduced`, `target`) on which a profile is the default, and is empty or absent for the others; the default image
+  profile lists both tiers. `min_tier` is absent for a profile that runs on every tier, as for every image profile.
+
+`scripts\lyrveil.cmd models` (P01.6c) reads only `id`, `display_name`, `file`, `url`, `bytes`, `sha256`, `license`,
+`license_url`, `min_tier` and `default_tiers`, and refuses a catalog that breaks the identifier, file name, HTTPS,
+size, hash or default rules. It ignores the other fields, which the backend's validator checks.
 
 ## Selecting a profile
 

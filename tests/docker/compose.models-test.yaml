@@ -1,0 +1,49 @@
+# Override of compose.yaml for tests/docker/Models.Tests.ps1 (T-DCK-11), which runs the models command against the
+# project "lyrveil-models-test" and a local HTTPS test server:
+#   docker compose -p lyrveil-models-test -f compose.yaml -f tests/docker/compose.models-test.yaml --profile tools config
+# It keeps compose.yaml's lyrveil-models service, so the command meets the real one, and changes only what would reach
+# a real installation or the Internet:
+#   - the two external volumes get their own names, never "lyrveil-data" or "lyrveil-models";
+#   - every image is tagged ":models-test", so no build replaces the ":local" images of an installation;
+#   - container_name and env_file are reset, so no container takes an installation's name or reads the repository's
+#     .env; the frontend would publish 127.0.0.1:14211, never 4200, but the test starts no core service;
+#   - lyrveil-models reads the test catalog and trusts only the test CA, both written by models-server into the
+#     project's own volume "test-shared", so every URL it opens points at models-server on the download network.
+services:
+  lyrveil-frontend:
+    image: lyrveil/frontend:models-test
+    container_name: !reset null
+    ports: !override ["127.0.0.1:14211:8080"]
+  lyrveil-backend:
+    image: lyrveil/backend:models-test
+    container_name: !reset null
+    env_file: !reset []
+  lyrveil-orchestrator:
+    image: lyrveil/orchestrator:models-test
+    container_name: !reset null
+    env_file: !reset []
+  lyrveil-models:
+    image: lyrveil/backend:models-test
+    environment:
+      LYRVEIL_MODEL_CATALOG: /test/catalog.json
+      LYRVEIL_MODELS_CA_FILE: /test/ca.pem
+    volumes:
+      - test-shared:/test:ro
+  models-server:
+    profiles: [tools]
+    image: lyrveil/models-test-server:models-test
+    build: {context: ., dockerfile: tests/docker/models-server/Dockerfile}
+    networks: [lyrveil-download]
+    volumes:
+      - test-shared:/shared
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.path.exists('/shared/catalog.json') else 1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 1s
+
+volumes:
+  lyrveil-data: {external: true, name: lyrveil-models-test-data}
+  lyrveil-models: {external: true, name: lyrveil-models-test-models}
+  test-shared: {}
