@@ -23,13 +23,17 @@ async function openCharacterForm(page) {
   await page.getByRole('button', { name: 'Nuova conversazione' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  // "Annulla" is on both steps and absent while the characters load, so it tells that the dialog has settled.
-  await expect(dialog.getByRole('button', { name: 'Annulla' })).toBeVisible();
+  // The dialog paints the picker once before its loading note, and shows the form at once when no character exists, so
+  // no single look tells that it has settled. Click "Nuovo personaggio" whenever it shows until the name field does;
+  // the click only resets an empty form, so repeating it is harmless.
   const create = dialog.getByRole('button', { name: 'Nuovo personaggio' });
-  if (await create.isVisible()) {
-    await create.click();
-  }
-  await expect(dialog.getByLabel('Nome', { exact: true })).toBeVisible();
+  const nameField = dialog.getByLabel('Nome', { exact: true });
+  await expect(async () => {
+    if (!(await nameField.isVisible()) && (await create.isVisible())) {
+      await create.click({ timeout: 1_000 });
+    }
+    await expect(nameField).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   return dialog;
 }
 

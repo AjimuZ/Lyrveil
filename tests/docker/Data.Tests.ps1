@@ -254,7 +254,8 @@ Describe 'import-model, backup and restore against a test project' {
 
         $run = Invoke-Captured -Name 'Invoke-LyrveilBackup' -Parameters $script:Common
         $run.Status | Should -Be 0 -Because $run.Text
-        $run.Text | Should -Match 'Backup written: backups/lyrveil-\d{8}T\d{6}Z\.tar, 2 files'
+        # The database, media/before-backup.txt and runtime/llm-launch.env, which the backend writes at startup (P06.6a).
+        $run.Text | Should -Match 'Backup written: backups/lyrveil-\d{8}T\d{6}Z\.tar, 3 files'
         $run.Text | Should -Match ([regex]::Escape("The backups are in $script:BackupFolder"))
         $name = Get-WrittenBackup -Text $run.Text
 
@@ -296,7 +297,7 @@ Describe 'import-model, backup and restore against a test project' {
         $before = (@(Get-VolumeFile -Volume $script:DataVolume) -join ',')
         $run = Invoke-Captured -Name 'Invoke-LyrveilRestore' -Parameters ($script:StartParameters + @{ Argument = @($script:BackupFile) })
         $run.Status | Should -Be 5 -Because $run.Text
-        $run.Text | Should -Match 'PASS     lyrveil-\d{8}T\d{6}Z\.tar: 2 files match the manifest'
+        $run.Text | Should -Match 'PASS     lyrveil-\d{8}T\d{6}Z\.tar: 3 files match the manifest'
         $run.Text | Should -Match 'Nothing was restored \(exit status 5\)'
         (@(Get-VolumeFile -Volume $script:DataVolume) -join ',') | Should -BeExactly $before
     }
@@ -309,7 +310,7 @@ Describe 'import-model, backup and restore against a test project' {
         $run.Status | Should -Be 0 -Because $run.Text
         Should -Invoke -ModuleName DataFiles Read-Confirmation -Times 1 -Exactly
         $run.Text | Should -Match 'Lyrveil is stopped\. Containers, volumes and data are kept\.'
-        $run.Text | Should -Match 'Restored 2 files from lyrveil-\d{8}T\d{6}Z\.tar\. The previous data is in pre-restore-\d{8}T\d{6}Z/\.'
+        $run.Text | Should -Match 'Restored 3 files from lyrveil-\d{8}T\d{6}Z\.tar\. The previous data is in pre-restore-\d{8}T\d{6}Z/\.'
         $run.Last | Should -BeExactly $script:ReadyLine
 
         $files = @(Get-VolumeFile -Volume $script:DataVolume)

@@ -75,4 +75,5 @@
 | [Import, backup and restore, 2026-11-07](verification/2026-11-07-data-files.md) | `import-model`, `backup` and `restore`, the `cli.py` backup commands, their unit tests, and what has not run |
 | [P01 exit, 2026-11-07](verification/2026-11-07-p01-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, WAL and FTS5 in the real image, the contract test fix, and what has not run |
 | [P05 exit, 2026-11-07](verification/2026-11-07-p05-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, the fixes to two specs and one Pester file, and the hardware and quality parts that have not run |
+| [P06 exit, 2026-11-08](verification/2026-11-08-p06-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, the fixes to one integration test, two specs and one Pester file, and the hardware part that has not run |
 | [Image runtime image, 2026-11-07](verification/2026-11-07-image-runtime.md) | The ComfyUI image of P05.1: the lock, the build checks, a CPU start in a build stage, and what has not run |

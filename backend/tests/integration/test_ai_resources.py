@@ -71,7 +71,8 @@ def test_the_snapshot_joins_the_gpu_state_the_card_the_queue_and_the_launch_leve
         "MODEL_PROFILE=gemma-4-12b\nCONTEXT_SIZE=6144\nLEVEL=B\n", encoding="utf-8"
     )
     write(engine, lambda connection: JobQueue().enqueue(connection, JobKind.CHAT_REPLY))
-    write(engine, lambda connection: JobQueue().enqueue(connection, JobKind.IMAGE_REQUEST))
+    # An image_request starts in its `prompt` stage, which needs the text model; only `render` needs the image mode.
+    write(engine, lambda connection: JobQueue().enqueue(connection, JobKind.IMAGE_REQUEST, stage="render"))
 
     body = client.get(f"{API}/system/resources").json()
 

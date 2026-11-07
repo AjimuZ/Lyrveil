@@ -50,7 +50,7 @@ test('the profiles show tier, licence and state, a profile is chosen and applied
 
   // A file already in the models folder is registered by name; it stays marked as not verified.
   const form = page.getByRole('form', { name: 'Aggiungi file locale' });
-  await expect(form.getByLabel('File')).toHaveValue(CUSTOM_FILE);
+  await expect(form.getByLabel('File', { exact: true })).toHaveValue(CUSTOM_FILE);
   await form.getByLabel('Formato del prompt').selectOption({ label: 'Formato ChatML' });
   await form.getByRole('button', { name: 'Registra file' }).click();
   await expect(page.getByText('File registrato. Non è verificato dal catalogo.')).toBeVisible({ timeout: 60_000 });
@@ -62,7 +62,7 @@ test('the profiles show tier, licence and state, a profile is chosen and applied
   await custom.getByRole('button', { name: 'Rimuovi' }).click();
   await custom.getByRole('button', { name: "Rimuovi dall'elenco" }).click();
   await expect(card(page, CUSTOM_FILE)).toHaveCount(0);
-  await expect(form.getByLabel('File')).toHaveValue(CUSTOM_FILE);
+  await expect(form.getByLabel('File', { exact: true })).toHaveValue(CUSTOM_FILE);
 
   // Put the original profile back, so the other specs run on the default.
   await card(page, original.display_name).getByRole('button', { name: 'Usa questo modello' }).click();

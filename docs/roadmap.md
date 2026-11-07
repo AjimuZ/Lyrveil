@@ -10,7 +10,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | In progress: automated exit passed; hardware and manual part (P03.EXIT-HW) pending |
 | P04 | Memory and consistency | In progress: automated exit passed; quality part (P04.10) pending |
 | P05 | Images in messages | In progress: automated exit passed; hardware part (P05.EXIT-HW) and measurement part (P05.8) pending |
-| P06 | Automatic GPU orchestration and recovery | Planned |
+| P06 | Automatic GPU orchestration and recovery | In progress: automated exit passed; hardware part (P06.EXIT-HW) pending |
 | P07 | Proactive messages and messaging details | Planned |
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | Planned |
 | P09 | Audit and public release | Planned |
@@ -167,6 +167,10 @@ Evidence:
 - [x] P06.6 AI resources screen and model settings, with profile selection, **Applica ora** and custom registration.
 
 Exit: T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09, T-ORC-11 to T-ORC-13 pass. T-GPU-07 to T-GPU-12 pass. AC-15, AC-18 and AC-19 hold, with measured switch times recorded.
+
+Evidence:
+
+- [P06 automated exit: the `unit`, `integration`, `e2e`, `docker` and `lint` levels, with T-IMG-04, T-IMG-10 to T-IMG-12, T-MOD-03, T-MOD-04, T-DCK-14, T-ORC-02, T-ORC-04 to T-ORC-06, T-ORC-08, T-ORC-09 and T-ORC-11 to T-ORC-13](verification/2026-11-08-p06-exit.md). The hardware part (T-GPU-07 to T-GPU-12, AC-15, AC-18, AC-19 and the measured switch times) is pending with P06.EXIT-HW, so the phase is not done.
 
 ## P07: Advanced messaging
 

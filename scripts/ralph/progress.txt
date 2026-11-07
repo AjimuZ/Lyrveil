@@ -216,6 +216,8 @@
 - Work that must not overlap a GPU lease, such as a mode change, can run as a queued job whose stage needs no GPU (mode none). The single worker then serializes it with every other job, so nothing else asks for a mode while it runs.
 - Accept a file name, never a path: check a strict name pattern, lstat to refuse symlinks, then compare the resolved parent with the root's resolved path joined with the folder name. Check again in the background job before reading the file.
 - Do not use test.skip for a machine-dependent case in e2e. Make the state deterministic by rewriting the API response with page.route/route.fetch, or by seeding it.
+- In Playwright helpers, for a dialog that renders in stages, wrap check-then-click in `expect(async () => {...}).toPass()` and finish on the element the next step needs.
+- When a count in a docker-level test depends on files the app writes at startup, name those files in a comment next to the expected count.
 
 ---
 
@@ -1955,4 +1957,26 @@ ADR 0042 records the decisions. The changelog and the models, configuration, API
   - page.request calls are not intercepted by page.route, so an e2e test can read the real settings through page.request and still show a rewritten response in the page.
   - The 'above the tier' hint in the model settings screen depends on tier === 'reduced' and min_tier === 'target', so a rewritten response must set the tier too.
   - The e2e and docker levels have not run for P06.6b; the orchestrator's final run is the first real check of the e2e specs.
+---
+
+## 2026-11-07T23:20:33Z - P06.EXIT
+- I ran the unit, integration, e2e, docker and lint levels, and all five now pass. The final counts are: unit passed (backend 970, orchestrator 584, Vitest 139, Pester 39, Node 11), integration passed (backend 372, orchestrator 209), e2e 37 passed, docker 178 passed, and lint passed. I fixed four stale tests and changed no product code.
+
+- **Integration:** `test_ai_resources.py` expected an `image_request` to count under `image`. A new one starts in its `prompt` stage, which needs the text model, so the test now enqueues it at `render`.
+- **e2e, `models.spec.mjs`:** `getByLabel('File')` also matched "Tipo di file", so I made it an exact match.
+- **e2e, `chat-list.spec.mjs`:** the `openCharacterForm` helper skipped its click when its single check landed on the loading frame. It now retries until the name field shows. It failed in one of three full runs, so it was a race, and one passing run doesn't prove the race is gone.
+- **docker, `Data.Tests.ps1`:** a backup now holds 3 files, not 2, because the backend writes `runtime/llm-launch.env` at startup (P06.6a). I updated the three counts. The first docker run's output was cut off, so I only read this one failure from it.
+
+The unit level ran before these fixes, which touch tests it doesn't run.
+
+I wrote `docs/verification/2026-11-08-p06-exit.md`. It records the commands, versions, counts, a table mapping each exit test to its file, the limits of the fakes, and what was not run. I added the "Evidence:" list to the P06 section and the entry to `docs/README.md`. The phase table now reads "In progress: automated exit passed; hardware part (P06.EXIT-HW) pending". I did not edit any item line.
+
+The hardware part is not claimed: T-GPU-07 to T-GPU-12, AC-15, AC-18, AC-19, the measured switch times, and the `gpu` level were not run.
+- Files changed: backend/tests/integration/test_ai_resources.py, tests/e2e/specs/models.spec.mjs, tests/e2e/specs/chat-list.spec.mjs, tests/docker/Data.Tests.ps1, docs/verification/2026-11-08-p06-exit.md, docs/roadmap.md, docs/README.md
+- **Learnings for future iterations:**
+  - An image_request job starts in stage `prompt` (mode llm); use `enqueue(..., stage="render")` in a test that needs a job under mode image.
+  - A backup now holds the database, the media files and runtime/llm-launch.env (3 files in the docker data test), because the backend writes the launch file at startup.
+  - The shell cuts long docker-level output; the full output is saved to a file named in the tool result, and Grep on it finds `[-]` and the Pester summary line.
+  - The new-chat dialog paints the picker once before its loading note, so an e2e helper cannot rely on one visibility check; retry the click until the form field shows.
+  - P06.EXIT-HW still needs the real models, the GPU and `scripts/lyrveil.cmd test gpu`; the roadmap has no P06.EXIT-HW item line, only the phase table text and the Evidence list.
 ---
