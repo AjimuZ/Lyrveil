@@ -17,8 +17,9 @@ from lyrveil.persistence.migrations import (
 )
 
 BASELINE = "0001"
-HEAD = "0002"
-TABLES = {"alembic_version", "application_settings", "generation_jobs"}
+JOBS = "0002"
+HEAD = "0003"
+TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -39,9 +40,9 @@ def user_tables(database_path: Path) -> set[str]:
     return {name for (name,) in rows}
 
 
-def test_the_job_queue_revision_follows_the_baseline() -> None:
+def test_the_revisions_follow_one_another() -> None:
     assert head_revision() == HEAD
-    assert known_revisions() == {BASELINE, HEAD}
+    assert known_revisions() == {BASELINE, JOBS, HEAD}
 
 
 def test_upgrade_head_creates_the_schema_on_an_empty_database(database_path: Path, tmp_path: Path) -> None:
@@ -72,6 +73,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", JOBS, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == {"alembic_version", "application_settings", "generation_jobs"}
     assert alembic(database_path, "downgrade", BASELINE, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == {"alembic_version", "application_settings"}
     assert alembic(database_path, "downgrade", "base", cwd=tmp_path).returncode == 0

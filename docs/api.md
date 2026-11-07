@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame. The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, and the conversation routes listed under [Conversations](#conversations). The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -142,6 +142,13 @@ All paths are under `/api/v1`.
 | `GET /conversations/{id}/search?q=` | Search in one chat. |
 | `GET /conversations/{id}/export?format=json\|md` | Export. |
 | `GET`, `PATCH /conversations/{id}/proactive` | Proactive settings. |
+
+Delivered in P02.5a: `GET` and `POST /conversations`, `GET`, `PATCH` and `DELETE /conversations/{id}`, and `undelete`.
+`GET` takes `status` (default `active`) and `character_id`; `q` comes with search (P02.5d). A deleted chat answers `404`
+everywhere except `undelete`, which answers `409` when the chat is not deleted or 30 days have passed. `POST` answers
+`201`, `404` for an unknown character or any `scenario_id` (no scenarios exist yet) and `409` for an archived
+character. A row lacks the last message, avatar and typing flag until messages and assets exist. These routes are not
+in `backend/openapi.json` until it is next regenerated with Docker.
 
 ### Messages
 

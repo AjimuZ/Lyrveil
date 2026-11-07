@@ -10,13 +10,15 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import events, health
+from lyrveil.api import conversations, events, health
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
     SecurityHeadersMiddleware,
     documented_headers,
+    domain_error_handler,
     internal_error_handler,
 )
+from lyrveil.domain.errors import DomainError
 from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
@@ -71,8 +73,10 @@ def create_app(
     app.state.control_probe = control_probe
     app.state.boot_id = str(uuid.uuid4())
     app.include_router(health.router, prefix=API_PREFIX)
+    app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(events.router)
     headers = documented_headers(settings.http_port)
+    app.add_exception_handler(DomainError, domain_error_handler)
     app.add_exception_handler(Exception, internal_error_handler(headers))
     # The middleware added last runs first: the headers wrap the Host and Origin refusals too.
     app.add_middleware(

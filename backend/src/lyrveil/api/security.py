@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from lyrveil.domain.errors import DomainError
 from lyrveil.logs import get_logger
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
@@ -134,6 +135,13 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+async def domain_error_handler(_request: Request, error: Exception) -> JSONResponse:
+    """Answers a DomainError a service raised with its own status, code and Italian detail as problem+json."""
+    assert isinstance(error, DomainError)
+    titles = {"NOT_FOUND": "Non trovato", "CONFLICT": "Operazione non consentita"}
+    return problem_response(error.status, error.code, titles.get(error.code, "Richiesta rifiutata"), error.detail)
 
 
 def internal_error_handler(headers: Mapping[str, str]) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:

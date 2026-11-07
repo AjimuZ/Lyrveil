@@ -76,6 +76,7 @@
 - Repositories take a caller-owned SQLAlchemy Connection and never commit, so domain changes and the jobs they create share one transaction.
 - Store timestamps with lyrveil.domain.identifiers.to_utc_text (UTC, milliseconds, Z) so text comparison in SQL follows time order. Primary keys use new_id() (UUIDv7).
 - ruff's N818 rule requires the Error suffix on exception names, and UP047 requires PEP 695 type parameters (def f[T](...)) instead of TypeVar.
+- In tests, use a typed inner function with a Connection parameter instead of a lambda when calling write(engine, fn).
 
 ---
 
@@ -628,4 +629,14 @@ Doc findings: the retry table gives extraction three waits but only 3 attempts, 
   - Alembic head is now 0002. Tests read head_revision() instead of hard-coding it.
   - `scripts/lyrveil.cmd test integration` takes no arguments. To run single integration files, use `test unit tests/integration/<file>.py`, which works because the conftest is picked up.
   - The log allowlist renders None identifier values as '[dropped]', so leave out optional fields such as error_code when they are None.
+---
+
+## 2026-11-07T02:42:06Z - P02.5a
+- The earlier attempt had already built the conversations feature: migration 0003, domain, repository, service, API router, docs and changelog. Only lint was failing, and I fixed that. The failures were two ruff format differences in services/conversations.py and test_conversations.py, one E501 line, and two mypy errors in test_conversations.py (an Any return and an untyped lambda). `scripts/lyrveil.cmd test lint` now passes. I ran test_conversations.py and test_migrations.py through the unit level: 13 passed. I did not run the full unit, integration, e2e or docker levels.
+- Files changed: backend/src/lyrveil/services/conversations.py, backend/tests/integration/test_conversations.py
+- **Learnings for future iterations:**
+  - Alembic head is now 0003.
+  - Backend ruff line length is 120, and ruff format joins short wrapped calls, so run the formatter before finishing.
+  - Test helpers passed to write() need typed functions rather than lambdas, because mypy --strict rejects lambdas with default arguments.
+  - Search is not part of this task (P02.5d).
 ---

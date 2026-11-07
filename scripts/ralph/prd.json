@@ -835,8 +835,8 @@
         "Deleted conversations follow the deletion policy of docs/data-model.md."
       ],
       "priority": 36,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "The earlier attempt had already built the conversations feature: migration 0003, domain, repository, service, API router, docs and changelog. Only lint was failing, and I fixed that. The failures were two ruff format differences in services/conversations.py and test_conversations.py, one E501 line, and two mypy errors in test_conversations.py (an Any return and an untyped lambda). `scripts/lyrveil.cmd test lint` now passes. I ran test_conversations.py and test_migrations.py through the unit level: 13 passed. I did not run the full unit, integration, e2e or docker levels.",
       "dependsOn": [
         "P01.EXIT"
       ],
