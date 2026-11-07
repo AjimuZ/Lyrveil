@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer, and nothing starts the socket yet: the shell will call `connect()` when it shows connection state. Every other real screen is planned, phases P02 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. Every other real screen is planned, phases P02 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -121,7 +121,7 @@ Every screen has loading, empty and error states. Every control has real behavio
 Avatar, name, last message (one line), time, unread count, typing indicator, and a pending-image or queue hint. Search covers names, titles and messages. Pinned chats come first, then activity. A context menu offers pin, archive, delete. **+** opens
 a picker: choose a character, an optional scenario and a language. The list has a separate tab for archived conversations.
 
-Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, still the placeholder. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03) and the scenario choice (P03). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
+Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, the conversation screen of P02.6b. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03) and the scenario choice (P03). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
 
 ### 2. Conversation
 
@@ -134,6 +134,37 @@ Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 25
 - Search: a bar with next and previous match, using `GET /conversations/{id}/search`.
 - Editing an older message warns: "I ricordi collegati verranno rivalutati."
 - Context panel: profile summary, relationship in words, recent events, images, scenario, proactive settings and a link to the Memory Studio. Diagnostic mode adds a link per reply, and only when it is on.
+
+Delivered in P02.6b (`features/conversation/`): the route `/chats/:conversationId` loads `conversation-screen.ts`, which
+provides its own `ConversationStore` and opens the chat named by the route.
+
+- **Delivered:** the header with the avatar initial, the name and the status (**Sta scrivendo…** or **In coda**); messages
+  under day separators and with a `HH:mm` time; one check for a sent message (the server never reports `read` yet); the
+  typing indicator and the queue note in a reply bubble that has no text yet; bubble actions **Copia**, **Modifica**,
+  **Elimina** (with an inline confirmation), and on the latest reply **Rigenera** and `‹ 2/3 ›` alternatives, shown on
+  hover and keyboard focus and always shown where there is no hover; the composer with Enter to send, Shift+Enter for a
+  line break, a counter from 7000 characters and a refusal over 8000; **Mostra messaggi precedenti**, which also loads
+  when the list is scrolled to the top; a failed send that stays with **Riprova invio** and **Scarta**.
+- **Streaming and recovery:** `message.delta` pieces are batched per animation frame into one signal for all streaming
+  replies. The store applies a piece by its `offset` (`applyDelta`): the next piece appends, a repeat changes nothing,
+  and a piece that starts beyond the known text waits. That is the page reload during streaming: REST returns the text
+  flushed every 2 seconds, the live pieces start beyond it, and the store asks REST for the newest page every 2 seconds
+  until the stored text reaches them. The same reload runs while the socket is not open and a reply is still produced,
+  and after `resync.required`. `message.completed` replaces the message with its final text. The send, edit, delete,
+  regenerate and activate answers are applied from the response, because the REST routes publish no events yet.
+- **Message text** is bound as text and drawn with `white-space: pre-wrap`; no template uses `innerHTML` (T-SEC-03, T-SEC-09).
+- **Not delivered, so no control is drawn for it:** the context panel, images and the lightbox, the image form,
+  search in a chat, "Ricorda questo", the simulated `read` state, unsent text kept per chat in `localStorage`, and
+  virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
+  navigate to a new chat after **Inizia conversazione**.
+- **Direct visits to a deep route.** `index.html` has no `<base>` element, because the Content-Security-Policy says
+  `base-uri 'none'` and the browser refused it, so a reload on `/chats/:conversationId` loaded the assets from
+  `/chats/` and showed an empty page. The build now writes absolute asset URLs (`deployUrl: "/"` in `angular.json`) and
+  `app.config.ts` provides `APP_BASE_HREF`. `tests/e2e/specs/zz-diagnose.spec.mjs` guards it.
+- **Tests:** `conversation-store.spec.ts` and `day-label.spec.ts` (unit) and, in `tests/e2e/specs/`,
+  `conversation.spec.mjs` (T-SEC-03, T-MSG-05, T-MSG-06, T-MSG-08) and `conversation-stream.spec.mjs` (T-MSG-03, T-MSG-04,
+  T-MSG-07, T-MSG-09, T-MSG-12); see [Testing](testing.md#messaging). The unit test for the screen component itself was
+  not written.
 
 ### 3. Character Creator
 

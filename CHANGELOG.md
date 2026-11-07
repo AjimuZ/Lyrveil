@@ -15,6 +15,15 @@ No application exists yet. This section records the design documentation.
   so `/ws` accepts connections and a reply streams to the browser. In the Compose test project a sent message gets a
   lease and a streamed, stored reply from the fake KoboldCpp. `start.cmd` does not start the orchestrator yet. Not yet
   tried with a real GPU and Docker socket.
+- The conversation screen at `/chats/:conversationId`: messages under day separators such as `sabato 1 novembre`, a
+  composer (Enter sends, Shift+Enter adds a line, a counter near the 8000-character limit), a typing indicator and
+  the reply text as it streams in, **Modifica** (with the warning about linked memories on an older message),
+  **Elimina** with a confirmation, **Copia**, **Rigenera** and `‹ 2/3 ›` alternatives on the latest reply, one check
+  on sent messages, older history on **Mostra messaggi precedenti**, and recovery of a reply after a page reload. A
+  message that fails to send stays on screen with **Riprova invio**. Message text always renders as text, never as
+  markup. The context panel, images, search in a chat, "Ricorda questo" and virtual scrolling are not part of it yet.
+  Opening or reloading a chat by its address now works: the page used to stay empty because a `<base>` element was
+  refused by the security policy.
 - The chat list screen at `/chats`: search over names, titles and messages, an **Attive** and an **Archiviate** tab,
   and a menu on each chat to pin, archive or unarchive, and delete, with a **Ripristina** notice after a delete. **Nuova
   conversazione** opens a dialog that picks a character and a language, or creates a character with a minimal form

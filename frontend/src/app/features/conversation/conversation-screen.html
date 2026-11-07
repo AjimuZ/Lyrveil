@@ -1,0 +1,193 @@
+<header class="header">
+  <a class="back" routerLink="/chats" [attr.aria-label]="'conv.back' | t"><span aria-hidden="true">‹</span></a>
+  <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+  <div class="who">
+    <h1 class="title">{{ name() || ('screen.conversation' | t) }}</h1>
+    <p class="status" role="status">
+      @if (store.typing()) {
+        {{ 'conv.status.typing' | t }}
+      } @else if (store.queued()) {
+        {{ 'conv.status.queued' | t }}
+      }
+    </p>
+  </div>
+</header>
+
+@if (store.actionError(); as failure) {
+  <div class="banner error" role="alert">
+    <span>{{ failure.detail ?? (failure.textKey | t) }}</span>
+    <button type="button" class="button" (click)="store.clearActionError()">{{ 'chats.dismiss' | t }}</button>
+  </div>
+}
+
+@if (copied()) {
+  <p class="banner" role="status">{{ 'conv.copied' | t }}</p>
+}
+
+@if (store.loading()) {
+  <p class="note" role="status">{{ 'conv.loading' | t }}</p>
+} @else if (store.error(); as failure) {
+  <div class="note error" role="alert">
+    <p>{{ failure.textKey | t }}</p>
+    <button type="button" class="button" (click)="store.retryOpen()">{{ 'chats.retry' | t }}</button>
+  </div>
+} @else {
+  <div class="scroller" #scroller (scroll)="onScroll()">
+    @if (store.hasOlder()) {
+      <button type="button" class="button older" [disabled]="store.loadingOlder()" (click)="older()">
+        {{ (store.loadingOlder() ? 'conv.olderLoading' : 'conv.older') | t }}
+      </button>
+    }
+    @if (rows().length === 0 && store.pending().length === 0) {
+      <p class="note">{{ 'conv.empty' | t }}</p>
+    }
+    <ol class="messages" [attr.aria-label]="'conv.messages' | t">
+      @for (row of rows(); track row.key) {
+        @if (row.kind === 'day') {
+          <li class="day"><span>{{ row.label }}</span></li>
+        } @else {
+          @let edit = editing();
+          <li class="message" [class.mine]="row.mine" [attr.data-status]="row.message.status">
+            <div class="bubble">
+              <span class="sr-only">{{ row.mine ? ('conv.you' | t) : name() }}:</span>
+              @if (edit !== null && edit.id === row.message.id) {
+                <textarea
+                  class="control"
+                  rows="3"
+                  [attr.aria-label]="'conv.edit.label' | t"
+                  [value]="edit.text"
+                  (input)="editTyped($event)"
+                ></textarea>
+                @if (isOlder(row.message)) {
+                  <p class="hint">{{ 'conv.edit.warning' | t }}</p>
+                }
+                <div class="actions">
+                  <button type="button" class="button primary" [disabled]="edit.text.trim() === ''" (click)="saveEdit(row.message)">
+                    {{ 'conv.edit.save' | t }}
+                  </button>
+                  <button type="button" class="button" (click)="cancelEdit()">{{ 'conv.edit.cancel' | t }}</button>
+                </div>
+              } @else {
+                @if (row.waiting) {
+                  @if (row.message.status === 'queued') {
+                    <p class="hint">{{ 'conv.queued' | t }}</p>
+                  } @else {
+                    <span class="typing" role="status" [attr.aria-label]="typingLabel()">
+                      <span></span><span></span><span></span>
+                    </span>
+                  }
+                } @else {
+                  <p class="text">{{ row.text }}</p>
+                }
+                @if (row.message.status === 'failed') {
+                  <p class="hint warn">{{ 'conv.failed' | t }}</p>
+                } @else if (row.message.status === 'interrupted') {
+                  <p class="hint warn">{{ 'conv.interrupted' | t }}</p>
+                }
+              }
+
+              <p class="meta">
+                <time [attr.datetime]="row.message.created_at">{{ row.clock }}</time>
+                @if (row.message.edited_at) {
+                  <span>· {{ 'conv.edited' | t }}</span>
+                }
+                @if (row.mine) {
+                  <span class="read" role="img" [attr.aria-label]="(row.message.read_state === 'read' ? 'conv.read.read' : 'conv.read.sent') | t">
+                    <span aria-hidden="true">{{ row.message.read_state === 'read' ? '✓✓' : '✓' }}</span>
+                  </span>
+                }
+              </p>
+            </div>
+
+            @let alt = store.alternatives();
+            @if (row.canRegenerate && alt !== null) {
+              <div class="alternatives" role="group" [attr.aria-label]="alternativeLabel(alt.index, alt.count)">
+                <button type="button" class="step" [attr.aria-label]="'conv.alt.previous' | t" [disabled]="alt.index === 0" (click)="store.stepAlternative(-1)">
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <span aria-hidden="true">{{ alt.index + 1 }}/{{ alt.count }}</span>
+                <button type="button" class="step" [attr.aria-label]="'conv.alt.next' | t" [disabled]="alt.index === alt.count - 1" (click)="store.stepAlternative(1)">
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+            }
+
+            @if (confirmingDelete() === row.message.id) {
+              <div class="actions confirm" role="alertdialog" [attr.aria-label]="'conv.delete.confirm' | t">
+                <span>{{ 'conv.delete.confirm' | t }}</span>
+                <button type="button" class="button danger" (click)="confirmDelete(row.message)">{{ 'conv.delete.yes' | t }}</button>
+                <button type="button" class="button" (click)="cancelDelete()">{{ 'conv.delete.no' | t }}</button>
+              </div>
+            } @else if (edit?.id !== row.message.id && (row.canEdit || row.canDelete || row.text !== '')) {
+              <div class="actions tools">
+                @if (row.text !== '') {
+                  <button type="button" class="tool" (click)="copy(row.text)">{{ 'conv.action.copy' | t }}</button>
+                }
+                @if (row.canEdit) {
+                  <button type="button" class="tool" (click)="startEdit(row.message)">{{ 'conv.action.edit' | t }}</button>
+                }
+                @if (row.canRegenerate) {
+                  <button type="button" class="tool" (click)="store.regenerate(row.message)">{{ 'conv.action.regenerate' | t }}</button>
+                }
+                @if (row.canDelete) {
+                  <button type="button" class="tool danger" (click)="askDelete(row.message)">{{ 'conv.action.delete' | t }}</button>
+                }
+              </div>
+            }
+          </li>
+        }
+      }
+      @for (entry of store.pending(); track entry.clientMessageId) {
+        <li class="message mine pending" [attr.data-state]="entry.state">
+          <div class="bubble">
+            <span class="sr-only">{{ 'conv.you' | t }}:</span>
+            <p class="text">{{ entry.content }}</p>
+            @if (entry.state === 'sending') {
+              <p class="meta">{{ 'conv.sending' | t }}</p>
+            } @else {
+              <p class="hint warn" role="alert">
+                {{ 'conv.sendFailed' | t }}
+                @if (entry.error?.detail; as detail) {
+                  {{ detail }}
+                }
+              </p>
+            }
+          </div>
+          @if (entry.state === 'failed') {
+            <div class="actions">
+              <button type="button" class="button" (click)="store.retry(entry.clientMessageId)">{{ 'conv.sendRetry' | t }}</button>
+              <button type="button" class="button" (click)="store.discard(entry.clientMessageId)">{{ 'conv.sendDiscard' | t }}</button>
+            </div>
+          }
+        </li>
+      }
+    </ol>
+  </div>
+
+  <form class="composer" (submit)="$event.preventDefault(); submit()">
+    <label class="sr-only" for="composer">{{ 'conv.composer.label' | t }}</label>
+    <textarea
+      id="composer"
+      #composer
+      class="control"
+      rows="2"
+      autocomplete="off"
+      aria-describedby="composer-count"
+      [placeholder]="'conv.composer.placeholder' | t"
+      [value]="draft()"
+      [attr.aria-invalid]="tooLong()"
+      (input)="typed($event)"
+      (keydown)="composerKey($event)"
+    ></textarea>
+    <div class="composer-side">
+      <p id="composer-count" class="counter" [class.over]="tooLong()">
+        @if (tooLong()) {
+          {{ 'conv.composer.tooLong' | t: { max: maxChars } }}
+        } @else if (showCounter()) {
+          {{ counter() }}
+        }
+      </p>
+      <button type="submit" class="button primary" [disabled]="!canSend()">{{ 'conv.composer.send' | t }}</button>
+    </div>
+  </form>
+}

@@ -22,7 +22,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/chats/chat-list-screen').then((module) => module.ChatListScreen),
     data: { screen: 'screen.chats' satisfies TextKey },
   },
-  unavailable('chats/:conversationId', 'screen.conversation'),
+  {
+    path: 'chats/:conversationId',
+    loadComponent: () =>
+      import('./features/conversation/conversation-screen').then((module) => module.ConversationScreen),
+    data: { screen: 'screen.conversation' satisfies TextKey },
+  },
   unavailable('characters', 'screen.characters'),
   unavailable('characters/new', 'screen.characterNew'),
   unavailable('characters/:id', 'screen.characterProfile'),

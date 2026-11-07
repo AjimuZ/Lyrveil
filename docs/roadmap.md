@@ -84,7 +84,7 @@ Evidence:
 - [x] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
 - [x] P02.4 Job queue with persistence and retries.
 - [x] P02.5 Conversations, messages, variants, streaming over WebSocket, search.
-- [ ] P02.6 Chat list and conversation screens with a built-in minimal character form.
+- [x] P02.6 Chat list and conversation screens with a built-in minimal character form.
 - [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
 
 Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.

@@ -301,17 +301,23 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | --- | --- | --- | --- |
 | T-MSG-01 | Create a chat. Delivered: `backend/tests/integration/test_conversations.py` and `test_characters.py`, and the first test of `tests/e2e/specs/chat-list.spec.mjs` (minimal character form, new chat, reload) | Integration, E2E | P02 |
 | T-MSG-02 | Send is idempotent, and is committed before the job exists | Integration | P02 |
-| T-MSG-03 | Streaming: order, persistence every 2 s, final text | Integration, E2E | P02 |
-| T-MSG-04 | Regenerate adds variants, and alternatives can be selected | Integration, E2E | P02 |
-| T-MSG-05 | Edit | Integration, E2E | P02 |
-| T-MSG-06 | Delete | Integration, E2E | P02 |
-| T-MSG-07 | Page reload during streaming resumes correctly | E2E | P02 |
-| T-MSG-08 | History paging and recovery | Integration, E2E | P02 |
-| T-MSG-09 | Simultaneous conversations are served in order, with no mixed text | Integration, E2E | P02 |
+| T-MSG-03 | Streaming: order, persistence every 2 s, final text. Delivered: the first test of `tests/e2e/specs/conversation-stream.spec.mjs` (a reply from the fake KoboldCpp, stored, same after a reload), `reply-stream.spec.mjs` for the pieces and offsets, and `conversation-store.spec.ts` | Integration, E2E | P02 |
+| T-MSG-04 | Regenerate adds variants, and alternatives can be selected. Delivered: the second test of `conversation-stream.spec.mjs` (**Rigenera**, `2/2`, stepping, the choice after a reload) | Integration, E2E | P02 |
+| T-MSG-05 | Edit. Delivered: the second test of `tests/e2e/specs/conversation.spec.mjs` | Integration, E2E | P02 |
+| T-MSG-06 | Delete. Delivered: the same test | Integration, E2E | P02 |
+| T-MSG-07 | Page reload during streaming resumes correctly. Delivered: the third test of `conversation-stream.spec.mjs` holds back the frames after the first piece of a reply, reloads, and expects the whole reply once; the fake's reply takes about a second, so a reply that is half stored is covered by the store test "resumes a reply after a page reload" | E2E | P02 |
+| T-MSG-08 | History paging and recovery. Delivered: the fourth test of `tests/e2e/specs/conversation.spec.mjs` | Integration, E2E | P02 |
+| T-MSG-09 | Simultaneous conversations are served in order, with no mixed text. Delivered on the screen side: the fourth test of `conversation-stream.spec.mjs` (two chats, each with its own reply only) | Integration, E2E | P02 |
 | T-MSG-10 | Read state and unread counts | Integration, E2E | P07 |
 | T-MSG-11 | Pin, archive, delete, restore, search. Delivered: `test_conversations.py`, `test_messages.py` and the second test of `tests/e2e/specs/chat-list.spec.mjs` | Integration, E2E | P02 |
-| T-MSG-12 | WebSocket reconnect with replay and resync | Integration, E2E | P02 |
+| T-MSG-12 | WebSocket reconnect with replay and resync. Delivered: the fifth test of `conversation-stream.spec.mjs` cuts the connection, sends a message and expects the reply after the page reconnects; the store test "reloads through REST when the server asks for a resync" covers the resync | Integration, E2E | P02 |
 | T-MSG-13 | Crash during streaming leaves `interrupted` | Integration | P02 |
+
+The browser tests of the conversation screen use the Compose test project, where the orchestrator grants a lease and the
+fake KoboldCpp streams `Ciao, sono qui.` for every reply. That reply takes about a second, so `conversation-stream.spec.mjs`
+uses Playwright's WebSocket routing to hold frames back (T-MSG-07) or cut the connection (T-MSG-12) while the real
+backend and orchestrator do the rest. Not covered in a browser: a reply that is half stored when the page reloads, and
+the server order of simultaneous jobs (the backend and orchestrator tests cover the server side).
 
 ### Images
 
@@ -382,7 +388,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | --- | --- | --- | --- |
 | T-SEC-01 | Wrong Host and wrong Origin are refused on REST and WebSocket. Delivered: `backend/tests/integration/test_local_only.py`, in process with Starlette's test client | Integration | P01 |
 | T-SEC-02 | Headers present on every response. Delivered: `tests/e2e/specs/security-headers.spec.mjs` checks the shell, a client route, a hashed and a missing asset, an API answer, an API 404 and a refused write through nginx, each header exactly once and no CORS header; `test_local_only.py` checks the backend's own headers | E2E | P01 |
-| T-SEC-03 | Markup in messages renders as text | E2E | P02 |
+| T-SEC-03 | Markup in messages renders as text. Delivered: the first test of `tests/e2e/specs/conversation.spec.mjs` | E2E | P02 |
 | T-SEC-04 | Path traversal attempts on media and asset routes | Integration | P03 |
 | T-SEC-05 | Decompression bomb and disguised uploads are refused | Integration | P03 |
 | T-SEC-06 | Marker strings never reach logs | Integration | P02 |
