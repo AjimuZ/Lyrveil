@@ -1,0 +1,13 @@
+<div class="field">
+  <div class="head">
+    <label class="label" [attr.for]="fid()">{{ label() }}</label>
+    <ng-content select="[lock]" />
+  </div>
+  <ng-content />
+  @if (hint()) {
+    <p class="hint" [id]="fid() + '-hint'">{{ hint() }}</p>
+  }
+  @if (message(); as text) {
+    <p class="error" [id]="fid() + '-error'" role="alert">{{ text }}</p>
+  }
+</div>

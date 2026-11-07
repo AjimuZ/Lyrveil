@@ -1,0 +1,241 @@
+:host {
+  display: block;
+  padding: var(--ob-space-5);
+}
+
+.screen {
+  max-width: 760px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ob-space-3);
+  margin-bottom: var(--ob-space-4);
+}
+
+.title {
+  margin: 0;
+}
+
+.subtitle {
+  margin: var(--ob-space-1) 0 0;
+  color: var(--ob-text-muted);
+}
+
+.section {
+  margin: var(--ob-space-5) 0 var(--ob-space-2);
+  font-size: 1.125rem;
+}
+
+.note {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-text-muted);
+}
+
+.error {
+  margin: var(--ob-space-1) 0 0;
+  color: var(--ob-danger);
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-3);
+  margin: 0 0 var(--ob-space-3);
+  padding: var(--ob-space-3);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+
+  &.error {
+    color: var(--ob-danger);
+    border-color: var(--ob-danger);
+  }
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ob-space-2);
+  margin-bottom: var(--ob-space-4);
+}
+
+.tab,
+.button,
+.lock {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-4);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover:not(:disabled) {
+    background: var(--ob-hover);
+  }
+
+  &:disabled {
+    color: var(--ob-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+.tab[aria-pressed="true"] {
+  background: var(--ob-selected);
+  border-color: var(--ob-control-border);
+}
+
+.flag {
+  margin-left: var(--ob-space-2);
+  color: var(--ob-danger);
+}
+
+.button {
+  border-color: var(--ob-control-border);
+
+  &.primary {
+    background: var(--ob-primary);
+    color: var(--ob-bg);
+    border-color: var(--ob-primary);
+
+    &:hover:not(:disabled) {
+      background: var(--ob-primary-hover);
+    }
+
+    &:disabled {
+      background: var(--ob-surface);
+      color: var(--ob-text-muted);
+      border-color: var(--ob-border);
+    }
+  }
+}
+
+.lock {
+  min-height: 32px;
+  padding: 0 var(--ob-space-3);
+  font-size: 0.875rem;
+
+  &[aria-pressed="true"] {
+    background: var(--ob-selected);
+    color: var(--ob-primary-hover);
+    border-color: var(--ob-primary);
+  }
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.control {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  box-sizing: border-box;
+
+  &.is-invalid {
+    border-color: var(--ob-danger);
+  }
+}
+
+textarea.control {
+  resize: vertical;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  column-gap: var(--ob-space-4);
+}
+
+.group {
+  margin: 0 0 var(--ob-space-4);
+  padding: var(--ob-space-3);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.rows,
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-3);
+  margin: 0 0 var(--ob-space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.card {
+  padding: var(--ob-space-3);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ob-space-2);
+}
+
+.persistent {
+  margin: 0 0 var(--ob-space-4);
+  padding: var(--ob-space-3);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.persistent-title {
+  margin: 0 0 var(--ob-space-2);
+  font-size: 1rem;
+}
+
+.mono {
+  margin: 0 0 var(--ob-space-2);
+  font-family: var(--ob-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ob-space-3);
+  padding: var(--ob-space-3) 0;
+  background: var(--ob-bg);
+  border-top: 1px solid var(--ob-border);
+
+  .note {
+    margin: 0;
+  }
+}

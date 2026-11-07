@@ -454,3 +454,12 @@ def test_the_list_filters_by_name_and_status(client: TestClient) -> None:
     assert names(q="%") == []
     assert names(status="archived") == []
     assert client.get(URL, params={"status": "deleted"}).status_code == 422
+
+
+def test_the_vocabulary_route_lists_every_tag_with_its_italian_aliases(client: TestClient) -> None:
+    response = client.get(f"{URL}/vocabulary")
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert {"tag": "black hair", "category": "hair_color", "aliases_it": ["capelli neri", "nero"]} in items
+    assert {item["category"] for item in items} >= {"hair_color", "eye_color", "skin", "hairstyle", "accessories"}
+    assert all(item["aliases_it"] for item in items)

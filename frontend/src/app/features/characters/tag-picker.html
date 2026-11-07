@@ -1,0 +1,57 @@
+<div class="picker">
+  @if (value().length > 0) {
+    <ul class="chips">
+      @for (tag of value(); track tag) {
+        <li class="chip">
+          <span>{{ chipText(tag) }}</span>
+          <button
+            type="button"
+            class="remove"
+            [disabled]="disabled()"
+            [attr.aria-label]="'creator.tags.remove' | t: { tag: tag }"
+            (click)="remove(tag)"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="search">
+    <input
+      class="control"
+      type="text"
+      autocomplete="off"
+      [id]="inputId()"
+      [value]="query()"
+      [disabled]="disabled() || full()"
+      (input)="typed($event)"
+      (keydown.enter)="enter($event)"
+      (blur)="touch.emit()"
+    />
+    @if (!vocabularyMode()) {
+      <button type="button" class="add" [disabled]="disabled() || full() || query().trim() === ''" (click)="addFree()">
+        {{ 'creator.tags.add' | t }}
+      </button>
+    }
+  </div>
+
+  @if (full()) {
+    <p class="note">{{ 'creator.tags.full' | t: { max: limit() } }}</p>
+  }
+
+  @if (suggestions().length > 0) {
+    <ul class="suggestions" [attr.aria-label]="'creator.tags.suggestions' | t">
+      @for (entry of suggestions(); track entry.tag) {
+        <li>
+          <button type="button" class="suggestion" (click)="choose(entry.tag)">
+            {{ entry.tag }} · {{ entry.aliases_it[0] }}
+          </button>
+        </li>
+      }
+    </ul>
+  } @else if (noMatch()) {
+    <p class="note" role="status">{{ 'creator.tags.noMatch' | t }}</p>
+  }
+</div>

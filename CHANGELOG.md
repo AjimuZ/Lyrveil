@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The Character Creator at `/characters/new` and `/characters/:id/edit`, in four tabs: **Identità**, **Personalità**,
+  **Comunicazione** and **Aspetto**. It edits the whole card: how the character speaks of itself, traits with locks,
+  *tu* or *Lei*, narration and emoji with a one-line example, example exchanges, phrases to avoid, the Italian
+  appearance descriptions with locks, the English identity slots chosen from the tag vocabulary (searchable by Italian
+  words), the usual outfit and up to 5 named outfits. Fields refuse an age under 18, a reserved or repeated outfit key
+  and a tag outside the vocabulary with Italian messages before anything is sent. A new character keeps a draft in
+  the browser, and leaving with unsaved changes asks first. The new-chat dialog links to it. `GET
+  /api/v1/characters/vocabulary` supplies the tags. The assist panel, import and export, avatar actions, the
+  characters list and the profile are not delivered yet. The end-to-end test for the flow was written but not run.
 - Saving a character card and its history in the backend: `PUT /api/v1/characters/{id}` saves the whole card and
   records a version only when something changed, `GET .../versions` lists the versions, `GET .../versions/{n}` returns
   one, `GET .../versions/{a}/diff/{b}` compares two field by field, and `POST .../versions/{n}/restore` adds a new

@@ -4,8 +4,10 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the voice fields and the s
 phase P03. Delivered in P03.1a: the card model (`lyrveil.domain.card`), its validation against the tag vocabulary
 (`lyrveil.services.card_rules`), storage, and `POST /characters` and `GET /characters/{id}`. Delivered in P03.1b: saving
 with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks against drafts and proposals
-([Versions and locks](#versions-and-locks)). Planned: locks in the translation job, the Creator screens, assets,
-assisted creation, and the exchange format.
+([Versions and locks](#versions-and-locks)). Delivered in P03.2a: the Creator screens for creating and editing a card
+(`/characters/new`, `/characters/:id/edit`; see [Frontend screen 3](frontend.md#3-character-creator)) and
+`GET /characters/vocabulary`. Planned: locks in the translation job, the profile, assets, assisted creation, and the
+exchange format.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -132,6 +134,10 @@ Rules:
   English tag translation for the slots that are not locked, and shows the rendered identity as **Prompt persistente**.
   A warning appears when the identity would not fit in the first prompt chunk.
 - Saving creates version 1 and an empty visual profile if none exists.
+
+Delivered in P03.2a: all four tabs, the draft in the browser and the validation above. In **Aspetto** the slots are
+chosen by hand from the vocabulary and nothing is translated on save; **Prompt persistente** is the plain list of the
+chosen tags. The avatar actions, the count of examples that fit the prompt and the first-chunk warning are not delivered.
 
 ## Versions and locks
 

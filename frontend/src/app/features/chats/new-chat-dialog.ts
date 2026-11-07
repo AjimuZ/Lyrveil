@@ -1,5 +1,6 @@
 // Dialog that starts a chat: pick a character and a language, or fill the minimal character form first.
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
@@ -40,12 +41,13 @@ type Step = 'pick' | 'create';
 /**
  * A modal `<dialog>`. `open()` shows it and loads the characters; the user picks one and starts the chat, or creates a
  * character with the minimal form (first name, optional last name, age, how it speaks of itself, language), which
- * then becomes the selected one. The full Creator replaces the form in P03. A start or a save that the server refuses
+ * then becomes the selected one. A link opens the full Creator (`/characters/new`) for everything the minimal form
+ * leaves out; the form stays for the quick start. A start or a save that the server refuses
  * keeps the dialog open and shows the reason; success on a start closes it, and the new row appears in the list.
  */
 @Component({
   selector: 'lyr-new-chat-dialog',
-  imports: [TranslatePipe],
+  imports: [TranslatePipe, RouterLink],
   templateUrl: './new-chat-dialog.html',
   styleUrl: './new-chat-dialog.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

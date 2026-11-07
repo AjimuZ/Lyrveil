@@ -2,6 +2,7 @@
 import { Route, Routes } from '@angular/router';
 
 import { TextKey } from './core/i18n/translator';
+import { leaveWithConfirmation } from './features/characters/leave-guard';
 
 /**
  * Returns a lazy route for a screen that a later phase delivers. `data.screen` is the catalog key of its title,
@@ -11,6 +12,20 @@ function unavailable(path: string, screen: TextKey): Route {
   return {
     path,
     loadComponent: () => import('./core/shell/unavailable-screen').then((module) => module.UnavailableScreen),
+    data: { screen },
+  };
+}
+
+/**
+ * Returns the route of the Character Creator. It is left with a confirmation when the form holds unsaved changes
+ * (docs/frontend.md, screen 3); the `id` segment, when the path has one, is bound to the screen's `id` input.
+ */
+function creator(path: string, screen: TextKey): Route {
+  return {
+    path,
+    loadComponent: () =>
+      import('./features/characters/character-creator-screen').then((module) => module.CharacterCreatorScreen),
+    canDeactivate: [leaveWithConfirmation],
     data: { screen },
   };
 }
@@ -29,9 +44,9 @@ export const routes: Routes = [
     data: { screen: 'screen.conversation' satisfies TextKey },
   },
   unavailable('characters', 'screen.characters'),
-  unavailable('characters/new', 'screen.characterNew'),
+  creator('characters/new', 'screen.characterNew'),
   unavailable('characters/:id', 'screen.characterProfile'),
-  unavailable('characters/:id/edit', 'screen.characterEdit'),
+  creator('characters/:id/edit', 'screen.characterEdit'),
   unavailable('characters/:id/memory', 'screen.characterMemory'),
   unavailable('gallery', 'screen.gallery'),
   unavailable('scenarios', 'screen.scenarios'),

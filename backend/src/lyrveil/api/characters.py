@@ -1,5 +1,5 @@
-"""Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, and its
-versions with diff and restore.
+"""Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
+versions with diff and restore, and the tag vocabulary the Creator offers.
 
 Duplicate, archive, purge and the exchange routes of that section arrive with the rest of the Creator (P03). Not in the
 committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
@@ -13,6 +13,7 @@ from sqlalchemy import Engine
 
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
+from lyrveil.images.tags import load_vocabulary
 from lyrveil.services.characters import CharacterService
 
 router = APIRouter(prefix="/characters", tags=["characters"], include_in_schema=False)
@@ -74,6 +75,16 @@ class VersionDiff(BaseModel):
     from_version_no: int
     to_version_no: int
     changes: list[FieldChangeOut]
+
+
+class VocabularyEntryOut(BaseModel):
+    tag: str
+    category: str
+    aliases_it: list[str]
+
+
+class VocabularyOut(BaseModel):
+    items: list[VocabularyEntryOut]
 
 
 def _version_out(version: VersionSummary) -> VersionOut:
@@ -151,6 +162,18 @@ def create_character(body: Annotated[dict[str, Any], Body()], service: Character
     120, an empty name, a value outside the closed lists, an unknown field, a slot tag the vocabulary lacks or an outfit
     with a reserved key."""
     return _out(service.create(_as_card(body)))
+
+
+@router.get("/vocabulary", response_model=VocabularyOut)
+def read_vocabulary() -> VocabularyOut:
+    """Returns the tag vocabulary of the card categories, in file order: the tags the Creator offers for each identity
+    slot, with the Italian words its search matches. Declared before `/{character_id}`, so "vocabulary" is no id."""
+    return VocabularyOut(
+        items=[
+            VocabularyEntryOut(tag=entry.tag, category=entry.category, aliases_it=list(entry.aliases_it))
+            for entry in load_vocabulary().entries
+        ]
+    )
 
 
 @router.get("/{character_id}", response_model=CharacterDetail)

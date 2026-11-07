@@ -109,6 +109,7 @@
         </select>
       </div>
       <div class="actions">
+        <a class="button" routerLink="/characters/new" (click)="close()">{{ 'newChat.fullCreator' | t }}</a>
         <button type="button" class="button" (click)="characters().length > 0 ? backToPicker() : close()">
           {{ (characters().length > 0 ? 'character.back' : 'newChat.cancel') | t }}
         </button>

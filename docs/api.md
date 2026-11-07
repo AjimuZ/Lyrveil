@@ -143,6 +143,9 @@ Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
 - `POST .../versions/{n}/restore` always appends a version, actor `restore`, summary `Ripristinata la versione n`,
   holding the card of version `n`, and answers the character. Versions are never changed or removed.
 - The three routes on a version answer `404 NOT_FOUND` for an unknown character or version.
+- Delivered in P03.2a: `GET /characters/vocabulary` answers `{"items": [{"tag", "category", "aliases_it"}]}`, the whole tag
+  vocabulary of the card categories in file order. The Creator builds its chips and its Italian search from it. It is
+  declared before `/characters/{id}`, so `vocabulary` is never read as an id.
 - Automatic sources are not routes yet. The service applies a proposal with `CharacterService.apply_proposal`, which
   keeps locked traits and locked visual fields and records actor `proposal`. Every other route of this table is
   planned. These routes are not in `backend/openapi.json` until it is next regenerated with Docker.

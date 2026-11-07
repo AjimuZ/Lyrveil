@@ -1,0 +1,588 @@
+@let f = creatorForm;
+
+<section class="screen">
+  <header class="header">
+    <div>
+      <h1 class="title">{{ (id() === undefined ? 'screen.characterNew' : 'screen.characterEdit') | t }}</h1>
+      @if (fullName() !== '') {
+        <p class="subtitle">{{ fullName() }}</p>
+      }
+    </div>
+    <a class="button" routerLink="/chats">{{ 'creator.toChats' | t }}</a>
+  </header>
+
+  @if (phase() === 'loading') {
+    <p class="note" role="status">{{ 'creator.loading' | t }}</p>
+  } @else if (phase() === 'failed') {
+    <div class="banner error" role="alert">
+      @if (loadError(); as failure) {
+        <p>{{ failure.textKey | t }}</p>
+      }
+      <a class="button" routerLink="/chats">{{ 'creator.toChats' | t }}</a>
+    </div>
+  } @else {
+    @switch (notice()) {
+      @case ('created') {
+        <p class="banner" role="status">{{ 'creator.notice.created' | t }}</p>
+      }
+      @case ('saved') {
+        <p class="banner" role="status">{{ 'creator.notice.saved' | t: { version: versionNo() ?? 0 } }}</p>
+      }
+      @case ('unchanged') {
+        <p class="banner" role="status">{{ 'creator.notice.unchanged' | t }}</p>
+      }
+      @case ('draft') {
+        <div class="banner" role="status">
+          <span>{{ 'creator.notice.draft' | t }}</span>
+          <button type="button" class="button" (click)="discardDraft()">{{ 'creator.discardDraft' | t }}</button>
+        </div>
+      }
+    }
+
+    <form class="form" novalidate (submit)="save($event)">
+      <div class="tabs" role="group" [attr.aria-label]="'creator.tabs.label' | t">
+        @for (item of tabs; track item.id) {
+          <button
+            type="button"
+            class="tab"
+            [attr.aria-pressed]="tab() === item.id"
+            [attr.aria-controls]="'creator-panel-' + item.id"
+            (click)="show(item.id)"
+          >
+            {{ item.label | t }}
+            @if (isTabInvalid(item.id) && attempted()) {
+              <span class="flag">{{ 'creator.tab.invalid' | t }}</span>
+            }
+          </button>
+        }
+      </div>
+
+      <!-- Identità -->
+      <div class="panel" id="creator-panel-identity" [hidden]="tab() !== 'identity'">
+        <p class="note">{{ 'creator.adults' | t }}</p>
+        <lyr-field [label]="'creator.firstName' | t" fid="creator-first-name" [field]="f.identity.firstName">
+          <input id="creator-first-name" class="control" type="text" autocomplete="off" [formField]="f.identity.firstName" />
+        </lyr-field>
+        <lyr-field [label]="'creator.lastName' | t" fid="creator-last-name" [field]="f.identity.lastName">
+          <input id="creator-last-name" class="control" type="text" autocomplete="off" [formField]="f.identity.lastName" />
+        </lyr-field>
+        <lyr-field
+          [label]="'creator.age' | t"
+          fid="creator-age"
+          [field]="f.identity.age"
+          [hint]="'creator.ageHint' | t"
+        >
+          <input
+            id="creator-age"
+            class="control"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            [formField]="f.identity.age"
+          />
+        </lyr-field>
+        <lyr-field [label]="'creator.gender' | t" fid="creator-gender" [field]="f.identity.gender">
+          <select id="creator-gender" class="control" [formField]="f.identity.gender" (change)="genderChosen($event)">
+            @for (option of genders; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <lyr-field [label]="'creator.language' | t" fid="creator-language" [field]="f.identity.primaryLanguage">
+          <select id="creator-language" class="control" [formField]="f.identity.primaryLanguage">
+            @for (option of languages; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <lyr-field [label]="'creator.narrativeIdentity' | t" fid="creator-narrative" [field]="f.identity.narrativeIdentity">
+          <textarea id="creator-narrative" class="control" rows="3" [formField]="f.identity.narrativeIdentity"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.occupation' | t" fid="creator-occupation" [field]="f.identity.occupation">
+          <input id="creator-occupation" class="control" type="text" autocomplete="off" [formField]="f.identity.occupation" />
+        </lyr-field>
+        <lyr-field [label]="'creator.setting' | t" fid="creator-setting" [field]="f.identity.setting">
+          <input id="creator-setting" class="control" type="text" autocomplete="off" [formField]="f.identity.setting" />
+        </lyr-field>
+        <lyr-field [label]="'creator.biography' | t" fid="creator-biography" [field]="f.identity.biography">
+          <textarea id="creator-biography" class="control" rows="4" [formField]="f.identity.biography"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.background' | t" fid="creator-background" [field]="f.identity.background">
+          <textarea id="creator-background" class="control" rows="3" [formField]="f.identity.background"></textarea>
+        </lyr-field>
+
+        <fieldset class="group">
+          <legend>{{ 'creator.interests' | t }}</legend>
+          <ul class="rows">
+            @for (row of f.identity.interests; track row; let i = $index) {
+              <li class="row">
+                <input
+                  class="control grow"
+                  type="text"
+                  autocomplete="off"
+                  [attr.aria-label]="'creator.interests.item' | t: { n: i + 1 }"
+                  [formField]="row.text"
+                />
+                <button
+                  type="button"
+                  class="button"
+                  [attr.aria-label]="'creator.interests.remove' | t: { n: i + 1 }"
+                  (click)="removeInterest(i)"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+                @if (row.text().touched() && row.text().errors()[0]; as problem) {
+                  <p class="error">{{ problem.message }}</p>
+                }
+              </li>
+            }
+          </ul>
+          <button type="button" class="button" (click)="addInterest()">{{ 'creator.interests.add' | t }}</button>
+        </fieldset>
+      </div>
+
+      <!-- Personalità -->
+      <div class="panel" id="creator-panel-personality" [hidden]="tab() !== 'personality'">
+        <p class="note">{{ 'creator.traits.note' | t }}</p>
+        <ul class="cards">
+          @for (trait of f.traits; track trait; let i = $index) {
+            <li class="card">
+              <lyr-field [label]="'creator.traits.category' | t" [fid]="'creator-trait-category-' + i" [field]="trait.category">
+                <select class="control" [id]="'creator-trait-category-' + i" [formField]="trait.category">
+                  @for (option of traitOptions; track option.value) {
+                    <option [value]="option.value">{{ option.label | t }}</option>
+                  }
+                </select>
+              </lyr-field>
+              <lyr-field [label]="'creator.traits.description' | t" [fid]="'creator-trait-description-' + i" [field]="trait.description">
+                <button
+                  lock
+                  type="button"
+                  class="lock"
+                  [attr.aria-pressed]="trait.locked().value()"
+                  [attr.aria-label]="'creator.traits.lock' | t: { n: i + 1 }"
+                  (click)="toggleTraitLock(i)"
+                >
+                  {{ 'creator.lock' | t }}
+                </button>
+                <textarea
+                  class="control"
+                  rows="2"
+                  [id]="'creator-trait-description-' + i"
+                  [formField]="trait.description"
+                ></textarea>
+              </lyr-field>
+              <button
+                type="button"
+                class="button"
+                [attr.aria-label]="'creator.traits.remove' | t: { n: i + 1 }"
+                (click)="removeTrait(i)"
+              >
+                {{ 'creator.remove' | t }}
+              </button>
+            </li>
+          }
+        </ul>
+        <button type="button" class="button" (click)="addTrait()">{{ 'creator.traits.add' | t }}</button>
+      </div>
+
+      <!-- Comunicazione -->
+      <div class="panel" id="creator-panel-communication" [hidden]="tab() !== 'communication'">
+        <div class="grid">
+          <lyr-field [label]="'creator.formality' | t" fid="creator-formality" [field]="f.communication.formality">
+            <select id="creator-formality" class="control" [formField]="f.communication.formality" (change)="registerChosen($event)">
+              @for (option of formalities; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.messageLength' | t" fid="creator-length" [field]="f.communication.messageLength">
+            <select id="creator-length" class="control" [formField]="f.communication.messageLength">
+              @for (option of lengths; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.questionFrequency' | t" fid="creator-questions" [field]="f.communication.questionFrequency">
+            <select id="creator-questions" class="control" [formField]="f.communication.questionFrequency">
+              @for (option of frequencies; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.initiativeFrequency' | t" fid="creator-initiative" [field]="f.communication.initiativeFrequency">
+            <select id="creator-initiative" class="control" [formField]="f.communication.initiativeFrequency">
+              @for (option of frequencies; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.expressiveness' | t" fid="creator-expressiveness" [field]="f.communication.expressiveness">
+            <select id="creator-expressiveness" class="control" [formField]="f.communication.expressiveness">
+              @for (option of expressiveness; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+        </div>
+
+        <lyr-field
+          [label]="'creator.addressForm' | t"
+          fid="creator-address"
+          [field]="f.communication.addressForm"
+          [hint]="addressExample() | t"
+        >
+          <select id="creator-address" class="control" [formField]="f.communication.addressForm" (change)="addressChosen()">
+            @for (option of addresses; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <lyr-field
+          [label]="'creator.narration' | t"
+          fid="creator-narration"
+          [field]="f.communication.narration"
+          [hint]="narrationExample() | t"
+        >
+          <select id="creator-narration" class="control" [formField]="f.communication.narration">
+            @for (option of narrations; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <lyr-field
+          [label]="'creator.emoji' | t"
+          fid="creator-emoji"
+          [field]="f.communication.emoji"
+          [hint]="emojiExample() | t"
+        >
+          <select id="creator-emoji" class="control" [formField]="f.communication.emoji">
+            @for (option of emojis; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <lyr-field [label]="'creator.punctuation' | t" fid="creator-punctuation" [field]="f.communication.punctuation">
+          <input id="creator-punctuation" class="control" type="text" autocomplete="off" [formField]="f.communication.punctuation" />
+        </lyr-field>
+        <lyr-field [label]="'creator.colloquialStyle' | t" fid="creator-colloquial" [field]="f.communication.colloquialStyle">
+          <input id="creator-colloquial" class="control" type="text" autocomplete="off" [formField]="f.communication.colloquialStyle" />
+        </lyr-field>
+
+        <fieldset class="group">
+          <legend>{{ 'creator.examples' | t }}</legend>
+          <p class="note">{{ 'creator.examples.note' | t }}</p>
+          <ul class="cards">
+            @for (example of f.communication.examples; track example; let i = $index) {
+              <li class="card">
+                <lyr-field [label]="'creator.examples.user' | t" [fid]="'creator-example-user-' + i" [field]="example.user">
+                  <textarea class="control" rows="2" [id]="'creator-example-user-' + i" [formField]="example.user"></textarea>
+                </lyr-field>
+                <lyr-field
+                  [label]="'creator.examples.character' | t"
+                  [fid]="'creator-example-character-' + i"
+                  [field]="example.character"
+                >
+                  <textarea
+                    class="control"
+                    rows="2"
+                    [id]="'creator-example-character-' + i"
+                    [formField]="example.character"
+                  ></textarea>
+                </lyr-field>
+                <div class="actions">
+                  <button
+                    type="button"
+                    class="button"
+                    [disabled]="i === 0"
+                    [attr.aria-label]="'creator.examples.up' | t: { n: i + 1 }"
+                    (click)="moveExample(i, -1)"
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    [disabled]="i === f.communication.examples.length - 1"
+                    [attr.aria-label]="'creator.examples.down' | t: { n: i + 1 }"
+                    (click)="moveExample(i, 1)"
+                  >
+                    <span aria-hidden="true">↓</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    [attr.aria-label]="'creator.examples.remove' | t: { n: i + 1 }"
+                    (click)="removeExample(i)"
+                  >
+                    {{ 'creator.remove' | t }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+          <button type="button" class="button" [disabled]="f.communication.examples.length >= limits.examples" (click)="addExample()">
+            {{ 'creator.examples.add' | t }}
+          </button>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>{{ 'creator.expressions' | t }}</legend>
+          <ul class="rows">
+            @for (row of f.communication.recurringExpressions; track row; let i = $index) {
+              <li class="row">
+                <input
+                  class="control grow"
+                  type="text"
+                  autocomplete="off"
+                  [attr.aria-label]="'creator.expressions.item' | t: { n: i + 1 }"
+                  [formField]="row.text"
+                />
+                <button
+                  type="button"
+                  class="button"
+                  [attr.aria-label]="'creator.expressions.remove' | t: { n: i + 1 }"
+                  (click)="removeExpression(i)"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+                @if (row.text().touched() && row.text().errors()[0]; as problem) {
+                  <p class="error">{{ problem.message }}</p>
+                }
+              </li>
+            }
+          </ul>
+          <button
+            type="button"
+            class="button"
+            [disabled]="f.communication.recurringExpressions.length >= limits.expressions"
+            (click)="addExpression()"
+          >
+            {{ 'creator.expressions.add' | t }}
+          </button>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>{{ 'creator.avoid' | t }}</legend>
+          <p class="note">{{ 'creator.avoid.note' | t: { max: limits.avoided } }}</p>
+          <ul class="rows">
+            @for (row of f.communication.avoid; track row; let i = $index) {
+              <li class="row">
+                <input
+                  class="control grow"
+                  type="text"
+                  autocomplete="off"
+                  [attr.aria-label]="'creator.avoid.item' | t: { n: i + 1 }"
+                  [formField]="row.text"
+                />
+                <button
+                  type="button"
+                  class="button"
+                  [attr.aria-label]="'creator.avoid.remove' | t: { n: i + 1 }"
+                  (click)="removeAvoided(i)"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+                @if (row.text().touched() && row.text().errors()[0]; as problem) {
+                  <p class="error">{{ problem.message }}</p>
+                }
+              </li>
+            }
+          </ul>
+          <button type="button" class="button" [disabled]="f.communication.avoid.length >= limits.avoided" (click)="addAvoided()">
+            {{ 'creator.avoid.add' | t }}
+          </button>
+        </fieldset>
+      </div>
+
+      <!-- Aspetto -->
+      <div class="panel" id="creator-panel-appearance" [hidden]="tab() !== 'appearance'">
+        <h2 class="section">{{ 'creator.appearance.description' | t }}</h2>
+        <p class="note">{{ 'creator.appearance.descriptionNote' | t }}</p>
+        <lyr-field [label]="'creator.hair' | t" fid="creator-hair" [field]="f.visual.hair">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('hair')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.hair' | t) }" (click)="toggleLock('hair')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-hair" class="control" rows="2" [formField]="f.visual.hair"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.eyes' | t" fid="creator-eyes" [field]="f.visual.eyes">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('eyes')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.eyes' | t) }" (click)="toggleLock('eyes')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-eyes" class="control" rows="2" [formField]="f.visual.eyes"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.face' | t" fid="creator-face" [field]="f.visual.face">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('face')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.face' | t) }" (click)="toggleLock('face')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-face" class="control" rows="2" [formField]="f.visual.face"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.body' | t" fid="creator-body" [field]="f.visual.body">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('body')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.body' | t) }" (click)="toggleLock('body')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-body" class="control" rows="2" [formField]="f.visual.body"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.distinctiveMarks' | t" fid="creator-marks-text" [field]="f.visual.distinctiveMarks">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('distinctive_marks')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.distinctive_marks' | t) }" (click)="toggleLock('distinctive_marks')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-marks-text" class="control" rows="2" [formField]="f.visual.distinctiveMarks"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.accessories' | t" fid="creator-accessories-text" [field]="f.visual.accessories">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('accessories')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.accessories' | t) }" (click)="toggleLock('accessories')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-accessories-text" class="control" rows="2" [formField]="f.visual.accessories"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.clothing' | t" fid="creator-clothing" [field]="f.visual.clothing">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('clothing')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.clothing' | t) }" (click)="toggleLock('clothing')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-clothing" class="control" rows="2" [formField]="f.visual.clothing"></textarea>
+        </lyr-field>
+        <lyr-field [label]="'creator.artStyle' | t" fid="creator-art-style" [field]="f.visual.artStyle">
+          <button lock type="button" class="lock" [attr.aria-pressed]="isLocked('art_style')" [attr.aria-label]="'creator.lock.aria' | t: { field: ('creator.lock.art_style' | t) }" (click)="toggleLock('art_style')">{{ 'creator.lock' | t }}</button>
+          <textarea id="creator-art-style" class="control" rows="2" [formField]="f.visual.artStyle"></textarea>
+        </lyr-field>
+
+        <h2 class="section">{{ 'creator.identityTags' | t }}</h2>
+        <p class="note">{{ 'creator.identityTags.note' | t }}</p>
+        <lyr-field [label]="'creator.subject' | t" fid="creator-subject" [field]="f.visual.subjectTag">
+          <select id="creator-subject" class="control" [formField]="f.visual.subjectTag" (change)="subjectChosen()">
+            @for (option of subjects; track option.value) {
+              <option [value]="option.value">{{ option.label | t }}</option>
+            }
+          </select>
+        </lyr-field>
+        <div class="grid">
+          <lyr-field [label]="'creator.hairColor' | t" fid="creator-hair-color" [field]="f.visual.hairColor">
+            <select id="creator-hair-color" class="control" [formField]="f.visual.hairColor">
+              <option value="">{{ 'creator.none' | t }}</option>
+              @for (entry of vocabulary().entries('hair_color'); track entry.tag) {
+                <option [value]="entry.tag">{{ entry.aliases_it[0] }} ({{ entry.tag }})</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.hairLength' | t" fid="creator-hair-length" [field]="f.visual.hairLength">
+            <select id="creator-hair-length" class="control" [formField]="f.visual.hairLength">
+              <option value="">{{ 'creator.none' | t }}</option>
+              @for (entry of vocabulary().entries('hair_length'); track entry.tag) {
+                <option [value]="entry.tag">{{ entry.aliases_it[0] }} ({{ entry.tag }})</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.eyeColor' | t" fid="creator-eye-color" [field]="f.visual.eyeColor">
+            <select id="creator-eye-color" class="control" [formField]="f.visual.eyeColor">
+              <option value="">{{ 'creator.none' | t }}</option>
+              @for (entry of vocabulary().entries('eye_color'); track entry.tag) {
+                <option [value]="entry.tag">{{ entry.aliases_it[0] }} ({{ entry.tag }})</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.skin' | t" fid="creator-skin" [field]="f.visual.skin">
+            <select id="creator-skin" class="control" [formField]="f.visual.skin">
+              <option value="">{{ 'creator.none' | t }}</option>
+              @for (entry of vocabulary().entries('skin'); track entry.tag) {
+                <option [value]="entry.tag">{{ entry.aliases_it[0] }} ({{ entry.tag }})</option>
+              }
+            </select>
+          </lyr-field>
+        </div>
+        <lyr-field [label]="'creator.hairstyle' | t" fid="creator-hairstyle" [field]="f.visual.hairstyle">
+          <lyr-tag-picker inputId="creator-hairstyle" category="hairstyle" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.hairstyle" />
+        </lyr-field>
+        <lyr-field [label]="'creator.faceTags' | t" fid="creator-face-tags" [field]="f.visual.faceTags">
+          <lyr-tag-picker inputId="creator-face-tags" category="face" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.faceTags" />
+        </lyr-field>
+        <lyr-field [label]="'creator.bodyTags' | t" fid="creator-body-tags" [field]="f.visual.bodyTags">
+          <lyr-tag-picker inputId="creator-body-tags" category="body" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.bodyTags" />
+        </lyr-field>
+        <lyr-field [label]="'creator.marks' | t" fid="creator-marks" [field]="f.visual.marks">
+          <lyr-tag-picker inputId="creator-marks" category="marks" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.marks" />
+        </lyr-field>
+        <lyr-field [label]="'creator.accessoryTags' | t" fid="creator-accessory-tags" [field]="f.visual.accessoryTags">
+          <lyr-tag-picker inputId="creator-accessory-tags" category="accessories" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.accessoryTags" />
+        </lyr-field>
+        <lyr-field [label]="'creator.style' | t" fid="creator-style" [field]="f.visual.style">
+          <lyr-tag-picker inputId="creator-style" category="style" [vocabulary]="vocabulary()" [limit]="limits.slotTags" [formField]="f.visual.style" />
+        </lyr-field>
+        <lyr-field [label]="'creator.extra' | t" fid="creator-extra" [field]="f.visual.extra" [hint]="'creator.extra.hint' | t">
+          <lyr-tag-picker inputId="creator-extra" [limit]="limits.extraTags" [formField]="f.visual.extra" />
+        </lyr-field>
+
+        <div class="persistent">
+          <h3 class="persistent-title">{{ 'creator.persistent' | t }}</h3>
+          <p class="mono" data-testid="persistent-identity">
+            {{ persistentIdentity() !== '' ? persistentIdentity() : ('creator.persistent.empty' | t) }}
+          </p>
+          <p class="note">{{ 'creator.persistent.note' | t }}</p>
+        </div>
+
+        <h2 class="section">{{ 'creator.wardrobe' | t }}</h2>
+        <lyr-field [label]="'creator.usualOutfit' | t" fid="creator-usual-outfit" [field]="f.visual.usualOutfit" [hint]="'creator.usualOutfit.hint' | t">
+          <lyr-tag-picker inputId="creator-usual-outfit" [limit]="limits.outfitTags" [formField]="f.visual.usualOutfit" />
+        </lyr-field>
+
+        <ul class="cards">
+          @for (outfit of f.visual.outfits; track outfit; let i = $index) {
+            <li class="card">
+              <lyr-field
+                [label]="'creator.outfit.key' | t"
+                [fid]="'creator-outfit-key-' + i"
+                [field]="outfit.key"
+                [hint]="'creator.outfit.keyHint' | t"
+              >
+                <input class="control" type="text" autocomplete="off" [id]="'creator-outfit-key-' + i" [formField]="outfit.key" />
+              </lyr-field>
+              <lyr-field [label]="'creator.outfit.label' | t" [fid]="'creator-outfit-label-' + i" [field]="outfit.label">
+                <input class="control" type="text" autocomplete="off" [id]="'creator-outfit-label-' + i" [formField]="outfit.label" />
+              </lyr-field>
+              <lyr-field [label]="'creator.outfit.description' | t" [fid]="'creator-outfit-description-' + i" [field]="outfit.description">
+                <textarea class="control" rows="2" [id]="'creator-outfit-description-' + i" [formField]="outfit.description"></textarea>
+              </lyr-field>
+              <lyr-field [label]="'creator.outfit.tags' | t" [fid]="'creator-outfit-tags-' + i" [field]="outfit.tags">
+                <lyr-tag-picker [inputId]="'creator-outfit-tags-' + i" [limit]="limits.outfitTags" [formField]="outfit.tags" />
+              </lyr-field>
+              <button
+                type="button"
+                class="button"
+                [attr.aria-label]="'creator.outfit.remove' | t: { n: i + 1 }"
+                (click)="removeOutfit(i)"
+              >
+                {{ 'creator.remove' | t }}
+              </button>
+            </li>
+          }
+        </ul>
+        <button type="button" class="button" [disabled]="f.visual.outfits.length >= limits.outfits" (click)="addOutfit()">
+          {{ 'creator.outfit.add' | t }}
+        </button>
+
+        <h2 class="section">{{ 'creator.images' | t }}</h2>
+        <lyr-field [label]="'creator.negative' | t" fid="creator-negative" [field]="f.visual.persistentNegative">
+          <input id="creator-negative" class="control" type="text" autocomplete="off" [formField]="f.visual.persistentNegative" />
+        </lyr-field>
+        <div class="grid">
+          <lyr-field [label]="'creator.seedPolicy' | t" fid="creator-seed-policy" [field]="f.visual.seedPolicy">
+            <select id="creator-seed-policy" class="control" [formField]="f.visual.seedPolicy">
+              @for (option of seedPolicies; track option.value) {
+                <option [value]="option.value">{{ option.label | t }}</option>
+              }
+            </select>
+          </lyr-field>
+          <lyr-field [label]="'creator.baseSeed' | t" fid="creator-base-seed" [field]="f.visual.baseSeed">
+            <input
+              id="creator-base-seed"
+              class="control"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              [formField]="f.visual.baseSeed"
+            />
+          </lyr-field>
+        </div>
+      </div>
+
+      @if (attempted() && invalidTabs().length > 0) {
+        <p class="banner error" role="alert">{{ 'creator.invalid' | t }}</p>
+      }
+      @if (saveError(); as failure) {
+        <p class="banner error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+      }
+
+      <div class="savebar">
+        @if (dirty()) {
+          <span class="note" role="status">{{ 'creator.unsaved' | t }}</span>
+        }
+        <button type="submit" class="button primary" [disabled]="busy()">{{ 'character.save' | t }}</button>
+      </div>
+    </form>
+  }
+</section>

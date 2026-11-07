@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. Every other real screen is planned, phases P02 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. P03.2a delivered the Character Creator, screen 3 (`features/characters/`), on Signal Forms; the characters list and the profile are still placeholders. Every other real screen is planned, phases P03 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -180,6 +180,40 @@ Tabs **Identità**, **Personalità**, **Comunicazione**, **Aspetto**. An assist 
   closed choices for hair color, length, eyes and skin, vocabulary chips with Italian search for the other slots, and free
   extra tags. Below them, the usual outfit and up to 5 named outfits. **Prompt persistente** shows the rendered English
   identity, read-only, with a warning when it would not fit in the first prompt chunk. Lock icons sit next to each field.
+
+Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `/characters/:id/edit` load
+`character-creator-screen.ts`, a Signal Forms editor of the whole card.
+
+- **Form.** The form model is one signal (`card-form.ts`: `CreatorModel`, `toModel`, `toCard`, `creatorSchema`). Each rule
+  is a pure function in `card-rules.ts` that mirrors `lyrveil.domain.card` and `lyrveil.services.card_rules`; the schema
+  attaches them to the fields, and a refusal carries the Italian text of the catalog (`creator.error.*`), so the form
+  refuses what the API refuses: an age under 18 or over 120, a name outside 1 to 80 characters, an unknown vocabulary
+  tag, a free tag of more than 4 words, a reserved (`usual`, `scene`), malformed or repeated outfit key, an example with
+  no answer, a seed policy without a starting seed, and the length and count limits. The server stays the authority and
+  its `detail` is shown when it refuses a save. A message shows once its field is touched, and a save with a wrong field
+  switches to the first tab with a problem and focuses it. One difference: the starting seed is limited to
+  9007199254740991 (a browser number), where the server accepts up to 2^63 - 1.
+- **Tabs.** Identità (name, age, **Come parla di sé**, language, narrative identity, occupation, setting, biography,
+  background, interests), Personalità (traits by category, each lockable), Comunicazione (register, length, questions,
+  initiative, expressiveness, *tu* or *Lei*, narration and emoji with a one-line example, punctuation, colloquial style,
+  example pairs in an order the user sets, recurring expressions, **Da evitare**), Aspetto (the eight Italian
+  descriptions with their locks, the subject tag, the closed hair color, hair length, eye color and skin, vocabulary
+  chips for hairstyle, face, body, marks, accessories and style, free tags, **Prompt persistente**, the usual outfit,
+  up to 5 outfits, the persistent negative and the seed policy). Choosing **Al femminile**, **Al maschile** or **Non
+  indicato** proposes the subject tag, and a formal register proposes *Lei*, until the user chooses either by hand.
+- **Vocabulary.** `GET /characters/vocabulary` supplies the tags; `Vocabulary.search` matches the English tag or an
+  Italian alias, ignoring case and accents. The chip control (`tag-picker.ts`) is a Signal Forms custom control.
+- **Draft and leaving.** A new character keeps a local draft in `localStorage` (`lyrveil.character-draft`) until it is
+  saved; reopening `/characters/new` restores it and offers **Scarta la bozza**. Leaving with unsaved changes asks for
+  confirmation (`leave-guard.ts`). After a first save the screen moves to the character's edit address.
+- **Not delivered, so no control is drawn for it:** the assist panel (`POST /characters/drafts` does not exist), import and
+  export, the avatar actions (P03.3), the counter of how many examples enter the prompt, the first-chunk warning of
+  **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
+  the locks' effect on a tag translation (there is no such job yet). The characters list and the profile are still
+  placeholders; the new-chat dialog links to the Creator.
+- **Tests:** `card-rules.spec.ts`, `card-form.spec.ts` and `character-creator-screen.spec.ts` (unit), and
+  `tests/e2e/specs/character-creator.spec.mjs` (T-CHR-13); see [Testing](testing.md#character-creator). The E2E spec
+  was written but not run in this change.
 
 ### 4. Character Profile
 
