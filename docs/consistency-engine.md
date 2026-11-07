@@ -168,13 +168,55 @@ and V3, and before V4 and the client. Its rules only remove or reshape text, and
 
 | Rule | Effect | While streaming |
 | --- | --- | --- |
-| N1 | Removes a leading speaker label, the character's first or full name followed by `:` or a dash, and quotes that wrap the whole reply | Holds back the first 40 characters |
-| N2 | Turns Markdown headings, rules, tables and code fences into plain text. `**bold**` loses its markers | Per line |
-| N3 | Applies `narration`. `nessuna` removes asterisk spans of three or more words, `leggera` keeps the first such span, `libera` keeps all. Shorter spans stay as emphasis | Holds a span back until it closes |
+| N1 | Removes a leading speaker label, the character's first or full name followed by `:` or a dash, and quotes that wrap the whole reply | Holds back the start while it may still be a label or a wrapping quote, up to the first 40 characters |
+| N2 | Turns Markdown headings, rules, tables and code fences into plain text. `**bold**` loses its markers | Holds a line start while it may still be Markdown, and a table row until it ends |
+| N3 | Applies `narration`. `nessuna` removes asterisk spans of three or more words, `leggera` keeps the first such span, `libera` keeps all. Shorter spans stay as emphasis | Holds back a span that may be removed until it closes |
 | N4 | When `finish_reason` is `length`, cuts after the last sentence end if at least half of the text remains, otherwise appends `…` | At the end |
-| N5 | Removes emoji when `emoji` is `mai`, then collapses blank lines and trailing spaces | Per chunk |
+| N5 | Removes emoji when `emoji` is `mai`, then collapses blank lines and trailing spaces | Holds only whitespace that may turn out trailing |
 
 `message_variants.checks_json` records the rules that fired, with counts.
+
+### Delivered in P04.8a
+
+`consistency/normalizer.py` holds `ReplyNormalizer`, and `normalize_reply` for a text known in one piece.
+`ChatInferenceService._stream` feeds it every token of a reply, and only what it releases is published or stored
+([Streaming persistence](backend.md#streaming-persistence)).
+
+- **Order.** The rules read the card's full and first name, `narration` and `emoji` (`NormalizerRules.for_card`). They
+  run as N1, N2, N3, the emoji half of N5, then the spacing half of N5. N4 needs the whole text, so it runs last, on
+  the text the others released. Each stage reads its input one character at a time, or decides only on facts that more
+  text cannot change, so the delivered text never depends on how the reply was split (T-CON-09).
+- **N1.** The name matches in any case, with up to two asterisks around it (`**Nerea:**`), followed by `:`, an en or
+  em dash, or `-` and whitespace. After the label, an opening quote (`"`, `“`, `«` or `„`) wraps the reply when its
+  closing quote falls within the first 40 characters and only whitespace follows it, or when no closing quote falls
+  within them. In that second case the first closing quote that follows goes with it, wherever it is, so the quotes
+  left stay paired. A quoted line closed within the 40 characters and followed by more text stays. A reply that
+  cannot start with a label or a quote streams at once.
+- **N2.** A heading keeps its title, and lines inside a fence stay as written. Rule lines, fence lines and table
+  separator rows go with their line. A table row becomes its non-empty cells joined by `, `. A run of asterisks keeps
+  one asterisk when its length is odd and none when it is even. Lists, block quotes and inline code stay.
+- **N3.** A span is the text between two asterisks on one line, and its words are the whitespace-separated pieces with
+  a letter or a digit. An asterisk with no closing one on its line stays as written. Only a span that may be removed
+  is held back: every span for `nessuna`, the spans after the first narration span for `leggera`, none for `libera`.
+- **N5.** Emoji are the code points from U+1F000 to U+1FAFF and from U+2600 to U+27BF, and a few others such as ⭐.
+  Their joiners, selectors and tags go with them. The spacing half drops leading and trailing whitespace and the
+  trailing spaces of each line, and keeps at most one blank line in a row. Where text was removed, the gap becomes
+  one space, or none before closing punctuation or at the start of a line, and a line that held only removed text
+  disappears.
+- **N4.** A sentence end is `.`, `!`, `?` or `…`, with any closing quote, bracket or asterisk after it, followed by
+  whitespace or the end. Before `…`, trailing commas, colons, semicolons and dashes go. Text already streamed cannot be
+  taken back, so when N4 cuts, `message.completed` carries the delivered text and the client replaces the streamed
+  text with it.
+- **Record.** `checks_json` holds `{"normalizer": {"N1": 1, ...}}`, with a count for each rule that fired: N1 the label
+  and the quotes; N2 each heading, rule, table row, fence line and `**` marker; N3 each removed span; N4 its cut or
+  ellipsis; N5 each removed run of emoji and each shortened run of blank lines. P04.8b adds the checks and the
+  regeneration count.
+- **Not delivered.** The reply checks V1 to V13 and the corrective generation (P04.8b). V2 and V3 are the stop
+  sequences only, so nothing yet removes control text or a user turn that the runtime lets through. An empty
+  normalized reply is stored as it is, until V1 retries it.
+
+`tests/unit/test_reply_normalizer.py` holds T-CON-09 and the single rules. `tests/integration/test_reply_streaming.py`
+checks that the reply path publishes and stores only normalized text, with its `checks_json`.
 
 ## Reply checks
 

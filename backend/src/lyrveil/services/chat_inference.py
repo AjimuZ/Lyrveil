@@ -9,9 +9,11 @@ while the reply streams. After a crash the reply keeps what was written: `recove
 
 The prompt is built by lyrveil.context.builder.ContextBuilder (docs/memory-engine.md, Context composition) in the
 family of `ReplySettings.template`, with the runtime's own token counts, the character's length band as `max_length`
-and the conversation's memories and summaries. Tokens are stored and published as the runtime yields them:
-ReplyNormalizer, the reply checks and the corrective generation, and with them `message.restarted` and the anchor's
-corrective notes, come in P04.8. No message text, prompt or token is ever logged: the assembly is logged as counts.
+and the conversation's memories and summaries. Every token passes through the card's ReplyNormalizer
+(lyrveil.consistency.normalizer) in `_stream`, and only the text it releases is published and stored, so the client,
+the database and later prompts all see the normalized reply. The reply checks and the corrective generation, and with
+them `message.restarted` and the anchor's corrective notes, come in P04.8b. No message text, prompt or token is ever
+logged: the assembly is logged as counts.
 
 After a finished reply is stored and announced, the use of its memories is recorded and the memory extraction trigger
 runs (lyrveil.services.memory_extraction.queue_extraction_if_due), each in its own transaction, so a failure there
@@ -19,8 +21,9 @@ never undoes the reply. A regenerated reply that extraction had already passed a
 (queue_reevaluation), since its regeneration invalidated what the earlier variant supported.
 """
 
+import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -29,6 +32,7 @@ from anyio import to_thread
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
+from lyrveil.consistency.normalizer import NormalizedReply, NormalizerRules, ReplyNormalizer
 from lyrveil.context.blocks import state_lines
 from lyrveil.context.builder import (
     Assembly,
@@ -134,12 +138,14 @@ class _Reply:
 
 @dataclass(frozen=True)
 class _Generated:
-    """A finished generation, with the size of its prompt and the memories and episodes its block 5 held."""
+    """A finished generation: its normalized text, the size of its prompt, the memories and episodes its block 5
+    held, and the normalizer's part of `checks_json`."""
 
     text: str
     status: MessageStatus
     prompt_tokens: int
     memory_ids: tuple[str, ...]
+    checks: Mapping[str, object]
 
 
 def _presence(reply: _Reply) -> dict[str, str]:
@@ -153,12 +159,19 @@ def _utf16_length(text: str) -> int:
 
 
 def _store(
-    connection: Connection, reply: _Reply, text: str, message_status: MessageStatus, variant_status: VariantStatus
+    connection: Connection,
+    reply: _Reply,
+    text: str,
+    message_status: MessageStatus,
+    variant_status: VariantStatus,
+    checks: Mapping[str, object] | None = None,
 ) -> Message:
-    """Writes `text` and the statuses into the reply's variant and message, and returns the message."""
-    repository.update_variant(
-        connection, reply.variant_id, content=text, content_hash=content_hash(text), status=variant_status.value
-    )
+    """Writes `text` and the statuses into the reply's variant and message, and returns the message. `checks`, when
+    given, becomes the variant's `checks_json`; otherwise that column is left as it is."""
+    columns: dict[str, object] = {"content": text, "content_hash": content_hash(text), "status": variant_status.value}
+    if checks is not None:
+        columns["checks_json"] = json.dumps(checks, ensure_ascii=False)
+    repository.update_variant(connection, reply.variant_id, **columns)
     repository.update_message(connection, reply.message_id, content=text, status=message_status.value)
     message = repository.get_message(connection, reply.message_id)
     assert message is not None
@@ -261,13 +274,16 @@ class ChatInferenceService:
     aware time of retrieval and use counters; tests pass fakes. The selection of a chat's last reply is kept in memory
     for its next one, so a restart only loses that small bonus. The state a run leaves, besides the job's own:
 
-    - finished: variant and message `complete` with the whole text, or `interrupted` when the runtime
-      reports the generation aborted; then `message.completed`, then the use of its memories, then a
+    - finished: variant and message `complete` with the whole normalized text and the variant's `checks_json`
+      holding the normalizer's counts, or `interrupted` when the runtime reports the generation aborted; then
+      `message.completed`, then the use of its memories, then a
       `memory_extraction` job when the chat is due and a `summary_checkpoint` job when a summary is due;
     - failed with a retry coming (a retryable failure with attempts left, a lost lease, a preemption):
       message back to `queued` with empty text, so the next run starts clean; then `message.updated`;
-    - failed for good: variant and message `failed` with the text streamed so far; then `message.failed`;
-    - cancelled by the shutdown (`close`): the text flushed, the reply left `streaming` for the next start.
+    - failed for good: variant and message `failed` with the text released so far; then `message.failed`;
+    - cancelled by the shutdown (`close`): the released text flushed, the reply left `streaming` for the next start.
+
+    Text the normalizer still held back when a run failed or was cancelled is dropped with it.
     """
 
     def __init__(
@@ -408,8 +424,8 @@ class ChatInferenceService:
         return write(self._engine, work)
 
     async def _generate(self, job: Job, reply: _Reply, context: RunContext, streamed: list[str]) -> _Generated:
-        """Builds the prompt, then streams the reply, publishing each token and flushing the text on time.
-        `streamed` collects the tokens, so a failure handler sees what was already shown."""
+        """Builds the prompt, then streams the reply through the card's normalizer (`_stream`). `streamed` collects
+        the released text, so a failure handler sees what was already shown."""
         wanted = await to_thread.run_sync(self._load_context, reply)
         if wanted is None:
             raise JobFailedError(INTERNAL, _NOTHING_TO_ANSWER, retryable=False)
@@ -434,6 +450,24 @@ class ChatInferenceService:
             dry_sequence_breakers=settings.dry_sequence_breakers,
             stop_sequence=formatter.stop_sequences(settings.user.display_name),
         )
+        normalizer = ReplyNormalizer(NormalizerRules.for_card(wanted.card))
+        normalized, finish = await self._stream(reply, request, normalizer, streamed)
+        status = MessageStatus.INTERRUPTED if finish == "aborted" else MessageStatus.COMPLETE
+        memory_ids = tuple(item.id for item in assembly.memories)
+        return _Generated(normalized.text, status, assembly.token_total, memory_ids, normalized.checks())
+
+    async def _stream(
+        self, reply: _Reply, request: TextRequest, normalizer: ReplyNormalizer, streamed: list[str]
+    ) -> tuple[NormalizedReply, FinishReason]:
+        """Streams one generation of `request` into the reply: the path every generated reply text takes.
+
+        Each runtime token goes through `normalizer`; the text it releases is appended to `streamed`, published as a
+        `message.delta` and flushed to the database every `flush_interval_s` seconds, so nothing the normalizer
+        holds back or removes is ever shown or stored. At the end the held text is published too, and the returned
+        reply holds the delivered text and the finish reason. When N4 cuts a reply that the length limit stopped, no
+        delta can take back text already shown: `message.completed` carries the delivered text, which replaces it.
+        Raises RuntimeStreamDroppedError when the stream ends without its final chunk, or what the runtime raises.
+        """
         offset = 0
         finish: FinishReason | None = None
         last_flush = self._monotonic()
@@ -441,18 +475,25 @@ class ChatInferenceService:
             if chunk.final:
                 finish = chunk.finish_reason
                 continue
-            streamed.append(chunk.token)
-            delta = {"message_id": reply.message_id, "variant_id": reply.variant_id, "offset": offset}
-            self._events.publish(MESSAGE_DELTA, {**delta, "text": chunk.token})
-            offset += _utf16_length(chunk.token)
+            offset = self._publish(reply, normalizer.feed(chunk.token), offset, streamed)
             if self._monotonic() - last_flush >= self._flush_interval_s:
                 await to_thread.run_sync(self._flush, reply, "".join(streamed))
                 last_flush = self._monotonic()
         if finish is None:
             raise RuntimeStreamDroppedError("the stream ended without its final chunk")
-        status = MessageStatus.INTERRUPTED if finish == "aborted" else MessageStatus.COMPLETE
-        memory_ids = tuple(item.id for item in assembly.memories)
-        return _Generated("".join(streamed), status, assembly.token_total, memory_ids)
+        normalized = normalizer.finish(finish)
+        self._publish(reply, normalized.tail, offset, streamed)
+        return normalized, finish
+
+    def _publish(self, reply: _Reply, text: str, offset: int, streamed: list[str]) -> int:
+        """Publishes `text` as the reply's next `message.delta` at `offset` and appends it to `streamed`, unless it
+        is empty. Returns the offset after it, in UTF-16 code units."""
+        if not text:
+            return offset
+        streamed.append(text)
+        delta = {"message_id": reply.message_id, "variant_id": reply.variant_id, "offset": offset}
+        self._events.publish(MESSAGE_DELTA, {**delta, "text": text})
+        return offset + _utf16_length(text)
 
     def _load_context(self, reply: _Reply) -> ContextRequest | None:
         """Returns what the reply's prompt is built from (load_context_request), in one read transaction. Blocks: run
@@ -470,15 +511,24 @@ class ChatInferenceService:
             ),
         )
 
-    def _write(self, reply: _Reply, text: str, status: MessageStatus, variant_status: VariantStatus) -> Message:
-        """Stores `text` and the statuses in one transaction and returns the message. Blocks: run it in a thread."""
-        return write(self._engine, lambda connection: _store(connection, reply, text, status, variant_status))
+    def _write(
+        self,
+        reply: _Reply,
+        text: str,
+        status: MessageStatus,
+        variant_status: VariantStatus,
+        checks: Mapping[str, object] | None = None,
+    ) -> Message:
+        """Stores `text`, the statuses and, when given, `checks` in one transaction and returns the message. Blocks:
+        run it in a thread."""
+        return write(self._engine, lambda connection: _store(connection, reply, text, status, variant_status, checks))
 
     def _flush(self, reply: _Reply, text: str) -> None:
         self._write(reply, text, MessageStatus.STREAMING, VariantStatus.STREAMING)
 
     def _finish(self, reply: _Reply, generated: _Generated) -> Message:
-        return self._write(reply, generated.text, generated.status, VariantStatus(generated.status.value))
+        status = generated.status
+        return self._write(reply, generated.text, status, VariantStatus(status.value), generated.checks)
 
     async def _cancelled(self, job: Job, reply: _Reply, text: str) -> None:
         if self._closing:

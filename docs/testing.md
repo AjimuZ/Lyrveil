@@ -498,6 +498,18 @@ fact, a relationship event and a mood) and all 29 summary steps (24 chunks, 5 ro
 `characters`, `character_traits`, `character_visual_profiles` and `character_versions` unchanged, with every proposed
 age stored as an `identity_candidate` only. Its memory tests are listed under [Memory](#memory).
 
+Delivered in P04.8a: `backend/tests/unit/test_reply_normalizer.py` holds T-CON-09. Six fixed raw replies, two per
+template family and written in the habits of its profiles (Markdown, labels with a colon, a dash or bold, asterisk
+narration, wrapping quotes, a table, emoji sequences, two cut by length), run under the rules of the three demo cards.
+Each gives its expected text and rule counts in one piece, cut in two at every position, and cut into equal chunks of
+1 to 8 characters. The text released while streaming, followed by the tail, equals the delivered text, except where N4
+cut it. The same file covers each rule alone, what is held back while streaming, and the rules read from a card.
+`backend/tests/integration/test_reply_streaming.py` adds a reply whose label, narration span and bold markers never
+reach a delta or the database, whose N4 cut reaches `message.completed`, and whose variant records
+`{"normalizer": {"N1": 1, "N2": 2, "N3": 1, "N4": 1}}`. In this change `scripts/lyrveil.cmd test unit
+tests/unit/test_reply_normalizer.py` (41 passed), the same command with `tests/integration/test_reply_streaming.py`
+(7 passed), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Messaging
 
 | ID | Test | Level | Phase |

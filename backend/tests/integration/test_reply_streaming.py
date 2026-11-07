@@ -1,4 +1,5 @@
-"""Checks reply streaming on a real database: T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13, T-SEC-06 (integration level).
+"""Checks reply streaming on a real database: T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13, T-SEC-06 (integration level),
+and that the reply normalizer stands between the runtime and both the client and the database (P04.8a).
 
 The text runtime is a fake that keeps the TextRuntime contract; the job worker, the event hub, the WebSocket
 route and the database are the real ones. The WebSocket is spoken in raw ASGI messages on the test's own event
@@ -32,7 +33,14 @@ from lyrveil.main import Worker, create_app
 from lyrveil.orchestration.client import Lease, LeaseMode, LeaseOutcome
 from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import upgrade_to_head
-from lyrveil.ports.text_runtime import RuntimeUnavailableError, TextChunk, TextRequest, TextRuntime, TextRuntimeInfo
+from lyrveil.ports.text_runtime import (
+    FinishReason,
+    RuntimeUnavailableError,
+    TextChunk,
+    TextRequest,
+    TextRuntime,
+    TextRuntimeInfo,
+)
 from lyrveil.services.chat_inference import ChatInferenceService
 from lyrveil.services.conversations import ConversationService
 from lyrveil.services.messages import MessageService
@@ -57,7 +65,7 @@ class FakeRuntime:
 
     `after_token(index)` runs when the handler asks for the token after `index`. `failures` are raised, one per
     stream, after its first token. `hold_after` makes a stream stop after that many tokens and wait forever, calling
-    `on_hold` first, as a generation cut by a crash does.
+    `on_hold` first, as a generation cut by a crash does. `finish_reason` ends every stream.
     """
 
     def __init__(self, answer: Callable[[str], str] = lambda current: f"Risposta a {current}") -> None:
@@ -67,6 +75,7 @@ class FakeRuntime:
         self.after_token: Callable[[int], None] | None = None
         self.hold_after: int | None = None
         self.on_hold: Callable[[], None] | None = None
+        self.finish_reason: FinishReason = "stop"
 
     async def count_tokens(self, text: str, *, special: bool = False) -> int:
         return len(text.split()) + int(special)
@@ -85,7 +94,7 @@ class FakeRuntime:
                 if self.on_hold is not None:
                     self.on_hold()
                 await anyio.sleep_forever()
-        yield TextChunk("", "stop", "".join(tokens))
+        yield TextChunk("", self.finish_reason, "".join(tokens))
 
     async def generate(self, request: TextRequest) -> str:
         return self.answer(current_message(request.prompt))
@@ -409,6 +418,43 @@ async def test_a_runtime_failure_requeues_the_reply_empty_and_the_retry_overwrit
     assert stored(migrated, reply.id) == ("complete", "Seconda prova riuscita", "complete", "Seconda prova riuscita")
     variants = MessageService(migrated).variants(reply.id)
     assert [variant.id for variant in variants] == [reply.active_variant_id]
+
+
+def checks_of(engine: Engine, message_id: str) -> Any:
+    """Returns the decoded `checks_json` of the message's active variant."""
+    with engine.connect() as connection:
+        value = connection.execute(
+            text(
+                "SELECT v.checks_json FROM messages AS m "
+                "JOIN message_variants AS v ON v.id = m.active_variant_id WHERE m.id = :id"
+            ),
+            {"id": message_id},
+        ).scalar_one()
+    return json.loads(value)
+
+
+@pytest.mark.anyio
+async def test_a_reply_is_normalized_before_it_is_shown_or_stored_and_its_variant_records_the_rules_that_fired(
+    migrated: Engine,
+) -> None:
+    reply = MessageService(migrated).send(new_chat(migrated), "Ciao").reply
+    runtime = FakeRuntime(lambda _current: "Alba: *si avvicina e sorride piano* Ciao! **Benvenuto** al porto. E poi")
+    runtime.finish_reason = "length"
+    hub = EventHub("boot")
+    _, scheduler = worker_for(migrated, runtime, hub, flush_interval_s=0.0)
+    finished = await scheduler.run_once()
+    assert finished is not None
+    assert finished.status is JobStatus.COMPLETED
+
+    # The label, the narration span (the default card has `narration` `nessuna`) and the bold markers never reach the
+    # client; N4 cuts the words after the last sentence, which message.completed replaces.
+    delivered = "Ciao! Benvenuto al porto."
+    published = events(hub)
+    assert "".join(delta["text"] for delta in deltas_of(published, reply.id)) == f"{delivered} E poi"
+    assert published[-1][0] == "message.completed"
+    assert published[-1][1]["message"]["content"] == delivered
+    assert stored(migrated, reply.id) == ("complete", delivered, "complete", delivered)
+    assert checks_of(migrated, reply.id) == {"normalizer": {"N1": 1, "N2": 2, "N3": 1, "N4": 1}}
 
 
 def start(monkeypatch: pytest.MonkeyPatch, database_path: Path) -> list[FastAPI]:

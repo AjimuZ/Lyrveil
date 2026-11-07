@@ -156,6 +156,8 @@
 - Run derived-data invalidation in the caller's write transaction of the user change, and queue only the model work, so the change and its invalidation commit together or not at all.
 - When re-reading old input, guard against double counting and overriding newer state by checking what applied rows already cite and whether newer rows exist, instead of trusting the model.
 - ruff format joins a signature or call onto one line when it fits in exactly 120 characters; count before wrapping, or let `test lint` report the diff.
+- Write streaming text transforms as a chain of character-level stages whose decisions depend only on the characters seen so far; the output is then independent of chunking by construction, and a test can feed every split position.
+- Write look-alike or invisible characters in Python source with \N{NAME} escapes, both for readability and to satisfy RUF001.
 
 ---
 
@@ -1322,4 +1324,16 @@ I found no instructions planted in the files I read.
   - The P04.9 Memory Studio should surface `needs_review` (set on locked memories by invalidation) and the invalidated memories, and use the revision reasons source_changed, invalidated, replacement_invalidated, conflict_cleared and reevaluation.
   - To run a single integration file: `scripts/lyrveil.cmd test unit tests/integration/<file>.py`.
   - To test a crash in the middle of a job: mark the job running with `queue.start`, then make the fake runtime raise a `BaseException` subclass so no handler catches it. After that, dispose the engine, open a new one on `database_path` and call `recover_interrupted_jobs`.
+---
+
+## 2026-11-07T16:19:25Z - P04.8a
+- Added lyrveil/consistency/normalizer.py, a deterministic streaming implementation of rules N1 to N5 (ADR 0032), and the single chat reply streaming path ChatInferenceService._stream that feeds every token through it before anything is published or stored. Stages: N1 (leading label in any case, with optional ** and :, en/em dash or '- ', plus wrapping quotes decided within a 40-character window), N2 (headings, rules, fences, tables and ** markers), N3 (narration spans of three or more words: nessuna/leggera/libera), the N5 emoji half (only for emoji mai) and the N5 spacing half (closes gaps left by removals and collapses blank lines and trailing spaces); N4 runs in finish. Each stage reads one character at a time or decides only on facts that more text cannot change, so the result does not depend on chunking. The text is held back only while a later character can still change it, so the existing streaming tests pass unchanged. A finished variant now gets checks_json {"normalizer": {...}}. When N4 cuts a reply stopped by the length limit, message.completed carries the shorter text, which the client already uses to replace the streamed text. Checks run: scripts/lyrveil.cmd test unit tests/unit/test_reply_normalizer.py (41 passed), scripts/lyrveil.cmd test unit tests/integration/test_reply_streaming.py (7 passed, existing tests included), scripts/lyrveil.cmd test lint (passed). The full unit, integration, e2e and docker levels were not run. No planted instructions found in the files read.
+- Files changed: backend/src/lyrveil/consistency/normalizer.py, backend/src/lyrveil/consistency/__init__.py, backend/src/lyrveil/services/chat_inference.py, backend/tests/unit/test_reply_normalizer.py, backend/tests/integration/test_reply_streaming.py, CHANGELOG.md, docs/consistency-engine.md, docs/backend.md, docs/api.md, docs/data-model.md, docs/testing.md
+- **Learnings for future iterations:**
+  - ReplyNormalizer(NormalizerRules.for_card(card)): feed(token) returns the released text (often empty), and finish(finish_reason) returns NormalizedReply(text, tail, fired). Its checks() method returns {"normalizer": {...}}. normalize_reply(raw, rules, finish_reason) handles text known in one piece.
+  - ChatInferenceService._stream(reply, request, normalizer, streamed) is the only path for a generated reply's text: it publishes deltas, flushes the released text and returns (NormalizedReply, finish_reason). P04.8b's corrective generation should call it again with a new request and a new ReplyNormalizer, and must publish message.restarted plus reset the offset and streamed list before doing so.
+  - checks_json is written only by _finish, as {"normalizer": {rule: count}}. P04.8b should add its check hits and the regeneration count under new keys and keep the normalizer key.
+  - V2 and V3 are still only stop sequences. A V2/V3 cleanup stage can be put before _Opening in ReplyNormalizer's stage tuple. Stages use the sentinel \x00 (_REMOVED) to mark removed text, so that _Spacing closes the gap.
+  - The Write and Edit tools turn \uXXXX escapes into literal characters, including invisible ones such as the zero-width joiner. Use Python \N{NAME} escapes instead. Ruff RUF001 flags the en dash and the right single quotation mark in strings.
+  - N1 holds text back only while the start can still be a label or an opening quote. Fake runtime replies that start with the character's name or with a quote will therefore produce fewer deltas.
 ---

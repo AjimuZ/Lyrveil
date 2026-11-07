@@ -266,8 +266,13 @@ writes the text to the variant and the message every 2 seconds and at the end, w
 time. A finished run sets both `complete` (`interrupted` when the runtime reports the generation aborted). A failure
 that will be retried puts the message back to `queued` with empty text and leaves the variant `streaming`; a final
 failure sets both `failed` and keeps the text streamed so far. At startup every message still `streaming` becomes
-`interrupted` with its active variant, and keeps its text. `generation_params_json` and `checks_json` stay NULL until
-the settings store and the reply checks exist (P04).
+`interrupted` with its active variant, and keeps its text. `generation_params_json` stays NULL until the settings store
+exists (P04).
+
+Since P04.8a the stored text of a generated reply is the normalized one, and a finished run writes `checks_json` as
+`{"normalizer": {...}}`, the count of each normalizer rule that fired
+([Delivered in P04.8a](consistency-engine.md#delivered-in-p048a)). A failed run leaves it NULL. The reply checks and
+the regeneration count join it in P04.8b.
 
 ## Memory tables
 

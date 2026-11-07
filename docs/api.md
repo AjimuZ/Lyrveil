@@ -461,8 +461,10 @@ Rules of the delivered server, beyond the protocol below:
   `message.failed`, and `message.updated` when a failed run will be retried and the reply goes back to `queued` with
   empty text. The REST routes, the job states, the GPU state and the rest publish nothing yet.
 - `message.delta` `offset` counts UTF-16 code units of the text before the delta, the index unit of JavaScript strings.
-  The deltas are the runtime's tokens: [reply normalization](consistency-engine.md#reply-normalization) and
-  `message.restarted` come with P04.8.
+  Since P04.8a the deltas are the text the [reply normalizer](consistency-engine.md#reply-normalization) releases, not
+  the runtime's tokens: one delta can join several tokens, and a token the normalizer holds back gives no delta. The
+  deltas joined are the reply's text, except when N4 cuts a reply that the length limit stopped; the content of
+  `message.completed` is then shorter and replaces the streamed text. `message.restarted` comes with P04.8b.
 
 Server frames:
 

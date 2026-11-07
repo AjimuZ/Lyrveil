@@ -74,7 +74,7 @@ orchestrator/
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
-| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the stream and the persistence, under the lease the scheduler holds; since P04.5 the context is `ContextBuilder`'s; the normalizer, the checks and the corrective generation join with P04.8. |
+| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the stream and the persistence, under the lease the scheduler holds; since P04.5 the context is `ContextBuilder`'s; since P04.8a the stream goes through the normalizer; the checks and the corrective generation join with P04.8b. |
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
@@ -224,7 +224,9 @@ Choices the docs did not fix, kept until the GPU suite (T-GPU-03, T-GPU-04) chec
 ### Streaming persistence
 
 While a reply streams, deltas go to the WebSocket as soon as `ReplyNormalizer` releases them.
-It holds back only the first 40 characters and any open asterisk span. The variant text is written to
+It holds back only what a later character can still change: the start of the reply while it may be a speaker label
+or a wrapping quote (up to the first 40 characters), the start of a line that may be Markdown, an asterisk span that
+may be removed, and whitespace that may be trailing. The variant text is written to
 the database every 2 seconds, and at the end. A corrected check that fires publishes `message.restarted`,
 and the second generation overwrites the same variant. After a crash the reply keeps what was
 written, its status becomes `interrupted` and the interface offers regeneration.
@@ -235,8 +237,8 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
 | Moment | Database | Events |
 | --- | --- | --- |
 | Run starts | Message `streaming`, text emptied; the payload's variant stays `streaming` | `typing.started` |
-| Each token | Written every 2 s (`FLUSH_INTERVAL_S`), each time in its own short transaction | `message.delta` |
-| Runtime finishes | Variant and message `complete` with the whole text; `interrupted` when the runtime reports `aborted` | `typing.stopped`, `message.completed` |
+| Each token | The text the normalizer released, written every 2 s (`FLUSH_INTERVAL_S`), each time in its own short transaction | `message.delta` with the released text, when there is any |
+| Runtime finishes | Variant and message `complete` with the whole normalized text, and the variant's `checks_json`; `interrupted` when the runtime reports `aborted` | The held text as a last `message.delta`, `typing.stopped`, `message.completed` |
 | Failure, retry coming | Message back to `queued`, text emptied, so the next run starts clean | `typing.stopped`, `message.updated` |
 | Final failure | Variant and message `failed`, with the text streamed so far | `typing.stopped`, `message.failed` |
 | Shutdown cancels the run | Text flushed, reply left `streaming` | None |
@@ -266,10 +268,17 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   instead of queuing it again, so the partial text the user saw is not silently replaced; a reply still `queued` when
   the backend stops is queued again. With no user message left before the reply (the user deleted it) the run fails
   with `INTERNAL`.
+- Since P04.8a every token goes through the card's `ReplyNormalizer` in `ChatInferenceService._stream`, the one path a
+  generated reply text takes; the corrective generation of P04.8b reuses it. Deltas, flushes, the failure text and
+  the stored reply all hold only released text, so the client, the database and later prompts never see a label,
+  Markdown or a removed span. Text still held back when a run fails or is cancelled is dropped. When N4 cuts a reply
+  that the length limit stopped, the words after the cut were already shown: `message.completed` carries the delivered
+  text, which replaces them ([Reply normalization](consistency-engine.md#delivered-in-p048a)).
 
 `tests/integration/test_reply_streaming.py` holds T-MSG-03 (token order, the flush times against a fake clock, the
 stored text), T-MSG-09, T-MSG-12 through the application's `/ws` with its lifespan worker, T-MSG-13 through a restart
-of `main()`, the retry path and T-SEC-06. `tests/unit/test_event_hub.py` covers the replay rules and the bounded queue.
+of `main()`, the retry path, T-SEC-06, and a reply normalized before it is shown or stored, with its `checks_json`.
+`tests/unit/test_event_hub.py` covers the replay rules and the bounded queue.
 
 ### Startup sequence
 
