@@ -51,6 +51,9 @@
 - Write files that must appear whole under a temporary name, then hard-link (no-clobber) or rename into place, and verify the result (hash or check) before giving it its final name.
 - Python code under backend/src must not contain the docker command text (the socket scan in test_docker_socket.py flags it); keep container invocations in the PowerShell scripts.
 - In PowerShell 5.1 test code, avoid the verb New- for helpers (PSUseShouldProcessForStateChangingFunctions); Write-/Get-/Invoke-/Export- are safe.
+- When nginx and the backend both set a response header, hide the upstream copy with proxy_hide_header: repeated COOP or CORP values stop parsing and browsers ignore them.
+- Starlette exception handlers for Exception run outside the user middleware stack, so they must set security headers themselves.
+- Log refusals with a constant event name and error_code only, never the refused Host or Origin value.
 
 ---
 
@@ -360,4 +363,27 @@ Earlier attempts had left most of the code in place. This session added the stan
   - restore asks for confirmation through Read-Confirmation (exit 5 without an answer) and also moves runtime/ (launch files) to pre-restore-<time>/, beyond the db and media named in the original spec; docs/operations.md records both.
   - Running a single Pester file outside `scripts/lyrveil.cmd test` is denied in this environment; only whole levels (and `test unit -k ...` for pytest) can be run.
   - .env.example cannot be read with the Read/Grep tools here (permission denied); tests read it at runtime instead.
+---
+
+## 2026-11-07T00:38:37Z - P01.7a
+- The backend now refuses requests that don't come from the local app. A request whose Host is not localhost or 127.0.0.1 on LYRVEIL_HTTP_PORT gets 403 FORBIDDEN_ORIGIN as application/problem+json. So does a write (any method other than GET or HEAD) or a /ws handshake that carries a foreign Origin. This works on REST and on the WebSocket handshake; the refusal body and the log never repeat the refused value. Both the backend and nginx.conf send the six documented security headers on every answer, errors included, and nginx removes the backend's copies so each header arrives only once. An unexpected exception now gives a generic 500 INTERNAL that carries the same headers. /ws now accepts the handshake and sends the `connected` frame with a per-process boot_id; events are left for P02.5c.
+
+The allowed lists come from two new properties on Settings, both derived from LYRVEIL_HTTP_PORT: allowed_hosts and allowed_origins. With port 80 the names without a port are also allowed. The backend also accepts Host 127.0.0.1:8000, because the Compose health check connects that way. compose.test.yaml now gives the backend LYRVEIL_HTTP_PORT equal to the test port.
+
+Checks: `scripts/lyrveil.cmd test lint` passed (docs, ruff, ruff format, mypy --strict, ESLint, strict build). `test unit` on the touched backend test files passed: the first run had 50 passing and 3 failing because of a mistake in my test, which I fixed. After the fix, test_local_only.py passed 27 of 27; the other touched files had already passed in the first run.
+
+Not run: the e2e spec security-headers.spec.mjs (T-SEC-02 through nginx), the full integration level, and anything against the built images. So the nginx changes (proxy_hide_header) and the compose.test.yaml port setting have not been tested.
+
+Known gap: the backend image has no WebSocket library. websockets 17.4 is listed in docs/technology.md but is in neither pyproject.toml nor uv.lock, so the real Uvicorn server cannot upgrade /ws yet. Only the in-process tests cover the handshake. docs/api.md says so.
+
+Docs updated: security.md, api.md, backend.md, configuration.md, testing.md, frontend.md and CHANGELOG.md.
+- Files changed: backend/src/lyrveil/api/security.py, backend/src/lyrveil/api/events.py, backend/src/lyrveil/main.py, backend/src/lyrveil/settings.py, backend/tests/integration/test_local_only.py, backend/tests/integration/test_health_and_startup.py, backend/tests/unit/test_app.py, backend/tests/unit/test_settings.py, frontend/nginx.conf, compose.test.yaml, tests/e2e/specs/security-headers.spec.mjs, docs/security.md, docs/api.md, docs/backend.md, docs/configuration.md, docs/testing.md, docs/frontend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Every backend TestClient must use the app's address, e.g. TestClient(app, base_url="http://localhost:4200"); the default 'testserver' Host is now refused with 403.
+  - Starlette's TestClient.websocket_connect resolves a relative path against ws://testserver and ignores base_url: pass a full URL such as ws://localhost:4200/ws.
+  - A refused WebSocket handshake raises starlette.testclient.WebSocketDenialResponse (an httpx.Response) in tests; the middleware uses the websocket.http.response extension, or close 1008 when the server lacks it.
+  - The backend image has no WebSocket library: websockets 17.4 (docs/technology.md) must be added to backend/pyproject.toml, uv.lock regenerated with the lockfile stage, and test_locked_environment.py updated before /ws works in the real server (P02.5c or earlier).
+  - `scripts/lyrveil.cmd test unit <paths under tests/>` runs any backend test file, integration ones included; `test integration` takes no arguments.
+  - tests/e2e/specs/security-headers.spec.mjs has not run yet; it expects nginx's CSP with port 4200 even on the test port 14200, each header exactly once, and FORBIDDEN_ORIGIN for a POST with a foreign Origin through nginx.
+  - compose.test.yaml now sets LYRVEIL_HTTP_PORT to the test port; any other compose test file whose tests call /api through nginx must do the same, or the backend answers 403.
 ---

@@ -17,6 +17,12 @@ from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.settings import Settings
 
 TOKEN = "ab" * 32
+# The address of the local app with the default port; any other Host is refused.
+APP_URL = "http://localhost:4200"
+
+
+def client_for(app: FastAPI) -> TestClient:
+    return TestClient(app, base_url=APP_URL)
 
 
 @pytest.fixture(autouse=True)
@@ -27,14 +33,14 @@ def restore_logging() -> Iterator[None]:
 
 
 def test_live_answers_200_without_a_database(settings: Settings) -> None:
-    client = TestClient(create_app(settings, engine=None, control_probe=lambda: False))
+    client = client_for(create_app(settings, engine=None, control_probe=lambda: False))
     response = client.get("/api/v1/health/live")
     assert (response.status_code, response.json()) == (200, {"status": "alive"})
 
 
 def test_ready_reports_every_check_on_a_migrated_database(settings: Settings, engine: Engine) -> None:
     upgrade_to_head(engine)
-    client = TestClient(create_app(settings, engine, control_probe=lambda: True))
+    client = client_for(create_app(settings, engine, control_probe=lambda: True))
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 200
     assert response.json() == {
@@ -50,14 +56,14 @@ def test_ready_reports_every_check_on_a_migrated_database(settings: Settings, en
 
 def test_the_control_api_is_reported_apart_from_readiness(settings: Settings, engine: Engine) -> None:
     upgrade_to_head(engine)
-    client = TestClient(create_app(settings, engine, control_probe=lambda: False))
+    client = client_for(create_app(settings, engine, control_probe=lambda: False))
     body = client.get("/api/v1/health/ready").json()
     assert body["status"] == "ready"
     assert body["control_api"] == {"reachable": False}
 
 
 def test_ready_answers_503_while_migrations_are_pending(settings: Settings, engine: Engine) -> None:
-    client = TestClient(create_app(settings, engine, control_probe=lambda: True))
+    client = client_for(create_app(settings, engine, control_probe=lambda: True))
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 503
     body = response.json()
@@ -68,14 +74,14 @@ def test_ready_answers_503_while_migrations_are_pending(settings: Settings, engi
 
 
 def test_ready_answers_503_on_a_database_without_wal(settings: Settings) -> None:
-    client = TestClient(create_app(settings, create_engine("sqlite://"), control_probe=lambda: True))
+    client = client_for(create_app(settings, create_engine("sqlite://"), control_probe=lambda: True))
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 503
     assert response.json()["checks"]["database"] == {"ok": False, "journal_mode": "memory"}
 
 
 def test_ready_answers_503_when_no_database_was_opened(settings: Settings) -> None:
-    response = TestClient(create_app(settings, engine=None, control_probe=lambda: True)).get("/api/v1/health/ready")
+    response = client_for(create_app(settings, engine=None, control_probe=lambda: True)).get("/api/v1/health/ready")
     assert response.status_code == 503
     assert response.json()["checks"]["database"] == {"ok": False, "journal_mode": None}
 
@@ -100,7 +106,7 @@ def test_main_migrates_a_new_database_and_serves_a_ready_application(
     assert backend.main() == 0
     (app,) = served
     app.state.control_probe = lambda: False
-    response = TestClient(app).get("/api/v1/health/ready")
+    response = client_for(app).get("/api/v1/health/ready")
     assert response.status_code == 200
     assert response.json()["checks"]["migrations"]["current"] == "0001"
     app.state.engine.dispose()

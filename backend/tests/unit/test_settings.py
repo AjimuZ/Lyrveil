@@ -35,6 +35,19 @@ def test_defaults_match_the_configuration_document() -> None:
     assert settings.control_token.get_secret_value() == TOKEN
 
 
+def test_the_allowed_hosts_and_origins_are_the_loopback_names_on_the_http_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = load_settings()
+    assert settings.allowed_hosts == ("localhost:4200", "127.0.0.1:4200")
+    assert settings.allowed_origins == ("http://localhost:4200", "http://127.0.0.1:4200")
+    monkeypatch.setenv("LYRVEIL_HTTP_PORT", "80")
+    # Browsers leave the default port out of Host and Origin.
+    assert load_settings().allowed_hosts == ("localhost:80", "127.0.0.1:80", "localhost", "127.0.0.1")
+    monkeypatch.setenv("LYRVEIL_BIND_ADDRESS", "192.168.1.10")
+    assert "192.168.1.10:80" not in load_settings().allowed_hosts
+
+
 def test_reads_the_example_values(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LYRVEIL_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("LYRVEIL_ALLOW_LOW_MEMORY", "true")

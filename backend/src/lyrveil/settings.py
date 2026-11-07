@@ -10,6 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_PREFIX = "LYRVEIL_"
 _HEX_TOKEN = re.compile(r"[0-9a-fA-F]{64}")
+# The names a browser on this machine uses for the published port; the only ones the Host check accepts.
+_LOOPBACK_NAMES = ("localhost", "127.0.0.1")
+# The HTTP port browsers omit from Host and Origin.
+_IMPLICIT_HTTP_PORT = 80
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
@@ -62,6 +66,21 @@ class Settings(BaseSettings):
     def zone(self) -> ZoneInfo:
         """The time zone of time context and scheduling."""
         return ZoneInfo(self.tz)
+
+    @property
+    def allowed_hosts(self) -> tuple[str, ...]:
+        """The Host values of the local app: `localhost` and `127.0.0.1` on `http_port` (docs/security.md).
+
+        Port 80 also allows the bare names, because browsers leave the default port out of Host. Any other name,
+        a LAN address included, is refused, since LAN exposure is unsupported (ADR 0017).
+        """
+        hosts = tuple(f"{name}:{self.http_port}" for name in _LOOPBACK_NAMES)
+        return (*hosts, *_LOOPBACK_NAMES) if self.http_port == _IMPLICIT_HTTP_PORT else hosts
+
+    @property
+    def allowed_origins(self) -> tuple[str, ...]:
+        """The Origin values of the local app: `http://` followed by each of `allowed_hosts`."""
+        return tuple(f"http://{host}" for host in self.allowed_hosts)
 
 
 def load_settings() -> Settings:

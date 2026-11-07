@@ -1,6 +1,7 @@
 """Composition root: loads settings, opens and migrates the database, builds the FastAPI application and serves it."""
 
 import sys
+import uuid
 from collections.abc import Callable
 
 import uvicorn
@@ -9,7 +10,13 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import health
+from lyrveil.api import events, health
+from lyrveil.api.security import (
+    LocalOnlyMiddleware,
+    SecurityHeadersMiddleware,
+    documented_headers,
+    internal_error_handler,
+)
 from lyrveil.logs import configure_logging, get_logger
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.persistence.database import (
@@ -24,6 +31,9 @@ from lyrveil.settings import Settings, SettingsError, load_settings
 API_PREFIX = "/api/v1"
 LISTEN_HOST = "0.0.0.0"  # Inside the container only; Compose publishes no backend port.
 LISTEN_PORT = 8000
+# The Host of the container's own health check, which connects to the loopback of the backend container. A browser
+# can never send it: the backend publishes no port, and nginx passes on the browser's Host, which names the app's port.
+INTERNAL_HOST = f"127.0.0.1:{LISTEN_PORT}"
 # EX_CONFIG from sysexits.h, the status the runtime entrypoints use for a configuration error.
 EXIT_INVALID_SETTINGS = 78
 # EX_UNAVAILABLE: the database is missing WAL or FTS5, or cannot be opened or migrated.
@@ -42,6 +52,10 @@ def create_app(
     503. `control_probe` tells whether the control API answers and may be replaced in tests. The OpenAPI document is
     served at /api/v1/openapi.json. The interactive documentation pages are disabled, because they load scripts from
     a CDN and the application works offline.
+
+    Every request, REST or WebSocket, must name an allowed Host, and a write or a handshake an allowed Origin, or it
+    gets 403 `FORBIDDEN_ORIGIN` (docs/security.md). Every answer carries the documented security headers, and an
+    unexpected exception becomes a generic 500 `INTERNAL`.
     """
     app = FastAPI(
         title="Lyrveil",
@@ -53,7 +67,18 @@ def create_app(
     app.state.settings = settings
     app.state.engine = engine
     app.state.control_probe = control_probe
+    app.state.boot_id = str(uuid.uuid4())
     app.include_router(health.router, prefix=API_PREFIX)
+    app.include_router(events.router)
+    headers = documented_headers(settings.http_port)
+    app.add_exception_handler(Exception, internal_error_handler(headers))
+    # The middleware added last runs first: the headers wrap the Host and Origin refusals too.
+    app.add_middleware(
+        LocalOnlyMiddleware,
+        hosts=(*settings.allowed_hosts, INTERNAL_HOST),
+        origins=settings.allowed_origins,
+    )
+    app.add_middleware(SecurityHeadersMiddleware, headers=headers)
     return app
 
 

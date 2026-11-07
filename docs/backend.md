@@ -200,6 +200,21 @@ committed file differs from what the application serves, with the regeneration c
 change, run `docker build -f backend/Dockerfile --target openapi --output type=local,dest=backend .`, then
 `npm run api:generate --prefix frontend`, and commit both.
 
+### Local-only checks and headers
+
+`api/security.py` holds the controls of [Security](security.md#local-only-model), and `create_app` installs them on
+every application:
+
+| Part | Behavior |
+| --- | --- |
+| `LocalOnlyMiddleware` | Refuses a `Host` outside `Settings.allowed_hosts` and `127.0.0.1:8000`, and an `Origin` outside `Settings.allowed_origins` on writes and WebSocket handshakes, with `403 FORBIDDEN_ORIGIN` in `application/problem+json`. It runs before any route. |
+| `SecurityHeadersMiddleware` | Sets the [documented headers](security.md#http-headers) on every answer and WebSocket handshake answer, refusals included, with the WebSocket origins on `LYRVEIL_HTTP_PORT`. |
+| `internal_error_handler` | Turns an unexpected exception into a generic `500 INTERNAL` with the same headers. Starlette runs it outside the middleware, so it sets them itself. |
+| `api/events.py` | `/ws`: accepts the handshake, sends the `connected` frame with `app.state.boot_id`, ignores client frames. Events arrive in P02.5c ([APIs](api.md#event-websocket)). |
+
+A test client must use the app's address, for example `TestClient(app, base_url="http://localhost:4200")`: the default
+`testserver` Host is refused. `tests/integration/test_local_only.py` is T-SEC-01.
+
 ### Shutdown sequence
 
 On SIGTERM: stop accepting jobs, flush the running reply, release the lease, close

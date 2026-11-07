@@ -17,7 +17,7 @@ Configuration has three levels:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LYRVEIL_BIND_ADDRESS` | `127.0.0.1` | Address of the published port. LAN exposure is unsupported, because the API has no authentication. |
-| `LYRVEIL_HTTP_PORT` | `4200` | Published port. |
+| `LYRVEIL_HTTP_PORT` | `4200` | Published port. The backend accepts only `localhost` and `127.0.0.1` on this port as `Host` and `Origin` ([Security](security.md#local-only-model)). |
 | `LYRVEIL_BACKUP_DIR` | Empty, meaning `%USERPROFILE%\Documents\Lyrveil\backups` | Windows folder for exported backups. Read by the scripts only. An absolute folder on a drive, without a comma or a double quote; `%VARIABLES%` are expanded. |
 | `LYRVEIL_CONTROL_TOKEN` | Random 32 bytes, hex, set by `setup.cmd` | Bearer token of the control API. |
 | `LYRVEIL_TZ` | `Europe/Rome` | Time zone of time context and scheduling. |

@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. The rest is planned, across all phases. P09 audits it.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. Delivered in P01.7a: the Host and Origin checks of the [local-only model](#local-only-model) on REST and on the `/ws` handshake, tested by T-SEC-01, and the [HTTP headers](#http-headers) from both nginx and the backend, tested by T-SEC-02. The content type rule (point 4) and the rest are planned, across all phases. P09 audits it.
 
 Lyrveil is a local, single-user application. It holds intimate text and images and controls Docker. The main threats are a malicious web page in the same browser, careless exposure on the network, a leak into logs or Git, and
 excessive authority in the service that controls containers.
@@ -43,16 +43,18 @@ excessive authority in the service that controls containers.
 No authentication exists in 1.0, so reachability is the control. See [ADR 0017](decisions/0017-local-only-security-model.md).
 
 1. **Binding.** Only `lyrveil-frontend` publishes a port, on `127.0.0.1:4200`. The other services publish nothing.
-2. **Host check.** `TrustedHostMiddleware` accepts only `localhost:<port>` and `127.0.0.1:<port>`, which blocks DNS rebinding.
-3. **Origin check.** Every non-GET request and every WebSocket handshake that has an `Origin` header must match the same list. A mismatch returns `403 FORBIDDEN_ORIGIN`.
+2. **Host check.** Every request and every WebSocket handshake must carry a `Host` of `localhost:<port>` or `127.0.0.1:<port>`, compared without case, which blocks DNS rebinding. Anything else, a LAN address included, gets `403 FORBIDDEN_ORIGIN`.
+3. **Origin check.** Every request whose method is not `GET` or `HEAD`, and every WebSocket handshake, that has an `Origin` header must carry `http://localhost:<port>` or `http://127.0.0.1:<port>`. A mismatch, `null` included, returns `403 FORBIDDEN_ORIGIN`. A request without `Origin` passes, since browsers always send it on these requests.
 4. **Content type.** JSON endpoints refuse other content types, which blocks simple cross-site form posts.
 5. **No CORS.** The API sends no CORS headers, so other origins cannot read responses.
 
-`LYRVEIL_BIND_ADDRESS` can be changed by editing `.env`, but LAN exposure is unsupported, and the documentation warns against it. Anyone on the network would reach private data.
+`<port>` is `LYRVEIL_HTTP_PORT`, 4200 by default. With port 80 the bare names `localhost` and `127.0.0.1` are allowed too, because browsers leave the default port out. `Settings.allowed_hosts` and `Settings.allowed_origins` in `backend/src/lyrveil/settings.py` build both lists, and `LocalOnlyMiddleware` in `backend/src/lyrveil/api/security.py` applies them before any route runs. The only other accepted `Host` is `127.0.0.1:8000`, the container's own health check, which a browser cannot send: the backend publishes no port, and nginx passes on the browser's `Host`, which names the app's port. A refusal body never repeats the refused value, and the log keeps only the event `host_refused` or `origin_refused` with the code. A refused handshake gets the same `403` answer, or a close with code 1008 when the server cannot send an HTTP answer to a handshake.
+
+`LYRVEIL_BIND_ADDRESS` can be changed by editing `.env`, but LAN exposure is unsupported, and the documentation warns against it. Anyone on the network would reach private data. The Host check refuses LAN names anyway.
 
 ## HTTP headers
 
-`nginx.conf` sets these on all responses:
+`nginx.conf` and the backend both set these on all responses, errors included:
 
 ```text
 Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self' ws://localhost:4200 ws://127.0.0.1:4200; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
@@ -63,9 +65,11 @@ Cross-Origin-Resource-Policy: same-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=()
 ```
 
-`'unsafe-inline'` for styles is needed by Angular's component styles and carries no script risk. The WebSocket origins use the configured port. Inline critical CSS is turned off in the build. HSTS does not apply to a loopback HTTP service.
+`'unsafe-inline'` for styles is needed by Angular's component styles and carries no script risk. Inline critical CSS is turned off in the build. HSTS does not apply to a loopback HTTP service.
 
-Error responses are generic. Stack traces stay in logs.
+nginx is what the browser sees. Its configuration is static, so its WebSocket origins name port 4200, and with another port `'self'` covers same-origin WebSockets in browsers that implement CSP Level 3. nginx drops the backend's copies with `proxy_hide_header`, so each header arrives once: a repeated `Cross-Origin-Opener-Policy` or `Cross-Origin-Resource-Policy` would no longer parse, and browsers would ignore it. `SecurityHeadersMiddleware` sets the same list in the backend, with the WebSocket origins on the configured port, on every answer and every WebSocket handshake answer, so an answer is covered even when it does not pass through nginx.
+
+Error responses are generic. An unexpected exception answers `500` with the code `INTERNAL` and the same headers, and its message and stack trace stay out of the answer.
 
 ## Input validation
 

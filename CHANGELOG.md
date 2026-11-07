@@ -131,6 +131,14 @@ No application exists yet. This section records the design documentation.
   damaged one or one from a newer version without stopping anything. After a
   confirmation it stops Lyrveil, keeps the current data in
   `pre-restore-<time>`, puts the backup's data in place and starts again.
+- The backend answers only the local app. A request whose `Host` is not
+  `localhost` or `127.0.0.1` on `LYRVEIL_HTTP_PORT`, which blocks DNS rebinding,
+  and a write or WebSocket handshake from another `Origin`, get `403` with the
+  code `FORBIDDEN_ORIGIN`. The backend and `nginx.conf` both send the documented
+  security headers on every answer, each header once, errors included, and an
+  unexpected failure answers a generic `500 INTERNAL`. The event WebSocket `/ws`
+  now accepts connections and sends its `connected` frame; events come later, and
+  the image cannot open it yet because the WebSocket library is not installed.
 
 ### Changed
 

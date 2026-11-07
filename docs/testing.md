@@ -133,7 +133,7 @@ Delivered in P01.8c ([evidence](verification/2026-11-06-e2e-level.md)). [`script
 3. It runs `npx playwright test` against `http://127.0.0.1:14200`, or the port in `LYRVEIL_TEST_HTTP_PORT`. It refuses 4200.
 4. In a `finally` block, whatever happened before, it runs `docker compose -p lyrveil-test ... down --volumes --remove-orphans`, then lists the containers and volumes that still carry the project's label. The level fails if any is left or if the removal cannot be checked.
 
-The level touches only the project `lyrveil-test`, named with `-p` so no `COMPOSE_PROJECT_NAME` can redirect it, and never `lyrveil-data`, `lyrveil-models` or the backup folder. The smoke test, `tests/e2e/specs/smoke.spec.mjs`, opens the empty app, checks the redirect to the chat list, the title and the heading, and fails on any [axe-core](https://github.com/dequelabs/axe-core) violation. The Pester cases "The e2e level" in `tests/scripts/TestCommand.Tests.ps1` check the order of the steps and the cleanup with stand-in commands; they are written and have not run.
+The level touches only the project `lyrveil-test`, named with `-p` so no `COMPOSE_PROJECT_NAME` can redirect it, and never `lyrveil-data`, `lyrveil-models` or the backup folder. The smoke test, `tests/e2e/specs/smoke.spec.mjs`, opens the empty app, checks the redirect to the chat list, the title and the heading, and fails on any [axe-core](https://github.com/dequelabs/axe-core) violation. `tests/e2e/specs/security-headers.spec.mjs` is T-SEC-02. `compose.test.yaml` gives the backend `LYRVEIL_HTTP_PORT` equal to the test port, because the backend refuses any other port in `Host` and `Origin`. The Pester cases "The e2e level" in `tests/scripts/TestCommand.Tests.ps1` check the order of the steps and the cleanup with stand-in commands; they are written and have not run.
 
 ### Pinned tools
 
@@ -344,8 +344,8 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
-| T-SEC-01 | Wrong Host and wrong Origin are refused on REST and WebSocket | Integration | P01 |
-| T-SEC-02 | Headers present on every response | E2E | P01 |
+| T-SEC-01 | Wrong Host and wrong Origin are refused on REST and WebSocket. Delivered: `backend/tests/integration/test_local_only.py`, in process with Starlette's test client | Integration | P01 |
+| T-SEC-02 | Headers present on every response. Delivered: `tests/e2e/specs/security-headers.spec.mjs` checks the shell, a client route, a hashed and a missing asset, an API answer, an API 404 and a refused write through nginx, each header exactly once and no CORS header; `test_local_only.py` checks the backend's own headers | E2E | P01 |
 | T-SEC-03 | Markup in messages renders as text | E2E | P02 |
 | T-SEC-04 | Path traversal attempts on media and asset routes | Integration | P03 |
 | T-SEC-05 | Decompression bomb and disguised uploads are refused | Integration | P03 |

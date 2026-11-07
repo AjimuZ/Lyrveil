@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), and the token check, health and preflight routes of the [control API](#control-api). The server side of `/ws` and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame. The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -241,7 +241,14 @@ Media is looked up by identifier. A request path never becomes a file path.
 ## Event WebSocket
 
 Endpoint: `/ws`. One connection per browser tab. The server checks `Origin` and `Host`
-before accepting.
+before accepting, and refuses the handshake with `403 FORBIDDEN_ORIGIN` otherwise
+([Security](security.md#local-only-model)).
+
+Delivered in P01.7a: the checks, the handshake and the `connected` frame. The server reads and ignores client frames
+until P02.5c adds replay and the events. In-process tests cover it. The backend image cannot serve it yet, because
+Uvicorn needs a WebSocket library, `websockets` in [Technology](technology.md), which is not in `pyproject.toml` and
+`uv.lock` yet; until then Uvicorn cannot upgrade the connection. Adding it needs the lock regenerated in the `lockfile`
+stage ([Backend](backend.md#dependencies-and-image)) and its version added to `tests/unit/test_locked_environment.py`.
 
 Server frames:
 
@@ -267,8 +274,8 @@ an event and has no `id`:
 {"v": 1, "type": "connected", "boot_id": "0192f3a0-0000-7000-8000-000000000000"}
 ```
 
-This frame is an assumption of the client, written in P01.5b. The server that sends it comes in P02, and this
-contract changes there if the server needs another form. Until the client has seen a `boot_id`, it sends `null`.
+The client defined this frame in P01.5b, and the server sends it since P01.7a. `boot_id` is a UUID drawn once per
+backend process, kept in `app.state.boot_id`. Until the client has seen a `boot_id`, it sends `null`.
 
 The client in `frontend/src/app/core/realtime/events-socket.ts` follows these rules. It asks for a resync on its own
 when it cannot name a position: a reconnection when no event was delivered yet, or a `boot_id` that differs from the

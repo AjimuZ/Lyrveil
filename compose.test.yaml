@@ -26,7 +26,9 @@ x-common: &common
   tmpfs: [/tmp]
   restart: "no"
 
+# LYRVEIL_HTTP_PORT names the published test port, because the backend accepts only that port in Host and Origin.
 x-settings: &settings
+  LYRVEIL_HTTP_PORT: "${LYRVEIL_TEST_HTTP_PORT:-14200}"
   LYRVEIL_CONTROL_TOKEN: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   LYRVEIL_TZ: Europe/Rome
   LYRVEIL_LOG_LEVEL: DEBUG
