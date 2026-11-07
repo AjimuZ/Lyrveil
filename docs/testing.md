@@ -103,10 +103,24 @@ pytest joins it when a Docker test needs Python. The files:
   published port, on `127.0.0.1`; that each container runs as `10001:10001` and each image sets that user; and that the
   frontend, backend and orchestrator images hold no `.env`, weights, database, files in `/data`, `/models` or
   `/backups`, tests or fakes, with the fakes image as the control. No check needs the Internet. It ran and passed in the P01 exit ([evidence](verification/2026-11-07-p01-exit.md)).
+- `tests/docker/TextRuntime.Tests.ps1` (P02.1) builds `docker/llm/Dockerfile` as `lyrveil/llm:test`; the first run
+  downloads the 629 MB KoboldCpp binary from GitHub, later runs use the build cache. It checks that the Dockerfile pins
+  the version, size and SHA-256 of [Technology](technology.md), and that a build with another size or hash fails. The
+  image runs as `10001:10001` and holds no `.gguf`, `.safetensors`, `.ckpt`, `.env` or single-file binary, with a
+  control run. In containers with a read-only root, the tmpfs `/tmp`, no capabilities, `no-new-privileges` and no
+  network, the unpacked launcher prints `1.124.2` for `--version` and lists every flag of the entrypoint in `--help`,
+  the root refuses a write even from root while `/tmp` accepts one, and the entrypoint, with tmpfs folders in place of
+  `/run/lyrveil` and `/models/llm`, turns the example launch file and a file with every optional flag into the
+  documented command (`--print-command`), and exits 78 for an unknown, invalid, repeated or missing key, Windows line
+  endings, a command substitution, a path in `MODEL_FILE`, a line that is not `KEY=VALUE`, a missing launch file and
+  a missing model, and 64 for an unknown argument. It needs no GPU and no model. It has not run yet.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
-`:setup-test`, and adds a fake `lyrveil-llm` so setup has a runtime container to create. Every command names the
+`:setup-test`, and puts the fakes image in place of the KoboldCpp image of `lyrveil-llm`, without its
+`container_name`, GPU request, volume subpaths or health check, so setup creates a runtime container with no 629 MB
+download and no GPU. The lifecycle, data and models overrides give `lyrveil-llm` a profile that no command enables, so
+those projects build and create no runtime, as before P02.1. Every command names the
 project with `-p`, `--env-file` points at `.env.example` or at a `.env` in Pester's temporary drive, and setup refuses
 to start unless the resolved configuration names only the test volumes. The test removes the project and both volumes
 afterwards and fails if a volume is left. Only `Data.Tests.ps1` uses a backup folder, its own in Pester's temporary

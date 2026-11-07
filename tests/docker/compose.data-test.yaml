@@ -28,6 +28,13 @@ services:
     env_file: !reset []
   lyrveil-models:
     image: lyrveil/backend:data-test
+  # The text runtime is left out of this project: a profile that no command enables keeps it from setup's build and
+  # "create", so the tests need no 629 MB download, no GPU and no model. Its tag and container name still differ from
+  # an installation's, should anything enable it.
+  lyrveil-llm:
+    profiles: !override [not-in-data-test]
+    image: lyrveil/llm:data-test
+    container_name: !reset null
 
 volumes:
   lyrveil-data: {external: true, name: lyrveil-data-test-data}

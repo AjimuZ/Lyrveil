@@ -27,7 +27,7 @@ Each tier has its own default text profile ([Model catalog](models.md#defaults-a
 | Default text model, reduced tier: `gemma-4-12b-it-qat-q4_0.gguf` | 6.98 GB |
 | Default image model: `Illustrious-XL-v2.0.safetensors` | 6.94 GB |
 | Each optional profile | Its size in the [catalog](models.md) |
-| KoboldCpp image | About 1.5 GB |
+| KoboldCpp image | About 1.9 GB (1.89 GB measured on 2026-11-07) |
 | ComfyUI image with PyTorch and CUDA | About 8 to 12 GB |
 | Frontend, backend and orchestrator images | Under 1 GB |
 | Application data | Grows with use. About 2 to 3 MB per **Rapida** image and 4 to 6 MB per **Alta** image |
@@ -399,8 +399,10 @@ The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That 
 
 `compose.yaml` holds the three core services, the four networks of [ADR 0003](decisions/0003-service-topology-and-networks.md)
 that they use, and the two external volumes (P01.2), and, since P01.6c, the `lyrveil-models` service of the `tools`
-profile with the network `lyrveil-download`, as below. The services of the `ai` profile and the rest of the file below
-are still the specification for P02 and P05: those parts are not in `compose.yaml` yet. Images are built locally, and
+profile with the network `lyrveil-download`, as below, and, since P02.1, the text runtime `lyrveil-llm` of the `ai`
+profile, exactly as below. `lyrveil-image` is still the specification for P05 and is not in `compose.yaml` yet. The
+`lyrveil-llm` image builds and its launcher runs without a GPU ([Runtime images](#runtime-images)); no container of
+the service has started with a GPU and a model yet. Images are built locally, and
 `pull_policy: never` keeps runtime fully offline. `lyrveil-models` has run only in the T-DCK-11 test project, against
 a local HTTPS server.
 
@@ -575,7 +577,10 @@ volumes:
 Notes:
 
 - `depends_on` is not used for the runtimes, because the orchestrator starts them.
-- When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here.
+- When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here. The text
+  runtime needs only `/tmp` without a GPU (P02.1); its first model load in P02 confirms that with a GPU.
+- The volume subpaths `llm/` and `runtime/` must exist when a runtime container starts. Setup builds the runtime image
+  and creates its container without starting it.
 - `compose.test.yaml` (delivered in P01.8b) replaces the runtimes with the fakes of `tests/fakes/` and has no `gpus`
   and no Docker socket. It is a separate project, `lyrveil-test`, with its own port (`LYRVEIL_TEST_HTTP_PORT`, default
   14200), volumes, image tags and settings, so it never touches `lyrveil-data`, `lyrveil-models` or the backup folder.
@@ -589,13 +594,22 @@ Notes:
 
 ### `docker/llm/Dockerfile`
 
-1. Base `debian:trixie-slim` with `curl` and `ca-certificates`.
-2. Download `koboldcpp-linux-x64` from the pinned release and verify its SHA-256 during the build.
-3. Run `./koboldcpp-linux-x64 --unpack /opt/koboldcpp`, then remove the single-file binary.
-4. Copy `docker/llm/entrypoint.sh`.
+Delivered in P02.1. Two stages, both on `debian:trixie-slim` pinned by digest:
 
-`entrypoint.sh` reads `/run/lyrveil/llm-launch.env` as data, never with `source`. It checks every key against the
-[allowed values](configuration.md#launch-files) and that `/models/llm/${MODEL_FILE}` exists, then runs:
+1. `download`, with `curl` and `ca-certificates`: download `koboldcpp-linux-x64` from the pinned release, then stop the
+   build unless its size is 628,981,944 bytes and its SHA-256 is the pin of [Technology](technology.md). The expected
+   values are build arguments declared after the download, so a build with other values reuses the cached download.
+2. Still in `download`: run `./koboldcpp-linux-x64 --unpack /opt/koboldcpp`, make the result readable for every user,
+   and run `koboldcpp-launcher --help`, which stops the build when the unpacked launcher cannot start.
+3. `runtime`, with `curl` for the health check: copy `/opt/koboldcpp` only, so the single-file binary never reaches
+   the image, and `docker/llm/entrypoint.sh` as `/usr/local/bin/lyrveil-llm-entrypoint`. `HOME` is `/tmp` and the user
+   is `10001:10001`.
+
+`entrypoint.sh` reads `/run/lyrveil/llm-launch.env` as data, never with `source`. It skips blank lines and lines that
+start with `#`, and requires every other line to be `KEY=VALUE`, each key of the
+[launch file table](configuration.md#launch-files) exactly once with an allowed value, and `/models/llm/${MODEL_FILE}`
+to be a readable file. Otherwise it prints the reason, naming the key and line but never the value, and exits 78.
+Then it runs:
 
 ```bash
 moe_args=()
@@ -627,7 +641,15 @@ exec /opt/koboldcpp/koboldcpp-launcher \
 
 The image is the same for every text profile. Only the launch file changes.
 
-The P02 exit check confirms this launcher at the pinned version. If it needs the single-file binary after all, the image keeps that binary, the root filesystem stays read-only and a tmpfs with exec permission holds the extraction.
+`lyrveil-llm-entrypoint --print-command` runs the same checks, then prints that command, one argument per line, and
+exits 0 without starting it. Any other argument exits 64.
+
+`tests/docker/TextRuntime.Tests.ps1` confirms the unpacked launcher on a read-only root with only the tmpfs `/tmp`
+(mounted `noexec` by default) as user 10001, with no GPU and no model: `--version` prints `1.124.2` and `--help` lists
+every flag above. Whether a model load on a GPU needs any other writable path is checked by the first real load in
+P02; a path it needs gets a tmpfs recorded in the Compose notes above. If the launcher needs the single-file binary
+after all, the image keeps that binary, the root filesystem stays read-only and a tmpfs with exec permission holds the
+extraction.
 
 ### `docker/image/Dockerfile`
 

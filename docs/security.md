@@ -155,8 +155,8 @@ These rules hold for every service of `compose.yaml` ([ADR 0003](decisions/0003-
 | Image content | `.dockerignore` keeps `.env`, weights, databases, `data/`, `models/` and `backups/` out of every build context, and runtime stages copy no tests and no fakes. |
 
 `tests/docker/Security.Tests.ps1` checks these rules (T-DCK-08 to T-DCK-10): the resolved `compose.yaml`, and a
-running test project with the fake runtimes, whose real KoboldCpp and ComfyUI images come with P02 and P05. It has not
-run yet in this change. The `--gpus` case of assumption A-11 in [Risks](risks.md) needs the real runtimes and stays
+running test project with the fake runtimes. The real KoboldCpp image arrived in P02.1, and
+`tests/docker/TextRuntime.Tests.ps1` checks its user, read-only root and content; the ComfyUI image comes with P05. The `--gpus` case of assumption A-11 in [Risks](risks.md) needs the real runtimes and stays
 open until T-GPU-01.
 
 ## Runtime isolation

@@ -37,7 +37,7 @@ its container through the launch file ([Model catalog](models.md#selecting-a-pro
 
 The backend writes these two files from the model settings. They are mounted read-only at `/run/lyrveil/` and read by the entrypoints when a container starts. Containers therefore never need recreating when a setting changes.
 
-Only known keys with validated values are read. The entrypoint does not `source` the file, because that would execute content. It reads `KEY=VALUE` lines and checks each value against a pattern. Unknown keys or invalid values make the container exit with status 78, which the orchestrator reports as a configuration error.
+Only known keys with validated values are read. The entrypoint does not `source` the file, because that would execute content. It reads `KEY=VALUE` lines, skips blank lines and lines starting with `#`, and checks each value against a pattern. A missing file, an unknown, missing or repeated key, an invalid value or, for the text runtime, a missing model file makes the container exit with status 78, which the orchestrator reports as a configuration error. The text runtime's entrypoint (P02.1) requires every key of its table; the message names the key, never the value.
 
 `runtime/llm-launch.env` in the data volume:
 

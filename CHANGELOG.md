@@ -10,6 +10,11 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The text runtime image, `lyrveil/llm:local`, built from the pinned KoboldCpp
+  `v1.124.2` binary, whose size and SHA-256 the build checks. Setup now builds it,
+  which downloads 629 MB from GitHub once, and creates its container; setup has not
+  yet run this way on a real installation. The image has not yet loaded a model on
+  a GPU.
 - A GitHub Actions workflow that, on every push, runs lint, type checks, unit and
   integration tests, the end-to-end tests with fakes, the image builds of the
   frontend, backend and orchestrator, a gitleaks scan of the pushed commits, and a

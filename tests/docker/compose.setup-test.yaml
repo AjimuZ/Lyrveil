@@ -4,8 +4,10 @@
 # reach a real installation:
 #   - the two external volumes get their own names, never "lyrveil-data" or "lyrveil-models";
 #   - every image is tagged ":setup-test", so no build replaces the ":local" images of an installation;
-#   - the fake KoboldCpp of tests/fakes stands in for the runtime service "lyrveil-llm" of the "ai" profile, with no
-#     container_name, so setup's "create" step has a runtime container to create until P02 adds the real one.
+#   - the fake KoboldCpp of tests/fakes stands in for the image of the runtime service "lyrveil-llm", so setup's build
+#     and "create" steps need no 629 MB download; the service keeps compose.yaml's user, hardening and network, and
+#     loses its container_name, so the container never takes an installation's name, and its GPU request, volume
+#     subpaths and curl health check, which the fake image and a GPU-less machine cannot serve.
 # Setup creates only runtime containers, so the container names of the core services are never used here.
 services:
   lyrveil-frontend:
@@ -16,18 +18,13 @@ services:
     image: lyrveil/orchestrator:setup-test
 
   lyrveil-llm:
-    profiles: [ai]
     image: lyrveil/fakes:setup-test
     build: {context: ., dockerfile: tests/fakes/Dockerfile}
     command: ["python", "-m", "fakes.fake_kobold"]
-    init: true
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    pull_policy: never
-    read_only: true
-    tmpfs: [/tmp]
-    restart: "no"
-    networks: [lyrveil-runtime]
+    container_name: !reset null
+    gpus: !reset null
+    volumes: !reset []
+    healthcheck: !reset null
 
 volumes:
   lyrveil-data: {external: true, name: lyrveil-setup-test-data}

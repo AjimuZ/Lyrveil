@@ -19,7 +19,9 @@ withdrawn ([ADR 0028](decisions/0028-koboldcpp-pin-v1-124-2.md)).
 ### Flags
 
 The image entrypoint launches `/opt/koboldcpp/koboldcpp-launcher`, extracted at build
-time with `--unpack`, so each start skips self-extraction.
+time with `--unpack`, so each start skips self-extraction. On 2026-11-07 the launcher
+unpacked from the pinned asset, run as user 10001 with no GPU, printed `1.124.2` for
+`--version`, and its `--help` listed every flag of this table.
 
 | Flag | Value | Purpose |
 | --- | --- | --- |

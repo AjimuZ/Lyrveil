@@ -1,6 +1,6 @@
-# The core services, networks and external volumes of Lyrveil, and the model download tool of the "tools" profile. The
-# runtime services of the "ai" profile come with P02 and P05. docs/operations.md (Reference Compose file) is the
-# specification of this file: change both together.
+# The core services, networks and external volumes of Lyrveil, the text runtime of the "ai" profile and the model
+# download tool of the "tools" profile. The image runtime joins the "ai" profile in P05. docs/operations.md (Reference
+# Compose file) is the specification of this file: change both together.
 #
 # Images are built locally from the repository root and never pulled, so the runtime works offline:
 #   docker compose build
@@ -87,6 +87,33 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
+
+  # The text runtime, KoboldCpp, built by docker/llm/Dockerfile. The orchestrator starts and stops it, so nothing depends
+  # on it and it never restarts by itself. It reads its settings from runtime/llm-launch.env and the model from llm/,
+  # both read-only, and exits 78 for an invalid launch file. The two subpaths must exist in the volumes.
+  lyrveil-llm:
+    <<: *common
+    profiles: [ai]
+    container_name: lyrveil-llm
+    image: lyrveil/llm:local
+    build: {context: ., dockerfile: docker/llm/Dockerfile}
+    restart: "no"
+    user: "10001:10001"
+    gpus: all
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - {type: volume, source: lyrveil-models, target: /models/llm, read_only: true, volume: {subpath: llm}}
+      - {type: volume, source: lyrveil-data, target: /run/lyrveil, read_only: true, volume: {subpath: runtime}}
+    networks: [lyrveil-runtime]
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5001/api/v1/model"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 240s
+      start_interval: 2s
 
   # One-shot model downloader, run only by "scripts\lyrveil.cmd models" with "docker compose run". It reuses the
   # backend image, is the only service with a route out, and mounts nothing but the models volume.

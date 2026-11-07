@@ -21,7 +21,7 @@ Each assumption is verified by a named check. A failure triggers the stated deci
 | --- | --- | --- | --- |
 | A-01 | Each measured text profile loads at its default context with at least 512 MiB of VRAM margin | T-GPU-02 | Level B becomes that profile's default. Autofit keeps it working meanwhile |
 | A-02 | Each template family matches its official template and stops cleanly | T-MOD-02, T-GPU-03, T-GPU-04 | Fix the formatter through a new template version. A profile that still fails is removed from the catalog |
-| A-03 | The unpacked KoboldCpp launcher runs on a read-only root | P02.1 | Keep the single-file binary with an exec tmpfs |
+| A-03 | The unpacked KoboldCpp launcher runs on a read-only root | P02.1, `tests/docker/TextRuntime.Tests.ps1` without a GPU, then the first model load in P02 | Keep the single-file binary with an exec tmpfs |
 | A-04 | ComfyUI runs with `cap_drop: ALL` and a read-only root | P05.1 | Add the smallest tmpfs or capability needed and record it |
 | A-05 | SDXL at 1024 x 1024, and the **Alta** second pass at 1536 x 1536, fit in the VRAM left after the desktop | T-GPU-06, T-IMG-14 | The tiled workflow is the default for that machine |
 | A-06 | A full mode switch takes under 150 s | T-GPU-07 | Keep the design and improve the wait messages. Batching rules limit how often switches happen |
