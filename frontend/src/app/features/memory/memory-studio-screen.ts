@@ -1,6 +1,6 @@
-// Screen 5 of docs/frontend.md: the Memory Studio. This change delivers the Ricordi, Eventi, Rapporto and Riassunti
-// tabs; conflicts to resolve, proposals for the profile and the diagnostic tab are not drawn.
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked } from '@angular/core';
+// Screen 5 of docs/frontend.md: the Memory Studio. It draws the Ricordi, Eventi, Rapporto and Riassunti tabs, and
+// Diagnostica only while diagnostic mode is on; conflicts to resolve and proposals for the profile are not drawn.
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { ApiError } from '../../core/api/api-error';
@@ -16,13 +16,19 @@ import {
   MemoryProvenance,
   MemoryRevision,
   MemoryStatus,
+  PROMPT_BLOCKS,
+  PROMPT_BUDGETS,
+  PromptBlock,
+  PromptBudget,
   RELATIONSHIP_DIMENSIONS,
   RelationshipDimension,
+  SCORE_PARTS,
+  ScorePart,
   SummaryContent,
 } from './memory.model';
 import { LockFilter, MemoryFilters, MemoryStudioStore, StatusFilter } from './memory-store';
 
-type TabId = 'memories' | 'events' | 'relationship' | 'summaries';
+type TabId = 'memories' | 'events' | 'relationship' | 'summaries' | 'diagnostics';
 
 interface Tab {
   readonly id: TabId;
@@ -35,6 +41,53 @@ const TABS: readonly Tab[] = [
   { id: 'relationship', label: 'memory.tab.relationship' },
   { id: 'summaries', label: 'memory.tab.summaries' },
 ];
+
+/** Drawn after the others, and only while diagnostic mode is on. */
+const DIAGNOSTICS_TAB: Tab = { id: 'diagnostics', label: 'memory.tab.diagnostics' };
+
+const BLOCK_LABEL: Readonly<Record<PromptBlock, TextKey>> = {
+  global: 'memory.diag.block.global',
+  identity: 'memory.diag.block.identity',
+  communication: 'memory.diag.block.communication',
+  scenario: 'memory.diag.block.scenario',
+  summary: 'memory.diag.block.summary',
+  history: 'memory.diag.block.history',
+  state: 'memory.diag.block.state',
+  memories: 'memory.diag.block.memories',
+  anchor: 'memory.diag.block.anchor',
+  current: 'memory.diag.block.current',
+};
+
+const BUDGET_LABEL: Readonly<Record<PromptBudget, TextKey>> = {
+  context_limit: 'memory.diag.budget.context_limit',
+  reply_reserve: 'memory.diag.budget.reply_reserve',
+  safety_margin: 'memory.diag.budget.safety_margin',
+  available: 'memory.diag.budget.available',
+  memory_target: 'memory.diag.budget.memory_target',
+  summary_target: 'memory.diag.budget.summary_target',
+};
+
+const PART_LABEL: Readonly<Record<ScorePart, TextKey>> = {
+  fts: 'memory.diag.part.fts',
+  importance: 'memory.diag.part.importance',
+  recency: 'memory.diag.part.recency',
+  topic: 'memory.diag.part.topic',
+  kind: 'memory.diag.part.kind',
+  confidence: 'memory.diag.part.confidence',
+  status_factor: 'memory.diag.part.status_factor',
+  locked_bonus: 'memory.diag.part.locked_bonus',
+  previous_bonus: 'memory.diag.part.previous_bonus',
+};
+
+const REDUCTION_LABEL: Readonly<Record<string, TextKey>> = {
+  examples: 'memory.diag.reduction.examples',
+  summaries: 'memory.diag.reduction.summaries',
+  memories: 'memory.diag.reduction.memories',
+  history: 'memory.diag.reduction.history',
+  identity: 'memory.diag.reduction.identity',
+  state: 'memory.diag.reduction.state',
+  history_below_floor: 'memory.diag.reduction.history_below_floor',
+};
 
 const STATUS_LABEL: Readonly<Record<MemoryStatus, TextKey>> = {
   active: 'memory.status.active',
@@ -134,8 +187,10 @@ const LOCK_FILTERS: readonly { value: LockFilter; label: TextKey }[] = [
  * can be edited, locked, confirmed or deleted, and opened to show its source messages, the memory it contradicts and
  * its history. A memory in an unresolved contradiction is labeled "Incerto" with a note. **Eventi**, **Rapporto** and
  * **Riassunti** show the episodes, the relationship (in words first, numbers only in an advanced section) and the
- * summary checkpoints, each with the messages it rests on. Rapporto and Riassunti need one chosen conversation. The
- * server is the source of truth: every action goes through the store, which reads again.
+ * summary checkpoints, each with the messages it rests on. **Diagnostica** exists only while diagnostic mode is on: for
+ * a chosen reply it shows the stored prompt assembly (budgets, tokens per block, the memories with their score parts,
+ * the summaries and the full prompt when it was kept). Rapporto, Riassunti and Diagnostica need one chosen
+ * conversation. The server is the source of truth: every action goes through the store, which reads again.
  */
 @Component({
   selector: 'lyr-memory-studio',
@@ -153,7 +208,10 @@ export class MemoryStudioScreen {
   /** The conversation to start with, from the `conversation` query parameter. */
   readonly conversation = input<string | undefined>();
 
-  protected readonly tabs = TABS;
+  protected readonly tabs = computed(() => (this.store.diagnosticMode() ? [...TABS, DIAGNOSTICS_TAB] : TABS));
+  protected readonly blocks = PROMPT_BLOCKS;
+  protected readonly budgets = PROMPT_BUDGETS;
+  protected readonly scoreParts = SCORE_PARTS;
   protected readonly statusFilters = STATUS_FILTERS;
   protected readonly lockFilters = LOCK_FILTERS;
   protected readonly kinds = MEMORY_KINDS.map((value) => ({ value, label: KIND_LABEL[value] }));
@@ -278,6 +336,11 @@ export class MemoryStudioScreen {
     return KIND_LABEL[kind];
   }
 
+  /** The label of a kind the server named as plain text, or null for one this screen does not know. */
+  protected kindName(kind: string): TextKey | null {
+    return (KIND_LABEL as Readonly<Record<string, TextKey>>)[kind] ?? null;
+  }
+
   protected provenanceLabel(provenance: MemoryProvenance): TextKey {
     return PROVENANCE_LABEL[provenance];
   }
@@ -312,6 +375,36 @@ export class MemoryStudioScreen {
       return 'memory.link.related';
     }
     return `memory.link.${link.relation}.${link.direction}`;
+  }
+
+  protected blockLabel(block: PromptBlock): TextKey {
+    return BLOCK_LABEL[block];
+  }
+
+  protected budgetLabel(budget: PromptBudget): TextKey {
+    return BUDGET_LABEL[budget];
+  }
+
+  protected partLabel(part: ScorePart): TextKey {
+    return PART_LABEL[part];
+  }
+
+  protected reductionLabel(name: string): TextKey | null {
+    return REDUCTION_LABEL[name] ?? null;
+  }
+
+  /** The message ranges as "3–7, 9–12". */
+  protected ranges(gaps: readonly (readonly [number, number])[]): string {
+    return gaps.map(([from, to]) => `${from}–${to}`).join(', ');
+  }
+
+  protected decimals(value: number): string {
+    return value.toFixed(2);
+  }
+
+  protected async chooseReply(event: Event): Promise<void> {
+    const value = this.valueOf(event);
+    await this.store.selectReply(value === '' ? null : value);
   }
 
   protected percent(confidence: number | null): number {
@@ -354,6 +447,9 @@ export class MemoryStudioScreen {
         break;
       case 'summaries':
         await this.store.loadSummaries();
+        break;
+      case 'diagnostics':
+        await this.store.loadReplies();
         break;
       case 'memories':
         break;

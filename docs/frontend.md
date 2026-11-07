@@ -270,9 +270,9 @@ Tabs:
 | **Diagnostica** | Visible only when diagnostic mode is on. For a chosen reply it shows blocks, tokens, memories with score parts, and summaries. |
 
 Delivered in P04.9a (`features/memory/`): the route `/characters/:id/memory` loads `memory-studio-screen.ts`, and the
-profile's **Memoria** link goes to it. Four tabs are drawn, **Ricordi**, **Eventi**, **Rapporto** and **Riassunti**;
-**Conflitti**, **Proposte** and **Diagnostica** are not (their routes and the diagnostic mode are P04.9b and later), and
-no control is drawn for them. A **Conversazione** choice at the top limits the memories and events to one chat (the
+profile's **Memoria** link goes to it. Four tabs are drawn, **Ricordi**, **Eventi**, **Rapporto** and **Riassunti**,
+and **Diagnostica** while diagnostic mode is on (P04.9b, below); **Conflitti** and **Proposte** are not (their routes
+are later), and no control is drawn for them. A **Conversazione** choice at the top limits the memories and events to one chat (the
 `conversation` query parameter chooses it on entry); **Rapporto** and **Riassunti** need one chat and say so
 otherwise. The state lives in `memory-store.ts`; every action calls the REST API and reads the list again.
 
@@ -295,11 +295,24 @@ otherwise. The state lives in `memory-store.ts`; every action calls the REST API
   A chat whose state was never written says so. Corrections are not drawn (the route is not delivered).
 - **Riassunti.** Every checkpoint, oldest range first: message range, level, version, status, text, its lists (events,
   decisions, relationship changes, open questions, key facts) and the messages it rests on.
+- **Diagnostica** (P04.9b). The tab is drawn only while `app.diagnostic_mode` is on, read from `GET /settings` when the
+  screen opens (off when the read fails); with the mode off no control or request for it exists. It needs one chosen
+  conversation. A **Risposta** choice lists the replies of that chat that have a stored assembly, newest first, each
+  with its message number and the start of its text. For the chosen reply the tab shows the tokens of the prompt
+  against the window; the **Budget** (window, space reserved for the reply, safety margin, space for the prompt,
+  targets for memories and summaries); the tokens of each block; the active corrective notes, the reductions applied
+  and any uncovered message ranges; every memory in the prompt with its text now (or that it was deleted since), its
+  label, score and the nine parts of the score in a `details`; the summaries used; and **Testo completo del prompt**
+  in a `details`, which says so when the text was not kept. The store is `memory-store.ts` (`diagnosticMode`,
+  `replies`, `diagnostics`), the data comes from `GET /conversations/{id}/diagnostics` and
+  `GET /messages/{id}/diagnostics` ([API](api.md#messages)). Not drawn: the switch for the mode (see
+  [General settings](#8-general-settings); until it exists the mode is changed with `PATCH /settings`) and the link per
+  reply in the conversation's context panel.
 - **Tests:** `memory-store.spec.ts` and `memory-studio-screen.spec.ts` (unit), and `tests/e2e/specs/memory-studio.spec.mjs`
-  (memories written by hand: list, filter, search, edit with a new revision, lock, delete, and the empty states). The
-  end-to-end spec was written but not run in this change; the fake runtime never produces extraction output, so
-  sources, events, state changes, summaries and a contradiction are covered by the backend integration test
-  (T-MEM-08, T-MEM-11) and the unit specs.
+  (memories written by hand: list, filter, search, edit with a new revision, lock, delete, and the empty states; and the
+  diagnostic mode: off by default, then the assembly of one reply). The end-to-end spec was written but not run in this
+  change; the fake runtime never produces extraction output, so sources, events, state changes, summaries and a
+  contradiction are covered by the backend integration test (T-MEM-08, T-MEM-11) and the unit specs.
 
 ### 6. Gallery
 

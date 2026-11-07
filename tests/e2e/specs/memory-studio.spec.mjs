@@ -7,6 +7,8 @@
 // the memories here are written by hand (`POST /memories`). Sources, episodes, state changes, summaries and an
 // unresolved contradiction come from real extraction runs, and the backend integration test
 // `test_memory_studio_api.py` (T-MEM-08, T-MEM-11) and the screen's unit spec cover how the Studio shows them.
+// The diagnostic mode of P04.9b (the last test) turns `app.diagnostic_mode` on through `PATCH /settings`, has the fake
+// runtime answer one message, and reads the stored assembly in the Diagnostica tab; it turns the mode off again.
 // This spec was written but not run in this change.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
@@ -130,4 +132,51 @@ test('events, relationship and summaries need a chat and say so when nothing was
   await page.getByRole('button', { name: 'Riassunti' }).click();
   await expect(page.getByText('Non ci sono ancora riassunti per questa conversazione.')).toBeVisible();
   await expectNoAccessibilityViolations(page);
+});
+
+test('diagnostic mode is off by default and then shows the stored prompt assembly of a chosen reply (T-MEM-21)', async ({
+  page,
+}) => {
+  const name = uniqueName('Ada');
+  const { id, chatId } = await setUp(page, name);
+  const setMode = (on) => page.request.patch('/api/v1/settings', { data: { 'app.diagnostic_mode': on } });
+  try {
+    // Off by default: no tab, and the API answers as if the records did not exist.
+    expect(await setMode(false).then((response) => response.json())).toEqual({ 'app.diagnostic_mode': false });
+    await page.goto(`/characters/${id}/memory?conversation=${chatId}`);
+    await expect(page.getByTestId('memory-card')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Diagnostica' })).toHaveCount(0);
+    expect((await page.request.get(`/api/v1/conversations/${chatId}/diagnostics`)).status()).toBe(404);
+
+    // With the mode on, a reply built from a message that matches a memory leaves its assembly.
+    expect((await setMode(true)).status()).toBe(200);
+    const sent = await page.request.post(`/api/v1/conversations/${chatId}/messages`, {
+      data: { content: 'Ricordi che amo il caffè amaro?' },
+    });
+    expect(sent.status()).toBe(202);
+    const replyId = (await sent.json()).reply.id;
+    await expect
+      .poll(async () => (await (await page.request.get(`/api/v1/conversations/${chatId}/diagnostics`)).json()).items.length)
+      .toBe(1);
+
+    await page.goto(`/characters/${id}/memory?conversation=${chatId}`);
+    await page.getByRole('button', { name: 'Diagnostica' }).click();
+    await page.getByLabel('Risposta', { exact: true }).selectOption({ index: 1 });
+    await expect(page.getByTestId('diagnostics-total')).toContainText('token su');
+    await expect(page.getByTestId('diagnostics-budgets')).toContainText('Spazio per il prompt');
+    await expect(page.getByTestId('diagnostics-blocks')).toContainText('Promemoria finale');
+    const used = page.getByTestId('diagnostics-memory').filter({ hasText: 'Ama il caffè amaro.' });
+    await expect(used).toBeVisible();
+    await expect(used).toContainText('Punteggio');
+    await page.getByText('Testo completo del prompt').click();
+    await expect(page.getByTestId('diagnostics-prompt')).toContainText('Ricordi che amo il caffè amaro?');
+    await expectNoAccessibilityViolations(page);
+
+    // The same assembly through the API.
+    const stored = await (await page.request.get(`/api/v1/messages/${replyId}/diagnostics`)).json();
+    expect(stored.memories.map((memory) => memory.content)).toContain('Ama il caffè amaro.');
+    expect(stored.token_total).toBeLessThanOrEqual(stored.budgets.available);
+  } finally {
+    await setMode(false);
+  }
 });

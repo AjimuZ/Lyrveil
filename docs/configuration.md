@@ -74,7 +74,11 @@ Values are validated against a Pydantic model. `PATCH /settings` rejects unknown
 | `ui.language` | `it` | `it` |
 | `characters.default_language` | `it` | `it`, `en`, `fr`, `de`, `es` |
 | `app.first_start_notice_seen` | `false` | Boolean |
-| `app.diagnostic_mode` | `false` | Boolean |
+| `app.diagnostic_mode` | `false` | Boolean. Turns on the Memory Studio's Diagnostica tab and keeps the prompt text of replies built while it is on |
+
+Delivered so far: `app.diagnostic_mode` alone, through `GET` and `PATCH /settings` ([API](api.md#messages)), read from
+`application_settings` on every use and applied at once. A missing row means the default. The other keys are planned
+with their screens.
 
 ### Models
 

@@ -125,7 +125,7 @@ Evidence:
 - [x] P04.6 `CharacterStateManager`, bounded updates, replay.
 - [x] P04.7 Invalidation and re-evaluation.
 - [x] P04.8 Reply normalizer, reply checks V1 to V13 with the corrective generation, and adaptive notes ([ADR 0032](decisions/0032-model-independent-reply-normalization.md)).
-- [ ] P04.9 Memory Studio, including diagnostic mode.
+- [x] P04.9 Memory Studio, including diagnostic mode.
 - [ ] P04.10 Run the Italian quality protocol, the consistency protocol and the extraction evaluation on the catalog
   profiles, with the SWA padding and SmartCache measurements. Apply the verified-profile rule and record
   `quality_evidence` ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).

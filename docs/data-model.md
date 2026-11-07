@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the memory tables (P04.1, revision `0010`), are described in their "Delivered in" notes below. The rest is planned, phases P04 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the prompt assemblies (P04.9b, revision `0012`), are described in their "Delivered in" notes below. The rest is planned, phases P04 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -254,7 +254,8 @@ Every text or image version of a message. A user edit and a regeneration each ad
 | `created_at` | TEXT | |
 
 Delivered in revision `0004` (P02.5b) with `CHECK` lists and `json_valid` on the two JSON columns. `image_id` and
-`prompt_assembly_id` are plain columns until their tables exist. A regeneration inserts a `generated` variant with
+`prompt_assembly_id` are plain columns until their tables exist (`prompt_assembly_id` stays one after revision `0012`,
+which the code keeps in step). A regeneration inserts a `generated` variant with
 status `streaming` and empty text, makes it the message's active variant and queues `chat_regenerate` with its id under
 the key `chat_regenerate:<variant id>`; the older variants stay selectable. An edit inserts an `edited` variant that is
 already `complete`. The keys from `generation_jobs` to `conversations`, `characters` and `messages` are still plain
@@ -678,10 +679,21 @@ overwritten: re-summarizing a range inserts the next `version` and marks the old
 `relationship_changes`, `unresolved`, `key_facts` and `source_seqs`, and `prompt_version` is `summary.v1`. `purge` deletes
 the checkpoints too.
 
-`prompt_assemblies` is not created yet. Since P04.5 `ContextBuilder` returns every value of the table except the ids and
-`created_at` (`Assembly`, [Delivered in P04.5](memory-engine.md#delivered-in-p045)) and each reply logs them as counts;
-the table, its retention and `prompt_text` under diagnostic mode belong with the Memory Studio's diagnostic mode, its
-first reader (P04.9).
+Delivered in P04.9b (revision `0012`): `prompt_assemblies` as in [`prompt_assemblies`](#prompt_assemblies), written by
+`lyrveil.persistence.assemblies` and read by `DiagnosticsService` ([Delivered in P04.9b](memory-engine.md#delivered-in-p049b)).
+Details the document leaves open: the conversation key is RESTRICT like every memory table, so `purge` deletes the rows
+first, and the message and variant keys are SET NULL. `message_variants.prompt_assembly_id` stays a plain column
+(SQLite cannot add a key to an existing column); the insert points the reply's variant at its row and the retention
+sets the pointer to NULL for the rows it removes. CHECK constraints cover `json_valid` on the three JSON columns and
+non-negative token counts. `blocks_json` is one object: `blocks` (the tokens of each block of
+[Context composition](memory-engine.md#context-composition)), `budgets` (`context_limit`, `reply_reserve`,
+`safety_margin`, `available`, `memory_target`, `summary_target`), `example_count`, `notes` (the corrective notes of the
+anchor), `reductions`, `gaps`, `history_count` and `current_truncated`. `memory_refs_json` lists each memory or
+episode with its `id`, `type`, `kind`, `status`, prompt `label`, `score`, `token_cost` and the nine `parts` of the
+score, but not its text, which is read from the memory when shown. A row is written for every delivered reply, right
+after the reply is stored; `prompt_text` is NULL unless diagnostic mode was on at that moment. Retention is applied on
+every insert: the newest 200 rows of the conversation by `created_at` are kept. A failure to write the row is logged
+and never fails the reply. The row of a reply that failed, was blocked or was cut is not written.
 
 Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes `memory_extraction_runs`, conversation
 `memories` with `memory_sources` and `memory_fts`, `episodic_memories` with `episodic_sources`, `episode_links` and

@@ -15,7 +15,7 @@
   </div>
 
   <div class="tabs" role="group" [attr.aria-label]="'memory.tabs.label' | t">
-    @for (item of tabs; track item.id) {
+    @for (item of tabs(); track item.id) {
       <button type="button" class="tab" [attr.aria-pressed]="tab() === item.id" (click)="showTab(item.id)">
         {{ item.label | t }}
       </button>
@@ -481,6 +481,163 @@
             </li>
           }
         </ul>
+      }
+    }
+
+    @case ('diagnostics') {
+      <h2 class="subtitle">{{ 'memory.tab.diagnostics' | t }}</h2>
+      <p class="note">{{ 'memory.diag.intro' | t }}</p>
+      @if (store.conversationId() === null) {
+        <p class="note">{{ 'memory.needsChat' | t }}</p>
+      } @else if (store.replies().error; as failure) {
+        <div class="error" role="alert">
+          <p>{{ failure.textKey | t }}</p>
+          <button type="button" class="button" (click)="store.loadReplies()">{{ 'memory.retry' | t }}</button>
+        </div>
+      } @else if (store.replies().loading) {
+        <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+      } @else if (store.replies().data.length === 0) {
+        <p class="note">{{ 'memory.diag.noReplies' | t }}</p>
+      } @else {
+        <div class="field">
+          <label for="memory-reply">{{ 'memory.diag.reply' | t }}</label>
+          <select id="memory-reply" class="control" (change)="chooseReply($event)">
+            <option value="" [selected]="store.reply() === null">{{ 'memory.diag.choose' | t }}</option>
+            @for (reply of store.replies().data; track reply.message_id) {
+              <option [value]="reply.message_id" [selected]="reply.message_id === store.reply()">
+                {{ 'memory.diag.replyOption' | t: { seq: reply.seq, excerpt: reply.excerpt } }}
+              </option>
+            }
+          </select>
+        </div>
+
+        @if (store.diagnostics().error; as failure) {
+          <div class="error" role="alert">
+            <p>{{ failure.textKey | t }}</p>
+          </div>
+        } @else if (store.diagnostics().loading) {
+          <p class="note" role="status">{{ 'memory.loading' | t }}</p>
+        } @else if (store.diagnostics().data; as assembly) {
+          <div class="card" data-testid="diagnostics">
+            <p class="content" data-testid="diagnostics-total">
+              {{ 'memory.diag.total' | t: { tokens: assembly.token_total, limit: assembly.context_limit } }}
+            </p>
+
+            <h3 class="section">{{ 'memory.diag.budgets' | t }}</h3>
+            <dl class="values" data-testid="diagnostics-budgets">
+              @for (budget of budgets; track budget) {
+                <dt>{{ budgetLabel(budget) | t }}</dt>
+                <dd>{{ assembly.budgets[budget] }}</dd>
+              }
+            </dl>
+
+            <h3 class="section">{{ 'memory.diag.blocks' | t }}</h3>
+            <dl class="values" data-testid="diagnostics-blocks">
+              @for (block of blocks; track block) {
+                <dt>{{ blockLabel(block) | t }}</dt>
+                <dd>{{ assembly.blocks[block] }}</dd>
+              }
+            </dl>
+            <p class="meta">{{ 'memory.diag.history' | t: { count: assembly.history_count } }}</p>
+            @if (assembly.current_truncated) {
+              <p class="conflict">{{ 'memory.diag.truncated' | t }}</p>
+            }
+            @if (assembly.gaps.length > 0) {
+              <p class="meta">{{ 'memory.diag.gaps' | t: { ranges: ranges(assembly.gaps) } }}</p>
+            }
+
+            @if (assembly.notes.length > 0) {
+              <h3 class="section">{{ 'memory.diag.notes' | t }}</h3>
+              <ul class="plain">
+                @for (note of assembly.notes; track $index) {
+                  <li>{{ note }}</li>
+                }
+              </ul>
+            }
+
+            @if (assembly.reductions.length > 0) {
+              <h3 class="section">{{ 'memory.diag.reductions' | t }}</h3>
+              <ul class="plain">
+                @for (name of assembly.reductions; track name) {
+                  <li>
+                    @if (reductionLabel(name); as label) {
+                      {{ label | t }}
+                    } @else {
+                      {{ name }}
+                    }
+                  </li>
+                }
+              </ul>
+            }
+
+            <h3 class="section">{{ 'memory.diag.memories' | t }}</h3>
+            @if (assembly.memories.length === 0) {
+              <p class="note">{{ 'memory.diag.memories.empty' | t }}</p>
+            } @else {
+              <ul class="list" data-testid="diagnostics-memories">
+                @for (item of assembly.memories; track item.id) {
+                  <li class="card" data-testid="diagnostics-memory">
+                    <p class="content">
+                      @if (item.content !== null) {
+                        {{ item.content }}
+                      } @else {
+                        <em>{{ 'memory.diag.memory.gone' | t }}</em>
+                      }
+                    </p>
+                    <div class="pills">
+                      <span class="pill">{{ item.label }}</span>
+                      @if (item.type === 'episode') {
+                        <span class="pill">{{ 'memory.diag.memory.episode' | t }}</span>
+                      } @else if (kindName(item.kind); as key) {
+                        <span class="pill">{{ key | t }}</span>
+                      } @else {
+                        <span class="pill">{{ item.kind }}</span>
+                      }
+                    </div>
+                    <p class="meta">
+                      {{ 'memory.diag.memory.score' | t: { score: decimals(item.score) } }} ·
+                      {{ 'memory.diag.memory.cost' | t: { tokens: item.token_cost } }}
+                    </p>
+                    <details class="advanced">
+                      <summary>{{ 'memory.diag.parts' | t }}</summary>
+                      <dl class="values">
+                        @for (part of scoreParts; track part) {
+                          <dt>{{ partLabel(part) | t }}</dt>
+                          <dd>{{ decimals(item.parts[part]) }}</dd>
+                        }
+                      </dl>
+                    </details>
+                  </li>
+                }
+              </ul>
+            }
+
+            <h3 class="section">{{ 'memory.diag.summaries' | t }}</h3>
+            @if (assembly.summaries.length === 0) {
+              <p class="note">{{ 'memory.diag.summaries.empty' | t }}</p>
+            } @else {
+              <ul class="plain" data-testid="diagnostics-summaries">
+                @for (summary of assembly.summaries; track summary.id) {
+                  <li>
+                    <strong>{{ 'memory.summary.range' | t: { from: summary.from_seq, to: summary.to_seq } }}</strong>
+                    · {{ 'memory.summary.level' | t: { level: summary.level } }}
+                    · {{ 'memory.summary.version' | t: { version: summary.version } }}
+                    · {{ 'memory.diag.summary.tokens' | t: { tokens: summary.token_count } }}
+                  </li>
+                }
+              </ul>
+            }
+
+            <details class="advanced">
+              <summary>{{ 'memory.diag.promptText' | t }}</summary>
+              @if (assembly.prompt_text !== null) {
+                <pre class="prompt" data-testid="diagnostics-prompt">{{ assembly.prompt_text }}</pre>
+              } @else {
+                <p class="note">{{ 'memory.diag.promptText.none' | t }}</p>
+              }
+            </details>
+          </div>
+        }
       }
     }
   }

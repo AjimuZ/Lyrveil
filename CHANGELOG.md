@@ -20,7 +20,14 @@ No application exists yet. This section records the design documentation.
   relationship in words, with the change log (reason and source messages) and the numbers only in an advanced section.
   **Riassunti** shows the summary checkpoints with their message range, version, status and source messages. Not yet:
   resolving a contradiction, sharing a memory, applying a proposal to the profile, correcting events or the
-  relationship, and the diagnostic mode.
+  relationship.
+- Diagnostic mode for the Memory Studio. It is off by default. While `app.diagnostic_mode` is on (until a settings
+  screen exists, `PATCH /api/v1/settings` with `{"app.diagnostic_mode": true}`), the Studio has a **Diagnostica** tab:
+  for a chosen reply of a chat it shows how many tokens the prompt used against the model's window, the budgets, the
+  tokens of each block, the memories that entered the prompt with their text and score parts, the summaries used, the
+  corrective notes and, for replies written while the mode was on, the complete prompt. Each reply stores this record
+  (the newest 200 per chat); with the mode off nothing is shown and the full prompt is not kept. No message text is
+  written to the logs.
 - Replies are now checked as they stream. If the character gives itself another name, states another age, or speaks
   of itself in the wrong grammatical gender (Italian), the reply stops, the bubble clears, and the reply is written
   once more with a reminder in its prompt; if the second reply makes the same mistake, it is kept. Text the model

@@ -69,11 +69,12 @@ describe('MemoryStudioScreen', () => {
 
   const cards = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('[data-testid="memory-card"]')];
 
-  /** Opens the screen for character c1 and answers the chat list and the first page of memories. */
-  async function open(items: readonly MemoryItem[]): Promise<void> {
+  /** Opens the screen for character c1 and answers the chat list, the settings and the first page of memories. */
+  async function open(items: readonly MemoryItem[], diagnosticMode = false): Promise<void> {
     fixture.componentRef.setInput('id', 'c1');
     fixture.detectChanges();
     backend.expectOne('/api/v1/conversations?character_id=c1').flush({ items: [CHAT] });
+    backend.expectOne('/api/v1/settings').flush({ 'app.diagnostic_mode': diagnosticMode });
     backend.expectOne(isMemories).flush({ items, next_cursor: null });
     await settle();
   }
@@ -289,5 +290,92 @@ describe('MemoryStudioScreen', () => {
     expect(summary).toContain('Versione 2');
     expect(summary).toContain('Ha iniziato un lavoro.');
     expect(summary).toContain('Messaggi di origine: 1, 3');
+  });
+
+  it('draws no Diagnostica tab while diagnostic mode is off', async () => {
+    await open([memory('a')]);
+
+    const labels = [...root.querySelectorAll('.tab')].map((tab) => tab.textContent?.trim());
+    expect(labels).toEqual(['Ricordi', 'Eventi', 'Rapporto', 'Riassunti']);
+  });
+
+  it('shows the stored assembly of a chosen reply: budgets, blocks, memories with score parts, summaries and prompt', async () => {
+    await open([], true);
+    expect([...root.querySelectorAll('.tab')].map((tab) => tab.textContent?.trim())).toContain('Diagnostica');
+
+    const select = root.querySelector<HTMLSelectElement>('#memory-conversation') as HTMLSelectElement;
+    select.value = 'chat1';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    backend.expectOne(isMemories).flush({ items: [], next_cursor: null });
+    await settle();
+
+    await click(root, 'Diagnostica');
+    backend.expectOne('/api/v1/conversations/chat1/diagnostics').flush({
+      items: [
+        {
+          message_id: 'm2',
+          seq: 2,
+          excerpt: 'Briciola sta bene.',
+          token_total: 410,
+          context_limit: 8192,
+          created_at: '2026-11-07T10:00:00.000Z',
+        },
+      ],
+    });
+    await settle();
+    expect(root.querySelector('[data-testid="diagnostics"]')).toBeNull();
+
+    const reply = root.querySelector<HTMLSelectElement>('#memory-reply') as HTMLSelectElement;
+    expect(reply.textContent).toContain('Messaggio 2: Briciola sta bene.');
+    reply.value = 'm2';
+    reply.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    backend.expectOne('/api/v1/messages/m2/diagnostics').flush({
+      message_id: 'm2',
+      token_total: 410,
+      context_limit: 8192,
+      blocks: { global: 261, identity: 5, communication: 36, scenario: 0, summary: 20, history: 30, state: 0, memories: 14, anchor: 37, current: 7 },
+      budgets: { context_limit: 8192, reply_reserve: 120, safety_margin: 64, available: 8008, memory_target: 900, summary_target: 600 },
+      notes: ['Evita le ripetizioni.'],
+      reductions: ['examples'],
+      gaps: [[3, 7]],
+      history_count: 4,
+      current_truncated: false,
+      memories: [
+        {
+          id: 'mem1',
+          type: 'memory',
+          kind: 'character_fact',
+          status: 'active',
+          label: '[sicuro]',
+          score: 0.8123,
+          token_cost: 14,
+          parts: { fts: 0.9, importance: 0.8, recency: 1, topic: 0, kind: 0.5, confidence: 1, status_factor: 1, locked_bonus: 0, previous_bonus: 0.05 },
+          content: 'Ha un gatto di nome Briciola.',
+        },
+      ],
+      summaries: [{ id: 's1', level: 0, from_seq: 1, to_seq: 2, version: 1, status: 'active', token_count: 20 }],
+      prompt_text: null,
+    });
+    await settle();
+
+    expect(root.querySelector('[data-testid="diagnostics-total"]')?.textContent).toContain('410 token su 8192');
+    const budgets = root.querySelector('[data-testid="diagnostics-budgets"]')?.textContent ?? '';
+    expect(budgets).toContain('Spazio per il prompt');
+    expect(budgets).toContain('8008');
+    const blocks = root.querySelector('[data-testid="diagnostics-blocks"]')?.textContent ?? '';
+    expect(blocks).toContain('Promemoria finale');
+    expect(blocks).toContain('261');
+    const memoryCard = root.querySelector('[data-testid="diagnostics-memory"]');
+    expect(memoryCard?.textContent).toContain('Ha un gatto di nome Briciola.');
+    expect(memoryCard?.textContent).toContain('[sicuro]');
+    expect(memoryCard?.textContent).toContain('Punteggio 0.81');
+    expect(memoryCard?.textContent).toContain('Somiglianza col testo');
+    expect(root.querySelector('[data-testid="diagnostics-summaries"]')?.textContent).toContain('Messaggi da 1 a 2');
+    expect(root.textContent).toContain('Evita le ripetizioni.');
+    expect(root.textContent).toContain('Messaggi non coperti da nessun riassunto: 3–7');
+    expect(root.textContent).toContain('Il testo del prompt non è stato conservato');
+    expect(root.querySelector('[data-testid="diagnostics-prompt"]')).toBeNull();
   });
 });

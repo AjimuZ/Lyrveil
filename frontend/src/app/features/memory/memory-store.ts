@@ -7,6 +7,9 @@ import { ApiClient, ApiQuery } from '../../core/api/api-client';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { Conversation, ConversationList } from '../chats/chats.model';
 import {
+  AppSettings,
+  DiagnosticReply,
+  Diagnostics,
   Episode,
   MemoryChange,
   MemoryDetail,
@@ -63,7 +66,7 @@ function part<T>(data: T, loading = false): Part<T> {
 @Injectable({ providedIn: 'root' })
 export class MemoryStudioStore {
   private readonly api = inject(ApiClient);
-  private tickets = { memories: 0, episodes: 0, relationship: 0, summaries: 0 };
+  private tickets = { memories: 0, episodes: 0, relationship: 0, summaries: 0, replies: 0, diagnostics: 0 };
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly characterState = signal<string | null>(null);
@@ -79,6 +82,10 @@ export class MemoryStudioStore {
   private readonly summariesState = signal<Part<readonly Summary[]>>(part([], true));
   private readonly openedState = signal<Readonly<Record<string, OpenedMemory>>>({});
   private readonly actionErrorState = signal<ApiError | null>(null);
+  private readonly diagnosticModeState = signal(false);
+  private readonly repliesState = signal<Part<readonly DiagnosticReply[]>>(part([]));
+  private readonly replyState = signal<string | null>(null);
+  private readonly diagnosticsState = signal<Part<Diagnostics | null>>(part(null));
 
   /** The character being shown, or null before `open`. */
   readonly characterId = this.characterState.asReadonly();
@@ -97,6 +104,13 @@ export class MemoryStudioStore {
   /** The memories whose sources and history are open, by id. */
   readonly opened = this.openedState.asReadonly();
   readonly actionError = this.actionErrorState.asReadonly();
+  /** True while `app.diagnostic_mode` is on; the Diagnostica tab is drawn only then. Off until the setting is read. */
+  readonly diagnosticMode = this.diagnosticModeState.asReadonly();
+  /** The chosen conversation's replies that have a stored prompt assembly, newest first. */
+  readonly replies = this.repliesState.asReadonly();
+  /** The reply whose assembly is shown, or null. */
+  readonly reply = this.replyState.asReadonly();
+  readonly diagnostics = this.diagnosticsState.asReadonly();
 
   /**
    * Starts the screen for a character: forgets the previous character's rows, reads the character's active
@@ -115,7 +129,9 @@ export class MemoryStudioStore {
     this.relationshipState.set(part(null, true));
     this.historyState.set([]);
     this.summariesState.set(part([], true));
+    this.resetDiagnostics();
     void this.loadConversations(characterId);
+    void this.loadDiagnosticMode(characterId);
     await this.reloadMemories();
   }
 
@@ -126,7 +142,54 @@ export class MemoryStudioStore {
     this.relationshipState.set(part(null, true));
     this.historyState.set([]);
     this.summariesState.set(part([], true));
+    this.resetDiagnostics();
     await this.reloadMemories();
+  }
+
+  /**
+   * Reads the replies of the chosen conversation that have a stored prompt assembly. Does nothing without a
+   * conversation. A refusal (the mode was turned off meanwhile) is kept as the part's `error`.
+   */
+  async loadReplies(): Promise<void> {
+    const conversationId = this.conversationState();
+    if (conversationId === null) {
+      return;
+    }
+    const ticket = ++this.tickets.replies;
+    this.repliesState.update((current) => ({ ...current, loading: true }));
+    try {
+      const list = await firstValueFrom(
+        this.api.get<{ items: readonly DiagnosticReply[] }>(`/conversations/${conversationId}/diagnostics`),
+      );
+      if (ticket === this.tickets.replies) {
+        this.repliesState.set(part(list.items));
+      }
+    } catch (failure) {
+      if (ticket === this.tickets.replies) {
+        this.repliesState.update((current) => ({ ...current, loading: false, error: toApiError(failure) }));
+      }
+    }
+  }
+
+  /** Chooses the reply to inspect (null: none) and reads its stored assembly. */
+  async selectReply(messageId: string | null): Promise<void> {
+    this.replyState.set(messageId);
+    const ticket = ++this.tickets.diagnostics;
+    if (messageId === null) {
+      this.diagnosticsState.set(part(null));
+      return;
+    }
+    this.diagnosticsState.set(part(null, true));
+    try {
+      const assembly = await firstValueFrom(this.api.get<Diagnostics>(`/messages/${messageId}/diagnostics`));
+      if (ticket === this.tickets.diagnostics) {
+        this.diagnosticsState.set(part(assembly));
+      }
+    } catch (failure) {
+      if (ticket === this.tickets.diagnostics) {
+        this.diagnosticsState.set({ data: null, loading: false, error: toApiError(failure) });
+      }
+    }
   }
 
   async setFilters(filters: Partial<MemoryFilters>): Promise<void> {
@@ -319,6 +382,27 @@ export class MemoryStudioStore {
       q: this.queryState().trim() || null,
       cursor,
     };
+  }
+
+  private resetDiagnostics(): void {
+    this.tickets.replies++;
+    this.tickets.diagnostics++;
+    this.repliesState.set(part([]));
+    this.replyState.set(null);
+    this.diagnosticsState.set(part(null));
+  }
+
+  /** Reads `app.diagnostic_mode`. A failed read leaves the mode off, which is also its documented default. */
+  private async loadDiagnosticMode(characterId: string): Promise<void> {
+    let on: boolean;
+    try {
+      on = (await firstValueFrom(this.api.get<AppSettings>('/settings')))['app.diagnostic_mode'];
+    } catch {
+      on = false;
+    }
+    if (this.characterState() === characterId) {
+      this.diagnosticModeState.set(on);
+    }
   }
 
   private async loadConversations(characterId: string): Promise<void> {

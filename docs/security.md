@@ -290,7 +290,7 @@ term, a childhood reference or an age under 18. The reply then ends `failed` wit
 | Messages, memories, images | Until the user deletes them |
 | Deleted conversations | Purged after 30 days |
 | `memory_extraction_runs.raw_output` | 30 days. Written since P04.2a; the removal, a `maintenance` job, is not delivered yet |
-| `prompt_assemblies` | Newest 200 per conversation. `prompt_text` only while diagnostic mode is on |
+| `prompt_assemblies` | Newest 200 per conversation, trimmed on every insert (since P04.9b). `prompt_text` only while diagnostic mode is on |
 | `model_lifecycle_events` | Newest 50,000 rows |
 | Pre-migration backups | Newest 5 |
 | Docker logs | 5 files of 10 MB per service |

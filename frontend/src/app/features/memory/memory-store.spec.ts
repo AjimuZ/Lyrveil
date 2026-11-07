@@ -33,6 +33,7 @@ function memory(id: string, overrides: Partial<MemoryItem> = {}): MemoryItem {
 
 const isMemories = (request: { url: string }): boolean => request.url === '/api/v1/memories';
 const isChats = (request: { url: string }): boolean => request.url === '/api/v1/conversations';
+const isSettings = (request: { url: string }): boolean => request.url === '/api/v1/settings';
 
 describe('MemoryStudioStore', () => {
   let store: MemoryStudioStore;
@@ -50,10 +51,15 @@ describe('MemoryStudioStore', () => {
     backend.verify();
   });
 
-  /** Opens the screen for character c1 and answers the chat list and the first page of memories. */
-  async function open(items: readonly MemoryItem[], conversation: string | null = null): Promise<TestRequest> {
+  /** Opens the screen for character c1 and answers the chat list, the settings and the first page of memories. */
+  async function open(
+    items: readonly MemoryItem[],
+    conversation: string | null = null,
+    diagnosticMode = false,
+  ): Promise<TestRequest> {
     const opened = store.open('c1', conversation);
     backend.expectOne(isChats).flush({ items: [] });
+    backend.expectOne(isSettings).flush({ 'app.diagnostic_mode': diagnosticMode });
     const first = backend.expectOne(isMemories);
     first.flush({ items, next_cursor: null });
     await opened;
@@ -97,6 +103,7 @@ describe('MemoryStudioStore', () => {
   it('appends the next page with its cursor', async () => {
     const opened = store.open('c1', null);
     backend.expectOne(isChats).flush({ items: [] });
+    backend.expectOne(isSettings).flush({ 'app.diagnostic_mode': false });
     backend.expectOne(isMemories).flush({ items: [memory('a')], next_cursor: 'cursor-1' });
     await opened;
     expect(store.hasMore()).toBe(true);
@@ -213,6 +220,69 @@ describe('MemoryStudioStore', () => {
     await store.loadRelationship();
     await store.loadSummaries();
     backend.expectNone((request) => request.url.includes('/relationship') || request.url.includes('/summaries'));
+  });
+
+  it('follows the diagnostic setting, off by default, and asks for no replies without a chosen chat', async () => {
+    await open([]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.diagnosticMode()).toBe(false);
+
+    await open([], null, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.diagnosticMode()).toBe(true);
+    await store.loadReplies();
+    backend.expectNone((request) => request.url.includes('/diagnostics'));
+  });
+
+  it('lists the replies with a stored assembly and shows the one that was chosen', async () => {
+    await open([], 'chat1', true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.diagnosticMode()).toBe(true);
+
+    const listed = store.loadReplies();
+    const reply = {
+      message_id: 'm2',
+      seq: 2,
+      excerpt: 'Ciao!',
+      token_total: 410,
+      context_limit: 8192,
+      created_at: '2026-11-07T10:00:00.000Z',
+    };
+    backend.expectOne('/api/v1/conversations/chat1/diagnostics').flush({ items: [reply] });
+    await listed;
+    expect(store.replies().data.map((item) => item.message_id)).toEqual(['m2']);
+
+    const chosen = store.selectReply('m2');
+    backend.expectOne('/api/v1/messages/m2/diagnostics').flush({ message_id: 'm2', token_total: 410, memories: [] });
+    await chosen;
+    expect(store.reply()).toBe('m2');
+    expect(store.diagnostics().data?.token_total).toBe(410);
+
+    await store.selectReply(null);
+    expect(store.diagnostics().data).toBeNull();
+    backend.expectNone((request) => request.url.includes('/diagnostics'));
+  });
+
+  it('keeps the refusal when the mode was turned off and forgets the assembly when the chat changes', async () => {
+    await open([], 'chat1', true);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const refused = store.loadReplies();
+    backend
+      .expectOne('/api/v1/conversations/chat1/diagnostics')
+      .flush({ code: 'NOT_FOUND' }, { status: 404, statusText: 'Not Found' });
+    await refused;
+    expect(store.replies().error?.code).toBe('NOT_FOUND');
+
+    const chosen = store.selectReply('m2');
+    backend.expectOne('/api/v1/messages/m2/diagnostics').flush({ message_id: 'm2' });
+    await chosen;
+    const selected = store.selectConversation('chat2');
+    backend.expectOne(isMemories).flush({ items: [], next_cursor: null });
+    await selected;
+    expect(store.reply()).toBeNull();
+    expect(store.diagnostics().data).toBeNull();
+    expect(store.replies().data).toEqual([]);
   });
 
   it('keeps the rows and sets the error when a read fails', async () => {

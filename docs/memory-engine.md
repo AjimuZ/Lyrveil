@@ -781,7 +781,7 @@ for a single system text.
 - **Record.** `Assembly` holds the prompt, `max_length`, the limit, `available`, `token_total`, the runtime count of
   each block, the example count, the memories with their score parts, the summary ids, the gaps, the history seqs, the
   reductions applied and whether the current message was cut. The reply logs it as `context_assembled`, with counts
-  only. The `prompt_assemblies` table is not written yet ([Data model](data-model.md#prompt_assemblies)).
+  only. Since P04.9b the reply also stores it in `prompt_assemblies` ([Delivered in P04.9b](#delivered-in-p049b)).
 - **Not delivered.** Block 4: no state existed before the Character State Manager and no time context exists before
   P07.4, so `StateText` was empty and the frame held blocks 5 and 9. Since P04.6 `load_context_request` fills block 4
   from the chat's stored state ([Block 4](prompting.md#block-4-state-and-time)); a chat whose state was never written
@@ -913,9 +913,33 @@ The Memory Studio reads and corrects this layer through `MemoryStudioService` (`
   refused).
 - **Not delivered.** `POST /memories/{id}/resolve` (so a contradiction can only be seen and labeled, not settled, from
   the Studio), sharing, applying an `identity_candidate` to the profile, edits of episodes and of the relationship
-  (`user_correction` rows), the `memory.updated` event and the diagnostic mode (P04.9b).
+  (`user_correction` rows) and the `memory.updated` event. The diagnostic mode is [P04.9b](#delivered-in-p049b).
 
 `tests/integration/test_memory_studio_api.py` holds the API half of T-MEM-08 and T-MEM-11 ([Testing](testing.md#memory)).
+
+### Delivered in P04.9b
+
+The diagnostic mode of the Memory Studio shows the prompt assembly of a reply ([Frontend](frontend.md#5-character-memory-studio),
+[API](api.md#messages)). The switch is the application setting `app.diagnostic_mode`
+([Configuration](configuration.md#general)), **off by default**; `DiagnosticsService` (`services/diagnostics.py`) reads it
+in the same transaction as every read.
+
+- **What is stored.** After a reply is stored, `ChatInferenceService` records the `Assembly` of the prompt that produced
+  the delivered text (the last one, when a check made it generate again) with the corrective notes of its anchor. The
+  counts, the ids, the scores and the budgets are stored always, so turning the mode on shows earlier replies too; the
+  prompt text only while the mode is on, so a reply built while it was off shows "the text was not kept". Memories are
+  stored by id and read again when shown: an edited memory shows its current text, a deleted one says so.
+- **What is shown.** Off, both reads answer 404 as if nothing was stored, and the Studio draws no Diagnostica tab. On,
+  a reply shows the window, the reply reserve, the safety margin, the room left for the prompt and the targets of
+  memories and summaries; the tokens of each block; the notes, reductions and uncovered ranges; each memory with its
+  label, score and the nine parts of the score; the summaries used; and, when kept, the whole prompt.
+- **Privacy.** The log line of the record (`assembly_recorded`) holds counts only. No prompt, reply or memory text is
+  logged, by this path or by the routes; the log filter drops any field that is not an identifier or a measure
+  ([Backend](backend.md#logging)). `tests/integration/test_diagnostics.py` checks that a marker in the message reaches
+  the stored prompt text but not the log.
+- **Not delivered.** A switch in the interface: `app.diagnostic_mode` is changed with `PATCH /settings` until the General
+  settings screen exists. The link per reply in the chat's context panel ([Frontend](frontend.md#2-conversation))
+  is not drawn either. The prompt of a reply that failed or was blocked is not stored.
 
 ## Settings
 

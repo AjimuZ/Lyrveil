@@ -395,6 +395,21 @@ tests/integration/test_memory_studio_api.py` passed (4 tests) and `scripts/lyrve
 strict frontend build). The frontend unit specs and the end-to-end spec were written but not run: no allowed command
 runs one frontend spec alone, and the full levels were not run.
 
+Delivered in P04.9b: `backend/tests/integration/test_diagnostics.py` runs the real `ChatInferenceService` and
+`ContextBuilder` on a migrated database (only the text runtime is the fake of `test_reply_streaming.py`) and covers
+R-STU-04 with T-MEM-21's assembly: the documented default is off and both reads answer `404`; with the mode on, a reply
+built from a message that matches a memory shows the nine block counts, the budgets, the memory with its text, label,
+score and the nine score parts, the empty summaries and the prompt text; a reply built while the mode was off keeps no
+prompt text; turning the mode off hides every record and turning it on again shows them; only the newest 200 rows of a
+conversation are kept; and a marker in the message reaches the stored prompt text but never the log. The migration test
+covers revision `0012`. `memory-store.spec.ts` and `memory-studio-screen.spec.ts` cover the setting, the tab that is
+drawn only when it is on, the list of replies, the refusal after the mode is turned off, and the blocks, budgets,
+memories with score parts, summaries and absent prompt text of a chosen reply; `tests/e2e/specs/memory-studio.spec.mjs`
+runs the flow in the browser. In this change `scripts/lyrveil.cmd test unit` with `tests/integration/test_diagnostics.py`,
+`test_migrations.py` and `test_memory_studio_api.py` passed (34 tests), the same with `test_reply_streaming.py` and
+`test_characters.py` passed (59 tests), and `scripts/lyrveil.cmd test lint` passed. The frontend unit specs and the
+end-to-end spec were written but not run, for the reason above.
+
 Delivered in P04.3: `backend/tests/integration/test_memory_retrieval.py` runs `FtsMemoryRetriever` on a migrated SQLite
 file. T-MEM-05: the order follows the weighted score, whose parts each item keeps (two matches normalized to 0.5 and
 1.0, a locked memory joining with no match, an unrelated one never a candidate); the topic and the previous selection

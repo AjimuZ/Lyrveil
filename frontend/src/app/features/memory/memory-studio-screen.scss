@@ -257,3 +257,14 @@
 .values dd {
   margin: 0;
 }
+
+/* The full prompt: identifiers and diagnostics use the monospace face (docs/design-system.md). */
+.prompt {
+  margin: var(--ob-space-2) 0 0;
+  max-height: 24rem;
+  overflow: auto;
+  font-family: var(--ob-font-mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

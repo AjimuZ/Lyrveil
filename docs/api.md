@@ -350,6 +350,24 @@ Delivered in P02.5b, all except `remember` and `diagnostics` (P04, P06):
 - **Variants** lists every version in creation order. **Activate** has the same last-character-message rule, copies the
   variant's text and status to the message and refuses a variant that is still `streaming` (`409`).
 
+Delivered in P04.9b (`api/diagnostics.py`, `services/diagnostics.py`): the diagnostic mode of the Memory Studio.
+
+- `GET /messages/{id}/diagnostics` answers the prompt assembly stored for the reply: `message_id`, `conversation_id`,
+  `variant_id`, `created_at`, `token_total`, `context_limit`, `blocks` (tokens per prompt block: `global`, `identity`,
+  `communication`, `scenario`, `summary`, `history`, `state`, `memories`, `anchor`, `current`), `budgets`
+  (`context_limit`, `reply_reserve`, `safety_margin`, `available`, `memory_target`, `summary_target`), `notes`,
+  `reductions`, `gaps`, `history_count`, `current_truncated`, `memories` (`id`, `type`, `kind`, `status`, `label`, `score`,
+  `token_cost`, `parts` and the memory's current `content`, null once it is deleted), `summaries` and `prompt_text`
+  (null unless it was stored while the mode was on). It is the assembly of the message's active variant, or the newest
+  one when that variant has none. `404` while diagnostic mode is off and for a reply with no stored assembly.
+- `GET /conversations/{id}/diagnostics` answers `{"items": []}`: the replies of the chat that have a stored assembly,
+  newest first, with `message_id`, `seq`, the start of the reply (`excerpt`), `token_total`, `context_limit` and
+  `created_at`. `404` while the mode is off and for an unknown chat. This route is not in the table above: it gives the
+  Studio its choice list.
+- `GET /settings` answers `{"app.diagnostic_mode": false}` and `PATCH /settings` takes the same key. These two routes
+  hold only the settings delivered so far; any other key is refused with `422`, and the rest of
+  [Configuration](configuration.md#application-settings) arrives with the screens that need it.
+
 These routes are not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ### Images

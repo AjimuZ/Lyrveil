@@ -166,6 +166,103 @@ export interface StateChange {
   readonly sources: readonly MemorySource[];
 }
 
+/** `GET /settings`: the application settings the backend has so far. */
+export interface AppSettings {
+  readonly 'app.diagnostic_mode': boolean;
+}
+
+/** One row of `GET /conversations/{id}/diagnostics`: a reply that has a stored prompt assembly. */
+export interface DiagnosticReply {
+  readonly message_id: string;
+  readonly seq: number;
+  /** The start of the reply's text. */
+  readonly excerpt: string;
+  readonly token_total: number;
+  readonly context_limit: number;
+  readonly created_at: string;
+}
+
+/** The parts of a memory's retrieval score, each 0 to 1 before weighting. */
+export const SCORE_PARTS = [
+  'fts',
+  'importance',
+  'recency',
+  'topic',
+  'kind',
+  'confidence',
+  'status_factor',
+  'locked_bonus',
+  'previous_bonus',
+] as const;
+export type ScorePart = (typeof SCORE_PARTS)[number];
+
+/** The blocks of a prompt, in the order of docs/memory-engine.md (Context composition). */
+export const PROMPT_BLOCKS = [
+  'global',
+  'identity',
+  'communication',
+  'scenario',
+  'summary',
+  'history',
+  'state',
+  'memories',
+  'anchor',
+  'current',
+] as const;
+export type PromptBlock = (typeof PROMPT_BLOCKS)[number];
+
+export const PROMPT_BUDGETS = [
+  'context_limit',
+  'reply_reserve',
+  'safety_margin',
+  'available',
+  'memory_target',
+  'summary_target',
+] as const;
+export type PromptBudget = (typeof PROMPT_BUDGETS)[number];
+
+/** A memory or episode that was in the prompt. `content` is its text now, null once it was deleted. */
+export interface DiagnosticMemory {
+  readonly id: string;
+  readonly type: 'memory' | 'episode';
+  readonly kind: string;
+  readonly status: string;
+  /** The label the prompt put before it, such as `[sicuro]`. */
+  readonly label: string;
+  readonly score: number;
+  readonly token_cost: number;
+  readonly parts: Readonly<Record<ScorePart, number>>;
+  readonly content: string | null;
+}
+
+export interface DiagnosticSummary {
+  readonly id: string;
+  readonly level: number;
+  readonly from_seq: number;
+  readonly to_seq: number;
+  readonly version: number;
+  readonly status: 'active' | 'superseded' | 'invalidated';
+  readonly token_count: number;
+}
+
+/** `GET /messages/{id}/diagnostics`: the stored prompt assembly of one reply. */
+export interface Diagnostics {
+  readonly message_id: string;
+  readonly token_total: number;
+  readonly context_limit: number;
+  readonly blocks: Readonly<Record<PromptBlock, number>>;
+  readonly budgets: Readonly<Record<PromptBudget, number>>;
+  readonly notes: readonly string[];
+  readonly reductions: readonly string[];
+  readonly gaps: readonly (readonly [number, number])[];
+  readonly history_count: number;
+  readonly current_truncated: boolean;
+  readonly memories: readonly DiagnosticMemory[];
+  readonly summaries: readonly DiagnosticSummary[];
+  /** Null unless diagnostic mode was on when the reply was built. */
+  readonly prompt_text: string | null;
+}
+
 /** The fields a correction can change; absent fields stay as they are. */
 export interface MemoryChange {
   readonly content?: string;

@@ -17,7 +17,9 @@ see the normalized reply. Each released sentence is checked (lyrveil.consistency
 generates once more with the matching note in the anchor; an empty reply (V1) is generated once more too. No message
 text, prompt or token is ever logged: the assembly is logged as counts, and the checks by their ids.
 
-After a finished reply is stored and announced, the use of its memories is recorded and the memory extraction trigger
+Right after a finished reply is stored, its prompt assembly is recorded for the diagnostic view
+(lyrveil.services.diagnostics); a failure there is logged and never fails the reply. After the reply is announced, the
+use of its memories is recorded and the memory extraction trigger
 runs (lyrveil.services.memory_extraction.queue_extraction_if_due), each in its own transaction, so a failure there
 never undoes the reply. A regenerated reply that extraction had already passed also queues its re-evaluation
 (queue_reevaluation), since its regeneration invalidated what the earlier variant supported.
@@ -109,6 +111,7 @@ from lyrveil.ports.text_runtime import (
     TextRuntimeError,
 )
 from lyrveil.prompts.formatter import PromptFormatter, formatter_for
+from lyrveil.services.diagnostics import DiagnosticsService
 from lyrveil.services.memory_extraction import queue_extraction_if_due, queue_reevaluation
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
@@ -170,13 +173,16 @@ class _Reply:
 @dataclass(frozen=True)
 class _Generated:
     """A finished reply: its normalized text, the size of its last prompt, the memories and episodes its block 5
-    held, and its `checks_json` (`_checks_record`)."""
+    held, its `checks_json` (`_checks_record`), and the assembly of its last prompt with the corrective notes of that
+    prompt's anchor, which the diagnostic record keeps."""
 
     text: str
     status: MessageStatus
     prompt_tokens: int
     memory_ids: tuple[str, ...]
     checks: Mapping[str, object]
+    assembly: Assembly
+    notes: tuple[str, ...]
 
 
 @dataclass
@@ -396,7 +402,9 @@ class ChatInferenceService:
         self._extraction = extraction or ExtractionSettings()
         self._summaries = summaries or SummarySettings()
         self._retriever = retriever or FtsMemoryRetriever(engine)
-        self._builder = ContextBuilder(runtime, self._retriever, context)
+        self._context = context or ContextSettings()
+        self._builder = ContextBuilder(runtime, self._retriever, self._context)
+        self._diagnostics = DiagnosticsService(engine, clock)
         self._queue = queue or JobQueue()
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
@@ -434,6 +442,20 @@ class ChatInferenceService:
                 await self._failed(job, reply, "".join(streamed), error)
             raise
         message = await to_thread.run_sync(self._finish, reply, generated)
+        try:
+            kept_prompt = await to_thread.run_sync(self._record_assembly, reply, generated)
+            logger.info(
+                "assembly_recorded",
+                job_id=job.id,
+                conversation_id=reply.conversation_id,
+                memory_count=len(generated.assembly.memories),
+                summary_count=len(generated.assembly.summary_ids),
+                prompt_tokens=generated.prompt_tokens,
+                prompt_text_count=int(kept_prompt),
+            )
+        except Exception:
+            # The record only serves diagnostics; the stored reply must not become a failed job over it.
+            logger.error("assembly_record_failed", job_id=job.id, exc_info=True)
         self._events.publish(TYPING_STOPPED, _presence(reply))
         self._events.publish(MESSAGE_COMPLETED, {"message": message_document(message)})
         logger.info(
@@ -458,6 +480,18 @@ class ChatInferenceService:
             # reply checks the trigger again.
             logger.error("memory_extraction_trigger_failed", job_id=job.id, exc_info=True)
         return JobDone({"message_id": reply.message_id, "variant_id": reply.variant_id})
+
+    def _record_assembly(self, reply: _Reply, generated: _Generated) -> bool:
+        """Stores the prompt assembly of the delivered reply for the diagnostic view and returns whether the prompt text
+        was kept (only while diagnostic mode is on). Blocks: run it in a thread."""
+        return self._diagnostics.record(
+            generated.assembly,
+            self._context,
+            conversation_id=reply.conversation_id,
+            message_id=reply.message_id,
+            variant_id=reply.variant_id,
+            notes=generated.notes,
+        )
 
     def _queue_extraction(self, conversation_id: str, seq: int) -> None:
         """The extraction trigger of docs/backend.md (Job handlers), in its own transaction after the reply's commit:
@@ -528,6 +562,7 @@ class ChatInferenceService:
         restarts: list[str] = []
         corrected = False
         assembly = await self._assemble(job, reply, wanted, formatter)
+        used_notes = tuple(wanted.notes)
         request = self._request(assembly, formatter, context.genkey)
         while True:
             pipeline = _Pipeline(
@@ -545,7 +580,8 @@ class ChatInferenceService:
                 corrected = True
                 await self._restart(job, reply, stopped, streamed)
                 notes = (note_text(stopped, wanted.card, wanted.user, wanted.language), *wanted.notes)
-                assembly = await self._assemble(job, reply, replace(wanted, notes=notes[:MAX_NOTES]), formatter)
+                used_notes = notes[:MAX_NOTES]
+                assembly = await self._assemble(job, reply, replace(wanted, notes=used_notes), formatter)
                 request = self._request(assembly, formatter, context.genkey)
                 continue
             normalized = done.normalized
@@ -565,7 +601,7 @@ class ChatInferenceService:
             status = MessageStatus.INTERRUPTED if done.finish == "aborted" else MessageStatus.COMPLETE
             memory_ids = tuple(item.id for item in assembly.memories)
             record = _checks_record(normalized.fired, checks, restarts)
-            return _Generated(normalized.text, status, assembly.token_total, memory_ids, record)
+            return _Generated(normalized.text, status, assembly.token_total, memory_ids, record, assembly, used_notes)
 
     async def _assemble(self, job: Job, reply: _Reply, wanted: ContextRequest, formatter: PromptFormatter) -> Assembly:
         """Builds the prompt of `wanted` and logs its counts."""

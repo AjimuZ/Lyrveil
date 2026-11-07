@@ -1,7 +1,8 @@
 """Message routes of docs/api.md (Messages): send, history, edit, delete, regenerate, variants and activation.
 
 Like the conversation routes they stay out of the committed OpenAPI document until it is next regenerated with the
-Docker `openapi` target, so `include_in_schema` is off. `remember` and `diagnostics` belong to later phases.
+Docker `openapi` target, so `include_in_schema` is off. `remember` belongs to a later phase; `diagnostics` is in
+lyrveil.api.diagnostics.
 """
 
 from typing import Literal
