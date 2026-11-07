@@ -16,7 +16,7 @@ from lyrveil.api.jobs import JobOut, wake_worker
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
 from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
-from lyrveil.images.tags import load_vocabulary
+from lyrveil.images.tags import CARD_CATEGORIES, load_vocabulary
 from lyrveil.media.store import MediaStore
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
@@ -276,11 +276,13 @@ def read_format_schema() -> JSONResponse:
 @router.get("/vocabulary", response_model=VocabularyOut)
 def read_vocabulary() -> VocabularyOut:
     """Returns the tag vocabulary of the card categories, in file order: the tags the Creator offers for each identity
-    slot, with the Italian words its search matches. Declared before `/{character_id}`, so "vocabulary" is no id."""
+    slot, with the Italian words its search matches. The scene categories are left out: no card slot takes them.
+    Declared before `/{character_id}`, so "vocabulary" is no id."""
     return VocabularyOut(
         items=[
             VocabularyEntryOut(tag=entry.tag, category=entry.category, aliases_it=list(entry.aliases_it))
             for entry in load_vocabulary().entries
+            if entry.category in CARD_CATEGORIES
         ]
     )
 

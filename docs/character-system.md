@@ -10,8 +10,8 @@ with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks 
 duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-purge)). Delivered in P03.3: assisted
 creation ([Assisted creation](#assisted-creation)). Delivered in P03.4a and P03.5, backend only: assets
 ([Avatars and images](#avatars-and-images)) and the [exchange format](#exchange-format). Delivered in P03.6a: the
-content guard on every card that is stored and on every draft ([Security](security.md#character-data)). Planned:
-locks in the translation job.
+content guard on every card that is stored and on every draft ([Security](security.md#character-data)). Delivered in
+P05.3b: the translation and its merge, which keeps locked slots. Planned: the translation job on save.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -162,7 +162,9 @@ the routes.
   `clothing` holds `usual_outfit_en`), and the list of locks does not change. Traits have no identifier, so a lock
   matches by category and description.
 - The user's own save carries the locks it wants, so it can change a locked item by unlocking it in the same save.
-- Locks in the translation job are not delivered; the job does not exist yet.
+- Since P05.3b the translation's merge (`apply_identity_result` in `lyrveil.services.visual_profile_translation`)
+  keeps every slot a lock protects, with the same mapping. The job that runs it on save does not exist yet, so a save
+  still translates nothing ([Backend](backend.md#visual-consistency)).
 
 ## Assisted creation
 

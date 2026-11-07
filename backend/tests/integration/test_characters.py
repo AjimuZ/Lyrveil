@@ -463,6 +463,7 @@ def test_the_vocabulary_route_lists_every_tag_with_its_italian_aliases(client: T
     items = response.json()["items"]
     assert {"tag": "black hair", "category": "hair_color", "aliases_it": ["capelli neri", "nero"]} in items
     assert {item["category"] for item in items} >= {"hair_color", "eye_color", "skin", "hairstyle", "accessories"}
+    assert not {item["category"] for item in items} & {"expression", "pose", "lighting"}
     assert all(item["aliases_it"] for item in items)
 
 

@@ -245,6 +245,21 @@ a multiple of 8.
 The sampler name is checked for shape only, not against ComfyUI's `KSAMPLER_NAMES`; ComfyUI refuses an unknown name
 at validation. The backend and test images copy `workflows/` to `/app/workflows/comfyui`. No job calls the builder yet.
 
+#### Visual consistency
+
+Delivered in P05.3b: `images/visual_consistency.py` holds `ImageScene` and `VisualConsistencyService`. `build(visual,
+age, scene, preset)` returns `FinalPrompt`: the positive and negative prompts in the order of
+[Final prompt](image-generation.md#final-prompt), the identity segment, the outfit used, the token estimate and whether
+the identity ends in the first chunk. `filter_scene` applies the [scene filter](image-generation.md#scene-filter) and
+lists every dropped tag with the step that dropped it. Both are pure and read no setting.
+
+`services/visual_profile_translation.py` holds `translate_visual_profile`: it generates `VisualIdentityResult`
+(`prompts/visual_profile.py`) under `identity_grammar`, a grammar whose slot values and outfit keys come from the
+vocabulary and the card, merges the result with `apply_identity_result`, which keeps the locked slots, and validates the
+merged card with `validate_card`, with one repair. `prompts/gbnf.py` gained `json_schema_to_gbnf` for such narrowed
+schemas. Not delivered: the `visual_profile_translate` handler, the save path that queues it, and the write of the
+translated slots. No job calls the builder yet; `image_request` (P05.4) will.
+
 ### Prompt formatter
 
 Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.
@@ -448,7 +463,7 @@ for the next start to mark `interrupted`. Its lease is not released: it expires 
 | `chat_reply`, `chat_regenerate` | Lease, `ContextBuilder`, stream through `ReplyNormalizer`, reply checks, at most one corrective regeneration, commit, release, then extraction trigger. |
 | `character_draft` | Lease, structured generation, safety check, store draft in `result_json`. |
 | `image_request` | Stages in [Image generation](image-generation.md#job-stages). |
-| `visual_profile_translate` | Lease, structured generation of `VisualIdentityResult` under a vocabulary grammar, sanitizer, store the identity slots and wardrobe tags that are not locked. |
+| `visual_profile_translate` | Lease, structured generation of `VisualIdentityResult` under a vocabulary grammar, sanitizer, store the identity slots and wardrobe tags that are not locked. The generation and the merge exist since P05.3b ([Visual consistency](#visual-consistency)); the handler does not. |
 | `image_proposal` | Lease, structured generation, store a proposal when valid. |
 | `proactive_message` | Stages `decide` and `generate`. See [Scheduler](scheduler.md#generation-flow). |
 | `summary_checkpoint` | Lease, structured generation, store a checkpoint. |

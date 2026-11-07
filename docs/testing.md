@@ -511,7 +511,7 @@ passed (5), and `scripts/lyrveil.cmd test lint` passed; the full levels were not
 | T-CON-04 | Canonical data hash is unchanged after 1000 synthetic messages, extraction and summaries | Integration | P04 |
 | T-CON-05 | `identity_candidate` is not applied until the user applies it | Integration | P04 |
 | T-CON-06 | Deltas are bounded per event, run and day, and always have a reason and sources | Unit | P04 |
-| T-CON-07 | Conflicting visual tags are removed | Unit | P05 |
+| T-CON-07 | Conflicting visual tags are removed. In `backend/tests/unit/test_visual_consistency.py` (P05.3b) | Unit | P05 |
 | T-CON-08 | Reply checks V1 to V13 on fixed texts, including quotations that V11 must skip | Unit | P04 |
 | T-CON-09 | Reply normalizer N1 to N5 on fixed raw replies from each template family, in one piece and split into stream chunks at every position. The delivered text is identical in both cases | Unit | P04 |
 | T-CON-10 | A V6, V10 or V11 hit aborts the stream, publishes `message.restarted` and regenerates once with the note in the anchor. A second hit is delivered and recorded. Adaptive notes start, last 3 replies and stay at most two | Integration | P04 |
@@ -606,8 +606,8 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
-| T-IMG-01 | Prompt composition is deterministic. Safety negative always present | Unit | P05 |
-| T-IMG-02 | Scene filter: the sanitizer, then tags over 4 words, unknown tags in vocabulary lists, duplicates, blocked terms, identity categories and locked categories, in the documented order | Unit | P05 |
+| T-IMG-01 | Prompt composition is deterministic. Safety negative always present. In `backend/tests/unit/test_visual_consistency.py` (P05.3b) | Unit | P05 |
+| T-IMG-02 | Scene filter: the sanitizer, then tags over 4 words, unknown tags in vocabulary lists, duplicates, blocked terms, identity categories and locked categories, in the documented order. In `backend/tests/unit/test_visual_consistency.py` (P05.3b) | Unit | P05 |
 | T-IMG-03 | Request detector on at least 100 phrases | Unit | P05 |
 | T-IMG-04 | GPU alternation in the right order, with fakes | Integration | P06 |
 | T-IMG-05 | ComfyUI messages map to progress | Unit | P05 |
@@ -620,7 +620,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-IMG-12 | Restart in each stage resumes without duplicates | Integration | P06 |
 | T-IMG-13 | Contextual mode off by default. A proposal needs a valid event and acceptance | Integration | P05 |
 | T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied. The unit part is `backend/tests/unit/test_workflows.py` (P05.2b) | Unit, real GPU | P05 |
-| T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps | Unit | P05 |
+| T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps. In `backend/tests/unit/test_visual_consistency.py`, with one scene per template family written by hand (P05.3b) | Unit | P05 |
 | T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5. The unit part is `backend/tests/unit/test_tag_vocabulary.py`, the tokenizer match is in `tests/docker/ImageRuntime.Tests.ps1` (P05.3a) | Unit, Docker | P05 |
 | T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene | Unit | P05 |
 | T-IMG-18 | The caption is written through the chat path before the scene, with the normalizer and checks. A failed caption sends the image without text | Integration | P05 |

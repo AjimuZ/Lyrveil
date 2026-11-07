@@ -10,11 +10,13 @@ from typing import TypeGuard
 from lyrveil.images.sanitizer import sanitize_tag
 
 VOCABULARY_PATH = Path(__file__).parent / "vocabulary" / "tags.v1.json"
-# The categories the character card validates (docs/image-generation.md, Tag vocabulary). The scene filter adds the
-# scene ones.
+# The categories the character card validates (docs/image-generation.md, Tag vocabulary).
 CARD_CATEGORIES = frozenset(
     {"hair_color", "hair_length", "eye_color", "skin", "hairstyle", "face", "body", "marks", "accessories", "style"}
 )
+# The closed lists of ImageScene, which the scene filter accepts only from the vocabulary.
+SCENE_CATEGORIES = frozenset({"expression", "pose", "lighting"})
+CATEGORIES = CARD_CATEGORIES | SCENE_CATEGORIES
 
 
 class VocabularyError(Exception):
@@ -39,9 +41,18 @@ class TagVocabulary:
     def __init__(self, entries: tuple[TagEntry, ...]) -> None:
         self._entries = entries
         grouped: dict[str, list[str]] = {}
+        categories: dict[str, set[str]] = {}
+        tokens: dict[str, int] = {}
         for entry in entries:
             grouped.setdefault(entry.category, []).append(entry.tag)
+            # A tag and each Italian alias, as the sanitizer writes them, name the entry's category.
+            for word in (entry.tag, *(sanitize_tag(alias) for alias in entry.aliases_it)):
+                categories.setdefault(word, set()).add(entry.category)
+            tokens[entry.tag] = max(tokens.get(entry.tag, 0), entry.clip_tokens)
+        self._ordered: Mapping[str, tuple[str, ...]] = {category: tuple(tags) for category, tags in grouped.items()}
         self._tags: Mapping[str, frozenset[str]] = {category: frozenset(tags) for category, tags in grouped.items()}
+        self._categories: Mapping[str, frozenset[str]] = {word: frozenset(names) for word, names in categories.items()}
+        self._tokens: Mapping[str, int] = tokens
 
     @property
     def entries(self) -> tuple[TagEntry, ...]:
@@ -55,6 +66,20 @@ class TagVocabulary:
         """Returns the tags of `category`, empty for a category the file does not hold."""
         return self._tags.get(category, frozenset())
 
+    def ordered(self, category: str) -> tuple[str, ...]:
+        """Returns the tags of `category` in file order, empty for a category the file does not hold. Grammars use
+        this order, so they are the same on every run."""
+        return self._ordered.get(category, ())
+
+    def categories_of(self, tag: str) -> frozenset[str]:
+        """Returns the categories whose entries have `tag` as their tag or as a sanitized Italian alias; empty for a
+        word the vocabulary does not know. Exact match only: `tall building` is not `tall`."""
+        return self._categories.get(tag, frozenset())
+
+    def clip_tokens(self, tag: str) -> int | None:
+        """Returns the CLIP token count of a vocabulary tag, or None for a tag the file does not list."""
+        return self._tokens.get(tag)
+
 
 def _is_alias_list(value: object) -> TypeGuard[list[str]]:
     return isinstance(value, list) and bool(value) and all(isinstance(alias, str) and alias for alias in value)
@@ -63,7 +88,7 @@ def _is_alias_list(value: object) -> TypeGuard[list[str]]:
 def parse_vocabulary(document: object) -> TagVocabulary:
     """Returns the vocabulary of a parsed file.
 
-    Raises VocabularyError for a missing or wrong field, a category the card does not know, a tag listed twice in the
+    Raises VocabularyError for a missing or wrong field, a category outside CATEGORIES, a tag listed twice in the
     same category, a tag that the sanitizer would change (so no tag needs an escape in a prompt), or a `clip_tokens`
     that is not a whole number at least the tag's word count (CLIP never encodes a word in fewer than one token).
     """
@@ -78,7 +103,7 @@ def parse_vocabulary(document: object) -> TagVocabulary:
         clip_tokens = item.get("clip_tokens")
         if not isinstance(tag, str) or not tag:
             raise VocabularyError("every entry needs a tag")
-        if category not in CARD_CATEGORIES:
+        if category not in CATEGORIES:
             raise VocabularyError(f"{tag!r} has an unknown category")
         if not _is_alias_list(aliases):
             raise VocabularyError(f"{tag!r} needs a non-empty list of Italian aliases")

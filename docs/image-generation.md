@@ -181,6 +181,12 @@ age band and identity first.
 The builder counts tokens with the vocabulary's counts, two per word for free tags, plus one per comma. It records the total
 and whether identity ends inside the first chunk. The Creator warns when it would not.
 
+Delivered in P05.3b: `VisualConsistencyService.build` applies this order, these caps and the safety negative, and
+returns the identity segment (quality tags to the last identity slot), the outfit used and the token counts. Each cap
+keeps the first tags of its part in order, and a tag that repeats keeps only its first place in either prompt. Tags
+outside the vocabulary, the preset's tags and the age band included, count as free tags. The persistent negative is
+split at commas and each part sanitized. The Creator warning is not delivered.
+
 ### Tag vocabulary
 
 `backend/src/lyrveil/images/vocabulary/tags.v1.json` is an original list, released under Apache 2.0 with the code. It holds no
@@ -207,8 +213,11 @@ docker build -f docker/image/Dockerfile --target clip-tokens --output type=local
 ```
 
 The target `clip-tokens-check` fails when a stored count differs. On 2026-11-07 it checked 125 entries and found 0
-differences. The loader refuses an entry without a whole `clip_tokens` that is at least its word count. The scene
-categories (`expression`, `pose`, `lighting`) are not in the file yet. They come with the scene filter.
+differences. The loader refuses an entry without a whole `clip_tokens` that is at least its word count.
+
+Delivered in P05.3b: the scene categories `expression` (22 tags), `pose` (21) and `lighting` (14), with Italian
+aliases and counts written by the target above. On 2026-11-07 `clip-tokens-check` checked all 182 entries and found 0
+differences. `GET /characters/vocabulary` still lists only the card categories, since no card slot takes a scene tag.
 
 The grammar of `visual_profile_translate` takes its closed values from this file. T-IMG-16 checks that every entry passes the
 sanitizer and that its token count matches the tokenizer.
@@ -246,6 +255,22 @@ Each scene tag is processed in order:
 4. Remove tags in an identity category: hair, eyes, skin, face, body and marks. The vocabulary's categories and aliases decide.
 5. When the `accessories` or `distinctive_marks` field is locked, remove scene tags of that category.
 
+Delivered in P05.3b, in `lyrveil.images.visual_consistency`:
+
+- Lists are read in prompt order: `scene_clothing` (only when the scene picks `scene` and `clothing` is not locked),
+  then `expression`, `pose`, `location`, `lighting` and `objects`. The first step that drops a tag is recorded.
+- "Already in the identity" means the identity slots, the stored outfit the scene picks, accessories, style and extra.
+- A blocked term is a tag the content guard refuses (`find_violation`, the lists of
+  [Content safeguards](security.md#content-safeguards)) or a tag holding a word of the safety negative, such as `nsfw`.
+  The detail never quotes the tag.
+- In step 4, a tag the vocabulary does not know also counts as an identity tag when its last word is `hair`, `eyes` or
+  `skin`, digits and periods left by a removed weight ignored: `long blonde hair` and `(blue eyes:1.6)` are removed. A
+  tag the vocabulary lists in another category, such as the expression `closed eyes`, is kept.
+- `extra_negative` gets steps 1 and 2, and loses any tag in an identity category or already in the positive prompt,
+  so a scene cannot negate the identity or the age band. It is not checked for blocked terms, like the persistent
+  negative.
+- A scene outfit with no clothing tag left, an unknown key, or `scene` with `clothing` locked uses the usual outfit.
+
 ## Visual consistency
 
 | Aspect | Mechanism |
@@ -257,6 +282,11 @@ Each scene tag is processed in order:
 | Seed | Policy `random`, `fixed` or `base_offset`. Stored for every image |
 
 The English tags are generated once and stay editable, so each image does not need a new translation.
+
+Delivered in P05.3b: `translate_visual_profile` generates `VisualIdentityResult` under `identity_grammar`. Each single
+slot is one of its category's tags or null, each list slot up to 4 of them, and `outfits` only the card's keys. The
+merge keeps the slots of every locked field, and the merged card passes `validate_card`, with one repair. The job that
+runs it after a save, and the write of the result, are not delivered ([Backend](backend.md#visual-consistency)).
 
 **Limit:** the seed alone does not preserve a character. Different prompts or sizes produce different images even with the same seed.
 A fixed identity prompt makes the description identical, but it cannot guarantee the same face. That needs reference techniques,

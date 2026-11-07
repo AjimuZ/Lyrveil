@@ -197,7 +197,15 @@ def schema_to_gbnf(model: type[BaseModel]) -> str:
 
     The output is deterministic for a given schema. Raises UnsupportedSchemaError for a construct outside the subset.
     """
-    schema = model.model_json_schema()
+    return json_schema_to_gbnf(model.model_json_schema())
+
+
+def json_schema_to_gbnf(schema: Mapping[str, Any]) -> str:
+    """Returns the GBNF grammar of a JSON Schema in the subset above, as schema_to_gbnf does for a model's schema.
+
+    For grammars built per request, such as one whose enums come from a data file: the caller narrows a model's
+    schema and converts the result. Raises UnsupportedSchemaError for a construct outside the subset.
+    """
     converter = _Converter(schema)
     root = converter.expression(schema)
     lines = [f"root ::= {root}", *(f"{name} ::= {body}" for name, body in converter.rules.items()), *_BASE_RULES]

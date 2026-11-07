@@ -6,7 +6,14 @@ import pytest
 
 from lyrveil.domain.errors import PromptSyntaxRefusedError
 from lyrveil.images.sanitizer import check_user_prompt, prompt_weights, sanitize_tag
-from lyrveil.images.tags import CARD_CATEGORIES, VocabularyError, load_vocabulary, parse_vocabulary
+from lyrveil.images.tags import (
+    CARD_CATEGORIES,
+    CATEGORIES,
+    SCENE_CATEGORIES,
+    VocabularyError,
+    load_vocabulary,
+    parse_vocabulary,
+)
 
 
 @pytest.mark.parametrize(
@@ -27,9 +34,16 @@ def test_the_sanitizer_keeps_only_safe_characters(raw: str, expected: str) -> No
     assert sanitize_tag(expected) == expected
 
 
-def test_the_packaged_vocabulary_covers_the_card_categories_with_italian_aliases() -> None:
+def test_the_packaged_vocabulary_covers_the_card_and_scene_categories_with_italian_aliases() -> None:
     vocabulary = load_vocabulary()
-    assert {entry.category for entry in vocabulary.entries} == CARD_CATEGORIES
+    assert {entry.category for entry in vocabulary.entries} == CARD_CATEGORIES | SCENE_CATEGORIES == CATEGORIES
+    assert vocabulary.contains("expression", "smile")
+    assert vocabulary.contains("pose", "sitting")
+    assert vocabulary.contains("lighting", "warm lighting")
+    assert vocabulary.categories_of("capelli biondi") == {"hair_color"}
+    assert vocabulary.categories_of("tall building") == frozenset()
+    assert vocabulary.clip_tokens("hair over one eye") == 4
+    assert vocabulary.ordered("skin") == ("pale skin", "tan", "dark skin")
     assert vocabulary.tags("hair_length") == {
         "very short hair",
         "short hair",
