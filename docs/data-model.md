@@ -662,6 +662,16 @@ Purges run in `PersistenceService` as one transaction that deletes children in a
 explicit order. Files are removed after the commit. A startup job removes orphan
 files. Items in `deleted` status are purged automatically after 30 days.
 
+Delivered in P03.2b: archiving and purging a character (`CharacterService.archive`, `unarchive`, `purge`; the SQL is in
+`lyrveil.persistence.characters`). Archive sets `status = archived` and `archived_at`, and the main conversation list then
+leaves out that character's conversations. A purge deletes, in this order, the `generation_jobs` rows whose
+`character_id`, `conversation_id` or `message_id` belongs to the character (those columns are still plain, so the SET NULL
+of the table is replaced by deleting the row), `message_variants`, `messages` (the triggers clear `message_fts`),
+`conversations` (and `conversation_fts`), `character_traits`, `character_visual_profiles`, `character_versions` and
+`characters`. It is refused with a conflict while one of those jobs is `running`. Memories, images and assets do not exist
+yet, so no file is removed. The deletion of a conversation on its own, the 30-day purge and the tombstones are not
+delivered.
+
 ## Migrations
 
 - Alembic manages every schema change, including FTS tables as raw SQL.

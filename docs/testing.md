@@ -251,6 +251,13 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
 | T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |
 
+Delivered in P03.2b: T-CHR-04 is `test_duplicate_copies_the_card_but_not_conversations_or_memories` in
+`backend/tests/integration/test_characters.py`, beside the archive, unarchive and purge tests of the same file (the purge
+test checks every table, the search index and the jobs; another character stays untouched). The profile has unit specs
+(`character-profile-screen.spec.ts`, `version-diff.spec.ts`) and the end-to-end spec
+`tests/e2e/specs/character-profile.spec.mjs`, which covers compare, restore (T-CHR-08), duplicate, archive and purge
+through the browser. The end-to-end spec was written but not run in this change.
+
 ### Memory
 
 | ID | Test | Level | Phase |

@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The character profile at `/characters/:id`: identity summary, personality, example exchanges, the character's active
+  conversations, a note that the character is simulated, and the version history with **Confronta** (field-by-field
+  comparison with the current version) and **Ripristina** (adds a new version, nothing is rewritten). **Duplica**
+  copies the card into a new character called "<name> (copia)" without conversations or memories. **Archivia** hides the
+  character and its conversations from the lists and **Rimuovi dall'archivio** brings them back. **Elimina
+  definitivamente** shows how many conversations, messages and versions will go and needs the first name typed before it
+  deletes them all for good. The routes `POST /api/v1/characters/{id}/duplicate`, `/archive`, `/unarchive`, `GET
+  .../purge-preview` and `POST .../purge` are new and not in `backend/openapi.json`. The avatar, the memory studio and
+  the proposals are not delivered yet, and the end-to-end test for the profile was written but not run.
 - The Character Creator at `/characters/new` and `/characters/:id/edit`, in four tabs: **Identità**, **Personalità**,
   **Comunicazione** and **Aspetto**. It edits the whole card: how the character speaks of itself, traits with locks,
   *tu* or *Lei*, narration and emoji with a one-line example, example exchanges, phrases to avoid, the Italian

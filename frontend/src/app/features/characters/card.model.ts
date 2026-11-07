@@ -143,6 +143,39 @@ export interface StoredCharacter {
   readonly card: CharacterCard;
 }
 
+/** One row of `GET /characters/{id}/versions`; `actor` is `user`, `import`, `restore`, `duplicate` or `proposal`. */
+export interface VersionSummary {
+  readonly version_no: number;
+  readonly change_summary: string;
+  readonly actor: string;
+  readonly created_at: string;
+}
+
+export interface VersionList {
+  readonly items: readonly VersionSummary[];
+}
+
+/** One field that differs between two versions; `field` is a dotted path such as `visual.identity_en.hair_color`. */
+export interface FieldChange {
+  readonly field: string;
+  readonly before: unknown;
+  readonly after: unknown;
+}
+
+/** `GET /characters/{id}/versions/{a}/diff/{b}`. */
+export interface VersionDiff {
+  readonly from_version_no: number;
+  readonly to_version_no: number;
+  readonly changes: readonly FieldChange[];
+}
+
+/** `GET /characters/{id}/purge-preview`: what a purge deletes besides the character. */
+export interface PurgePreview {
+  readonly conversations: number;
+  readonly messages: number;
+  readonly versions: number;
+}
+
 /** One tag of the vocabulary file with the Italian words that map to it. */
 export interface VocabularyEntry {
   readonly tag: string;

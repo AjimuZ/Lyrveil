@@ -100,7 +100,7 @@ Evidence:
 - [x] P03.1 Full card, traits, communication and visual fields, versions, diff, restore and locks. The card includes the
   voice fields of [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md), and the identity slots and wardrobe
   of [ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md).
-- [ ] P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge.
+- [x] P03.2 Creator screens with Signal Forms, profile screen, duplicate, archive and purge.
 - [ ] P03.3 Assisted creation with grammar, validation and repair.
 - [ ] P03.4 Upload, crop, variants and primary avatar.
 - [ ] P03.5 Exchange format, import, export and JSON Schema.

@@ -104,6 +104,9 @@
 - Validation rules live as pure functions returning a catalog key plus params, mirroring the backend rules. The form schema, unit tests and any other caller share them.
 - A FormValueControl for list-like values (tag-picker) is bound with `[formField]` inside a `lyr-field` shell that shows the field's first error once it is touched.
 - Proposals that follow another field (subject tag from gender, Lei from a formal register) run in the control's `(change)` handler and stop once the user chooses by hand. They are not effects, since effects are reserved for external sync such as the local draft.
+- A destructive action takes a server-side confirmation (the typed name in the body) and a preview of counts, and the client disables its button until the same text matches. The server stays authoritative.
+- One row-level action runs at a time through a shared `run()` wrapper that sets `busy`, clears the previous notice and error, and turns a failure into an `ApiError` shown with the server's `detail`.
+- A service operation that mutates several tables runs in one `write()` transaction, and the persistence function lists its delete order explicitly.
 
 ---
 
@@ -844,4 +847,48 @@ Not verified: the docker level (`test docker`) and the integration level were no
   - The starting seed is limited to Number.MAX_SAFE_INTEGER in the form because a JSON number loses precision above it; the server accepts up to 2**63 - 1.
   - Run one frontend spec file with `npm run test -- --include <glob>`. The `npm run test` script appends extra arguments to the `node --test` command too, so the whole unit suite ran anyway. `./scripts/lyrveil.cmd test unit tests/integration/test_characters.py` works from the repo root in Git Bash.
   - T-CHR-13 and its axe check are unverified. The next task that can run e2e should run tests/e2e/specs/character-creator.spec.mjs first and fix selectors or accessibility findings.
+---
+
+## 2026-11-07T05:33:48Z - P03.2b
+- Built the character profile at /characters/:id and the backend for duplicate, archive, unarchive and purge. Backend tests, unit suites and lint pass. The new Playwright spec was written but never run, and the e2e acceptance for archive and purge is therefore unverified.
+
+Checks I ran: `test lint` passes. `test unit` passes, with 76 frontend, 297 backend and 555 orchestrator tests plus the Pester tests. `tests/integration/test_characters.py` passes with 42 tests, and `tests/integration/test_conversations.py` passes with 7. I did not run the integration, e2e or docker suites in full.
+
+**Backend**
+- `POST /characters/{id}/duplicate` copies the current card into a new active character at version 1 with actor `duplicate`. The first name becomes "<name> (copia)", cut to stay within 80 characters. It copies no conversations, memories or older versions.
+- `POST /characters/{id}/archive` and `/unarchive` are idempotent.
+- `GET /characters/{id}/purge-preview` returns counts of conversations, messages and versions.
+- `POST /characters/{id}/purge` takes `{"confirm_name"}` and returns 204.
+  - It deletes, in one transaction, the jobs that name the character, its variants, messages, conversations, traits, visual profile, versions and the character itself.
+  - A wrong name gives 422, a running job gives 409, and an unknown id gives 404. Nothing is deleted in any refusal.
+- The main conversation list now leaves out conversations of archived characters. The profile still lists them when asked for one character.
+
+**Frontend**
+- The new profile screen shows the identity summary, traits with their locks, example exchanges, active conversations and the "simulated" note.
+- **Nuova conversazione**, **Modifica**, **Duplica**, **Archivia** and **Rimuovi dall'archivio** work from the screen.
+- **Elimina definitivamente** opens an inline confirmation with the preview counts. Its button stays disabled until the first name is typed, and the server checks the name again.
+- The version list has **Confronta**, a field-by-field table against the current version, and **Ripristina**, which adds a new version.
+- Switching to another id, as after a duplicate, loads that character in the same component.
+
+**Tests added**
+- T-CHR-04 and the archive, purge and running-job tests in `test_characters.py`.
+- `character-profile-screen.spec.ts` and `version-diff.spec.ts`.
+- `tests/e2e/specs/character-profile.spec.mjs`, which covers compare, restore, duplicate, archive and purge.
+
+**Docs and changelog**
+- Updated `CHANGELOG.md`, `docs/api.md`, `docs/frontend.md`, `docs/character-system.md`, `docs/data-model.md` and `docs/testing.md`. I left the roadmap checkbox alone.
+
+**Not verified or not delivered**
+- The e2e spec has not been run. It sets up through `page.request` POST/PUT without an Origin header, which I assumed the origin guard accepts. Its selectors and its axe check are untested.
+- Memories, images and assets do not exist yet, so purge removes no files and the preview has no counts for them.
+- The avatar, the **Memoria** link and the proposals are not drawn. The new routes are not in `backend/openapi.json`.
+- Files changed: backend/src/lyrveil/api/characters.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/persistence/conversations.py, backend/src/lyrveil/domain/characters.py, backend/tests/integration/test_characters.py, frontend/src/app/app.routes.ts, frontend/src/app/features/characters/card.model.ts, frontend/src/app/features/characters/characters-store.ts, frontend/src/app/features/characters/version-diff.ts, frontend/src/app/features/characters/version-diff.spec.ts, frontend/src/app/features/characters/character-profile-screen.ts, frontend/src/app/features/characters/character-profile-screen.html, frontend/src/app/features/characters/character-profile-screen.scss, frontend/src/app/features/characters/character-profile-screen.spec.ts, frontend/src/i18n/it.json, tests/e2e/specs/character-profile.spec.mjs, CHANGELOG.md, docs/api.md, docs/frontend.md, docs/character-system.md, docs/data-model.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The shell allowlist refuses `npm` and chained `cd && ...` commands. Use `./scripts/lyrveil.cmd test lint` and `./scripts/lyrveil.cmd test unit [pytest path]` from the repo root, and the Read/Grep/Glob/Edit tools for everything else. `test unit` passes extra arguments only to pytest, so a frontend spec can only run through the whole unit level (about 1 minute).
+  - Frontend component specs that chain several promises (action, then reload, then a notice) need a macrotask in `settle()`: `await new Promise(r => setTimeout(r))` per round. `fixture.whenStable()` alone returned before the notice signal was set.
+  - generation_jobs.character_id/conversation_id/message_id are still plain columns with no FK, so a purge deletes those job rows by hand before the messages and conversations. When the job table is rebuilt with SET NULL keys, revisit `persistence.characters.purge` and `has_running_job`.
+  - Once memories, images or assets exist, add them to `count_purge` and `purge` in persistence/characters.py, to the preview model and to the confirmation texts (`profile.purge.*` in it.json). Files are removed after the commit.
+  - The profile reuses the Creator's `creator.*` catalog labels for diff field names (`version-diff.ts`); a new card field needs a path entry there or the diff shows the raw dotted path.
+  - The component-input `id` route binding reuses one profile component across `/characters/a` to `/characters/b`, so the screen loads from an `effect` on `id()` rather than `ngOnInit`.
+  - The e2e specs for the Creator and the profile are unrun. The next task that can run e2e should run `character-creator.spec.mjs` and `character-profile.spec.mjs` first and fix selectors or axe findings. The profile spec also relies on `page.request.post/put` without an Origin header being accepted by the origin guard.
 ---

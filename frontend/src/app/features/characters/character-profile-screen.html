@@ -1,0 +1,223 @@
+<section class="screen">
+  <header class="header">
+    <div>
+      <h1 class="title">{{ 'screen.characterProfile' | t }}</h1>
+      @if (character(); as c) {
+        <p class="subtitle">{{ c.full_name }}</p>
+      }
+    </div>
+    <a class="button" routerLink="/chats">{{ 'creator.toChats' | t }}</a>
+  </header>
+
+  @if (notice(); as shown) {
+    <p class="banner" role="status">{{ shown.key | t: shown.params }}</p>
+  }
+  @if (actionError(); as failure) {
+    <p class="banner error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (phase() === 'loading') {
+    <p class="note" role="status">{{ 'profile.loading' | t }}</p>
+  } @else if (phase() === 'failed') {
+    <div class="banner error" role="alert">
+      @if (loadError(); as failure) {
+        <p>{{ failure.textKey | t }}</p>
+      }
+      <a class="button" routerLink="/chats">{{ 'creator.toChats' | t }}</a>
+    </div>
+  } @else if (character(); as c) {
+    <div class="identity">
+      <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+      <div>
+        <p class="name">{{ c.full_name }}</p>
+        @if (archived()) {
+          <span class="pill">{{ 'profile.archivedBadge' | t }}</span>
+        }
+      </div>
+    </div>
+    <p class="note">{{ 'profile.simulated' | t }}</p>
+    @if (archived()) {
+      <p class="banner">{{ 'profile.archivedNote' | t }}</p>
+    }
+
+    <div class="actions" role="group" [attr.aria-label]="'profile.actions.label' | t">
+      <button type="button" class="button primary" [disabled]="busy() || archived()" (click)="startChat()">
+        {{ 'profile.newChat' | t }}
+      </button>
+      <a class="button" [routerLink]="['/characters', c.id, 'edit']">{{ 'profile.edit' | t }}</a>
+      <button type="button" class="button" [disabled]="busy()" (click)="duplicate()">{{ 'profile.duplicate' | t }}</button>
+      <button type="button" class="button" [disabled]="busy()" (click)="toggleArchive()">
+        {{ (archived() ? 'profile.unarchive' : 'profile.archive') | t }}
+      </button>
+      <button type="button" class="button danger" [disabled]="busy()" (click)="startPurge()">{{ 'profile.purge' | t }}</button>
+    </div>
+
+    @if (purging() !== null) {
+      <form class="confirm" role="alertdialog" aria-labelledby="purge-title" novalidate (submit)="confirmPurge($event)">
+        <h2 class="section" id="purge-title">{{ 'profile.purge.title' | t: { name: c.full_name } }}</h2>
+        <p>{{ 'profile.purge.warning' | t }}</p>
+        <ul class="bullets">
+          @for (line of purgeLines(); track $index) {
+            <li>{{ line }}</li>
+          }
+        </ul>
+        <label class="label" for="purge-name">{{ 'profile.purge.type' | t: { name: firstName() } }}</label>
+        <input
+          #purgeInput
+          id="purge-name"
+          class="control"
+          type="text"
+          autocomplete="off"
+          [value]="purgeName()"
+          (input)="purgeName.set(valueOf($event))"
+        />
+        <div class="actions">
+          <button type="button" class="button" (click)="cancelPurge()">{{ 'profile.purge.cancel' | t }}</button>
+          <button type="submit" class="button danger" [disabled]="!canPurge()">{{ 'profile.purge.confirm' | t }}</button>
+        </div>
+      </form>
+    }
+
+    <h2 class="section">{{ 'profile.identity' | t }}</h2>
+    <dl class="facts">
+      @for (row of identityRows(); track row.label) {
+        <div class="fact">
+          <dt>{{ row.label | t }}</dt>
+          <dd>
+            @if (row.valueKey; as key) {
+              {{ key | t }}
+            } @else {
+              {{ row.text }}
+            }
+          </dd>
+        </div>
+      }
+    </dl>
+
+    <h2 class="section">{{ 'profile.personality' | t }}</h2>
+    @if (c.card.traits.length === 0) {
+      <p class="note">{{ 'profile.personality.empty' | t }}</p>
+    } @else {
+      <ul class="list">
+        @for (trait of c.card.traits; track $index) {
+          <li class="item">
+            @if (traitLabel(trait.category); as label) {
+              <strong>{{ label | t }}:</strong>
+            }
+            {{ trait.description }}
+            @if (trait.locked) {
+              <span class="pill">{{ 'profile.locked' | t }}</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="section">{{ 'profile.examples' | t }}</h2>
+    @if (c.card.communication.examples.length === 0) {
+      <p class="note">{{ 'profile.examples.empty' | t }}</p>
+    } @else {
+      <ul class="list">
+        @for (example of c.card.communication.examples; track $index) {
+          <li class="item">
+            @if (example.user !== null) {
+              <p class="line"><strong>{{ 'profile.examples.user' | t }}:</strong> {{ example.user }}</p>
+            }
+            <p class="line"><strong>{{ 'profile.examples.character' | t }}:</strong> {{ example.character }}</p>
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="section">{{ 'profile.conversations' | t }}</h2>
+    @if (conversations().length === 0) {
+      <p class="note">{{ 'profile.conversations.empty' | t }}</p>
+    } @else {
+      <ul class="list">
+        @for (conversation of conversations(); track conversation.id) {
+          <li class="item">
+            <a [routerLink]="['/chats', conversation.id]">{{ conversation.title }}</a>
+          </li>
+        }
+      </ul>
+    }
+
+    <h2 class="section">{{ 'profile.versions' | t }}</h2>
+    <p class="note">{{ 'profile.versions.note' | t }}</p>
+    <ul class="list" data-testid="versions">
+      @for (version of versions(); track version.version_no) {
+        <li class="item version">
+          <div class="version-text">
+            <strong>{{ 'profile.versions.item' | t: { n: version.version_no } }}</strong>
+            @if (version.version_no === c.current_version_no) {
+              <span class="pill">{{ 'profile.versions.current' | t }}</span>
+            }
+            @if (actorLabel(version.actor); as actor) {
+              <span class="pill">{{ actor | t }}</span>
+            }
+            <span class="meta">{{ version.change_summary }} · {{ when(version.created_at) }}</span>
+          </div>
+          @if (version.version_no !== c.current_version_no) {
+            <div class="actions">
+              <button
+                type="button"
+                class="button"
+                [disabled]="busy()"
+                [attr.aria-label]="'profile.versions.compare.aria' | t: { n: version.version_no }"
+                (click)="compare(version)"
+              >
+                {{ 'profile.versions.compare' | t }}
+              </button>
+              <button
+                type="button"
+                class="button"
+                [disabled]="busy()"
+                [attr.aria-label]="'profile.versions.restore.aria' | t: { n: version.version_no }"
+                (click)="restore(version)"
+              >
+                {{ 'profile.versions.restore' | t }}
+              </button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (comparison(); as diff) {
+      <div class="comparison" role="region" aria-labelledby="diff-title">
+        <h3 class="section" id="diff-title">
+          {{ 'profile.diff.title' | t: { from: diff.from_version_no, to: diff.to_version_no } }}
+        </h3>
+        @if (diff.changes.length === 0) {
+          <p class="note">{{ 'profile.diff.none' | t }}</p>
+        } @else {
+          <table class="diff">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'profile.diff.field' | t }}</th>
+                <th scope="col">{{ 'profile.diff.before' | t }}</th>
+                <th scope="col">{{ 'profile.diff.after' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (change of diff.changes; track change.field) {
+                <tr>
+                  <th scope="row">
+                    @if (fieldKey(change.field); as key) {
+                      {{ key | t }}
+                    } @else {
+                      {{ change.field }}
+                    }
+                  </th>
+                  <td>{{ show(change.before) }}</td>
+                  <td>{{ show(change.after) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+        <button type="button" class="button" (click)="closeComparison()">{{ 'profile.diff.close' | t }}</button>
+      </div>
+    }
+  }
+</section>

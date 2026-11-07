@@ -60,6 +60,16 @@ class StoredVersion:
 
 
 @dataclass(frozen=True)
+class PurgeCounts:
+    """What a purge of one character removes, as the preview counts it: every conversation whatever its status, their
+    messages, and the versions of the card. Memories, images and assets are added when their tables exist."""
+
+    conversations: int
+    messages: int
+    versions: int
+
+
+@dataclass(frozen=True)
 class CharacterSummary:
     """A character as the list and the new-chat picker show it. `status` is `active` or `archived`."""
 

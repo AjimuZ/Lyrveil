@@ -45,7 +45,12 @@ export const routes: Routes = [
   },
   unavailable('characters', 'screen.characters'),
   creator('characters/new', 'screen.characterNew'),
-  unavailable('characters/:id', 'screen.characterProfile'),
+  {
+    path: 'characters/:id',
+    loadComponent: () =>
+      import('./features/characters/character-profile-screen').then((module) => module.CharacterProfileScreen),
+    data: { screen: 'screen.characterProfile' satisfies TextKey },
+  },
   creator('characters/:id/edit', 'screen.characterEdit'),
   unavailable('characters/:id/memory', 'screen.characterMemory'),
   unavailable('gallery', 'screen.gallery'),

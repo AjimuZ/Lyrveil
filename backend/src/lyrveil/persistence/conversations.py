@@ -128,12 +128,15 @@ def list_all(
     connection: Connection, status: ConversationStatus, character_id: str | None, match: str | None = None
 ) -> list[Conversation]:
     """Returns the conversations in `status`, optionally of one character, in list order: pinned first, then by
-    activity.
+    activity. Without a `character_id` the conversations of an archived character are left out, because archiving a
+    character hides them with it; asking for one character's conversations lists them whatever its status.
 
     A `match` (from lyrveil.persistence.search.match_query) keeps the conversations whose title matches or that hold a
     message, not deleted, that matches.
     """
-    clause = "WHERE c.status = :status" + ("" if character_id is None else " AND c.character_id = :character_id")
+    clause = "WHERE c.status = :status" + (
+        " AND ch.status = 'active'" if character_id is None else " AND c.character_id = :character_id"
+    )
     if match is not None:
         clause += (
             " AND (c.id IN (SELECT conversation_id FROM conversation_fts WHERE conversation_fts MATCH :match)"

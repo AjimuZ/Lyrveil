@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.card import CharacterCard
-from lyrveil.domain.characters import CharacterSummary, StoredCharacter, StoredVersion, VersionSummary
+from lyrveil.domain.characters import CharacterSummary, PurgeCounts, StoredCharacter, StoredVersion, VersionSummary
 from lyrveil.domain.identifiers import new_id
 
 _COLUMNS = "id, first_name, last_name, age, grammatical_gender, primary_language, status, created_at, updated_at"
@@ -294,6 +294,70 @@ def get_card(connection: Connection, character_id: str) -> StoredCharacter | Non
         updated_at=row["updated_at"],
         card=card,
     )
+
+
+def set_status(connection: Connection, *, character_id: str, status: str, now: str) -> None:
+    """Sets `status` (`active` or `archived`), keeps `archived_at` in step with it and touches `updated_at`. The card,
+    its versions and the conversations are not changed."""
+    connection.execute(
+        text("UPDATE characters SET status = :status, archived_at = :archived_at, updated_at = :now WHERE id = :id"),
+        {"id": character_id, "status": status, "archived_at": now if status == "archived" else None, "now": now},
+    )
+
+
+def count_purge(connection: Connection, character_id: str) -> PurgeCounts:
+    """Counts what `purge` would delete for the character."""
+    params = {"id": character_id}
+
+    def count(sql: str) -> int:
+        return int(connection.execute(text(sql), params).scalar_one())
+
+    return PurgeCounts(
+        conversations=count("SELECT COUNT(*) FROM conversations WHERE character_id = :id"),
+        messages=count(
+            "SELECT COUNT(*) FROM messages WHERE conversation_id IN "
+            "(SELECT id FROM conversations WHERE character_id = :id)"
+        ),
+        versions=count("SELECT COUNT(*) FROM character_versions WHERE character_id = :id"),
+    )
+
+
+def has_running_job(connection: Connection, character_id: str) -> bool:
+    """Returns whether a job that belongs to the character, to one of its conversations or to one of its messages is
+    running. A running job holds a lease and writes into those rows, so a purge waits for it."""
+    return (
+        connection.execute(
+            text(
+                "SELECT 1 FROM generation_jobs WHERE status = 'running' AND (character_id = :id OR conversation_id IN "
+                "(SELECT id FROM conversations WHERE character_id = :id) OR message_id IN "
+                "(SELECT m.id FROM messages AS m JOIN conversations AS c ON c.id = m.conversation_id "
+                "WHERE c.character_id = :id)) LIMIT 1"
+            ),
+            {"id": character_id},
+        ).first()
+        is not None
+    )
+
+
+def purge(connection: Connection, character_id: str) -> None:
+    """Hard-deletes the character with everything it owns, children first because every key is RESTRICT: the jobs that
+    name it, its message variants, messages and conversations (the search triggers clear their index rows), then its
+    traits, visual profile, versions and the character row. The caller owns the transaction and the confirmation."""
+    params = {"id": character_id}
+    owned_conversations = "SELECT id FROM conversations WHERE character_id = :id"
+    owned_messages = f"SELECT id FROM messages WHERE conversation_id IN ({owned_conversations})"
+    for sql in (
+        f"DELETE FROM generation_jobs WHERE character_id = :id OR conversation_id IN ({owned_conversations}) "
+        f"OR message_id IN ({owned_messages})",
+        f"DELETE FROM message_variants WHERE message_id IN ({owned_messages})",
+        f"DELETE FROM messages WHERE conversation_id IN ({owned_conversations})",
+        "DELETE FROM conversations WHERE character_id = :id",
+        "DELETE FROM character_traits WHERE character_id = :id",
+        "DELETE FROM character_visual_profiles WHERE character_id = :id",
+        "DELETE FROM character_versions WHERE character_id = :id",
+        "DELETE FROM characters WHERE id = :id",
+    ):
+        connection.execute(text(sql), params)
 
 
 def get(connection: Connection, character_id: str) -> CharacterSummary | None:

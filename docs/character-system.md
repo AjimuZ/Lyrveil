@@ -6,8 +6,9 @@ phase P03. Delivered in P03.1a: the card model (`lyrveil.domain.card`), its vali
 with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks against drafts and proposals
 ([Versions and locks](#versions-and-locks)). Delivered in P03.2a: the Creator screens for creating and editing a card
 (`/characters/new`, `/characters/:id/edit`; see [Frontend screen 3](frontend.md#3-character-creator)) and
-`GET /characters/vocabulary`. Planned: locks in the translation job, the profile, assets, assisted creation, and the
-exchange format.
+`GET /characters/vocabulary`. Delivered in P03.2b: the profile ([Frontend screen 4](frontend.md#4-character-profile)),
+duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-purge)). Planned: locks in the translation
+job, assets, assisted creation, and the exchange format.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -199,6 +200,14 @@ Reference images are stored and shown. Version 1.0 workflows do not use them
 | Duplicate | New character with a copy of the card and primary avatar, version 1, actor `duplicate`. No conversations or memories. |
 | Archive | Hidden with its conversations. Nothing is deleted. |
 | Purge | Preview of counts, confirmation by typing the first name, then a hard delete. See [Deletion policy](data-model.md#deletion-policy). |
+
+Delivered in P03.2b. The copy is named "<first name> (copia)" so the two tell apart in every list, and its history is its
+own: version 1, actor `duplicate`. Avatars do not exist yet, so only the card is copied; the primary avatar joins the copy
+with the assets (P03.3). Archiving hides the character from the active list and its conversations from the main
+conversation list; unarchiving shows both again. A purge deletes, in one transaction, the jobs that name the character,
+its conversations or their messages, then variants, messages, conversations, traits, visual profile, versions and the
+character, and is refused while one of those jobs runs. Memories, images, assets and files do not exist yet; their
+deletion (files after the commit) is added with them.
 
 ## Exchange format
 

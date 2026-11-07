@@ -1,13 +1,13 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
-versions with diff and restore, and the tag vocabulary the Creator offers.
+versions with diff and restore, duplicate, archive, purge, and the tag vocabulary the Creator offers.
 
-Duplicate, archive, purge and the exchange routes of that section arrive with the rest of the Creator (P03). Not in the
-committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
+The exchange routes of that section arrive with the rest of the Creator (P03). Not in the committed OpenAPI document
+yet, for the reason given in lyrveil.api.conversations.
 """
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import Engine
 
@@ -85,6 +85,16 @@ class VocabularyEntryOut(BaseModel):
 
 class VocabularyOut(BaseModel):
     items: list[VocabularyEntryOut]
+
+
+class PurgePreview(BaseModel):
+    conversations: int
+    messages: int
+    versions: int
+
+
+class PurgeBody(BaseModel):
+    confirm_name: str
 
 
 def _version_out(version: VersionSummary) -> VersionOut:
@@ -190,6 +200,43 @@ def save_character(
     answers the character; a card equal to the stored one creates none. The locks in the body are the new locks. Answers
     404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` as the create route does."""
     return _detail(service.update(character_id, _as_card(body)))
+
+
+@router.post("/{character_id}/duplicate", response_model=CharacterOut, status_code=201)
+def duplicate_character(character_id: str, service: CharacterService = Service) -> CharacterOut:
+    """Creates an active character with a copy of the card, named "<first name> (copia)", at version 1 with actor
+    `duplicate`. No conversation, memory or older version is copied. Answers 404 `NOT_FOUND` for an unknown
+    character."""
+    return _out(service.duplicate(character_id))
+
+
+@router.post("/{character_id}/archive", response_model=CharacterOut)
+def archive_character(character_id: str, service: CharacterService = Service) -> CharacterOut:
+    """Hides the character, and its conversations, from the active lists; nothing is deleted. Archiving an archived
+    character answers it unchanged. Answers 404 `NOT_FOUND` for an unknown character."""
+    return _out(service.archive(character_id))
+
+
+@router.post("/{character_id}/unarchive", response_model=CharacterOut)
+def unarchive_character(character_id: str, service: CharacterService = Service) -> CharacterOut:
+    """Shows an archived character again. Answers 404 `NOT_FOUND` for an unknown character."""
+    return _out(service.unarchive(character_id))
+
+
+@router.get("/{character_id}/purge-preview", response_model=PurgePreview)
+def purge_preview(character_id: str, service: CharacterService = Service) -> PurgePreview:
+    """Counts what a purge deletes besides the character itself. Answers 404 `NOT_FOUND` for an unknown character."""
+    counts = service.purge_preview(character_id)
+    return PurgePreview(conversations=counts.conversations, messages=counts.messages, versions=counts.versions)
+
+
+@router.post("/{character_id}/purge", status_code=204)
+def purge_character(character_id: str, body: PurgeBody, service: CharacterService = Service) -> Response:
+    """Deletes the character for good, with its conversations, messages and versions, once `confirm_name` equals its
+    first name. Answers 204. Answers 404 `NOT_FOUND` for an unknown character, 422 `VALIDATION_ERROR` when the name does
+    not match and 409 `CONFLICT` while a job of the character is running; nothing is deleted in those cases."""
+    service.purge(character_id, body.confirm_name)
+    return Response(status_code=204)
 
 
 @router.get("/{character_id}/versions", response_model=VersionList)

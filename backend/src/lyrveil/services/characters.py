@@ -1,7 +1,8 @@
-"""CharacterService: creates, reads, saves and lists characters with their whole card, and keeps their versions.
+"""CharacterService: creates, reads, saves and lists characters with their whole card, keeps their versions, and
+duplicates, archives and purges them.
 
-A saved change appends a version, restoring appends one too, and history is never rewritten. Archive and purge belong to
-the rest of the Creator (P03); this service holds what creation, editing and the chat need.
+A saved change appends a version, restoring appends one too, and history is never rewritten. A purge is the only
+operation that deletes a character's rows (docs/data-model.md, Deletion policy).
 """
 
 from collections.abc import Callable, Mapping
@@ -10,11 +11,11 @@ from typing import Any
 
 from sqlalchemy import Connection, Engine
 
-from lyrveil.domain.card import CharacterCard
+from lyrveil.domain.card import MAX_NAME_LENGTH, CharacterCard
 from lyrveil.domain.card_diff import FieldChange, diff_cards
 from lyrveil.domain.card_locks import keep_locked
-from lyrveil.domain.characters import CharacterSummary, StoredCharacter, StoredVersion, VersionSummary
-from lyrveil.domain.errors import NotFoundError, ValidationFailedError
+from lyrveil.domain.characters import CharacterSummary, PurgeCounts, StoredCharacter, StoredVersion, VersionSummary
+from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import characters as repository
@@ -24,6 +25,8 @@ STATUSES = frozenset({"active", "archived"})
 _SECTION_NAMES = {"identity": "identità", "traits": "tratti", "communication": "comunicazione", "visual": "aspetto"}
 _NO_CHARACTER = "Il personaggio non esiste."
 _NO_VERSION = "La versione non esiste."
+_NAME_MISMATCH = "Il nome digitato non corrisponde al nome del personaggio."
+_JOB_RUNNING = "Un'operazione del personaggio è ancora in corso. Riprova tra poco."
 
 
 def _utc_now() -> datetime:
@@ -56,7 +59,69 @@ class CharacterService:
         over 120, an empty or over-long name, a value outside the closed lists, an unknown field, a slot tag the
         vocabulary lacks, or an outfit with a reserved key. Nothing is written in that case.
         """
-        card = validate_card(raw_card)
+        return self._insert_new(validate_card(raw_card), actor="user", summary="Creazione")
+
+    def duplicate(self, character_id: str) -> CharacterSummary:
+        """Returns a new active character holding a copy of the current card of `character_id`, at version 1 with actor
+        `duplicate`. Conversations, memories and the version history are not copied. The first name gets the suffix
+        " (copia)" (the name is cut to stay within its limit), so the two are told apart in every list.
+
+        Raises NotFoundError for an unknown character. An archived source can be duplicated; the copy is active.
+        """
+        source = self.get(character_id)
+        suffix = " (copia)"
+        name = source.card.identity.first_name[: MAX_NAME_LENGTH - len(suffix)].rstrip() + suffix
+        raw = source.card.model_dump(mode="json")
+        raw["identity"]["first_name"] = name
+        return self._insert_new(
+            validate_card(raw), actor="duplicate", summary=f"Duplicato da {source.card.identity.first_name}"
+        )
+
+    def archive(self, character_id: str) -> CharacterSummary:
+        """Hides the character from the active list; nothing is deleted. Archiving an archived character changes
+        nothing. Raises NotFoundError for an unknown character."""
+        return self._set_status(character_id, "archived")
+
+    def unarchive(self, character_id: str) -> CharacterSummary:
+        """Brings an archived character back to the active list. Raises NotFoundError for an unknown character."""
+        return self._set_status(character_id, "active")
+
+    def purge_preview(self, character_id: str) -> PurgeCounts:
+        """Returns the counts of what `purge` would remove. Raises NotFoundError for an unknown character."""
+
+        def work(connection: Connection) -> PurgeCounts | None:
+            if repository.get(connection, character_id) is None:
+                return None
+            return repository.count_purge(connection, character_id)
+
+        found = read(self._engine, work)
+        if found is None:
+            raise NotFoundError(_NO_CHARACTER)
+        return found
+
+    def purge(self, character_id: str, confirm_name: str) -> None:
+        """Hard-deletes the character with its conversations, messages, versions and card rows in one transaction, once
+        `confirm_name` equals its first name (surrounding spaces ignored, case kept). Nothing is deleted otherwise.
+
+        Raises NotFoundError for an unknown character, ValidationFailedError when the name does not match and
+        ConflictError while a job of the character is running. No file belongs to a character yet; when avatars and
+        images exist their files are removed after the commit (docs/data-model.md, Deletion policy).
+        """
+
+        def work(connection: Connection) -> None:
+            character = repository.get(connection, character_id)
+            if character is None:
+                raise NotFoundError(_NO_CHARACTER)
+            if confirm_name.strip() != character.first_name:
+                raise ValidationFailedError(_NAME_MISMATCH)
+            if repository.has_running_job(connection, character_id):
+                raise ConflictError(_JOB_RUNNING)
+            repository.purge(connection, character_id)
+
+        write(self._engine, work)
+
+    def _insert_new(self, card: CharacterCard, *, actor: str, summary: str) -> CharacterSummary:
+        """Stores `card` as a new active character at version 1 and returns it."""
         character_id = new_id()
         now = to_utc_text(self._clock())
 
@@ -67,13 +132,29 @@ class CharacterService:
                 character_id=character_id,
                 version_no=1,
                 card=card,
-                change_summary="Creazione",
-                actor="user",
+                change_summary=summary,
+                actor=actor,
                 now=now,
             )
             created = repository.get(connection, character_id)
             assert created is not None
             return created
+
+        return write(self._engine, work)
+
+    def _set_status(self, character_id: str, status: str) -> CharacterSummary:
+        now = to_utc_text(self._clock())
+
+        def work(connection: Connection) -> CharacterSummary:
+            current = repository.get(connection, character_id)
+            if current is None:
+                raise NotFoundError(_NO_CHARACTER)
+            if current.status == status:
+                return current
+            repository.set_status(connection, character_id=character_id, status=status, now=now)
+            changed = repository.get(connection, character_id)
+            assert changed is not None
+            return changed
 
         return write(self._engine, work)
 

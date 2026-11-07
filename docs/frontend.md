@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. P03.2a delivered the Character Creator, screen 3 (`features/characters/`), on Signal Forms; the characters list and the profile are still placeholders. Every other real screen is planned, phases P03 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. P03.2a delivered the Character Creator, screen 3 (`features/characters/`), on Signal Forms. P03.2b delivered the Character Profile, screen 4; the characters list is still a placeholder. Every other real screen is planned, phases P03 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -209,8 +209,8 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
 - **Not delivered, so no control is drawn for it:** the assist panel (`POST /characters/drafts` does not exist), import and
   export, the avatar actions (P03.3), the counter of how many examples enter the prompt, the first-chunk warning of
   **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
-  the locks' effect on a tag translation (there is no such job yet). The characters list and the profile are still
-  placeholders; the new-chat dialog links to the Creator.
+  the locks' effect on a tag translation (there is no such job yet). The characters list is still a
+  placeholder; the new-chat dialog links to the Creator.
 - **Tests:** `card-rules.spec.ts`, `card-form.spec.ts` and `character-creator-screen.spec.ts` (unit), and
   `tests/e2e/specs/character-creator.spec.mjs` (T-CHR-13); see [Testing](testing.md#character-creator). The E2E spec
   was written but not run in this change.
@@ -219,6 +219,28 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
 
 Avatar and variants, identity summary, personality, communication examples, conversation list, **Nuova conversazione**, **Modifica**, **Memoria**, version history with compare and restore, proposals for the profile, duplicate, archive and purge. A clear note states that the character
 is simulated.
+
+Delivered in P03.2b (`character-profile-screen.*`, route `/characters/:id`):
+
+- **Content.** The identity summary (age, how it speaks of itself, language, and the written fields that are not empty),
+  the traits with their lock, the example exchanges, the character's active conversations (a link each) and a note that the
+  character is simulated. A route change to another id, as after **Duplica**, loads that character in the same component.
+- **Actions.** **Nuova conversazione** starts a chat and opens it (disabled while archived). **Modifica** opens the Creator.
+  **Duplica** creates "<name> (copia)" and opens it with a notice that conversations and memories were not copied.
+  **Archivia** and **Rimuovi dall'archivio** switch the status and show a note while archived. **Elimina
+  definitivamente** reads `GET .../purge-preview` and opens an inline confirmation (`role="alertdialog"`) with the counts
+  and a field for the first name; its button stays disabled until the typed name equals the first name, and the server
+  checks it again. After the purge the screen goes to `/chats`. A refusal shows the server's `detail` and changes
+  nothing. One action runs at a time.
+- **Versions.** The list shows each version with its number, the "Attuale" pill, the actor (Modifica, Ripristino,
+  Duplicazione, Importazione, Proposta), the summary and the time. Every version but the current one has **Confronta**,
+  which shows a table of the fields that differ from the current version (Italian field names from the Creator's
+  labels, `version-diff.ts`), and **Ripristina**, which adds a new version and reads the character again.
+- **Not delivered, so no control is drawn for it:** the avatar and its variants (P03.3), the **Memoria** link (the memory
+  studio is a placeholder), and the proposals for the profile.
+- **Tests:** `character-profile-screen.spec.ts` and `version-diff.spec.ts` (unit), and
+  `tests/e2e/specs/character-profile.spec.mjs` (T-CHR-04, T-CHR-08). The end-to-end spec was written but not run in this
+  change.
 
 ### 5. Character Memory Studio
 

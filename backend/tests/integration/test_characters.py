@@ -5,9 +5,10 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import IntegrityError
 
+from lyrveil.jobs.scheduler import write
 from lyrveil.main import create_app
 from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import upgrade_to_head
@@ -463,3 +464,139 @@ def test_the_vocabulary_route_lists_every_tag_with_its_italian_aliases(client: T
     assert {"tag": "black hair", "category": "hair_color", "aliases_it": ["capelli neri", "nero"]} in items
     assert {item["category"] for item in items} >= {"hair_color", "eye_color", "skin", "hairstyle", "accessories"}
     assert all(item["aliases_it"] for item in items)
+
+
+API = "/api/v1"
+
+
+def table_count(engine: Engine, table: str, where: str = "1 = 1", **params: object) -> int:
+    with engine.connect() as connection:
+        return int(connection.execute(text(f"SELECT count(*) FROM {table} WHERE {where}"), params).scalar_one())
+
+
+def chat_with_messages(client: TestClient, character_id: str) -> str:
+    chat = client.post(f"{API}/conversations", json={"character_id": character_id}).json()["id"]
+    response = client.post(f"{API}/conversations/{chat}/messages", json={"content": "Ciao"})
+    assert response.status_code == 202, response.text
+    return str(chat)
+
+
+def listed_chats(client: TestClient, **query: str) -> list[str]:
+    return [item["id"] for item in client.get(f"{API}/conversations", params=query).json()["items"]]
+
+
+def test_duplicate_copies_the_card_but_not_conversations_or_memories(client: TestClient, engine: Engine) -> None:
+    """T-CHR-04."""
+    source = create_full(client)
+    client.put(f"{URL}/{source}", json=edited(age=28))
+    chat_with_messages(client, source)
+
+    response = client.post(f"{URL}/{source}/duplicate")
+    assert response.status_code == 201, response.text
+    copy = response.json()
+    assert copy["id"] != source
+    assert (copy["first_name"], copy["status"]) == ("Nerea (copia)", "active")
+
+    original = client.get(f"{URL}/{source}").json()["card"]
+    copied = client.get(f"{URL}/{copy['id']}").json()
+    assert copied["current_version_no"] == 1
+    assert copied["card"]["identity"] == {**original["identity"], "first_name": "Nerea (copia)"}
+    for section in ("traits", "communication", "visual"):
+        assert copied["card"][section] == original[section], section
+    history = versions(client, copy["id"])
+    assert [(item["version_no"], item["actor"]) for item in history] == [(1, "duplicate")]
+    assert history[0]["change_summary"] == "Duplicato da Nerea"
+
+    assert listed_chats(client, character_id=copy["id"]) == []
+    assert table_count(engine, "conversations", "character_id = :id", id=copy["id"]) == 0
+    assert table_count(engine, "conversations", "character_id = :id", id=source) == 1
+    assert client.post(f"{URL}/missing/duplicate").status_code == 404
+
+
+def test_duplicate_keeps_a_long_first_name_within_its_limit(client: TestClient) -> None:
+    created = client.post(URL, json={"first_name": "A" * 80, "age": 30}).json()
+    copy = client.post(f"{URL}/{created['id']}/duplicate").json()
+    assert len(copy["first_name"]) == 80
+    assert copy["first_name"].endswith(" (copia)")
+
+
+def test_archive_hides_a_character_and_its_conversations_and_unarchive_brings_them_back(client: TestClient) -> None:
+    character_id = create_full(client)
+    chat = chat_with_messages(client, character_id)
+
+    archived = client.post(f"{URL}/{character_id}/archive")
+    assert (archived.status_code, archived.json()["status"]) == (200, "archived")
+    assert client.post(f"{URL}/{character_id}/archive").json()["status"] == "archived"
+    assert client.get(URL).json()["items"] == []
+    assert [item["id"] for item in client.get(URL, params={"status": "archived"}).json()["items"]] == [character_id]
+    assert listed_chats(client) == []
+    # The character's own screen can still list them, and nothing was deleted.
+    assert listed_chats(client, character_id=character_id) == [chat]
+    assert client.get(f"{URL}/{character_id}").json()["status"] == "archived"
+    assert client.post(f"{API}/conversations", json={"character_id": character_id}).status_code == 409
+
+    restored = client.post(f"{URL}/{character_id}/unarchive")
+    assert (restored.status_code, restored.json()["status"]) == (200, "active")
+    assert [item["id"] for item in client.get(URL).json()["items"]] == [character_id]
+    assert listed_chats(client) == [chat]
+    for action in ("archive", "unarchive"):
+        assert client.post(f"{URL}/missing/{action}").status_code == 404
+
+
+def test_purge_deletes_the_character_with_its_data_after_the_name_is_typed(client: TestClient, engine: Engine) -> None:
+    character_id = create_full(client)
+    other = client.post(URL, json={"first_name": "Marco", "age": 30}).json()["id"]
+    chat = chat_with_messages(client, character_id)
+    other_chat = chat_with_messages(client, other)
+    client.put(f"{URL}/{character_id}", json=edited(age=28))
+    messages = table_count(engine, "messages", "conversation_id = :id", id=chat)
+    assert messages >= 2
+
+    preview = client.get(f"{URL}/{character_id}/purge-preview")
+    assert (preview.status_code, preview.json()) == (200, {"conversations": 1, "messages": messages, "versions": 2})
+
+    for wrong in ("", "nerea", "Marco"):
+        refused = client.post(f"{URL}/{character_id}/purge", json={"confirm_name": wrong})
+        assert (refused.status_code, refused.json()["code"]) == (422, "VALIDATION_ERROR"), wrong
+    assert client.post(f"{URL}/{character_id}/purge", json={}).status_code == 422
+    assert client.get(f"{URL}/{character_id}").status_code == 200
+    assert table_count(engine, "messages", "conversation_id = :id", id=chat) == messages
+
+    done = client.post(f"{URL}/{character_id}/purge", json={"confirm_name": " Nerea "})
+    assert (done.status_code, done.content) == (204, b"")
+    assert client.get(f"{URL}/{character_id}").status_code == 404
+    assert client.get(f"{URL}/{character_id}/purge-preview").status_code == 404
+    assert client.get(f"{API}/conversations/{chat}").status_code == 404
+    for table, column in (
+        ("characters", "id"),
+        ("character_traits", "character_id"),
+        ("character_visual_profiles", "character_id"),
+        ("character_versions", "character_id"),
+        ("conversations", "character_id"),
+        ("generation_jobs", "character_id"),
+    ):
+        assert table_count(engine, table, f"{column} = :id", id=character_id) == 0, table
+    assert table_count(engine, "messages", "conversation_id = :id", id=chat) == 0
+    assert table_count(engine, "message_variants", "message_id NOT IN (SELECT id FROM messages)") == 0
+    assert table_count(engine, "message_fts", "conversation_id = :id", id=chat) == 0
+    assert table_count(engine, "generation_jobs", "conversation_id = :id", id=chat) == 0
+    # Another character and its chat are untouched.
+    assert client.get(f"{URL}/{other}").status_code == 200
+    assert table_count(engine, "messages", "conversation_id = :id", id=other_chat) >= 2
+    assert table_count(engine, "generation_jobs", "character_id = :id", id=other) >= 1
+    assert client.post(f"{URL}/{character_id}/purge", json={"confirm_name": "Nerea"}).status_code == 404
+
+
+def test_purge_waits_while_a_job_of_the_character_is_running(client: TestClient, engine: Engine) -> None:
+    character_id = create_full(client)
+    chat_with_messages(client, character_id)
+
+    def mark_running(connection: Connection) -> None:
+        connection.execute(
+            text("UPDATE generation_jobs SET status = 'running' WHERE character_id = :id"), {"id": character_id}
+        )
+
+    write(engine, mark_running)
+    refused = client.post(f"{URL}/{character_id}/purge", json={"confirm_name": "Nerea"})
+    assert (refused.status_code, refused.json()["code"]) == (409, "CONFLICT")
+    assert client.get(f"{URL}/{character_id}").status_code == 200

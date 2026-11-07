@@ -147,8 +147,28 @@ Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
   vocabulary of the card categories in file order. The Creator builds its chips and its Italian search from it. It is
   declared before `/characters/{id}`, so `vocabulary` is never read as an id.
 - Automatic sources are not routes yet. The service applies a proposal with `CharacterService.apply_proposal`, which
-  keeps locked traits and locked visual fields and records actor `proposal`. Every other route of this table is
-  planned. These routes are not in `backend/openapi.json` until it is next regenerated with Docker.
+  keeps locked traits and locked visual fields and records actor `proposal`. Every route of this table that this
+  section does not describe as delivered (export, import, format schema and drafts) is planned. These routes are not in
+  `backend/openapi.json` until it is next regenerated with Docker.
+
+Delivered in P03.2b: duplicate, archive, unarchive and purge.
+
+- `POST /characters/{id}/duplicate` answers `201` with the summary of a new active character that holds a copy of the
+  current card, at version 1, actor `duplicate`, summary `Duplicato da <first name>`. Its first name is the original
+  followed by ` (copia)`, cut to stay within 80 characters. Conversations, memories and older versions are not copied. An
+  archived character can be duplicated; the copy is active. `404 NOT_FOUND` for an unknown character.
+- `POST /characters/{id}/archive` and `/unarchive` answer `200` with the summary, whose `status` is then `archived` or
+  `active`. Repeating either changes nothing. Nothing is deleted. The conversation list leaves out the conversations of
+  an archived character, unless it is asked for that character with `character_id`; a new conversation with an archived
+  character is refused with `409 CONFLICT`, as before. `404 NOT_FOUND` for an unknown character.
+- `GET /characters/{id}/purge-preview` answers `{"conversations", "messages", "versions"}`: the conversations in any
+  status, their messages and the card versions that a purge deletes. Memories, images and assets join the preview when
+  their tables exist.
+- `POST /characters/{id}/purge` with `{"confirm_name": "..."}` answers `204` after it deletes, in one transaction, the
+  jobs that name the character, its conversations or their messages, the message variants, messages, conversations,
+  traits, visual profile, versions and the character. The name must equal the first name (surrounding spaces ignored,
+  capitals kept), otherwise `422 VALIDATION_ERROR`. `409 CONFLICT` while one of those jobs is running. `404 NOT_FOUND`
+  for an unknown character. Nothing is deleted in any refusal.
 
 ### Assets
 
