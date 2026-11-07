@@ -170,8 +170,8 @@ Delivered in P01.6a, in `scripts/lib/Setup.psm1` ([evidence](verification/2026-1
 - Step 8 creates the runtime services that the Compose file defines. `compose.yaml` has none yet (P02, P05), so setup
   says so and creates nothing.
 - Steps 5 to 7 are not delivered in setup: the models command does licenses and downloads (P01.6c), but it needs
-  `config/model-catalog.json`, which arrives in P02.1a, and launch files come with the catalog (P02). Setup prints that
-  nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until then and point at
+  `config/model-catalog.json`, which is in the backend image since P02.1a, but setup does not use it yet, and launch
+  files are planned (P02). Setup prints that nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until then and point at
   `scripts\lyrveil.cmd models`, and `-SkipModels` is accepted.
 
 ### Model downloads
@@ -204,9 +204,9 @@ No account or token is needed, because every catalog repository is public and no
 image builds, and weights never enter an image.
 
 Delivered in P01.6c, in `scripts/lib/Models.psm1` and `backend/src/lyrveil/tools/models.py`
-([evidence](verification/2026-11-07-models.md)). `config/model-catalog.json` is not in the image until P02.1a, so on an
-installation every option except a refused argument fails with exit status 1 and a message naming the missing catalog.
-The behavior below was verified only with a test catalog and a local HTTPS server (T-DCK-11).
+([evidence](verification/2026-11-07-models.md)). `config/model-catalog.json` entered the image with P02.1a, which was not run through this command
+against the real catalog: the behavior below was verified only with a test catalog and a local HTTPS server
+(T-DCK-11), and nothing was downloaded from the Internet.
 
 - The command checks Docker (exit 2), then that the models volume exists with the label and the backend image is
   present (exit 2, run `setup.cmd`). The tier is `target` when Docker sees at least 20 GiB and `reduced` otherwise,

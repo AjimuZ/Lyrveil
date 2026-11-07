@@ -64,6 +64,8 @@
 - Declare expected-hash and expected-size build ARGs after the download RUN, so mismatch tests reuse the cached download and still run the check.
 - For container tests from Windows PowerShell, pass file content as base64 to `bash -c` with a script that has no double quotes, and use tmpfs mounts in place of read-only volumes, so no bind mount is needed.
 - Entrypoints that validate config can offer a --print-command mode that runs every check and prints the argv, so the command logic is testable with no GPU or model.
+- Strict, frozen, extra=forbid Pydantic models for config files. `parse_catalog` turns the ValidationError into one CatalogError that lists every problem with its field location.
+- A test that parses a documentation table and compares it with a shipped data file keeps the docs and the data from drifting. Copy the page into the test stage and use `.dockerignore` negations, as docs/runtime-contracts.md already does.
 
 ---
 
@@ -455,4 +457,30 @@ Checks:
   - Setup does not yet create runtime/ in the data volume or llm/ in the models volume. The lyrveil-llm subpath mounts need both before the container starts. Whether `docker compose create` checks them is unverified.
   - Leftover local images: lyrveil/llm:test and lyrveil/llm-probe:test. Probe Dockerfiles are in %TEMP%/lyrveil-llm-probe and lyrveil-llm-probe2.
   - Whether a GPU model load needs more writable paths than the noexec tmpfs /tmp (CUDA caches go to HOME=/tmp) is unverified until the first real load.
+---
+
+## 2026-11-07T01:51:46Z - P02.1a
+- I added `config/model-catalog.json` with all 5 text and 3 image profiles, and a strict Pydantic validator, `backend/src/lyrveil/catalog.py`. The catalog tests (T-MOD-01) and `test lint` pass. The validator is not called at backend startup yet, and the backend runtime-stage image build was not run.
+
+- **Catalog:** the revisions, file names, sizes and SHA-256 come from docs/models.md, and a test compares them with it, so a drift fails. `license_url` values for the non-Google profiles point at the Hugging Face repo page. The docs don't give those URLs. `gemma-4-12b`, `gemma-4-26b-a4b` and the rest also use `vram_required_mib`/`vram_preferred_mib` from the planning values in docs/gpu-orchestration.md.
+- **Validator:** it refuses bad identifiers and file names, moving or malformed revisions, URLs that don't match the file, and unknown templates or presets. It also refuses invalid `swa_padding`, `smart_cache` or `quality_evidence`, and unknown fields. A tier with zero or two defaults per kind is refused, and so is a default that sits above its `min_tier`. `custom_sampler_preset()` always returns `generic`, and `generic` is also a valid catalog value.
+- **Tier defaults:** `Catalog.default_text` and `Catalog.default_image` resolve them. Target gives Gemma 4 26B-A4B, reduced gives Gemma 4 12B, and both tiers give Illustrious XL v2.0 for images.
+- **Image build:** the catalog is copied into the backend runtime image at `/app/config/model-catalog.json`, where the models tool already looks. The test image also gets the catalog and docs/models.md, and `.dockerignore` allows docs/models.md.
+
+**Checks run:**
+- **Catalog tests:** `test unit -k test_catalog` ran 85 tests and all passed. The orchestrator component reported pytest exit 5 only because it has no matching test.
+- **Lint:** the final `test lint` run passed. It ran after two small formatting fixes, but the 85 catalog tests were not re-run after them.
+
+**Not checked:**
+- The full unit, integration, e2e and docker suites.
+- The backend runtime-stage image build with the new catalog copy (only the test stage was exercised).
+- `scripts\lyrveil.cmd models` against the real catalog.
+- Files changed: config/model-catalog.json, backend/src/lyrveil/catalog.py, backend/src/lyrveil/tools/models.py, backend/tests/unit/test_catalog.py, backend/Dockerfile, .dockerignore, CHANGELOG.md, docs/models.md, docs/backend.md, docs/operations.md, docs/licensing.md
+- **Learnings for future iterations:**
+  - `lyrveil.catalog` offers `load_catalog(path)`, `parse_catalog(document)`, `Catalog.default_text(tier)`, `Catalog.default_image(tier)` and `custom_sampler_preset()`. Wiring it into backend startup (refuse to start on CatalogError) and the Settings > Modelli service is not done yet.
+  - The sampler presets are `gemma4`, `nemo` and `generic`. The image presets are `illustrious` and `noobai`. The launch values per profile are context 16384 for Gemma and 8192 for the Nemo profiles. VRAM required/preferred is 7000/10000 for the 26B-A4B profiles and 6000/9000 for the others.
+  - tests/unit/test_catalog.py finds the catalog and docs/models.md in the repo or under /app in the test image. The test stage of backend/Dockerfile copies both, and .dockerignore un-ignores docs/models.md.
+  - Setup (steps 5 to 7) and the status script still say the catalog is not available. Wiring them to the catalog belongs to later P02 work. tests/docker/Lifecycle.Tests.ps1 asserts the 'not available yet' warning, so it must change together with that script.
+  - `test unit -k <name>` reports FAILED when the orchestrator component has no matching test (pytest exit 5). That is harmless noise for a targeted run.
+  - The Edit tool drops a trailing space in `old_string`/`new_string` ('Tier = ' became 'Tier =Literal'), and ruff format caught it. Prefer anchoring edits on a whole token.
 ---

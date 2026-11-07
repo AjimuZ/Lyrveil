@@ -40,6 +40,9 @@ COPY backend/openapi.json ./openapi.json
 COPY backend/migrations ./migrations
 COPY backend/src ./src
 COPY backend/tests ./tests
+# The catalog and the page it must match, which tests/unit/test_catalog.py compares.
+COPY config/model-catalog.json ./config/model-catalog.json
+COPY docs/models.md ./docs/models.md
 CMD ["pytest"]
 
 # Writes the OpenAPI document of the sources, not the committed one, so the output reflects the current API.
@@ -55,6 +58,8 @@ COPY --from=deps /app/.venv /app/.venv
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/migrations ./migrations
 COPY backend/src ./src
+# The models tool reads the catalog from here (lyrveil.tools.models.DEFAULT_CATALOG).
+COPY config/model-catalog.json ./config/model-catalog.json
 RUN python -m compileall -q src
 # A new named volume takes the owner of the folder it is mounted on, so /data must exist and belong to the service user
 # in the image; otherwise the volume is owned by root and the backend cannot create /data/db.

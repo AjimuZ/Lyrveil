@@ -29,8 +29,8 @@ they download and ask for acceptance first. Each profile's license is also in th
 
 Delivered for `scripts\lyrveil.cmd models` (P01.6c): before any request it prints each profile to download with its
 license name and URL from the catalog, and asks once for all of them. `-AcceptModelLicenses` records acceptance without
-asking; with no answer, or no console to answer, nothing is downloaded and the command exits 5. Setup does not ask yet,
-because the catalog arrives in P02.1a.
+asking; with no answer, or no console to answer, nothing is downloaded and the command exits 5. Setup does not ask yet:
+it does not use the catalog, which is in the image since P02.1a.
 
 | Profile | Author | License | Base model and its license |
 | --- | --- | --- | --- |

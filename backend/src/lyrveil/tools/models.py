@@ -175,7 +175,7 @@ def _text_field(entry: dict[str, Any], where: str, name: str, default: str | Non
 def _parse_profile(kind: str, index: int, entry: object) -> Profile:
     """Returns the profile of one catalog entry. Raises CatalogError naming the entry and the field that is wrong.
 
-    Fields this tool does not use are ignored; the backend's validator (P02.1a) checks the whole entry.
+    Fields this tool does not use are ignored; the backend's validator (lyrveil.catalog) checks the whole entry.
     """
     where = f"{kind}[{index}]"
     if not isinstance(entry, dict):
@@ -232,8 +232,7 @@ def load_catalog(path: Path) -> list[Profile]:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise CatalogError(
-            f"The model catalog {path} is not in the image. It arrives with P02.1a; until then no profile can be"
-            " listed or downloaded."
+            f"The model catalog {path} is not in the image. Rebuild the backend image with .\\setup.cmd -Rebuild."
         ) from None
     except OSError as error:
         raise CatalogError(f"The model catalog {path} could not be read: {error}") from error

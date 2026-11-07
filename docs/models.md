@@ -1,6 +1,6 @@
 # Model catalog
 
-Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
+Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: the catalog file and its validator are delivered (P02.1a); the rest is planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
 
 The user chooses the active text and image models from verified profiles ([ADR 0024](decisions/0024-selectable-model-profiles.md)). One text model serves every text task, and it never shares the GPU with the image model ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -64,7 +64,9 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
 
 ## Catalog file
 
-`config/model-catalog.json` is part of the repository and is reviewed like code. The backend validates it at startup with a Pydantic model and refuses to start on an error. `scripts\lyrveil.cmd models` reads it with the Python standard library. One text entry and one image entry:
+`config/model-catalog.json` is part of the repository and is reviewed like code. The backend validates it at startup with a Pydantic model and refuses to start on an error. `scripts\lyrveil.cmd models` reads it with the Python standard library. Delivered in P02.1a: the file, with all eight
+profiles, and the validator `lyrveil.catalog` in the backend (`load_catalog`, `parse_catalog`). Wiring the validator
+into the backend's startup is planned for the settings and model services of P02. One text entry and one image entry:
 
 ```json
 {
@@ -120,6 +122,7 @@ Rules checked by the validator:
 - Every URL is `https://huggingface.co/<repo>/resolve/<40-hex revision>/<file>`. Moving branches are refused.
 - `template` is one of `gemma4`, `mistral_v3_tekken`, `chatml`. `prediction` is `epsilon` in 1.0.
 - `sampler` and `defaults` name presets defined in code, so the catalog cannot carry arbitrary parameters.
+- `sampler` is `gemma4`, `nemo` or `generic`; `defaults` is `illustrious` or `noobai`. A custom profile always gets `generic` (`custom_sampler_preset`).
 - `swa_padding` is 0, 1024 or 2048, and above 0 only for a `gemma4` profile. `smart_cache` is 0 or 2, and 2 only for a target-tier profile.
 - `quality_evidence` is null or a path under `docs/verification/`. The P08 release check fails while a default profile has none.
 - Exactly one default text profile per tier and one default image profile exist. `default_tiers` lists the tiers

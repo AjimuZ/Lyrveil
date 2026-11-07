@@ -15,6 +15,7 @@ backend/
     main.py              Composition root: builds adapters, services and the app
     settings.py          Typed environment settings
     logs.py              JSON logging with the field allowlist
+    catalog.py           Validator of config/model-catalog.json and the tier defaults (P02.1a)
     cli.py               backup, export-backups, restore-check, restore (P01.6d); rebuild-search, drain (planned)
     tools/               One-shot tools: models.py (downloads), import_model.py (copies a custom model file)
     api/                 Routers, request and response schemas, error mapping, WebSocket

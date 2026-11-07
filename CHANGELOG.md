@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The model catalog, `config/model-catalog.json`, with the five text and three image
+  profiles, each pinned to a revision with its size and SHA-256 as `docs/models.md`
+  lists them, and the backend validator that refuses a bad catalog. The tier defaults
+  are Gemma 4 26B-A4B on the 32 GB tier, Gemma 4 12B on the 16 GB tier and Illustrious
+  XL v2.0 for images. The catalog is in the backend image, so `scripts\lyrveil.cmd
+  models` can now read it; no model has been downloaded or loaded yet, and nothing
+  starts the validator at startup yet.
 - The text runtime image, `lyrveil/llm:local`, built from the pinned KoboldCpp
   `v1.124.2` binary, whose size and SHA-256 the build checks. Setup now builds it,
   which downloads 629 MB from GitHub once, and creates its container; setup has not

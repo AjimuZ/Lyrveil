@@ -79,7 +79,7 @@ Evidence:
 **Depends on:** P01. **Areas:** LLM runtime, messaging.
 
 - [x] P02.1 `docker/llm` image from the pinned binary. Confirm the unpacked launcher and read-only root.
-- [ ] P02.1a `config/model-catalog.json`, its validator and the tier defaults, including `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset.
+- [x] P02.1a `config/model-catalog.json`, its validator and the tier defaults, including `swa_padding`, `smart_cache`, `quality_evidence` and the `generic` preset.
 - [ ] P02.2 Orchestrator loads and stops the LLM. Leases.
 - [ ] P02.3 `KoboldCppRuntime`: stream, generate, token count, abort. `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml`, with the stable prefix, the frame of the dynamic context and the anchor ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
 - [ ] P02.4 Job queue with persistence and retries.
