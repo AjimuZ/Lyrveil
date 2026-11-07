@@ -567,6 +567,13 @@ a thread a shutdown abandons and stores the profile. Another operation ends the 
 lease, and the worker waits for the job like any other, so a long hash delays the jobs behind it. See [Model
 catalog](models.md#delivered-in-p066a).
 
+Delivered in P06.6b: `AiResources` (`services/ai_resources.py`), passed to `create_app` as `ai_resources` and kept in
+`app.state.ai_resources`, builds the snapshot of `GET /system/resources` ([API](api.md#system)) on each request, in
+FastAPI's thread pool: the GPU state (`OrchestratorClient.read_state`), the card's memory (`read_vram`, the `gpu.vram`
+of `GET /v1/preflight`), the active jobs counted by required mode, and the launch file's profile, level and context
+through `ModelProfiles.launch_settings` and `text_name`. A source that fails leaves its part `null`; the route answers
+200 anyway.
+
 Delivered in P03.3: `character_draft`, run by `CharacterCreatorService` (`services/character_creator.py`), registered in
 the application's lifespan beside the reply handler. See [Assisted creation](character-system.md#assisted-creation).
 Since P03.6a the safety check is the content guard, run inside the draft's validation so that a refusal gets the one

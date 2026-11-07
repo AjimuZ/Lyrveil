@@ -90,10 +90,32 @@ All paths are under `/api/v1`.
 | `GET /health/live` | Process alive. Used by the container health check. Answers `200` with `{"status": "alive"}`. |
 | `GET /health/ready` | Database, migrations and FTS5 are fine. Reports the control API separately. Answers `200` when ready and `503` otherwise, with `status`, `checks` and `control_api` in both ([Backend](backend.md#database-and-health)). |
 | `GET /system/status` | GPU state, queue depth, runtime status, degraded flags. |
-| `GET /system/resources` | VRAM, memory seen by Docker, disk, tokens per second. Real values only. |
+| `GET /system/resources` | VRAM, memory seen by Docker, disk, tokens per second. Real values only. Since P06.6b it answers the GPU state, the card's VRAM, the queue and the active model with its launch level; the rest is planned (see below). |
 | `GET /system/lifecycle-events?cursor=` | Transition log. |
 | `POST /system/recover` | Asks the orchestrator to leave `ERROR`. |
 | `GET /system/preflight` | The same checks as `start.cmd`, for the settings screen. |
+
+Delivered in P06.6b: `GET /system/resources` (`lyrveil/api/system.py`, `lyrveil/services/ai_resources.py`), read by the
+AI resources screen. It answers `200` with four parts, each `null` when its source could not be read (the control API
+did not answer, no launch file), and holds only enums, counts, MiB and profile names:
+
+```json
+{
+  "gpu": {"state": "LLM_READY", "label_key": null, "desired_mode": "llm", "draining": false,
+          "blocked_reason": null, "blocked_vram": null},
+  "vram": {"device_name": "NVIDIA GeForce RTX 4070", "total_mib": 12282, "used_mib": 1489, "free_mib": 10793},
+  "queue": {"queued": 2, "running": 1, "by_mode": {"llm": {"queued": 2, "running": 1},
+            "image": {"queued": 0, "running": 0}, "none": {"queued": 0, "running": 0}}},
+  "model": {"profile_id": "gemma-4-12b", "display_name": "Gemma 4 12B", "level": "A", "context_size": 16384}
+}
+```
+
+`gpu` is `GET /v1/state` of the control API with the interface `label_key` of
+[Interface labels](gpu-orchestration.md#interface-labels); `vram` is `gpu.vram` of `GET /v1/preflight`, the whole card
+as NVML reads it; `queue` counts the `queued` and `running` jobs by their required mode; `model` is the launch file's
+`MODEL_PROFILE`, `LEVEL` and `CONTEXT_SIZE`. Not delivered yet: memory seen by Docker, disk, tokens per second,
+`GET /system/status`, the transition log and the preflight route. The route is not in the committed OpenAPI document
+(`include_in_schema=False`, like the jobs routes), and the screen types it by hand.
 
 ### Characters
 

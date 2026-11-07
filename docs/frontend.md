@@ -400,9 +400,39 @@ mixture-of-experts profiles only), temperature and other sampler values, reply l
 sampler, scheduler, CLIP skip, second-pass scale, `denoise` and steps, and seed policy default. Each field shows its
 default, and **Ripristina predefiniti** restores them. A note marks values applied at the next load.
 
+Delivered in P06.6b (`features/models/`): the route `/settings/models` loads `model-settings-screen.ts`, over
+`GET /settings/models`. **Modello di testo** and **Modello per immagini** list every catalog profile and every
+registered custom file with its size in GB, licence, minimum tier (**Completo** or **Ridotto**) and state (**Verificato**,
+**Dimensione errata**, **Da scaricare**); the active one is marked **In uso**, a custom one **non verificato**, and a
+text profile with `quality_evidence` **Qualità verificata** (a badge only: the evidence is a repository file the
+application does not serve). A profile whose file is not verified shows its download command with **Copia il comando**.
+A text profile above the machine's tier shows the memory it needs (20 GB for **Completo**) and its **Usa questo modello**
+button is disabled, as it is for a profile whose file is missing. **Usa questo modello** sends `PATCH /settings/models`;
+a refusal (`MODEL_PROFILE_UNAVAILABLE`) shows the server's reason and changes nothing. After a choice, **Applica ora**
+sends `POST /settings/models/apply` and the screen follows the reload job with `GET /jobs/{id}` every second, since the
+backend publishes no `job.updated` event yet: **In coda** while the running reply finishes, **Sto ricaricando il
+modello…**, then **Ricarica avviata: il nuovo modello si sta caricando.** or the failure in the server's words.
+**Aggiungi file locale** lists the files of the model folders that no profile names, takes a prompt format for a text
+file, and sends `POST /settings/models/custom`; the hash job is followed the same way and the lists reload when it
+completes. **Rimuovi** (with a confirmation) removes a custom registration and never the file. The navigation links to
+**Modelli** and **Risorse AI**. Not delivered: the choice of the image profile, **Qualità immagini**, the short purpose
+of each profile (the catalog has none), the advanced values with **Ripristina predefiniti**, and the link from
+**Qualità verificata** to a summary; the backend has no route for the first four.
+
 ### 10. AI resources
 
 State in words and code, VRAM gauge, memory and disk gauges, queue by class, job list with cancel and retry, tokens per second, recent transitions and preflight results. Values that are unavailable show as unknown. The screen has a "Riprova" action during `ERROR`.
+
+Delivered in P06.6b (`features/resources/`): the route `/settings/resources` loads `resources-screen.ts`, over
+`GET /system/resources` ([API](api.md#system)). It shows the GPU state in words and as its code (**Scheda video**), the
+desired mode and a drain, a hold for VRAM with the free and the needed MiB, a **Memoria video (VRAM)** gauge with the
+numbers of the whole card and its name, the **Coda** (queued and running jobs, in total and for text, images and jobs
+without the GPU), and the **Modello attivo** with its **Livello di avvio** (A, B, C or CUSTOM, in words) and context.
+It is live: the `gpu.state` event shows the new state at once and triggers a read after 250 ms, a `resync.required`
+triggers a read, and a poll every 3 s keeps the card's memory current, because no event carries it. A part the backend
+could not read shows **Non disponibile**. Not delivered: the memory and disk gauges, the job list with cancel and
+retry (the list and retry routes are planned), tokens per second, recent transitions, preflight results and the
+**Riprova** action during `ERROR` (the recover route is planned).
 
 ## Keyboard
 

@@ -215,6 +215,7 @@
 - Several observers behind one callback should be joined with a combinator that isolates each one's exceptions (lifecycle_events.each), so one failure does not stop the others.
 - Work that must not overlap a GPU lease, such as a mode change, can run as a queued job whose stage needs no GPU (mode none). The single worker then serializes it with every other job, so nothing else asks for a mode while it runs.
 - Accept a file name, never a path: check a strict name pattern, lstat to refuse symlinks, then compare the resolved parent with the root's resolved path joined with the folder name. Check again in the background job before reading the file.
+- Do not use test.skip for a machine-dependent case in e2e. Make the state deterministic by rewriting the API response with page.route/route.fetch, or by seeding it.
 
 ---
 
@@ -1945,4 +1946,13 @@ ADR 0042 records the decisions. The changelog and the models, configuration, API
   - Not delivered: images.profile_id and images.quality (ImageSettings is still fixed at startup), and the prompt template and sampler following the active text profile (ReplySettings stays gemma4).
   - A test catalog with small sizes is made by loading config/model-catalog.json and setting bytes before parse_catalog. find_catalog and values are importable from integration.test_launch_levels.
   - No prompt-injection attempts were found in the repository files read.
+---
+
+## 2026-11-07T22:57:18Z - P06.6b
+- The model settings screen and the AI resources screen were already in the working tree from attempt 1. This attempt fixed the one reported problem: the `test.skip(above === undefined, ...)` in tests/e2e/specs/models.spec.mjs. That test now rewrites the GET /settings/models response with `page.route`. The response shows a reduced-tier machine, full-tier text profiles that cannot be chosen, and reduced-tier ones missing their file. The test then checks that the disabled button, the tier hint, the "Da scaricare" state and the download command appear, so it always runs. `scripts/lyrveil.cmd test lint` passed (docs checks, ruff, mypy, eslint, style tokens, API types, strict frontend build). I did not run the unit, integration, e2e or docker levels, so the e2e specs have not run against the fakes.
+- Files changed: tests/e2e/specs/models.spec.mjs
+- **Learnings for future iterations:**
+  - page.request calls are not intercepted by page.route, so an e2e test can read the real settings through page.request and still show a rewritten response in the page.
+  - The 'above the tier' hint in the model settings screen depends on tier === 'reduced' and min_tier === 'target', so a rewritten response must set the tier too.
+  - The e2e and docker levels have not run for P06.6b; the orchestrator's final run is the first real check of the e2e specs.
 ---

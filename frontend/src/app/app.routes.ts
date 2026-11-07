@@ -69,8 +69,17 @@ export const routes: Routes = [
     data: { screen: 'screen.scenarios' satisfies TextKey },
   },
   unavailable('settings', 'screen.settings'),
-  unavailable('settings/models', 'screen.settingsModels'),
-  unavailable('settings/resources', 'screen.settingsResources'),
+  {
+    path: 'settings/models',
+    loadComponent: () =>
+      import('./features/models/model-settings-screen').then((module) => module.ModelSettingsScreen),
+    data: { screen: 'screen.settingsModels' satisfies TextKey },
+  },
+  {
+    path: 'settings/resources',
+    loadComponent: () => import('./features/resources/resources-screen').then((module) => module.ResourcesScreen),
+    data: { screen: 'screen.settingsResources' satisfies TextKey },
+  },
   unavailable('settings/data', 'screen.settingsData'),
   { path: '**', redirectTo: 'chats' },
 ];

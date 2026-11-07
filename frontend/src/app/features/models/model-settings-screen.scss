@@ -1,0 +1,236 @@
+:host {
+  display: block;
+  padding: var(--ob-space-5);
+}
+
+.screen {
+  max-width: 760px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ob-space-3);
+  margin-bottom: var(--ob-space-3);
+}
+
+.title,
+.subtitle {
+  margin: 0;
+}
+
+.subtitle {
+  margin-bottom: var(--ob-space-3);
+}
+
+.note,
+.hint,
+.meta {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-text-muted);
+}
+
+.hint {
+  margin: 0 0 var(--ob-space-2);
+}
+
+.error {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-danger);
+}
+
+.status {
+  margin: var(--ob-space-2) 0 0;
+  color: var(--ob-success);
+}
+
+.group,
+.form,
+.apply {
+  margin-bottom: var(--ob-space-5);
+}
+
+.form,
+.apply {
+  display: flex;
+  flex-direction: column;
+  padding: var(--ob-space-4);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.apply {
+  align-items: flex-start;
+  gap: var(--ob-space-2);
+
+  .hint,
+  .status,
+  .error {
+    margin: 0;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+  margin-bottom: var(--ob-space-4);
+}
+
+.control {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-4);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover:not(:disabled) {
+    background: var(--ob-hover);
+  }
+
+  &:disabled {
+    color: var(--ob-text-muted);
+    border-color: var(--ob-border);
+    cursor: not-allowed;
+  }
+
+  &.primary {
+    background: var(--ob-primary);
+    color: var(--ob-bg);
+    border-color: var(--ob-primary);
+
+    &:hover:not(:disabled) {
+      background: var(--ob-primary-hover);
+    }
+
+    &:disabled {
+      background: var(--ob-surface);
+      color: var(--ob-text-muted);
+    }
+  }
+
+  &.danger {
+    color: var(--ob-danger);
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ob-space-2);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-2);
+  padding: var(--ob-space-3);
+  background: var(--ob-surface);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+}
+
+.card-title {
+  margin: 0;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+}
+
+.card .meta {
+  margin: 0;
+}
+
+.badge {
+  padding: 0 var(--ob-space-2);
+  color: var(--ob-text-muted);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  font-size: 0.875rem;
+
+  &.active {
+    color: var(--ob-primary-hover);
+    border-color: var(--ob-primary);
+  }
+
+  &.ok {
+    color: var(--ob-success);
+    border-color: var(--ob-success);
+  }
+
+  &.warn {
+    color: var(--ob-warning);
+    border-color: var(--ob-warning);
+  }
+}
+
+.download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+
+  .hint {
+    margin: 0;
+  }
+}
+
+.command {
+  padding: var(--ob-space-1) var(--ob-space-2);
+  background: var(--ob-bg);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  font-family: var(--ob-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+}
+
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-2);
+}

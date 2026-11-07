@@ -192,6 +192,19 @@ Delivered in P01.8c ([evidence](verification/2026-11-06-e2e-level.md)). [`script
 
 1. It runs `npm ci --ignore-scripts` in `tests/e2e/` when `node_modules` is missing or older than the lock, then `npx playwright install chromium`, which downloads the browser of the locked Playwright 1.64.1 into the user's Playwright cache.
 2. It removes any earlier project named `lyrveil-test`, so the volumes start empty, then runs `docker compose -p lyrveil-test -f compose.test.yaml up --build --detach --wait` for `lyrveil-frontend` (which starts `lyrveil-backend`), `lyrveil-orchestrator`, `lyrveil-llm` and `lyrveil-image`. Since P02.6c the orchestrator serves the control API over its fakes and has a health check, so `up --wait` waits for it too.
+
+   Since P06.6b the backend also depends on `lyrveil-models-seed` (`service_completed_successfully`), a one-shot service
+   of the backend image that runs as root without a network and writes, into the empty `models` volume, a sparse file
+   of the exact catalog size for every text and image profile (so each reads as `verified` without a download) and the
+   small file `llm/e2e-custom.Q4_K_M.gguf`, which `tests/e2e/specs/models.spec.mjs` registers. Delivered, not yet run
+   against Docker: the seed service and `up --wait` with a service that ends.
+
+   The P06.6b specs, also not run yet: `models.spec.mjs` lists the profiles with licence, tier and state, chooses a
+   second text profile, applies it with **Applica ora** until the reload job ends, registers the custom file, removes
+   the registration and puts the first profile back, and checks that a profile above the tier cannot be chosen;
+   `resources.spec.mjs` checks the GPU state code, the 12282 MiB gauge of the fake NVML, the queue and the active model.
+   Their unit tests are `model-settings-store.spec.ts`, `model-settings-screen.spec.ts` and `resources-store.spec.ts`
+   (including the live `gpu.state` update), and `backend/tests/integration/test_ai_resources.py` for the route.
 3. It runs `npx playwright test` against `http://127.0.0.1:14200`, or the port in `LYRVEIL_TEST_HTTP_PORT`. It refuses 4200.
 4. In a `finally` block, whatever happened before, it runs `docker compose -p lyrveil-test ... down --volumes --remove-orphans`, then lists the containers and volumes that still carry the project's label. The level fails if any is left or if the removal cannot be checked.
 
@@ -254,7 +267,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 - `fake_docker` and `fake_nvml` implement `ContainerGate` and `GpuProbe`. `FakeContainerGate` subclasses the real gate without opening the socket, keeps the state of both containers, refuses a missing or foreign container and a name outside the allowlist, and raises queued failures with `fail`. `FakeGpuProbe` models a card shared with other programs: external memory use, scripted between reads, queued and permanent failures, and a count of reads.
 - They live only in `tests/fakes/` and in `compose.test.yaml`, and never enter a production image. `tests/docker/TestFakes.Tests.ps1` lists the file system of each production image and fails if `fakes` or a fake's name appears. It also lists the image built from `tests/fakes/Dockerfile`, to show that the check can find them. Only the test stages of the orchestrator and, since P02.3a, the backend, and that image, copy `tests/fakes/`. The backend's `tests/unit/test_koboldcpp_runtime.py` runs `KoboldCppRuntime` against `fake_kobold` ([Backend](backend.md#text-runtime)), and since P05.2a `tests/unit/test_comfyui_runtime.py` runs `ComfyUiRuntime` against `fake_comfy` over HTTP and WebSocket and holds T-IMG-05 ([Backend](backend.md#image-runtime)).
 - `fake_orchestrator` (P02.6c) is the command of the test-only `fake-runtime` stage of `orchestrator/Dockerfile`, the image `lyrveil/orchestrator-fakes:test` of `compose.test.yaml`: it passes `FakeContainerGate` and `FakeGpuProbe` to `lyrveil_orchestrator.main.run`, so the real control API and lifecycle manager grant leases without a Docker socket or a GPU. The fake gate reports the text runtime healthy once started, while the `fake_kobold` container answers the backend. `orchestrator/tests/unit/test_main.py` checks that `main` always passes `ContainerGate` and `NvmlProbe`, that the settings hold only the token and the log level, and that no module of `lyrveil_orchestrator` imports `fakes`.
-- `compose.test.yaml` starts the three core services with the two HTTP fakes as the services `lyrveil-llm` and `lyrveil-image`, and the orchestrator over its fakes. It has its own project name `lyrveil-test`, its own port, its own empty volumes, its own `:test` image tags and inline settings, and no `container_name`. The same Docker test reads the resolved configuration and fails if it names an external volume, a host folder, the Docker socket, `gpus` or port 4200.
+- `compose.test.yaml` starts the three core services with the two HTTP fakes as the services `lyrveil-llm` and `lyrveil-image`, and the orchestrator over its fakes. It has its own project name `lyrveil-test`, its own port, its own volumes (`data` empty, `models` filled once by the one-shot service `lyrveil-models-seed` since P06.6b, see below), its own `:test` image tags and inline settings, and no `container_name`. The same Docker test reads the resolved configuration and fails if it names an external volume, a host folder, the Docker socket, `gpus` or port 4200.
 - The GPU suite records real responses at P02 and P05 into fixtures, so contract tests catch a fake that drifts from reality.
 
 ## Catalog

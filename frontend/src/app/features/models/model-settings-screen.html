@@ -1,0 +1,156 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.settingsModels' | t }}</h1>
+  </header>
+
+  @if (store.loading()) {
+    <p class="note" role="status">{{ 'models.loading' | t }}</p>
+  } @else if (store.settings(); as settings) {
+    <p class="note">{{ 'models.tier.yours' | t: { tier: (tierText(settings.tier) | t) } }}</p>
+    <p class="note">{{ 'models.appliedNote' | t }}</p>
+
+    @if (store.actionError(); as failure) {
+      <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+    }
+
+    @if (store.changed() || store.reload() !== null) {
+      <div class="apply" role="group" [attr.aria-label]="'models.apply.label' | t">
+        <button type="button" class="button primary" [disabled]="busy()" (click)="apply()">
+          {{ 'models.apply' | t }}
+        </button>
+        <p class="hint">{{ 'models.apply.hint' | t }}</p>
+        @if (store.reload(); as job) {
+          <p [class]="jobFailed(job) ? 'error' : 'status'" [attr.role]="jobFailed(job) ? 'alert' : 'status'">
+            {{ jobText(job) }}
+          </p>
+        }
+      </div>
+    }
+
+    @for (section of sections(); track section.kind) {
+      <section class="group" [attr.aria-labelledby]="'models-' + section.kind + '-title'">
+        <h2 class="subtitle" [id]="'models-' + section.kind + '-title'">{{ section.title | t }}</h2>
+        @if (section.kind === 'image') {
+          <p class="hint">{{ 'models.image.fixed' | t }}</p>
+        }
+        <ul class="list">
+          @for (profile of section.profiles; track profile.id) {
+            <li class="card">
+              <div class="card-head">
+                <h3 class="card-title">{{ profile.display_name }}</h3>
+                @if (profile.id === section.activeId) {
+                  <span class="badge active">{{ 'models.active' | t }}</span>
+                }
+                <span class="badge" [class.ok]="profile.state === 'verified'" [class.warn]="profile.state !== 'verified'">
+                  {{ stateText(profile) | t }}
+                </span>
+                @if (profile.custom) {
+                  <span class="badge warn">{{ 'models.custom.unverified' | t }}</span>
+                }
+                @if (profile.quality_evidence) {
+                  <span class="badge ok">{{ 'models.quality' | t }}</span>
+                }
+              </div>
+              <p class="meta">
+                {{ 'models.size' | t: { size: size(profile.bytes) } }} ·
+                @if (profile.license; as license) {
+                  {{ 'models.license' | t: { license: license } }}
+                } @else {
+                  {{ 'models.license.none' | t }}
+                } ·
+                {{ 'models.tier.min' | t: { tier: (tierText(profile.min_tier) | t) } }}
+                @if (templateText(profile); as template) {
+                  · {{ template | t }}
+                }
+              </p>
+              @if (aboveTier(profile)) {
+                <p class="hint">{{ 'models.tier.above' | t }}</p>
+              }
+              @if (profile.download_command; as command) {
+                <div class="download">
+                  <span class="hint">{{ 'models.download' | t }}</span>
+                  <code class="command">{{ command }}</code>
+                  <button type="button" class="button" (click)="copy(profile)">
+                    {{ (copied() === profile.id ? 'models.copied' : 'models.copy') | t }}
+                  </button>
+                </div>
+              }
+              <div class="card-actions">
+                @if (section.kind === 'text' && profile.id !== section.activeId) {
+                  <button
+                    type="button"
+                    class="button"
+                    [disabled]="!canChoose(section.kind, profile, section.activeId)"
+                    (click)="choose(profile)"
+                  >
+                    {{ 'models.choose' | t }}
+                  </button>
+                }
+                @if (profile.custom && profile.id !== section.activeId) {
+                  @if (confirmingRemove() === profile.id) {
+                    <span class="confirm" role="group" [attr.aria-label]="'models.remove.confirm' | t: { name: profile.display_name }">
+                      <span>{{ 'models.remove.confirm' | t: { name: profile.display_name } }}</span>
+                      <button type="button" class="button danger" (click)="remove(profile)">{{ 'models.remove.yes' | t }}</button>
+                      <button type="button" class="button" (click)="confirmingRemove.set(null)">{{ 'models.remove.no' | t }}</button>
+                    </span>
+                  } @else {
+                    <button type="button" class="button danger" (click)="confirmingRemove.set(profile.id)">
+                      {{ 'models.remove' | t }}
+                    </button>
+                  }
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    <form class="form" aria-labelledby="models-local-title" (submit)="register($event)">
+      <h2 class="subtitle" id="models-local-title">{{ 'models.local.title' | t }}</h2>
+      <p class="hint">{{ 'models.local.hint' | t }}</p>
+      <div class="field">
+        <label for="models-local-kind">{{ 'models.local.kind' | t }}</label>
+        <select id="models-local-kind" class="control" (change)="pickKind($event)">
+          <option value="text" [selected]="newKind() === 'text'">{{ 'models.local.kind.text' | t }}</option>
+          <option value="image" [selected]="newKind() === 'image'">{{ 'models.local.kind.image' | t }}</option>
+        </select>
+      </div>
+      @if (candidates().length === 0) {
+        <p class="note">{{ 'models.local.none' | t }}</p>
+      } @else {
+        <div class="field">
+          <label for="models-local-file">{{ 'models.local.file' | t }}</label>
+          <select id="models-local-file" class="control" (change)="newFile.set(valueOf($event))">
+            @for (candidate of candidates(); track candidate.file) {
+              <option [value]="candidate.file" [selected]="candidate.file === chosenFile()">{{ candidate.file }}</option>
+            }
+          </select>
+        </div>
+        @if (newKind() === 'text') {
+          <div class="field">
+            <label for="models-local-template">{{ 'models.local.template' | t }}</label>
+            <select id="models-local-template" class="control" (change)="pickTemplate($event)">
+              @for (option of templates; track option.value) {
+                <option [value]="option.value" [selected]="option.value === newTemplate()">{{ option.label | t }}</option>
+              }
+            </select>
+          </div>
+        }
+        <div class="actions">
+          <button type="submit" class="button primary" [disabled]="busy()">{{ 'models.local.register' | t }}</button>
+        </div>
+      }
+      @if (store.registration(); as job) {
+        <p [class]="jobFailed(job) ? 'error' : 'status'" [attr.role]="jobFailed(job) ? 'alert' : 'status'">
+          {{ jobText(job) }}
+        </p>
+      }
+    </form>
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.load()">{{ 'models.retry' | t }}</button>
+    </div>
+  }
+</section>

@@ -28,6 +28,7 @@ from lyrveil.api import (
     messages,
     model_settings,
     scenarios,
+    system,
 )
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
@@ -66,6 +67,7 @@ from lyrveil.ports.image_runtime import ImageRuntime
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.runtimes.comfyui import ComfyUiRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
+from lyrveil.services.ai_resources import AiResources
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
 from lyrveil.services.daily_backup import DailyBackup
@@ -266,11 +268,12 @@ def create_app(
     media_store: MediaStore | None = None,
     daily_backup: DailyBackup | None = None,
     model_profiles: ModelProfiles | None = None,
+    ai_resources: AiResources | None = None,
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
 
     `model_profiles`, kept in `app.state.model_profiles`, serves the /settings/models routes; without it they answer
-    500 `INTERNAL`.
+    500 `INTERNAL`. `ai_resources`, kept in `app.state.ai_resources`, serves GET /system/resources the same way.
 
     `engine` is the verified and migrated database, kept in `app.state.engine`; without it `/health/ready` answers
     503. `media_store` holds the asset files, in `app.state.media`; by default it is the store at `/data/media`, which
@@ -302,6 +305,7 @@ def create_app(
     app.state.daily_backup = daily_backup
     app.state.scheduler = None
     app.state.model_profiles = model_profiles
+    app.state.ai_resources = ai_resources
     app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(characters.router, prefix=API_PREFIX)
@@ -314,6 +318,7 @@ def create_app(
     app.include_router(images.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(model_settings.router, prefix=API_PREFIX)
+    app.include_router(system.router, prefix=API_PREFIX)
     app.include_router(events.router)
     app.include_router(media.router)
     headers = documented_headers(settings.http_port)
@@ -416,6 +421,7 @@ def main() -> int:
             media_store=media_store,
             daily_backup=daily_backup,
             model_profiles=model_profiles,
+            ai_resources=AiResources(engine, orchestrator, model_profiles),
         ),
         host=LISTEN_HOST,
         port=LISTEN_PORT,

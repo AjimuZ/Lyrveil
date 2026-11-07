@@ -1,0 +1,115 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.settingsResources' | t }}</h1>
+  </header>
+
+  @if (store.loading()) {
+    <p class="note" role="status">{{ 'resources.loading' | t }}</p>
+  } @else {
+    @if (store.error(); as failure) {
+      <p class="error" role="alert">{{ failure.textKey | t }}</p>
+    }
+
+    @let resources = store.snapshot();
+
+    <section class="panel" aria-labelledby="resources-gpu-title">
+      <h2 class="subtitle" id="resources-gpu-title">{{ 'resources.gpu.title' | t }}</h2>
+      <p class="value" role="status">
+        @if (stateName(); as name) {
+          @if (stateText(); as text) {
+            {{ text | t }}
+          } @else {
+            {{ 'resources.unknown' | t }}
+          }
+          <code class="code">{{ name }}</code>
+        } @else {
+          {{ 'resources.unknown' | t }}
+        }
+      </p>
+      @if (blockedForVram()) {
+        <p class="warning">{{ 'gpu.blocked.insufficientVram' | t }}</p>
+        @if (resources?.gpu?.blocked_vram; as blocked) {
+          <p class="meta">
+            {{ 'resources.blocked.numbers' | t: { free: blocked.free_mib, required: blocked.required_mib } }}
+          </p>
+        }
+      }
+      @if (resources?.gpu; as gpu) {
+        <p class="meta">
+          {{ 'resources.gpu.desired' | t: { mode: (modeText(gpu.desired_mode) | t) } }}
+          @if (gpu.draining) {
+            · {{ 'resources.gpu.draining' | t }}
+          }
+        </p>
+      }
+    </section>
+
+    <section class="panel" aria-labelledby="resources-vram-title">
+      <h2 class="subtitle" id="resources-vram-title">{{ 'resources.vram.title' | t }}</h2>
+      @if (resources?.vram; as vram) {
+        <meter
+          class="gauge"
+          min="0"
+          [max]="vram.total_mib"
+          [value]="vram.used_mib"
+          [attr.aria-label]="'resources.vram.gauge' | t"
+        >
+          {{ usedPercent() }}%
+        </meter>
+        <p class="meta">
+          {{ 'resources.vram.numbers' | t: { used: vram.used_mib, total: vram.total_mib, free: vram.free_mib } }}
+        </p>
+        <p class="meta">{{ vram.device_name }}</p>
+      } @else {
+        <p class="value">{{ 'resources.unknown' | t }}</p>
+      }
+    </section>
+
+    <section class="panel" aria-labelledby="resources-queue-title">
+      <h2 class="subtitle" id="resources-queue-title">{{ 'resources.queue.title' | t }}</h2>
+      @if (resources; as current) {
+        <p class="value">
+          {{ 'resources.queue.total' | t: { queued: current.queue.queued, running: current.queue.running } }}
+        </p>
+        <ul class="rows">
+          @for (row of queueRows; track row.mode) {
+            <li class="row">
+              <span>{{ row.label | t }}</span>
+              <span>
+                {{
+                  'resources.queue.row'
+                    | t: { queued: current.queue.by_mode[row.mode].queued, running: current.queue.by_mode[row.mode].running }
+                }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="value">{{ 'resources.unknown' | t }}</p>
+      }
+    </section>
+
+    <section class="panel" aria-labelledby="resources-model-title">
+      <h2 class="subtitle" id="resources-model-title">{{ 'resources.model.title' | t }}</h2>
+      @if (resources?.model; as model) {
+        <p class="value">{{ model.display_name }}</p>
+        <p class="meta">
+          {{ 'resources.level.label' | t }}:
+          @if (model.level; as level) {
+            <code class="code">{{ level }}</code>
+            @if (levelText(level); as text) {
+              {{ text | t }}
+            }
+          } @else {
+            {{ 'resources.unknown' | t }}
+          }
+        </p>
+        @if (model.context_size !== null) {
+          <p class="meta">{{ 'resources.model.context' | t: { size: model.context_size } }}</p>
+        }
+      } @else {
+        <p class="value">{{ 'resources.unknown' | t }}</p>
+      }
+    </section>
+  }
+</section>

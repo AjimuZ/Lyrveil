@@ -10,6 +10,17 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The **Modelli** and **Risorse AI** screens (`/settings/models`, `/settings/resources`), with links in the navigation.
+  **Modelli** lists the text and image profiles with size, license, minimum tier and local state (**Verificato**,
+  **Dimensione errata**, **Da scaricare**, with the download command and a copy button), marks the active and custom
+  ones, disables a profile the machine cannot run, chooses the text profile with **Usa questo modello**, reloads it with
+  **Applica ora** (the reload is followed until it ends), and registers a file already in a model folder with
+  **Aggiungi file locale**, marked **non verificato**. **Risorse AI** shows the GPU state in words and code, the card's
+  VRAM gauge, the queue by class, the active model and its launch level, and updates live. New route
+  `GET /api/v1/system/resources`. Not delivered: choosing the image profile, **Qualità immagini**, the advanced values,
+  the memory and disk gauges, the job list, tokens per second, recent transitions and the **Riprova** action. Not
+  verified yet: the new end-to-end specs and the model-seeding service of `compose.test.yaml` against Docker.
+
 - Text profile changes and custom model files, in the backend (the **Impostazioni > Modelli** screen is P06.6b).
   `GET /api/v1/settings/models` lists every catalog profile with its tier, license, size and local state (present,
   wrong size or missing, with the download command), the registered custom profiles, the unregistered files in the two

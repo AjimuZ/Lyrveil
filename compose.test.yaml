@@ -3,8 +3,9 @@
 #   - its own Compose project name, "lyrveil-test", so containers, networks and volumes are "lyrveil-test-*" and
 #     "lyrveil-test_*", and no container sets container_name, so none can collide with "lyrveil-backend" and the others;
 #   - its own port, LYRVEIL_TEST_HTTP_PORT (default 14200), bound to 127.0.0.1;
-#   - its own volumes "data" and "models", created by Compose and empty, never "lyrveil-data" or "lyrveil-models", so
-#     "docker compose -f compose.test.yaml down -v" removes only test data;
+#   - its own volumes "data" and "models", created by Compose, never "lyrveil-data" or "lyrveil-models", so
+#     "docker compose -f compose.test.yaml down -v" removes only test data. "data" starts empty; the one-shot service
+#     "lyrveil-models-seed" fills "models" with sparse files (no download, no real model);
 #   - its own image tags ":test", and no .env: the settings are written below, with a token that guards only this
 #     project. It has no backup folder, since nothing in it writes outside the volumes.
 # Run it with:
@@ -52,12 +53,42 @@ services:
       retries: 6
       start_period: 5s
 
+  # Fills the empty "models" volume once, for the model settings screens: a sparse file of the catalog's exact size for
+  # every profile (so each one reads as verified without downloading anything), and a few bytes named like a custom
+  # model, which the specs register. It runs as root because a new volume belongs to root, has no network, and ends
+  # before the backend starts.
+  lyrveil-models-seed:
+    <<: *common
+    image: lyrveil/backend:test
+    build: {context: ., dockerfile: backend/Dockerfile, target: runtime}
+    user: "0:0"
+    volumes:
+      - models:/models
+    network_mode: none
+    command:
+      - python
+      - -c
+      - |
+        import json
+        from pathlib import Path
+
+        catalog = json.loads(Path("/app/config/model-catalog.json").read_text(encoding="utf-8"))
+        root = Path("/models")
+        for kind, folder in (("text", "llm"), ("image", "image/checkpoints")):
+            (root / folder).mkdir(parents=True, exist_ok=True)
+            for profile in catalog[kind]:
+                with open(root / folder / profile["file"], "wb") as handle:
+                    handle.truncate(profile["bytes"])
+        (root / "llm" / "e2e-custom.Q4_K_M.gguf").write_bytes(b"a file for the end-to-end registration test")
+
   lyrveil-backend:
     <<: *common
     image: lyrveil/backend:test
     build: {context: ., dockerfile: backend/Dockerfile, target: runtime}
     user: "10001:10001"
     environment: *settings
+    depends_on:
+      lyrveil-models-seed: {condition: service_completed_successfully}
     volumes:
       - data:/data
       - models:/models:ro

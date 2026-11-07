@@ -6,7 +6,16 @@
       <a class="nav-link" routerLink="/characters" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.characters' | t }}</a>
       <a class="nav-link" routerLink="/gallery" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.gallery' | t }}</a>
       <a class="nav-link" routerLink="/scenarios" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.scenarios' | t }}</a>
-      <a class="nav-link" routerLink="/settings" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.settings' | t }}</a>
+      <a
+        class="nav-link"
+        routerLink="/settings"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        ariaCurrentWhenActive="page"
+        >{{ 'nav.settings' | t }}</a
+      >
+      <a class="nav-link" routerLink="/settings/models" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.models' | t }}</a>
+      <a class="nav-link" routerLink="/settings/resources" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.resources' | t }}</a>
     </nav>
   </header>
   <main class="content">

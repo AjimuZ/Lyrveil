@@ -113,6 +113,17 @@ class GpuStatus:
 
 
 @dataclass(frozen=True)
+class VramReading:
+    """The memory of the whole card in MiB, as the orchestrator's NVML read it just now. `used_mib` includes memory
+    held by other programs. `device_name` is the card's name."""
+
+    device_name: str
+    total_mib: int
+    used_mib: int
+    free_mib: int
+
+
+@dataclass(frozen=True)
 class LifecycleEvent:
     """One event of GET /v1/events: a transition from `source` to `target`, or a note in one state (a hold for VRAM).
 
@@ -247,6 +258,23 @@ class OrchestratorClient:
             raise OrchestratorUnavailableError(f"the control API answered {status} to events without events")
         read = (_event(item) for item in events)
         return EventPage(boot_id=current, events=tuple(event for event in read if event is not None))
+
+    def read_vram(self) -> VramReading | None:
+        """Returns the card's memory from GET /v1/preflight, or None when the orchestrator could not read the card
+        (`gpu` is null) or sent a reading not of the documented form. Raises OrchestratorUnavailableError for anything
+        but a 200."""
+        status, body = self._send("GET", "/v1/preflight", None)
+        if status != 200:
+            raise OrchestratorUnavailableError(f"the control API answered {status} to preflight")
+        gpu = body.get("gpu")
+        vram = gpu.get("vram") if isinstance(gpu, dict) else None
+        if not isinstance(gpu, dict) or not isinstance(vram, dict):
+            return None
+        name = gpu.get("device_name")
+        total, used, free = (_mib(vram.get(key)) for key in ("total_mib", "used_mib", "free_mib"))
+        if not isinstance(name, str) or total is None or used is None or free is None:
+            return None
+        return VramReading(device_name=name, total_mib=total, used_mib=used, free_mib=free)
 
     def drain(self) -> GpuStatus:
         """Starts the drain, POST /v1/drain: the orchestrator stops the runtime once the current lease ends, and

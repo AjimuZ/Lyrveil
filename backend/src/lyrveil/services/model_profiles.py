@@ -210,6 +210,20 @@ class ModelProfiles:
             return stored
         return self._catalog.default_text(self._tier).id
 
+    def launch_settings(self) -> dict[str, str] | None:
+        """Returns the KEY=VALUE values of the launch file, or None when it is missing or unreadable."""
+        return read_launch_settings(self._launch_file)
+
+    def text_name(self, profile_id: str) -> str | None:
+        """Returns the display name of a catalog or registered custom text profile, or None for any other id."""
+        profile = self._text.get(profile_id)
+        if profile is not None:
+            return profile.display_name
+        return next(
+            (item.file for item in read(self._engine, self.customs) if item.id == profile_id and item.kind == "text"),
+            None,
+        )
+
     def overview(self) -> dict[str, Any]:
         """Returns what GET /settings/models answers: the tier, the active profiles, every catalog and custom profile
         with its local state, the unregistered files of the two model folders, and the launch file's values (None
