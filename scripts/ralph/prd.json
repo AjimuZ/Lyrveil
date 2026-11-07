@@ -1426,7 +1426,7 @@
       ],
       "priority": 60,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: The code, migration, tests and docs are written, but nothing was run, and backend/uv.lock needs a new entry that I could not create. P04.1 adds snowballstemmer==3.1.1 to backend/pyproject.toml. The image installs with `uv sync --locked`, which fails until the lock lists the package. The lock is regenerated with `docker build -f backend/Dockerfile --target lockfile --output type=local,dest=backend .`. That command needs a container build with network access and writes a file, which my shell rules deny. I did not hand-write the entry, because the PyPI URLs and hashes would be invented. ",
       "dependsOn": [
         "P03.EXIT"
       ],
