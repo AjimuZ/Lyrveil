@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 
 from lyrveil.domain.messages import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, JobRef, Message, Variant, message_document
+from lyrveil.services.images import ImageService
 from lyrveil.services.messages import MessageService
 
 router = APIRouter(tags=["messages"], include_in_schema=False)
@@ -128,12 +129,15 @@ def _wake_worker(request: Request) -> None:
 
 
 def get_service(request: Request) -> MessageService:
-    """Returns the service on the application's engine, in the deployment time zone; startup always opens one before
-    it serves routes."""
+    """Returns the service on the application's engine, in the deployment time zone, with the image service that
+    `intent` `image` and the request detector queue their jobs through; startup always opens the database and the media
+    store before it serves routes."""
     engine: Engine | None = request.app.state.engine
     if engine is None:
         raise RuntimeError("the message routes need a database")
-    return MessageService(engine, zone=request.app.state.settings.zone)
+    return MessageService(
+        engine, zone=request.app.state.settings.zone, images=ImageService(engine, request.app.state.media)
+    )
 
 
 Service = Depends(get_service)
@@ -168,9 +172,10 @@ def search_messages(
 def send_message(
     conversation_id: str, body: SendMessage, request: Request, service: MessageService = Service
 ) -> SendResult:
-    """Saves the user's message and queues the character's reply. Sending the same `client_message_id` again returns
-    the first result. 404 for a missing or deleted chat, 409 for an archived chat or a full queue, 413 over 8000
-    characters and 422 for blank text."""
+    """Saves the user's message and queues the character's reply, which is an image when `intent` is `image` or, for
+    `auto`, when the request detector reads the message as an image request. Sending the same `client_message_id`
+    again returns the first result. 404 for a missing or deleted chat, 409 for an archived chat or a full queue, 413
+    over 8000 characters and 422 for blank text, or for an `image` intent over 1000 characters."""
     sent = service.send(conversation_id, body.content, client_message_id=body.client_message_id, intent=body.intent)
     _wake_worker(request)
     return SendResult(message=_message(sent.message), reply=_message(sent.reply), job=_job(sent.job))

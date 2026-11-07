@@ -33,12 +33,15 @@ from lyrveil.domain.messages import (
     VariantStatus,
     content_hash,
 )
+from lyrveil.images.request_detector import detect_image_request
 from lyrveil.jobs.policy import JobKind
 from lyrveil.jobs.queue import JobQueue, QueueFullError
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence import settings as settings_repository
 from lyrveil.persistence.search import match_query, search_messages
+from lyrveil.services.images import MAX_REQUEST_CHARS, ImageService
 from lyrveil.services.invalidation import InvalidationService
 
 _NO_CHAT = "Conversazione non trovata."
@@ -66,28 +69,40 @@ class MessageService:
         queue: JobQueue | None = None,
         clock: Callable[[], datetime] = _utc_now,
         zone: tzinfo = UTC,
+        images: ImageService | None = None,
     ) -> None:
         self._engine = engine
         self._clock = clock
         self._queue = queue or JobQueue(clock=clock)
         self._invalidation = InvalidationService(self._queue, zone)
+        self._images = images
 
     def send(
         self, conversation_id: str, content: str, *, client_message_id: str | None = None, intent: str = "auto"
     ) -> SentMessage:
-        """Saves the user's message and queues a `chat_reply` job for the character's reply.
+        """Saves the user's message and queues a `chat_reply` job for the character's reply, or an `image_request`
+        job when the message asks for an image.
 
         Returns the stored user message, the reply placeholder (status `queued`, empty text, one `streaming` variant
         the job fills) and the job. Sending the same `client_message_id` again to the conversation returns the first
         result and writes nothing new; if the first attempt died before queuing its job, the retry queues it.
 
+        `intent` `text` always makes a text reply and `image` always an image (ImageService.request, in one
+        transaction). `auto` makes an image when `images.auto_detect_requests` is on (the default), the message is at
+        most MAX_REQUEST_CHARS long and the request detector reads it as a request in the conversation's language
+        (lyrveil.images.request_detector); any other message gets a text reply. Without an ImageService, `image`
+        raises ConflictError and `auto` never detects.
+
         Raises NotFoundError for a missing or deleted conversation, ConflictError for an archived one, for the
-        unavailable `image` intent, and when the queue is full (the message stays saved and the retry queues it),
-        ValidationFailedError for blank text and PayloadTooLargeError over MAX_MESSAGE_CHARS.
+        unavailable `image` intent, and when the queue is full (a text message stays saved and the retry queues it; an
+        image request saves nothing), ValidationFailedError for blank text and PayloadTooLargeError over
+        MAX_MESSAGE_CHARS.
         """
         _check_text(content)
-        if intent == "image":
+        if intent == "image" and self._images is None:
             raise ConflictError("La generazione di immagini dalla chat non è ancora disponibile.")
+        if self._images is not None and self._wants_image(conversation_id, content, intent):
+            return self._images.request(conversation_id, content, client_message_id=client_message_id)
         now = to_utc_text(self._clock())
 
         def save(connection: Connection) -> tuple[Message, Message, str]:
@@ -140,6 +155,23 @@ class MessageService:
             },
         )
         return SentMessage(message=self._current(user.id), reply=self._current(reply.id), job=job)
+
+    def _wants_image(self, conversation_id: str, content: str, intent: str) -> bool:
+        """Tells whether the message becomes an image request: always for the `image` intent, never for `text`, and for
+        `auto` when the detector is on, the text fits an image request and the detector reads it as one. A missing
+        conversation answers False, so the text path raises its NotFoundError."""
+        if intent == "image":
+            return True
+        if intent != "auto" or len(content) > MAX_REQUEST_CHARS:
+            return False
+
+        def load(connection: Connection) -> str | None:
+            conversation = conversation_repository.get(connection, conversation_id)
+            enabled = settings_repository.get_flag(connection, settings_repository.IMAGES_AUTO_DETECT_REQUESTS, True)
+            return conversation.effective_language if conversation is not None and enabled else None
+
+        language = read(self._engine, load)
+        return language is not None and detect_image_request(content, language)
 
     def history(self, conversation_id: str, before_seq: int | None = None, limit: int = DEFAULT_PAGE_SIZE) -> Page:
         """Returns the newest `limit` messages that are not deleted and have `seq` below `before_seq` (the newest of

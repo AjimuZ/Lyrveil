@@ -10,6 +10,10 @@ from sqlalchemy import Connection, text
 
 # docs/configuration.md: shows a reply's prompt assembly in the Memory Studio and stores `prompt_text`. Off by default.
 DIAGNOSTIC_MODE = "app.diagnostic_mode"
+# docs/configuration.md: a chat message that asks for an image replaces the text reply with an image (on by default).
+IMAGES_AUTO_DETECT_REQUESTS = "images.auto_detect_requests"
+# docs/configuration.md: the character may propose an image on its own, which the user must accept (off by default).
+IMAGES_CONTEXTUAL_ENABLED = "images.contextual_enabled"
 
 
 def get_flag(connection: Connection, key: str, default: bool) -> bool:

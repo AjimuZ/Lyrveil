@@ -185,6 +185,8 @@
 - Tests for a multi-stage job drive the real JobScheduler with a mutable GPU mode (`lambda: harness.mode`), switching it between run_once calls to match each stage's required_mode.
 - Make persistence idempotent by deriving ids and file names from the job id (uuid5) and keeping a unique job_id column; a repeat then overwrites the same files and inserts nothing.
 - Event publishing must happen on the event loop: do the database work in a thread, return what to announce, and publish after the thread returns.
+- Keep fixed word lists for deterministic detectors in prompts/<lang>/*.txt files, not in code, so a language without lists never matches.
+- Document a backend-only change in the changelog and say plainly what is not delivered, so the entry stays honest.
 
 ---
 
@@ -1659,4 +1661,15 @@ No injected instructions found in the files I read.
   - ImageService.request saves the user's request message, the image placeholder and the job in one transaction; a full queue rolls everything back (unlike text sends, which keep the message). ImageService.regenerate enqueues at stage `render` via JobQueue.enqueue(stage=...) and reuses the stored prompt.
   - The integration level takes no arguments; run one file with `scripts/lyrveil.cmd test unit tests/integration/<file>.py -q`; several files can be passed together.
   - MediaStore staged files live in `.staging/<job_id>/render`; clear_staging removes only loose files, so a restarted persist can still read them. The job id must be a lowercase UUID.
+---
+
+## 2026-11-07T19:21:02Z - P05.5a
+- Backend image modes are in place: the Italian request detector, manual and character image requests, and contextual mode (off by default) with proposal accept/reject. The earlier reviewer flagged a missing changelog entry; I added it and made no other changes this attempt. The existing code and tests from attempt 1 were left as they were. 155 tests in the two new files (detector unit tests and image modes integration tests) pass, and `scripts/lyrveil.cmd test lint` passes. I did not run the full suite. The end-to-end and GPU paths are untested: nothing draws until the orchestrator image mode (P05.7), and the model step that writes proposals, the image button, the proposal card and the settings screen are not delivered. `docs/image-generation.md` says this too.
+- Files changed: CHANGELOG.md, backend/migrations/versions/0014_image_proposals.py, backend/src/lyrveil/domain/image_proposals.py, backend/src/lyrveil/images/request_detector.py, backend/src/lyrveil/persistence/image_proposals.py, backend/src/lyrveil/prompts/it/image_request_negations.txt, backend/src/lyrveil/prompts/it/image_request_not_imperative.txt, backend/src/lyrveil/prompts/it/image_request_nouns.txt, backend/src/lyrveil/prompts/it/image_request_verbs.txt, backend/src/lyrveil/services/image_proposals.py, backend/src/lyrveil/services/images.py, backend/src/lyrveil/services/messages.py, backend/src/lyrveil/services/assets.py, backend/src/lyrveil/services/image_generation.py, backend/src/lyrveil/api/images.py, backend/src/lyrveil/api/assets.py, backend/src/lyrveil/api/messages.py, backend/src/lyrveil/domain/assets.py, backend/src/lyrveil/persistence/assets.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/persistence/settings.py, backend/src/lyrveil/ports/events.py, backend/tests/integration/test_migrations.py, backend/tests/integration/test_image_modes.py, backend/tests/unit/test_image_request_detector.py, docs/api.md, docs/backend.md, docs/configuration.md, docs/data-model.md, docs/image-generation.md, docs/testing.md
+- **Learnings for future iterations:**
+  - Run a targeted test with `scripts/lyrveil.cmd test unit <paths> -q`; unit and integration files can be passed together.
+  - The new routes (conversation images, character assets/generate, image-proposals accept/reject) are not in backend/openapi.json, so the frontend API types do not cover them. P05.5b will have to add them or call them by hand.
+  - The detector only recognizes the listed imperative verbs (see backend/src/lyrveil/prompts/it/image_request_verbs.txt), followed by an image noun within 6 words. Add words to the lists, not code.
+  - Missing for contextual mode: the image_proposal job handler (prompt and grammar), the queue_if_due call after a reply, a route to list pending proposals and a job that expires them.
+  - `main()` still passes no image runtime, so image_request jobs wait until P05.7.
 ---

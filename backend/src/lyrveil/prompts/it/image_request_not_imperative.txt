@@ -1,0 +1,27 @@
+# Words that make the next verb a statement, not an imperative (docs/image-generation.md, Manual mode): "lei crea
+# immagini", "chi disegna", "ho creato". When one of these stands right before a request verb, in the same clause,
+# the verb is not a request. One word per line.
+lui
+lei
+loro
+io
+tu
+noi
+che
+chi
+si
+se
+quando
+mentre
+perche
+come
+cosa
+dove
+ho
+hai
+ha
+abbiamo
+hanno
+sto
+stai
+sta

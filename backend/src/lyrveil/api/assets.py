@@ -1,5 +1,6 @@
-"""Asset routes of docs/api.md (Assets): list, upload, crop, primary avatar and delete. Generation arrives with the
-image pipeline (P05). Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
+"""Asset routes of docs/api.md (Assets): list, upload, generate, crop, primary avatar and delete. Generation (character
+mode) only queues the job; the pipeline links its result as an asset. Not in the committed OpenAPI document yet, for
+the reason given in lyrveil.api.conversations.
 """
 
 from typing import Annotated, Any
@@ -9,10 +10,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 from starlette.concurrency import run_in_threadpool
 
+from lyrveil.api.messages import JobOut, _job, _wake_worker
 from lyrveil.domain.assets import StoredAsset
 from lyrveil.media.images import MAX_UPLOAD_BYTES
 from lyrveil.media.store import MediaStore
 from lyrveil.services.assets import CharacterAssetService
+from lyrveil.services.images import MAX_REQUEST_CHARS, ImageService
 
 router = APIRouter(prefix="/characters", tags=["assets"], include_in_schema=False)
 
@@ -51,6 +54,25 @@ class CropBody(BaseModel):
     height: int = Field(ge=1)
 
 
+class GenerateBody(BaseModel):
+    """Character mode of docs/image-generation.md: `purpose` is `avatar`, `profile`, `scene` or `variant`, and `scene`
+    describes the picture (it may be blank except for `scene`). Aspect, outfit, quality and seed take the values of a
+    chat image request, which the service checks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str = "avatar"
+    scene: str = Field(default="", max_length=MAX_REQUEST_CHARS)
+    aspect: str = "square"
+    outfit: str | None = None
+    quality: str | None = None
+    seed: int | None = None
+
+
+class GenerateResult(BaseModel):
+    job: JobOut
+
+
 def asset_out(asset: StoredAsset) -> AssetOut:
     return AssetOut(
         id=asset.id,
@@ -82,6 +104,17 @@ def get_service(request: Request) -> CharacterAssetService:
 Service = Depends(get_service)
 
 
+def get_image_service(request: Request) -> ImageService:
+    """Returns the image service on the application's engine and media store."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the asset routes need a database")
+    return ImageService(engine, request.app.state.media)
+
+
+ImageApiService = Depends(get_image_service)
+
+
 @router.get("/{character_id}/assets", response_model=AssetList)
 def list_assets(character_id: str, kind: str | None = None, service: CharacterAssetService = Service) -> AssetList:
     """Lists the live assets of the character, newest first, of `kind` when given. Answers 404 `NOT_FOUND` for an
@@ -106,6 +139,28 @@ async def upload_asset(
     # Decoding up to 8192 x 8192 pixels takes a while; it runs in a worker thread so the event loop keeps serving.
     stored = await run_in_threadpool(service.upload, character_id, kind, data, file.content_type)
     return asset_out(stored)
+
+
+@router.post("/{character_id}/assets/generate", response_model=GenerateResult, status_code=202)
+def generate_asset(
+    character_id: str, body: GenerateBody, request: Request, service: ImageService = ImageApiService
+) -> GenerateResult:
+    """Queues an `image_request` job that draws the character outside any chat and answers `202` with the job. When it
+    ends, the image joins the character's assets as `purpose` and appears in the gallery; a generated avatar becomes
+    the primary one only if the character has none. Answers 404 `NOT_FOUND` for an unknown character, 409 `CONFLICT`
+    for a full queue and 422 `VALIDATION_ERROR` for an unknown purpose, a blank scene of the `scene` purpose, an
+    unknown aspect or quality, a seed out of range or an outfit the character does not have."""
+    job = service.request_asset(
+        character_id,
+        body.purpose,
+        body.scene,
+        aspect=body.aspect,
+        outfit=body.outfit,
+        quality=body.quality,
+        seed=body.seed,
+    )
+    _wake_worker(request)
+    return GenerateResult(job=_job(job))
 
 
 @router.post("/{character_id}/assets/{asset_id}/crop", response_model=AssetOut, status_code=201)

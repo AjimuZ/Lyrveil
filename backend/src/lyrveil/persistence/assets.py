@@ -5,6 +5,7 @@ to every read here.
 """
 
 import json
+import uuid
 from typing import Any
 
 from sqlalchemy import Connection, RowMapping, text
@@ -13,7 +14,7 @@ from lyrveil.domain.assets import StoredAsset
 
 _COLUMNS = (
     "id, character_id, kind, source, file_path, thumb_path, media_type, width, height, byte_size, sha256, crop_json, "
-    "is_primary, created_at"
+    "is_primary, created_at, generated_image_id"
 )
 
 
@@ -33,6 +34,7 @@ def _asset(row: RowMapping) -> StoredAsset:
         crop=None if row["crop_json"] is None else json.loads(row["crop_json"]),
         is_primary=bool(row["is_primary"]),
         created_at=row["created_at"],
+        generated_image_id=row["generated_image_id"],
     )
 
 
@@ -41,7 +43,8 @@ def insert(connection: Connection, asset: StoredAsset) -> None:
     connection.execute(
         text(
             f"INSERT INTO character_assets ({_COLUMNS}) VALUES (:id, :character_id, :kind, :source, :file_path, "
-            ":thumb_path, :media_type, :width, :height, :byte_size, :sha256, :crop_json, :is_primary, :created_at)"
+            ":thumb_path, :media_type, :width, :height, :byte_size, :sha256, :crop_json, :is_primary, :created_at, "
+            ":generated_image_id)"
         ),
         {
             "id": asset.id,
@@ -58,8 +61,47 @@ def insert(connection: Connection, asset: StoredAsset) -> None:
             "crop_json": None if asset.crop is None else json.dumps(asset.crop, separators=(",", ":")),
             "is_primary": asset.is_primary,
             "created_at": asset.created_at,
+            "generated_image_id": asset.generated_image_id,
         },
     )
+
+
+def link_generated(connection: Connection, image: RowMapping) -> bool:
+    """Adds the asset of a generated image (a `generated_images` row whose purpose is a GENERATED_KINDS value), and
+    returns whether it wrote a row. The asset shares the image's files and takes the purpose as its kind.
+
+    Idempotent: an image that already has its asset writes nothing, so a persist that restarts adds no second one. The
+    asset id derives from the image id. A generated avatar becomes primary only when the character has none.
+    """
+    exists = connection.execute(
+        text("SELECT 1 FROM character_assets WHERE generated_image_id = :id"), {"id": image["id"]}
+    ).first()
+    if exists is not None:
+        return False
+    asset_id = str(uuid.uuid5(uuid.UUID(image["id"]), "asset"))
+    insert(
+        connection,
+        StoredAsset(
+            id=asset_id,
+            character_id=image["character_id"],
+            kind=image["purpose"],
+            source="generated",
+            file_path=image["file_path"],
+            thumb_path=image["thumb_path"],
+            media_type=image["media_type"],
+            width=image["width"],
+            height=image["height"],
+            byte_size=image["byte_size"],
+            sha256=image["sha256"],
+            crop=None,
+            is_primary=False,
+            created_at=image["created_at"],
+            generated_image_id=image["id"],
+        ),
+    )
+    if image["purpose"] == "avatar" and not has_primary(connection, image["character_id"]):
+        set_primary(connection, character_id=image["character_id"], asset_id=asset_id, now=image["created_at"])
+    return True
 
 
 def get(connection: Connection, asset_id: str) -> StoredAsset | None:

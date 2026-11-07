@@ -1,0 +1,17 @@
+# Image nouns of the image request detector (docs/image-generation.md, Manual mode). One word per line, singular and
+# plural. Matching ignores case and accents, and works on whole words. An apostrophe splits words, so "un'immagine"
+# holds "immagine".
+foto
+fotografia
+fotografie
+immagine
+immagini
+disegno
+disegni
+ritratto
+ritratti
+selfie
+illustrazione
+illustrazioni
+schizzo
+schizzi

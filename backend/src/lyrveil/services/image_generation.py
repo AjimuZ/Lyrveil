@@ -16,7 +16,7 @@ it. Persistence is idempotent: `generated_images.job_id` is unique and the file 
 import json
 import secrets
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Self
@@ -27,6 +27,7 @@ from sqlalchemy import Connection, Engine, RowMapping
 
 from lyrveil.catalog import ImagePreset, ImageProfile
 from lyrveil.context.builder import ContextRequest, ContextSettings
+from lyrveil.domain.assets import GENERATED_KINDS
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.errors import ContentPolicyBlockedError, DomainError
 from lyrveil.domain.identifiers import to_utc_text
@@ -56,6 +57,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
 from lyrveil.media.images import prepare_upload
 from lyrveil.media.store import MediaPathError, MediaStore
+from lyrveil.persistence import assets as asset_repository
 from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import images as image_repository
 from lyrveil.persistence import messages as repository
@@ -145,6 +147,13 @@ class _Target:
 
     card: CharacterCard
     chat: ContextRequest | None
+
+
+def _sampling(payload: Mapping[str, Any], settings: ImageSettings) -> tuple[int, float]:
+    """Returns the step count and CFG of a job: the request's own when the form gave them, else the settings'."""
+    steps = payload.get("steps")
+    cfg = payload.get("cfg")
+    return (settings.steps if steps is None else steps), (settings.cfg if cfg is None else cfg)
 
 
 def job_error(error: Exception) -> Exception:
@@ -301,6 +310,7 @@ class ImageGenerationService:
         quality: QualityPreset = payload["quality"]
         aspect: Aspect = payload["aspect"]
         settings = self._settings
+        steps, cfg = _sampling(payload, settings)
         # The second attempt follows an out-of-memory failure or a stall, so it decodes in tiles (docs/backend.md,
         # Retry policy). The preset used is the one stored with the image.
         tiled = job.attempt > 1
@@ -313,8 +323,8 @@ class ImageGenerationService:
                 negative=payload["negative"],
                 seed=payload["seed"],
                 tiled=tiled,
-                steps=settings.steps,
-                cfg=settings.cfg,
+                steps=steps,
+                cfg=cfg,
                 sampler=settings.sampler,
                 scheduler=settings.scheduler,
                 clip_skip=settings.clip_skip,
@@ -349,8 +359,8 @@ class ImageGenerationService:
         self._progress(job, "saving")
         image, message = await to_thread.run_sync(self._store, job)
         await to_thread.run_sync(self._media.discard_staged, job.id)
+        self._events.publish(IMAGE_COMPLETED, {"image": image, "message_id": None if message is None else message.id})
         if message is not None:
-            self._events.publish(IMAGE_COMPLETED, {"image": image, "message_id": message.id})
             self._events.publish(MESSAGE_COMPLETED, {"message": message_document(message)})
         logger.info("image_persisted", job_id=job.id, image_id=image["id"])
         return JobDone({"image_id": image["id"], "message_id": job.message_id})
@@ -374,6 +384,8 @@ class ImageGenerationService:
                 image_repository.insert(connection, new)
             found = image_repository.find_by_job(connection, job.id)
             assert found is not None
+            if found["purpose"] in GENERATED_KINDS:
+                asset_repository.link_generated(connection, found)
             if job.message_id is None or variant_id is None:
                 return found, None
             caption: str = payload.get("caption") or ""
@@ -421,6 +433,7 @@ class ImageGenerationService:
         self._media.save(thumb_path, encoded.thumbnail)
         self._media.save(file_path, encoded.data)
         alta = quality == "alta"
+        steps, cfg = _sampling(payload, settings)
         assert job.character_id is not None, "an image job names its character"
         return NewImage(
             id=image_id,
@@ -443,8 +456,8 @@ class ImageGenerationService:
             prompt_positive=payload["positive"],
             prompt_negative=payload["negative"],
             seed=payload["seed"],
-            steps=settings.steps,
-            cfg=settings.cfg,
+            steps=steps,
+            cfg=cfg,
             sampler=settings.sampler,
             scheduler=settings.scheduler,
             clip_skip=settings.clip_skip,

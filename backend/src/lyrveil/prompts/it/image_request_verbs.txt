@@ -1,0 +1,15 @@
+# Request verbs of the image request detector (docs/image-generation.md, Manual mode): the imperative forms that ask
+# for something to be made or sent. One phrase per line, words separated by spaces. Matching ignores case and accents,
+# and works on whole words.
+mandami
+inviami
+fammi vedere
+mostrami
+disegna
+disegnami
+genera
+generami
+crea
+creami
+fammi
+scatta

@@ -21,7 +21,7 @@ The user asks for an image in two ways:
 
 | Language | Verbs | Nouns |
 | --- | --- | --- |
-| Italian | `mandami`, `inviami`, `fammi vedere`, `mostrami`, `disegna`, `disegnami`, `genera`, `generami`, `crea`, `creami`, `fammi`, `scatta` | `foto`, `fotografia`, `immagine`, `disegno`, `ritratto`, `selfie`, `illustrazione`, `schizzo` |
+| Italian | `mandami`, `inviami`, `fammi vedere`, `mostrami`, `disegna`, `disegnami`, `genera`, `generami`, `crea`, `creami`, `fammi`, `scatta` | `foto`, `fotografia`, `immagine`, `disegno`, `ritratto`, `selfie`, `illustrazione`, `schizzo`, and their plurals |
 
 The detector ignores negated requests such as `non mandarmi`, and statements such as `ti ho mandato una foto`. When it matches, the
 message is saved and an `image_request` job replaces the `chat_reply` job. The pending bubble has a cancel action, so a false
@@ -55,6 +55,52 @@ When enabled:
 
 `POST /characters/{id}/assets/generate` covers avatars, profile images, set illustrations, contextual scenes and variants. It uses
 the same job and pipeline, with `purpose` set accordingly. The result is linked as a `character_assets` row and appears in the gallery.
+
+### Delivered in P05.5a
+
+Backend only. The image button, the proposal card and the settings screen are part of the conversation screen (P05.5b),
+and the gallery of P05.6. Nothing draws until the orchestrator switches modes for images (P05.7), because `main()` still
+starts the worker without an image runtime: the jobs wait in the queue.
+
+- **Detector** (`lyrveil.images.request_detector`). The lists are `prompts/it/image_request_verbs.txt` and
+  `image_request_nouns.txt`; the nouns also hold the plurals (`foto`, `fotografie`, `immagini`, `disegni`, `ritratti`,
+  `selfie`, `illustrazioni`, `schizzi`). Matching ignores case and accents and works on whole words; an apostrophe splits
+  a word, so `un'immagine` holds `immagine`. Each sentence (ended by `.`, `!`, `?`, `;` or a line break) is read alone.
+  A verb counts when an image noun stands at most 6 words after its last word, no word of
+  `image_request_negations.txt` (`non`, `mai`, `senza`, `nessuna`...) stands among the 3 words before it in the same
+  clause (a comma starts a clause), and the word right before it, in the clause, is not one of
+  `image_request_not_imperative.txt` (`lei`, `chi`, `se`, `quando`, `ho`...), which makes it a statement. Only the listed
+  verbs count: `puoi mandarmi una foto?` is not detected, and the image button is the way to ask. A language without
+  lists never matches. The tests, with 59 positive and 57 negative phrases, are in
+  `backend/tests/unit/test_image_request_detector.py`.
+- **Message send.** `MessageService.send` makes an `image_request` job, through `ImageService.request`, for `intent: image`
+  and, under `auto`, for a message of at most 1000 characters that the detector reads as a request in the conversation's
+  language, while `images.auto_detect_requests` is on (the default; the key lives in `application_settings`, and no screen
+  changes it yet). `intent: text` and every other message keep the `chat_reply` job. Nothing is saved for a request the
+  full queue refuses; the same `client_message_id` returns the first image request, and one that was sent as text answers
+  `409`. Without an `ImageService` the service never detects and `image` answers `409`.
+- **Explicit request.** `POST /conversations/{id}/images` takes `request`, `aspect`, `outfit`, `quality`, `seed`, `steps`
+  (10 to 50) and `cfg` (1 to 12). `steps` and `cfg` travel in the job's payload, run in the workflow and are stored with
+  the image; a regeneration reuses the stored ones.
+- **Character mode.** `POST /characters/{id}/assets/generate` takes `purpose` (`avatar`, `profile`, `scene` or `variant`),
+  `scene`, `aspect` (`square` by default), `outfit`, `quality` and `seed`, and answers `202` with the job. A blank scene
+  draws a default text of the purpose; `scene` needs a description. The job has no conversation and no message, so it has
+  no caption. At `persist` the image joins the character's assets in the same transaction, as the asset kind of its
+  purpose with `source = generated` and `generated_image_id`; a generated avatar becomes primary only if the character has
+  none. The asset shares the image's files, so deleting the asset leaves them; they go with the image (P05.6).
+  `image.completed` is published with `message_id: null`.
+- **Contextual mode** (`ImageProposalService`). `images.contextual_enabled` is off by default. `queue_if_due` queues an
+  `image_proposal` job only when it is on, the chat is active, no proposal or job is waiting, the newest proposal is over
+  an hour old and `images.proposal_min_messages` messages came after the message it followed. `propose` stores the
+  decision as a `pending` row and publishes `image.proposed` only when the setting is still on, `propose` is true, the
+  scene is not blank, the content guard accepts the scene and the reason, and the message is a live message of an
+  active chat. `accept` queues the image (a character message with the scene as its request) together with the status
+  change; `reject` closes the proposal; both answer `409` for one already answered or older than 24 hours, which becomes
+  `expired`. Routes: `POST /image-proposals/{id}/accept` and `/reject`.
+- **Not delivered.** The model step that writes the decision (the `image_proposal` job handler, its prompt and grammar)
+  and the call to `queue_if_due` after a reply: until they exist, a proposal can only be stored through
+  `ImageProposalService.propose`. There is no route that lists the pending proposals, and no job that expires them:
+  `expire_stale` exists, and `accept` and `reject` expire the proposal they find too old.
 
 ## Job stages
 
@@ -513,9 +559,10 @@ Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md
 - The caption becomes the variant's text. The message is `mixed` with a caption and `image` without one, stays `queued`
   while its job works, and carries `image_id`. `image.progress` reports `prompt`, `loading`, `sampling`, `refining`
   and `saving`; `image.completed` and `message.completed` follow the commit.
-- Not delivered: the explicit request and gallery routes (P05.5, P05.6), the mode switch through the orchestrator
-  (P05.7), the `waiting` phase, the settings that choose the profile and the quality, the retry with **Rapida** after a
-  second out of memory (P06), and the browser test of T-IMG-07 and T-IMG-08.
+- Not delivered: the gallery routes (P05.6), the mode switch through the orchestrator (P05.7), the `waiting` phase,
+  the settings that choose the profile and the quality, the retry with **Rapida** after a second out of memory (P06),
+  and the browser test of T-IMG-07 and T-IMG-08. The explicit request route arrived with P05.5a
+  ([Delivered in P05.5a](#delivered-in-p055a)).
 
 ComfyUI's directories live in a tmpfs that disappears when the container stops. The backend serves `/media/...` from `data/media`, so
 images never depend on ComfyUI.

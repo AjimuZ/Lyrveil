@@ -29,7 +29,8 @@ SCENARIOS = "0009"
 MEMORY = "0010"
 SUMMARIES = "0011"
 ASSEMBLIES = "0012"
-HEAD = "0013"
+IMAGES = "0013"
+HEAD = "0014"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -60,7 +61,8 @@ MEMORY_TABLES = {
 TABLES_WITH_MEMORY = {*TABLES_WITH_SCENARIOS, *MEMORY_TABLES}
 TABLES_WITH_SUMMARIES = {*TABLES_WITH_MEMORY, "conversation_summaries"}
 TABLES_WITH_ASSEMBLIES = {*TABLES_WITH_SUMMARIES, "prompt_assemblies"}
-TABLES = {*TABLES_WITH_ASSEMBLIES, "generated_images"}
+TABLES_WITH_IMAGES = {*TABLES_WITH_ASSEMBLIES, "generated_images"}
+TABLES = {*TABLES_WITH_IMAGES, "image_proposals"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -96,6 +98,7 @@ def test_the_revisions_follow_one_another() -> None:
         MEMORY,
         SUMMARIES,
         ASSEMBLIES,
+        IMAGES,
         HEAD,
     }
 

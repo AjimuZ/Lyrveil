@@ -10,6 +10,18 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Image request modes, backend only. A message sent with `intent: image` becomes an image request, and with the
+  default `intent: auto` a short message that asks for a picture in Italian, such as "mandami una foto di te sul
+  balcone", does too, while "non mandarmi foto" and "ti ho mandato una foto" stay ordinary text; the check is a fixed
+  list of verbs and image nouns, not the model, and `images.auto_detect_requests` turns it off. `POST
+  /api/v1/conversations/{id}/images` asks for an image explicitly (aspect, outfit, quality, seed, steps, cfg), and
+  `POST /api/v1/characters/{id}/assets/generate` generates an avatar, profile image, scene or variant for a character,
+  which joins its pictures when finished. Contextual mode, where the character may propose an image, is off by default
+  (`images.contextual_enabled`); a proposal is stored only with a valid decision and becomes an image only after
+  `POST /api/v1/image-proposals/{id}/accept`, and `.../reject` closes it. Migration `0014` adds the proposals table.
+  The routes are not in `backend/openapi.json`. Nothing draws yet: the worker has no image runtime until the
+  orchestrator switches to image mode, so requests wait in the queue; the model step that writes proposals, the image
+  button, the proposal card and the settings screen are not delivered either.
 - The image runtime image, `lyrveil/image:local`, built from ComfyUI `v0.43.0` at its pinned commit, with PyTorch
   `2.14.1` for CUDA 13.0 and every other package installed only from `docker/image/requirements.lock`, each with its
   SHA-256. It is the `lyrveil-image` service of the `ai` profile in `compose.yaml`: user `10001:10001`, a read-only

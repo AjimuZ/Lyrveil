@@ -96,7 +96,8 @@ class CharacterAssetService:
         return write(self._engine, work)
 
     def delete(self, character_id: str, asset_id: str) -> None:
-        """Marks the asset deleted, then removes its file and thumbnail.
+        """Marks the asset deleted, then removes its file and thumbnail, except for a generated asset: its files
+        belong to the generated image and stay.
 
         Raises NotFoundError as `crop` does, and ConflictError for the primary avatar until another one is chosen.
         Both paths are checked inside the transaction, so a path outside the media root (MediaPathError) leaves the
@@ -114,6 +115,9 @@ class CharacterAssetService:
             return asset
 
         deleted = write(self._engine, work)
+        if deleted.generated_image_id is not None:
+            # The files belong to the generated image, which stays in the gallery until it is deleted itself.
+            return
         self._media.delete(deleted.file_path)
         self._media.delete(deleted.thumb_path)
 

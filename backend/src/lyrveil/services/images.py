@@ -14,6 +14,7 @@ from typing import Any, get_args
 
 from sqlalchemy import Connection, Engine, text
 
+from lyrveil.domain.assets import GENERATED_KINDS
 from lyrveil.domain.conversations import Conversation, ConversationStatus
 from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.identifiers import new_id, to_utc_text
@@ -43,8 +44,20 @@ from lyrveil.prompts.image_scene import outfit_choices
 from lyrveil.services.image_generation import STAGE_RENDER, random_seed
 
 MAX_REQUEST_CHARS = 1000
+# docs/configuration.md (`images.steps`, `images.cfg`): the ranges a request may override.
+MIN_STEPS, MAX_STEPS = 10, 50
+MIN_CFG, MAX_CFG = 1.0, 12.0
+# What each purpose draws when the form gives no scene; `scene` has none, so it needs a description.
+DEFAULT_SCENES = {
+    "avatar": "ritratto del personaggio, primo piano del viso, sguardo verso chi guarda, sfondo semplice",
+    "profile": "il personaggio a mezzo busto, in posa, con uno sfondo che richiama il suo mondo",
+    "variant": "il personaggio in una posa diversa, con la stessa espressione di sempre",
+}
 _ASPECTS = frozenset(get_args(RequestedAspect))
 _QUALITIES = frozenset({"alta", "rapida"})
+_NO_CHARACTER = "Il personaggio non esiste."
+_NO_OUTFIT = "Il personaggio non ha questo abito."
+_ALREADY_SENT = "Questo messaggio è già stato inviato come testo."
 _NO_CHAT = "Conversazione non trovata."
 _NO_IMAGE = "Immagine non trovata."
 _QUEUE_FULL = "Troppe richieste in coda: riprova tra poco."
@@ -87,38 +100,46 @@ class ImageService:
         outfit: str | None = None,
         quality: str | None = None,
         seed: int | None = None,
+        steps: int | None = None,
+        cfg: float | None = None,
+        client_message_id: str | None = None,
     ) -> SentMessage:
         """Saves `request` as the user's message, adds the image message that will show the result and queues its
         `image_request` job, all in one transaction. Returns the user's message, the image placeholder (status
         `queued`, empty text, one `streaming` variant) and the job.
 
         `aspect` is `auto` or a fixed aspect, `outfit` is None, `usual`, `scene` or a key of the character's wardrobe,
-        `quality` is `alta`, `rapida` or None for the image settings, and `seed` is None or a seed ComfyUI accepts.
-        Raises NotFoundError for a missing or deleted conversation, ConflictError for an archived one and when the
-        queue is full, and ValidationFailedError for a blank or long request, an unknown aspect or quality, a seed
-        out of range, or an outfit the card does not offer.
+        `quality` is `alta`, `rapida` or None for the image settings, `seed` is None or a seed ComfyUI accepts, and
+        `steps` and `cfg` are None for the image settings or inside the range of docs/configuration.md. Sending the
+        same `client_message_id` to the conversation again returns the first result and writes nothing.
+        Raises NotFoundError for a missing or deleted conversation, ConflictError for an archived one, when the queue
+        is full and when the id already names a message that is not an image request, and ValidationFailedError for
+        a blank or long request, an unknown aspect or quality, a value out of range, or an outfit the card does not
+        offer.
         """
         if not request.strip():
             raise ValidationFailedError("La richiesta è vuota.")
         if len(request) > MAX_REQUEST_CHARS:
             raise ValidationFailedError(f"La richiesta supera i {MAX_REQUEST_CHARS} caratteri.")
-        if aspect not in _ASPECTS:
-            raise ValidationFailedError("Formato dell'immagine sconosciuto.")
-        if quality is not None and quality not in _QUALITIES:
-            raise ValidationFailedError("Qualità dell'immagine sconosciuta.")
-        if seed is not None and (isinstance(seed, bool) or not 0 <= seed <= MAX_SEED):
-            raise ValidationFailedError("Il seed è fuori dall'intervallo ammesso.")
+        _check_options(aspect, quality, seed, steps, cfg)
         now = to_utc_text(self._clock())
 
         def save(connection: Connection) -> SentMessage:
             conversation = _active_conversation(connection, conversation_id)
-            stored = character_repository.get_card(connection, conversation.character_id)
-            assert stored is not None, "a conversation's character cannot be removed while the chat exists"
-            try:
-                outfit_choices(stored.card.visual, outfit)
-            except ValueError:
-                raise ValidationFailedError("Il personaggio non ha questo abito.") from None
-            user = _add_message(connection, conversation_id, Author.USER, MessageStatus.COMPLETE, request, now)
+            if client_message_id is not None:
+                stored = repository.find_by_client_id(connection, conversation_id, client_message_id)
+                if stored is not None:
+                    return self._replay(connection, conversation, stored)
+            _check_outfit(connection, conversation, outfit)
+            user = _add_message(
+                connection,
+                conversation_id,
+                Author.USER,
+                MessageStatus.COMPLETE,
+                request,
+                now,
+                client_message_id=client_message_id,
+            )
             reply = _add_message(
                 connection, conversation_id, Author.CHARACTER, MessageStatus.QUEUED, "", now, kind="image"
             )
@@ -132,12 +153,100 @@ class ImageService:
                 "outfit": outfit,
                 "quality": quality,
                 "seed": seed,
+                "steps": steps,
+                "cfg": cfg,
                 "purpose": "chat",
             }
             job = self._enqueue(connection, conversation, reply, payload, key=f"image_request:{user.id}", stage=None)
             return SentMessage(message=user, reply=_reload(connection, reply.id), job=job)
 
         return self._run(save)
+
+    def request_asset(
+        self,
+        character_id: str,
+        purpose: str,
+        scene: str = "",
+        *,
+        aspect: str = "square",
+        outfit: str | None = None,
+        quality: str | None = None,
+        seed: int | None = None,
+    ) -> JobRef:
+        """Queues an `image_request` job that draws the character outside any chat (character mode) and returns it.
+
+        `purpose` is one of GENERATED_KINDS: when the job ends, the image joins the character's assets as that kind
+        (ImageGenerationService). `scene` describes the picture; it may be blank except for `scene`, and then the
+        default text of the purpose is drawn. The other values are those of `request`. No message is written, the
+        image has no caption, and the job runs under the same stages as a chat image. Raises NotFoundError for an
+        unknown character, ConflictError when the queue is full, and ValidationFailedError for an unknown purpose, a
+        blank scene of the `scene` purpose, a scene over MAX_REQUEST_CHARS, or the errors of `request` for the other
+        values.
+        """
+        if purpose not in GENERATED_KINDS:
+            raise ValidationFailedError("Il tipo di immagine non è valido.")
+        drawn = scene.strip() or DEFAULT_SCENES.get(purpose, "")
+        if not drawn:
+            raise ValidationFailedError("Descrivi la scena da generare.")
+        if len(drawn) > MAX_REQUEST_CHARS:
+            raise ValidationFailedError(f"La richiesta supera i {MAX_REQUEST_CHARS} caratteri.")
+        _check_options(aspect, quality, seed, None, None)
+
+        def save(connection: Connection) -> JobRef:
+            stored = character_repository.get_card(connection, character_id)
+            if stored is None:
+                raise NotFoundError(_NO_CHARACTER)
+            try:
+                outfit_choices(stored.card.visual, outfit)
+            except ValueError:
+                raise ValidationFailedError(_NO_OUTFIT) from None
+            payload: dict[str, Any] = {
+                "request": drawn,
+                "aspect": aspect,
+                "outfit": outfit,
+                "quality": quality,
+                "seed": seed,
+                "purpose": purpose,
+            }
+            job = self._queue.enqueue(
+                connection, JobKind.IMAGE_REQUEST, payload, character_id=character_id, idempotency_key=None
+            )
+            return JobRef(
+                id=job.id,
+                kind=job.kind.value,
+                status=job.status.value,
+                queue_position=repository.queue_position(connection, job.id),
+            )
+
+        return self._run(save)
+
+    def queue_proposed(self, connection: Connection, conversation_id: str, scene: str, *, key: str) -> SentMessage:
+        """Adds the image message of an accepted proposal and queues its job, in the caller's transaction.
+
+        Nothing of the user is saved: the character sends the image, so the returned `message` is the placeholder
+        itself (status `queued`, one `streaming` variant), and `reply` is the same message. `scene` is drawn as the
+        request, with the usual outfit choice left to the scene. `key` makes a repeat return the first job. Raises
+        NotFoundError for a missing or deleted conversation, ConflictError for an archived one, and QueueFullError
+        when the queue is full, which the caller turns into its own answer.
+        """
+        conversation = _active_conversation(connection, conversation_id)
+        now = to_utc_text(self._clock())
+        placeholder = _add_message(
+            connection, conversation_id, Author.CHARACTER, MessageStatus.QUEUED, "", now, kind="image"
+        )
+        assert placeholder.active_variant_id is not None
+        payload: dict[str, Any] = {
+            "reply_message_id": placeholder.id,
+            "variant_id": placeholder.active_variant_id,
+            "request": scene,
+            "aspect": "auto",
+            "outfit": None,
+            "quality": None,
+            "seed": None,
+            "purpose": "chat",
+        }
+        job = self._enqueue(connection, conversation, placeholder, payload, key=key, stage=None)
+        return SentMessage(message=placeholder, reply=placeholder, job=job)
 
     def regenerate(self, image_id: str, *, keep_seed: bool = False) -> Regeneration:
         """Adds a `generated` variant to the image's message, makes it the active one and queues an `image_request`
@@ -188,6 +297,8 @@ class ImageService:
                 "aspect": row["aspect"],
                 "outfit": None,
                 "quality": row["quality_preset"],
+                "steps": row["steps"],
+                "cfg": row["cfg"],
                 "seed": row["seed"] if keep_seed else self._seed_source(),
                 "purpose": row["purpose"],
                 "caption": _caption_of(connection, row["id"]),
@@ -233,6 +344,17 @@ class ImageService:
             raise NotFoundError(_NO_IMAGE)
         return path, "image/webp" if thumbnail else row["media_type"]
 
+    def _replay(self, connection: Connection, conversation: Conversation, user: Message) -> SentMessage:
+        """Returns the result of the earlier request that saved `user`: its image message and its job, which the
+        idempotency key finds (the first attempt saved the messages and the job in one transaction, so the job exists
+        and the empty payload is never stored). Raises ConflictError when `user` has no image message after it,
+        because it was sent as text."""
+        reply = repository.find_by_seq(connection, conversation.id, user.seq + 1)
+        if reply is None or reply.kind not in ("image", "mixed"):
+            raise ConflictError(_ALREADY_SENT)
+        job = self._enqueue(connection, conversation, reply, {}, key=f"image_request:{user.id}", stage=None)
+        return SentMessage(message=user, reply=reply, job=job)
+
     def _enqueue(
         self,
         connection: Connection,
@@ -269,6 +391,30 @@ class ImageService:
             raise ConflictError(_QUEUE_FULL) from None
 
 
+def _check_options(aspect: str, quality: str | None, seed: int | None, steps: int | None, cfg: float | None) -> None:
+    """Raises ValidationFailedError for an unknown aspect or quality, or a seed, step count or CFG outside its range."""
+    if aspect not in _ASPECTS:
+        raise ValidationFailedError("Formato dell'immagine sconosciuto.")
+    if quality is not None and quality not in _QUALITIES:
+        raise ValidationFailedError("Qualità dell'immagine sconosciuta.")
+    if seed is not None and (isinstance(seed, bool) or not 0 <= seed <= MAX_SEED):
+        raise ValidationFailedError("Il seed è fuori dall'intervallo ammesso.")
+    if steps is not None and (isinstance(steps, bool) or not MIN_STEPS <= steps <= MAX_STEPS):
+        raise ValidationFailedError(f"I passi vanno da {MIN_STEPS} a {MAX_STEPS}.")
+    if cfg is not None and (isinstance(cfg, bool) or not MIN_CFG <= cfg <= MAX_CFG):
+        raise ValidationFailedError(f"Il CFG va da {MIN_CFG:g} a {MAX_CFG:g}.")
+
+
+def _check_outfit(connection: Connection, conversation: Conversation, outfit: str | None) -> None:
+    """Raises ValidationFailedError when the conversation's character does not offer `outfit`."""
+    stored = character_repository.get_card(connection, conversation.character_id)
+    assert stored is not None, "a conversation's character cannot be removed while the chat exists"
+    try:
+        outfit_choices(stored.card.visual, outfit)
+    except ValueError:
+        raise ValidationFailedError(_NO_OUTFIT) from None
+
+
 def _active_conversation(connection: Connection, conversation_id: str) -> Conversation:
     conversation = conversation_repository.get(connection, conversation_id)
     if conversation is None or conversation.status is ConversationStatus.DELETED:
@@ -301,6 +447,7 @@ def _add_message(
     now: str,
     *,
     kind: str = "text",
+    client_message_id: str | None = None,
 ) -> Message:
     """Adds a message with its first variant, active, and returns it. Only a user message starts `sent`; a character
     message with no text yet gets a `streaming` variant that its job fills."""
@@ -311,7 +458,7 @@ def _add_message(
         message_id=message_id,
         conversation_id=conversation_id,
         seq=repository.take_seq(connection, conversation_id, now),
-        client_message_id=None,
+        client_message_id=client_message_id,
         author=author,
         status=status,
         read_state="sent" if author is Author.USER else None,

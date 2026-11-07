@@ -580,6 +580,13 @@ Retention: the newest 50,000 rows.
 | `job_id` | TEXT | FK, SET NULL |
 | `created_at`, `decided_at` | TEXT | |
 
+Delivered in revision `0014` (P05.5a). The keys to `conversations` and `messages` are RESTRICT, like the other tables
+(`characters.purge` deletes the proposals first), and `status` has a `CHECK` list. A `CHECK` ties the status to
+`decided_at`: a row is `pending` exactly while `decided_at` is NULL. `scene_json` holds the validated
+`ImageProposalResult` and `reason` repeats its reason; the API shows the scene text. A proposal expires 24 hours after
+`created_at`, which no column records: `accept`, `reject` and `expire_stale` compare the time. Indexes:
+`(conversation_id, created_at)` and `(status, created_at)`.
+
 ## Scheduling and settings
 
 ### `scheduled_events`
@@ -774,7 +781,11 @@ paths up and never build them. CHECKs cover the kind, the source, the media type
 NULL)`; the partial unique index is `uq_character_assets_primary`, and `ix_character_assets_list` covers `(character_id,
 kind, created_at)`. `generated_image_id` and `character_visual_profiles.primary_avatar_asset_id` stay plain columns:
 `generated_images` does not exist, and adding a key to the profile would need a table rebuild, so the service keeps
-the profile column in step with `is_primary`, which is the source of truth. `crop_json` is
+the profile column in step with `is_primary`, which is the source of truth. Since P05.5a the persist stage of a
+character-mode image (purpose `avatar`, `profile`, `scene` or `variant`) inserts the asset row itself, with `source =
+generated`, the kind of the purpose, `generated_image_id` set and the image's own `file_path` and `thumb_path`; the id
+derives from the image id, so a restarted persist adds no second row. Deleting such an asset leaves the files to the
+image. `crop_json` is
 `{"source_asset_id", "x", "y", "width", "height"}`. `sha256` is the hash of the stored, re-encoded file.
 
 ## Deletion policy

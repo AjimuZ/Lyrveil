@@ -132,6 +132,11 @@ First-pass defaults come from the image profile's preset. A changed value is sto
 | `images.max_wait_seconds` | 60 | 0 to 600 |
 | `images.max_in_a_row` | 4 | 1 to 20 |
 
+Since P05.5a the backend reads `images.auto_detect_requests` and `images.contextual_enabled` from `application_settings`
+(a key with no row holds its default); no screen or route changes them yet. `images.proposal_min_messages` is the
+`min_messages` argument of `ImageProposalService`, not yet read from a setting. `images.steps` and `images.cfg` bound the
+`steps` and `cfg` of an explicit image request, whose values replace the settings' for that image.
+
 ### GPU and jobs
 
 Listed in [GPU orchestration](gpu-orchestration.md#timeouts), plus the following. The text model's VRAM thresholds

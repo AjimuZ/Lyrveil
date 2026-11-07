@@ -304,7 +304,23 @@ it. A failure with no attempt left sets the message and the variant `failed` and
 `services/images.py` holds `ImageService`: `request` saves the user's request, the image placeholder and the job in one
 transaction (a full queue rolls all of it back), `regenerate` adds a `generated` variant and queues the job at the
 `render` stage with the stored prompt (`JobQueue.enqueue(..., stage=)`), `get` and `media_file` read the metadata and
-the files. No setting store, orchestrator mode switch or HTTP route starts a request yet (P05.5, P05.7).
+the files. No setting store or orchestrator mode switch starts a request yet (P05.7).
+
+Delivered in P05.5a ([Modes](image-generation.md#delivered-in-p055a)):
+
+- `images/request_detector.py` holds the pure `detect_image_request(text, language)`; its word lists are under
+  `prompts/<code>/image_request_*.txt`.
+- `MessageService(engine, ..., images=ImageService)` sends a detected or `intent: image` message through
+  `ImageService.request` (with `client_message_id` replay). `persistence/settings.py` holds the keys
+  `images.auto_detect_requests` (default on) and `images.contextual_enabled` (default off).
+- `ImageService.request` takes `steps` and `cfg` (`_sampling` in `ImageGenerationService` falls back to the settings),
+  `request_asset` queues a job with no conversation or message (character mode), and `queue_proposed` queues the image
+  of an accepted proposal inside the caller's transaction.
+- The `persist` stage links a character-mode image as a `character_assets` row (`persistence.assets.link_generated`)
+  and publishes `image.completed` with `message_id: null` when there is no message.
+- `services/image_proposals.py` holds `ImageProposalService` (`queue_if_due`, `propose`, `accept`, `reject`,
+  `expire_stale`) on `persistence/image_proposals.py` and the `image_proposals` table (revision `0014`). The
+  `image_proposal` job handler is not written, so `main()` registers none and nothing calls `queue_if_due` yet.
 
 ### Prompt formatter
 

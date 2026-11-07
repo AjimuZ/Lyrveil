@@ -329,8 +329,11 @@ Delivered in P02.5b, all except `remember` and `diagnostics` (P04, P06):
   one, so the text is never lost to a full queue. Sending the same `client_message_id` to the same chat again returns the
   first result and writes nothing; if the first attempt died before queuing its job, the retry queues it. A chat that is
   deleted answers `404`, an archived one `409`, blank text `422` and text over 8000 characters `413`. `queue_position`
-  counts the queued and running jobs that run before the job, itself included. The `image` intent answers `409` until
-  P05; `auto` and `text` both produce a text reply.
+  counts the queued and running jobs that run before the job, itself included. Since P05.5a the `image` intent, and an
+  `auto` message of at most 1000 characters that the [request detector](image-generation.md#manual-mode) reads as a
+  request (while `images.auto_detect_requests` is on), save the user's message and an image message (`kind` `image`) and
+  queue an `image_request` job instead, in one transaction: a full queue answers `409` and saves nothing, and an `image`
+  intent over 1000 characters answers `422`. `text` and every other message produce a text reply.
 - **History** returns the newest `limit` messages below `before_seq` (default: the newest), oldest first inside the page,
   as `{"items": [], "next_before_seq": null}`. `next_before_seq` is the `before_seq` of the next older page and null at
   the start. Deleted messages are left out and their `seq` is not reused. Queued, streaming, failed and interrupted
@@ -399,9 +402,26 @@ Delivered in P05.4b: `GET /media/images/{id}/original` and `/thumbnail` with the
 `GET /images/{id}`, which answers the stored metadata (size, request, scene, final prompts, seed, sampler values,
 profile, preset, workflow file and ComfyUI version, but not the submitted workflow) with `url` and `thumbnail_url`. The
 files come from `data/media`, so they load with ComfyUI off. A message carries `image_id`, the image of its active
-variant (null for a message with none), and `image.completed` carries the same metadata as `image`. Planned (P05.5 and
-P05.6): the explicit request, the gallery, regeneration and deletion routes. The service behind the first two exists
-(`ImageService.request`, `regenerate`).
+variant (null for a message with none), and `image.completed` carries the same metadata as `image`.
+
+Delivered in P05.5a ([Delivered in P05.5a](image-generation.md#delivered-in-p055a)):
+
+- `POST /conversations/{id}/images` answers `202` with `message`, `reply` and `job`, as a message send does. It accepts
+  no field beyond the documented ones (`422`). `steps` is 10 to 50 and `cfg` 1 to 12. It answers `404` for a missing
+  chat, `409` for an archived chat or a full queue, and `422` for a blank request, an unknown aspect or quality, a value
+  out of range or an outfit the character does not have.
+- `POST /characters/{id}/assets/generate` answers `202` with `{"job": {...}}` and takes `purpose` (`avatar`, `profile`,
+  `scene` or `variant`), `scene`, `aspect`, `outfit`, `quality` and `seed`. It answers `404` for an unknown character,
+  `409` for a full queue and `422` for another purpose, a blank `scene` with the `scene` purpose, or the values above.
+- `POST /image-proposals/{id}/accept` answers `202` like a send (`message` and `reply` are the image placeholder), and
+  `/reject` answers `200` with the proposal. Both answer `404` for an unknown proposal and `409` for one already
+  answered or older than 24 hours. The `image.proposed` event carries `proposal` (`id`, `conversation_id`,
+  `message_id`, `scene`, `reason`, `status`, `job_id`, `created_at`, `decided_at`), and `image.completed` carries
+  `message_id: null` for an image of character mode.
+
+Planned (P05.6): the gallery, regeneration and deletion routes. The service behind regeneration exists
+(`ImageService.regenerate`). None of the image routes is in `backend/openapi.json` until it is next regenerated with
+Docker.
 
 ### Memory
 

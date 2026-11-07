@@ -13,6 +13,7 @@ MESSAGE_FAILED = "message.failed"
 MESSAGE_UPDATED = "message.updated"
 IMAGE_PROGRESS = "image.progress"
 IMAGE_COMPLETED = "image.completed"
+IMAGE_PROPOSED = "image.proposed"
 
 
 class EventPublisher(Protocol):

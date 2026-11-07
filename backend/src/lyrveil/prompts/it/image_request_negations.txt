@@ -1,0 +1,11 @@
+# Negations of the image request detector (docs/image-generation.md, Manual mode): a verb with one of these among the
+# three words before it, in the same clause, is not a request ("non crea immagini"). One word per line.
+non
+mai
+senza
+niente
+nulla
+nessun
+nessuna
+nessuno
+no
