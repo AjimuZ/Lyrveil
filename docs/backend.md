@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -131,6 +131,8 @@ Adding a model means writing a new adapter or changing a model file. No service 
 
 Delivered in P02.3a: `ports/text_runtime.py` holds `TextRuntime` with its types and errors, and
 `runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Nothing calls the adapter yet: the job queue of P02.4 will.
+Delivered in P02.3b: `prompts/formatter.py` renders the prompt text that the adapter sends
+([Prompt formatter](#prompt-formatter)).
 
 - `TextRequest` carries only the [GenerationInput fields](runtime-contracts.md#generationinput-fields-used).
   A field left at `None` is not sent, so the runtime's default applies. `genkey` is required.
@@ -166,6 +168,32 @@ Error messages hold paths, status codes and reasons, never prompt or reply text.
 `tests/unit/test_koboldcpp_runtime.py` runs the adapter against `fake_kobold` over real HTTP. It also
 reads the contract page and fails when the adapter's module names an `/api/` path missing from the
 KoboldCpp endpoint table, or when a request sends a field outside the GenerationInput table.
+
+### Prompt formatter
+
+Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.
+Nothing calls it yet: `ContextBuilder` will.
+
+- `formatter_for(family)` returns the formatter of a catalog `template`: `gemma4`, `mistral_v3_tekken` or `chatml`.
+- `chat(parts, current_message)` and `proactive(parts, instruction)` take a `ChatParts`: the stable text, the
+  history as `Turn` values, blocks 4, 5 and 9, the character's first name and the user's display name. They return
+  `text` and `prefix`, the start of `text` that ends where the last user turn begins. For `gemma4` and `chatml` the
+  prefix holds the stable text and the history, for `mistral_v3_tekken` only the history.
+- `structured(system_text, user_text)` returns one system text and one user turn, with no frame.
+- `stop_sequences(user_display_name)` returns the family's stop sequences.
+- `neutralize_frame_markers` replaces the `[` of a line that starts with `[Contesto per` or `[Messaggio di`,
+  in any case and after optional spaces, with `(`. Every text the formatter receives passes through it, so only the
+  formatter writes the markers.
+
+Choices the docs did not fix, kept until the GPU suite (T-GPU-03, T-GPU-04) checks them:
+
+- An empty block 4, 5 or 9 is left out of the frame, and trailing line breaks of a block are dropped. Turn text is
+  kept as is.
+- Each history turn is written by its own role, so two character turns in a row, such as a proactive message after a
+  reply, stay two turns. In `mistral_v3_tekken` that gives two `{reply}</s>` pieces, an order the GGUF template refuses.
+
+`tests/unit/test_prompt_formatter.py` holds T-MOD-02, with golden strings written from the formats of
+[Prompt format](prompting.md#prompt-format), and T-MOD-05.
 
 ## Concurrency model
 

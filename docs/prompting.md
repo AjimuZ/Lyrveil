@@ -1,7 +1,8 @@
 # Prompting and language
 
 Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models and 2026-11-06 for the prompt layout and the
-voice fields. Implementation: planned, phases P02 to P05.
+voice fields. Implementation: partial. Delivered in P02.3b: `PromptFormatter` for the three families of
+[Prompt format](#prompt-format) ([Backend](backend.md#prompt-formatter)). The rest is planned, phases P02 to P05.
 
 `PromptTemplateService` loads templates from `backend/src/lyrveil/prompts/<language>/`. Each
 file has a version in its name, such as `extraction.v1.j2`. Rendering uses Jinja2 with
@@ -114,7 +115,8 @@ Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}
 ### Checks
 
 - A unit test compares each formatter with the output of the model's official template for the same
-  turns (T-MOD-02).
+  turns (T-MOD-02). In P02.3b its golden strings are written from the formats above, because the sessions had no
+  access to the official templates. The tokenization fixtures of the P02 exit check confirm them.
 - A unit test renders two consecutive replies of one conversation and checks that they share the
   stable text and the history byte for byte, and that no old turn carries the frame (T-MOD-05).
 - The P02 exit check tokenizes one prompt per family with the real model and stores the identifiers as

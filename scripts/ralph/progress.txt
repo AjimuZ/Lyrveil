@@ -71,6 +71,8 @@
 - Mypy strict flags a repeated `assert obj.prop is X` after a mutation as non-overlapping. Compare a tuple such as `(obj.state, obj.lease) == (...)` instead.
 - Adapters list every path they call in a module-level ENDPOINTS constant, and a unit test parses the docs/runtime-contracts.md tables and fails on any '/api/' string constant in the module that the contract does not list.
 - Bound streaming reads with anyio.fail_after around each `anext()` call, never around a `yield`, so one wait can tell a stall from the total deadline.
+- Pure renderers that feed the KoboldCpp prompt cache return the full text plus the prefix that stays stable, so tests can check byte-for-byte prefix reuse without a model.
+- Neutralize untrusted text at the single point where control markers are written, so only that code can produce real markers.
 
 ---
 
@@ -555,4 +557,41 @@ Not run: the integration and end-to-end levels, and anything against a real Kobo
   - A small uv.lock change, such as moving a package already in the lock from dev to runtime, can be hand-edited in the root package's dependencies, dev-dependencies, requires-dist and requires-dev. `test lint` builds the test stage with `uv sync --locked` and so checks the edit.
   - Ruff PT012 is active: a `pytest.raises` block must hold one simple statement, so move loops and branches into helper functions.
   - Two assumptions are still unconfirmed until the GPU suite: the field name `value` for /api/extra/true_max_context_length, and the out-of-memory detection (body text 'out of memory', or a closing stream event with 'error').
+---
+
+## 2026-11-07T02:23:11Z - P02.3b
+- I added `PromptFormatter` for `gemma4`, `mistral_v3_tekken` and `chatml` in `backend/src/lyrveil/prompts/formatter.py`, following docs/prompting.md (Prompt format) and ADRs 0025 and 0031.
+
+What it does:
+- `formatter_for(family)` returns the formatter for a catalog template.
+- `chat(parts, current_message)` lays out a reply prompt: the stable text, the history as plain turns, then the last user turn. That turn holds the frame of the dynamic context and the current message.
+- `proactive(parts, instruction)` uses the same layout, but the frame ends with the instruction and has no `[Messaggio di …]` line.
+- `structured(system, user)` gives one system text and one user turn, with no frame.
+- `stop_sequences(user_display_name)` returns each family's stop list.
+- `chat` and `proactive` return `FormattedPrompt(text, prefix)`. `prefix` is the part of `text` before the last user turn: the stable text plus history for `gemma4` and `chatml`, only the history for `mistral_v3_tekken`.
+- `neutralize_frame_markers` turns the `[` into `(` on any line starting with `[Contesto per` or `[Messaggio di` (any case, optional leading spaces, also after a lone `\r`). It is applied to every text the formatter receives, so only the formatter itself writes real markers. No family writes BOS.
+
+Tests: `backend/tests/unit/test_prompt_formatter.py` holds 24 cases for T-MOD-02 and T-MOD-05. The golden strings are written from the formats in docs/prompting.md, because sessions have no access to the official templates; T-GPU-03 will confirm them. The tests check:
+- the golden strings for chat and structured prompts;
+- the stop sequences;
+- that no family writes BOS;
+- that two consecutive replies share the prefix byte for byte, and old turns carry no frame;
+- that markers are neutralized in the summary, user and character turns, memories, the current message and the proactive instruction;
+- the proactive layout, empty blocks being dropped, and that neutralizing twice changes nothing.
+
+Checks: `scripts/lyrveil.cmd test unit tests/unit/test_prompt_formatter.py` passed (24 tests). `scripts/lyrveil.cmd test lint` failed once on `ruff format`; I fixed the layout and it then passed. The final format fix only moved line breaks and came after that test run. I did not run the integration, e2e or Docker levels, or anything against a real model.
+
+Choices the docs did not fix, recorded in docs/backend.md: an empty block 4, 5 or 9 is left out of the frame, and trailing line breaks of a block are dropped. Each history turn is written under its own role, so two character turns in a row produce two `{reply}</s>` pieces in `mistral_v3_tekken`, an order its GGUF template would refuse.
+
+Finding, outside this task: nothing removes control tokens such as `<|turn>`, `[INST]` or `<|im_start|>` that a user types into a message. KoboldCpp reads control tokens written in the prompt as real tokens, so this is a possible prompt injection that no document covers yet.
+
+CHANGELOG.md is unchanged because nothing calls the formatter yet.
+- Files changed: backend/src/lyrveil/prompts/__init__.py, backend/src/lyrveil/prompts/formatter.py, backend/tests/unit/test_prompt_formatter.py, docs/backend.md, docs/prompting.md
+- **Learnings for future iterations:**
+  - PromptFormatter is in lyrveil.prompts.formatter. Use formatter_for(catalog template) and then .chat(ChatParts, msg), .proactive(ChatParts, instruction), .structured(system, user) and .stop_sequences(user_name). Nothing calls it yet; ContextBuilder should. Its stop_sequences fill TextRequest.stop_sequence.
+  - FormattedPrompt.prefix ends where the last user turn begins. For mistral_v3_tekken the stable text sits in the last turn and is not part of the prefix.
+  - The formatter neutralizes frame markers in every text it receives, so callers must not write '[Contesto per' or '[Messaggio di' themselves.
+  - Gap, not covered by any doc: nothing removes control tokens (<|turn>, [INST], <|im_start|>) from user text, and KoboldCpp parses control tokens written in the prompt. This needs a product or security decision.
+  - Running one test: `scripts/lyrveil.cmd test unit tests/unit/<file>.py` runs only that file in the backend test stage.
+  - ruff format joins wrapped expressions back onto one line when they fit in 120 characters. Run `test lint` after hand-wrapping lines.
 ---
