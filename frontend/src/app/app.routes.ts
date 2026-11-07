@@ -54,7 +54,11 @@ export const routes: Routes = [
   creator('characters/:id/edit', 'screen.characterEdit'),
   unavailable('characters/:id/memory', 'screen.characterMemory'),
   unavailable('gallery', 'screen.gallery'),
-  unavailable('scenarios', 'screen.scenarios'),
+  {
+    path: 'scenarios',
+    loadComponent: () => import('./features/scenarios/scenarios-screen').then((module) => module.ScenariosScreen),
+    data: { screen: 'screen.scenarios' satisfies TextKey },
+  },
   unavailable('settings', 'screen.settings'),
   unavailable('settings/models', 'screen.settingsModels'),
   unavailable('settings/resources', 'screen.settingsResources'),

@@ -4,6 +4,8 @@ Every function works on a connection the caller owns and never commits. Writers 
 option of lyrveil.persistence.database, so the service decides what one transaction holds.
 """
 
+import json
+
 from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.characters import CharacterProfile
@@ -12,7 +14,7 @@ from lyrveil.domain.conversations import CharacterRef, Conversation, Conversatio
 _SELECT = """
 SELECT c.id, c.character_id, ch.first_name, ch.last_name, c.title, c.language, ch.primary_language, c.status,
        c.pinned_at, c.shares_memory, c.next_seq, c.last_read_seq, c.last_message_at, c.created_at, c.updated_at,
-       c.deleted_at,
+       c.deleted_at, c.scenario_id, json_extract(c.scenario_snapshot_json, '$.title') AS scenario_title,
        (SELECT a.id FROM character_assets AS a
         WHERE a.character_id = c.character_id AND a.kind = 'avatar' AND a.is_primary = 1 AND a.deleted_at IS NULL
         LIMIT 1) AS avatar_asset_id
@@ -43,6 +45,8 @@ def _conversation(row: RowMapping) -> Conversation:
         updated_at=row["updated_at"],
         deleted_at=row["deleted_at"],
         avatar_asset_id=row["avatar_asset_id"],
+        scenario_id=row["scenario_id"],
+        scenario_title=row["scenario_title"],
     )
 
 
@@ -104,16 +108,22 @@ def insert(
     language: str | None,
     shares_memory: bool,
     now: str,
+    scenario_id: str | None = None,
+    scenario_snapshot: dict[str, object] | None = None,
 ) -> None:
-    """Adds an active conversation with `next_seq` 1 and every cursor at 0."""
+    """Adds an active conversation with `next_seq` 1 and every cursor at 0. A conversation that starts from a scenario
+    stores its id and `scenario_snapshot`, the copy that later edits of the scenario never change."""
     connection.execute(
         text(
-            "INSERT INTO conversations (id, character_id, title, language, shares_memory, created_at, updated_at) "
-            "VALUES (:id, :character_id, :title, :language, :shares_memory, :now, :now)"
+            "INSERT INTO conversations (id, character_id, scenario_id, scenario_snapshot_json, title, language, "
+            "shares_memory, created_at, updated_at) VALUES (:id, :character_id, :scenario_id, :snapshot, :title, "
+            ":language, :shares_memory, :now, :now)"
         ),
         {
             "id": conversation_id,
             "character_id": character_id,
+            "scenario_id": scenario_id,
+            "snapshot": None if scenario_snapshot is None else json.dumps(scenario_snapshot, ensure_ascii=False),
             "title": title,
             "language": language,
             "shares_memory": int(shares_memory),

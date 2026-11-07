@@ -14,7 +14,7 @@ generation, and with them `message.restarted`, come in P04.8. No message text, p
 """
 
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 import anyio
@@ -40,6 +40,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.ports.events import (
     MESSAGE_COMPLETED,
     MESSAGE_DELTA,
@@ -258,7 +259,7 @@ class ChatInferenceService:
     async def _generate(self, reply: _Reply, context: RunContext, streamed: list[str]) -> _Generated:
         """Streams the reply, publishing each token and flushing the text on time. `streamed` collects the
         tokens, so a failure handler sees what was already shown."""
-        character, messages = await to_thread.run_sync(self._load_context, reply)
+        character, messages, scenario = await to_thread.run_sync(self._load_context, reply)
         split = split_current_message(messages)
         if split is None:
             raise JobFailedError(INTERNAL, _NOTHING_TO_ANSWER, retryable=False)
@@ -267,7 +268,13 @@ class ChatInferenceService:
         formatter = formatter_for(settings.template)
         info = await self._runtime.info()
         prompt, prompt_tokens = await self._fit(
-            formatter, character, reply.language, history, current, info.max_context_length - settings.max_length
+            formatter,
+            character,
+            reply.language,
+            history,
+            current,
+            info.max_context_length - settings.max_length,
+            scenario,
         )
         request = TextRequest(
             prompt=prompt.text,
@@ -313,6 +320,7 @@ class ChatInferenceService:
         history: Sequence[Turn],
         current: str,
         budget: int,
+        scenario: Mapping[str, object] | None = None,
     ) -> tuple[FormattedPrompt, int]:
         """Returns the prompt and its token count, with the oldest turns dropped until it fits `budget` tokens.
 
@@ -323,18 +331,21 @@ class ChatInferenceService:
         kept = list(history)
         user = self._settings.user
         while True:
-            prompt = formatter.chat(chat_parts(character, user, language, kept), current)
+            prompt = formatter.chat(chat_parts(character, user, language, kept, scenario), current)
             tokens = await self._runtime.count_tokens(prompt.text, special=True)
             if tokens <= budget or not kept:
                 return prompt, tokens
             del kept[: max(1, len(kept) // 4)]
 
-    def _load_context(self, reply: _Reply) -> tuple[CharacterProfile, list[Message]]:
-        def load(connection: Connection) -> tuple[CharacterProfile, list[Message]]:
+    def _load_context(self, reply: _Reply) -> tuple[CharacterProfile, list[Message], dict[str, object] | None]:
+        """Returns the character card, the chat's messages before the reply, and the scenario copy the chat started
+        with. Everything is keyed by this reply's conversation, so another chat of the same character adds nothing."""
+
+        def load(connection: Connection) -> tuple[CharacterProfile, list[Message], dict[str, object] | None]:
             character = conversation_repository.find_profile(connection, reply.character_id)
             assert character is not None, "a conversation's character cannot be removed while the chat exists"
             messages = repository.prompt_messages(connection, reply.conversation_id, reply.seq, MAX_HISTORY_MESSAGES)
-            return character, messages
+            return character, messages, scenario_repository.snapshot_of(connection, reply.conversation_id)
 
         return read(self._engine, load)
 

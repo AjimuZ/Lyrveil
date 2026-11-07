@@ -37,6 +37,8 @@ class ConversationOut(BaseModel):
     created_at: str
     updated_at: str
     avatar_url: str | None = None
+    scenario_id: str | None = None
+    scenario_title: str | None = None
 
 
 class ConversationList(BaseModel):
@@ -85,6 +87,8 @@ def _out(conversation: Conversation) -> ConversationOut:
         avatar_url=(
             None if conversation.avatar_asset_id is None else f"/media/assets/{conversation.avatar_asset_id}/thumbnail"
         ),
+        scenario_id=conversation.scenario_id,
+        scenario_title=conversation.scenario_title,
     )
 
 
@@ -114,7 +118,8 @@ def list_conversations(
 
 @router.post("", response_model=ConversationOut, status_code=201)
 def create_conversation(body: CreateConversation, service: ConversationService = Service) -> ConversationOut:
-    """Starts a conversation with a character: 404 when the character does not exist, 409 when it is archived."""
+    """Starts a conversation with a character, optionally from a scenario: 404 when the character or the scenario does
+    not exist, 409 when the character or the scenario is archived or the scenario is for another character."""
     return _out(
         service.create(
             body.character_id,

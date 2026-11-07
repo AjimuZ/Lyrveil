@@ -30,7 +30,8 @@ class Conversation:
     """One conversation row with its character's name. Timestamps are stored UTC text (data-model.md, Conventions).
 
     `language` is what the row stores, None meaning "inherit"; `effective_language` is the one in force.
-    `unread_count` is the messages after `last_read_seq`, and is 0 while a chat has none.
+    `unread_count` is the messages after `last_read_seq`, and is 0 while a chat has none. `scenario_title` is the title
+    in the copy taken when the chat started from a scenario; `scenario_id` is None once that scenario is deleted.
     """
 
     id: str
@@ -48,6 +49,8 @@ class Conversation:
     updated_at: str
     deleted_at: str | None
     avatar_asset_id: str | None = None
+    scenario_id: str | None = None
+    scenario_title: str | None = None
 
     @property
     def pinned(self) -> bool:

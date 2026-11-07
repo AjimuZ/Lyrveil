@@ -259,6 +259,23 @@ its conversations or their messages, then variants, messages, conversations, tra
 character, and is refused while one of those jobs runs. Since P03.4a it also deletes the asset rows, and removes their
 files after the commit. Memories and images do not exist yet; their deletion is added with them.
 
+## Conversations and scenarios
+
+A character can have any number of conversations at once. Each has its own history, state and context: a reply reads
+the character's card, that conversation's messages and the scenario copy that conversation started with, never another
+conversation of the same character. Archiving a character hides all of them with it.
+
+A **scenario** is a reusable starting situation (title, description, setting, opening message, an optional character
+and language; [data model](data-model.md#scenarios), [screen 7](frontend.md#7-scenarios)). Starting a conversation from
+one copies it into the conversation; the opening message becomes the first message of the character, and the description
+and setting join the stable system text of that conversation's replies as a `Scenario:` block. Later edits, archiving or
+deleting of the scenario change no running conversation. Scenario texts pass the same content guard as a card.
+
+Delivered in P03.7a. The integration test starts three conversations of one character, one from a scenario, and checks
+that no prompt holds another conversation's messages and that only the scenario's conversation holds its text; T-CON-02
+as written follows in P04. Not delivered: scenario text in the conversation's context panel, and the backup and restore
+that the roadmap line P03.7 also names.
+
 ## Exchange format
 
 A plain JSON file with extension `.lyrveil-character.json`. It never holds conversations or memories, because those are

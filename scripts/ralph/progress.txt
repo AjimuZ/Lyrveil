@@ -122,6 +122,9 @@
 - Prove a safeguard is not configurable with an AST check of the module's imports and names plus an end-to-end test under non-default settings, hostile environment variables and settings rows.
 - Keep test file basenames unique across tests/unit and tests/integration, or make both folders packages; mypy --strict refuses duplicate module names.
 - Write paths that must flag a row (such as is_demo) pass the flag into the single transaction of _insert_new instead of updating afterwards.
+- Copy-on-start: a conversation stores a JSON snapshot of anything it takes from a reusable template, and every later read (prompt, UI) uses the snapshot, so edits or deletion of the template never change a running story.
+- Text that reaches the model from user-written templates (scenarios) goes through consistency.content_guard.find_violation and raises ContentPolicyBlockedError naming the field, never quoting the text.
+- Do accent- and case-insensitive search of small tables in the service with a NFKD fold, because SQLite lower() is ASCII only.
 
 ---
 
@@ -984,4 +987,38 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - Slot tags must come from backend/src/lyrveil/images/vocabulary/tags.v1.json; I checked the ones used by hand against its category lists.
   - Not delivered: the first-start prompt, a frontend button, the synthetic 52 and 70 year-old test characters, and files under tests/fixtures/characters/. P05 (image identity protocol) needs the two synthetic characters.
   - Ruff enforces 120 columns and format; long dict literals need to be split across lines.
+---
+
+## 2026-11-07T07:25:35Z - P03.7a
+- Scenarios and several conversations per character are implemented in the backend and the frontend. `scripts/lyrveil.cmd test lint` passes. The targeted integration tests pass (21: test_scenarios, test_migrations, test_conversations). The Playwright spec was written but not run, and the full unit, integration, e2e and docker levels were not run.
+
+**What now works**
+- **Several conversations:** a character can have any number of conversations, and `GET /conversations?character_id=` lists them all. This already worked, and the new tests now cover it.
+- **Scenario API:** revision `0009` adds the `scenarios` table. There is a scenario service and routes: `GET`, `POST /scenarios`, `GET`, `PUT`, `DELETE /scenarios/{id}`, and `POST /scenarios/{id}/archive` and `/unarchive`. Search ignores case and accents. Scenario text is checked with the same minor-content guard as character cards.
+- **Conversation from a scenario:**
+  - `POST /conversations` now accepts `scenario_id`. It returns 404 for an unknown scenario and 409 for an archived one or one made for another character.
+  - The conversation stores a copy of the scenario and takes its language when none is given.
+  - A non-empty opening message becomes the first message, written by the character.
+  - The conversation's JSON also carries `scenario_id` and `scenario_title`.
+- **Context isolation:** the reply prompt now includes a `Scenario:` block built only from that conversation's own copy, so editing or deleting the scenario later changes nothing in a running chat. An integration test starts three chats of one character, one from a scenario. It checks that no prompt contains another chat's messages and that only the scenario chat contains the scenario text.
+- **Frontend:**
+  - The `/scenarios` screen has a list with search, active and archived tabs, a create/edit form, archive/restore, delete with an inline confirmation, and **Inizia conversazione**.
+  - **Inizia conversazione** goes to `/chats?scenario=<id>`, where the new-chat picker opens with that scenario chosen.
+  - The picker has an optional **Scenario** choice, limited to the scenarios the chosen character can use.
+
+**What is not covered or not verified**
+- **Not run:** the Playwright spec `tests/e2e/specs/scenarios.spec.mjs` was written but not run.
+- **Vitest:** the Vitest suite was run once and ignored my filter, so it ran everything. 80 of 86 tests passed, including my new store spec. The 6 failures are all in `character-profile-screen.spec.ts` ("Expected no open requests ... /characters/c1/assets"). I did not touch that area (`git diff` shows no changes under `frontend/src/app/features/characters`), but I did not check them against a clean baseline.
+- **Backup/restore:** the backup and restore half of roadmap line P03.7 is not part of this task and is not delivered.
+- **T-CON-02:** the full test follows in P04. The scenario text in the conversation's context panel is not delivered.
+- **OpenAPI:** the new routes are not in `backend/openapi.json`, as with the other character and conversation routes.
+- Files changed: backend/migrations/versions/0009_scenarios.py, backend/src/lyrveil/domain/scenarios.py, backend/src/lyrveil/domain/conversations.py, backend/src/lyrveil/persistence/scenarios.py, backend/src/lyrveil/persistence/conversations.py, backend/src/lyrveil/services/scenarios.py, backend/src/lyrveil/services/conversations.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/context/minimal.py, backend/src/lyrveil/api/scenarios.py, backend/src/lyrveil/api/conversations.py, backend/src/lyrveil/main.py, backend/tests/integration/test_scenarios.py, backend/tests/integration/test_migrations.py, frontend/src/app/features/scenarios/scenario.model.ts, frontend/src/app/features/scenarios/scenarios-store.ts, frontend/src/app/features/scenarios/scenarios-store.spec.ts, frontend/src/app/features/scenarios/scenarios-screen.ts, frontend/src/app/features/scenarios/scenarios-screen.html, frontend/src/app/features/scenarios/scenarios-screen.scss, frontend/src/app/features/chats/new-chat-dialog.ts, frontend/src/app/features/chats/new-chat-dialog.html, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/chats/chats-store.ts, frontend/src/app/features/chats/chats.model.ts, frontend/src/app/app.routes.ts, frontend/src/i18n/it.json, tests/e2e/specs/scenarios.spec.mjs, CHANGELOG.md, docs/api.md, docs/data-model.md, docs/frontend.md, docs/character-system.md
+- **Learnings for future iterations:**
+  - `conversations.scenario_id` has no foreign key: a batch alter in SQLite would recreate `conversations` and drop the FTS triggers of revision 0005. ScenarioRepository.delete clears the link itself. Any future FK on `conversations` needs the triggers recreated in the same migration.
+  - The reply prompt takes the scenario only from `conversations.scenario_snapshot_json` (persistence.scenarios.snapshot_of), via `chat_parts(..., scenario)`. P04's ContextBuilder should keep reading the snapshot, never the live scenarios row, to keep T-CON-02 isolation.
+  - The opening message is written by `_write_opening_message` in services/conversations.py with the messages repository, as a complete character message with one generated variant. It takes seq 1 and sets `last_message_at`.
+  - `npm run test --prefix frontend -- --include ...` ignores the filter and runs the whole Vitest suite. character-profile-screen.spec.ts fails 6 tests on an unflushed `GET /characters/c1/assets?kind=avatar`; this is outside this task, and no file under features/characters changed.
+  - Adding a migration needs test_migrations.py updated: HEAD, known_revisions, a new downgrade step and the table sets (done for 0009).
+  - Shell writes (python heredocs, redirection) are denied in this session; use the Edit and Write tools for all file changes.
+  - Not delivered from the P03.7 roadmap line: backup and restore. Scenario text in the conversation context panel and the full T-CON-02 test (P04) are also not delivered.
 ---

@@ -8,13 +8,17 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 from lyrveil.domain.conversations import RESTORE_WINDOW, Conversation, ConversationStatus
 from lyrveil.domain.errors import ConflictError, NotFoundError
 from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
+from lyrveil.domain.messages import Author, MessageStatus, VariantSource, VariantStatus, content_hash
+from lyrveil.domain.scenarios import ScenarioStatus
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as repository
+from lyrveil.persistence import messages as message_repository
+from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.persistence.search import match_query
 
 # The fields PATCH may change (docs/api.md, Conversations).
@@ -24,6 +28,35 @@ _NO_CHAT = "Conversazione non trovata."
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _write_opening_message(connection: Connection, conversation_id: str, content: str, now: str) -> None:
+    """Adds the scenario's opening message as the chat's first message: a complete character message with one
+    generated variant, as a reply leaves it, so history, search and the prompt treat it like any other turn."""
+    message_id, variant_id = new_id(), new_id()
+    message_repository.insert_message(
+        connection,
+        message_id=message_id,
+        conversation_id=conversation_id,
+        seq=message_repository.take_seq(connection, conversation_id, now),
+        client_message_id=None,
+        author=Author.CHARACTER,
+        status=MessageStatus.COMPLETE,
+        read_state=None,
+        content=content,
+        now=now,
+    )
+    message_repository.insert_variant(
+        connection,
+        variant_id=variant_id,
+        message_id=message_id,
+        content=content,
+        content_hash=content_hash(content),
+        source=VariantSource.GENERATED,
+        status=VariantStatus.COMPLETE,
+        now=now,
+    )
+    message_repository.update_message(connection, message_id, active_variant_id=variant_id)
 
 
 class ConversationService:
@@ -47,13 +80,14 @@ class ConversationService:
         shares_memory: bool = False,
     ) -> Conversation:
         """Returns a new active conversation with the character. The title defaults to the character's name and the
-        language to inheriting the character's.
+        language to the scenario's, else to inheriting the character's. A character can have any number of
+        conversations; each one has its own history, so none reads another's.
 
-        Raises NotFoundError when the character, or the scenario, does not exist (no scenario can exist before the
-        scenarios table does), and ConflictError when the character is archived.
+        With a `scenario_id` the conversation stores a copy of the scenario (Scenario.snapshot), and a non-empty
+        opening message becomes its first message, written by the character. Raises NotFoundError when the character,
+        or the scenario, does not exist, and ConflictError when the character is archived, the scenario is archived,
+        or the scenario is for another character.
         """
-        if scenario_id is not None:
-            raise NotFoundError("Scenario non trovato.")
         now = to_utc_text(self._clock())
 
         def work(connection: Any) -> Conversation:
@@ -62,16 +96,28 @@ class ConversationService:
                 raise NotFoundError("Personaggio non trovato.")
             if not character.active:
                 raise ConflictError("Il personaggio è archiviato.")
+            scenario = None if scenario_id is None else scenario_repository.get(connection, scenario_id)
+            if scenario_id is not None:
+                if scenario is None:
+                    raise NotFoundError("Scenario non trovato.")
+                if scenario.status is ScenarioStatus.ARCHIVED:
+                    raise ConflictError("Lo scenario è archiviato.")
+                if scenario.character_id not in (None, character.id):
+                    raise ConflictError("Lo scenario è pensato per un altro personaggio.")
             conversation_id = new_id()
             repository.insert(
                 connection,
                 conversation_id=conversation_id,
                 character_id=character.id,
                 title=(title or "").strip() or character.name,
-                language=language,
+                language=language or (scenario.language if scenario else None),
                 shares_memory=shares_memory,
                 now=now,
+                scenario_id=scenario_id,
+                scenario_snapshot=None if scenario is None else scenario.snapshot(),
             )
+            if scenario is not None and scenario.opening_message:
+                _write_opening_message(connection, conversation_id, scenario.opening_message, now)
             created = repository.get(connection, conversation_id)
             assert created is not None
             return created

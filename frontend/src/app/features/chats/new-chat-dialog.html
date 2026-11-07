@@ -15,12 +15,29 @@
     @if (characters().length > 0) {
       <div class="field">
         <label for="new-chat-character">{{ 'newChat.character' | t }}</label>
-        <select id="new-chat-character" class="control" (change)="characterId.set(valueOf($event))">
+        <select id="new-chat-character" class="control" (change)="chooseCharacter(valueOf($event))">
           @for (character of characters(); track character.id) {
             <option [value]="character.id" [selected]="character.id === characterId()">{{ character.full_name }}</option>
           }
         </select>
       </div>
+      @if (choices().length > 0) {
+        <div class="field">
+          <label for="new-chat-scenario">{{ 'newChat.scenario' | t }}</label>
+          <select
+            id="new-chat-scenario"
+            class="control"
+            aria-describedby="new-chat-scenario-hint"
+            (change)="scenarioId.set(valueOf($event))"
+          >
+            <option value="" [selected]="scenarioId() === ''">{{ 'newChat.scenarioNone' | t }}</option>
+            @for (scenario of choices(); track scenario.id) {
+              <option [value]="scenario.id" [selected]="scenario.id === scenarioId()">{{ scenario.title }}</option>
+            }
+          </select>
+          <p class="hint" id="new-chat-scenario-hint">{{ 'newChat.scenarioHint' | t }}</p>
+        </div>
+      }
       <div class="field">
         <label for="new-chat-language">{{ 'newChat.language' | t }}</label>
         <select id="new-chat-language" class="control" (change)="language.set(valueOf($event))">

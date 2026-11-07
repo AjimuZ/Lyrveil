@@ -1,0 +1,184 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.scenarios' | t }}</h1>
+    <button type="button" class="button primary" (click)="newScenario()">{{ 'scenarios.new' | t }}</button>
+  </header>
+
+  <p class="note">{{ 'scenarios.copyNote' | t }}</p>
+
+  @if (editing() !== null) {
+    <form class="form" novalidate aria-labelledby="scenario-form-title" (submit)="submit($event)">
+      <h2 class="subtitle" id="scenario-form-title">
+        {{ (editing() === 'new' ? 'scenarios.form.new' : 'scenarios.form.edit') | t }}
+      </h2>
+
+      @if (store.actionError(); as failure) {
+        <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+      }
+
+      <div class="field">
+        <label for="scenario-title">{{ 'scenarios.title' | t }}</label>
+        <input
+          id="scenario-title"
+          class="control"
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="limits.title"
+          [value]="title()"
+          [attr.aria-invalid]="attempted() && !titleValid()"
+          [attr.aria-describedby]="attempted() && !titleValid() ? 'scenario-title-error' : null"
+          (input)="title.set(valueOf($event))"
+        />
+        @if (attempted() && !titleValid()) {
+          <p class="field-error" id="scenario-title-error">{{ 'scenarios.error.title' | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="scenario-description">{{ 'scenarios.description' | t }}</label>
+        <textarea
+          id="scenario-description"
+          class="control"
+          rows="3"
+          [attr.maxlength]="limits.description"
+          [value]="description()"
+          (input)="description.set(valueOf($event))"
+        ></textarea>
+      </div>
+      <div class="field">
+        <label for="scenario-setting">{{ 'scenarios.setting' | t }}</label>
+        <textarea
+          id="scenario-setting"
+          class="control"
+          rows="2"
+          [attr.maxlength]="limits.setting"
+          [value]="setting()"
+          (input)="setting.set(valueOf($event))"
+        ></textarea>
+      </div>
+      <div class="field">
+        <label for="scenario-opening">{{ 'scenarios.opening' | t }}</label>
+        <textarea
+          id="scenario-opening"
+          class="control"
+          rows="3"
+          aria-describedby="scenario-opening-hint"
+          [attr.maxlength]="limits.openingMessage"
+          [value]="openingMessage()"
+          (input)="openingMessage.set(valueOf($event))"
+        ></textarea>
+        <p class="hint" id="scenario-opening-hint">{{ 'scenarios.openingHint' | t }}</p>
+      </div>
+      <div class="field">
+        <label for="scenario-character">{{ 'scenarios.character' | t }}</label>
+        <select id="scenario-character" class="control" (change)="characterId.set(valueOf($event))">
+          <option value="" [selected]="characterId() === ''">{{ 'scenarios.anyCharacter' | t }}</option>
+          @for (character of characters(); track character.id) {
+            <option [value]="character.id" [selected]="character.id === characterId()">{{ character.full_name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="scenario-language">{{ 'scenarios.language' | t }}</label>
+        <select id="scenario-language" class="control" (change)="language.set(valueOf($event))">
+          <option value="" [selected]="language() === ''">{{ 'newChat.languageDefault' | t }}</option>
+          @for (option of languages; track option.value) {
+            <option [value]="option.value" [selected]="option.value === language()">{{ option.label | t }}</option>
+          }
+        </select>
+      </div>
+      <div class="actions">
+        <button type="button" class="button" (click)="cancel()">{{ 'scenarios.cancel' | t }}</button>
+        <button type="submit" class="button primary" [disabled]="busy()">{{ 'scenarios.save' | t }}</button>
+      </div>
+    </form>
+  }
+
+  <div class="search">
+    <label class="search-label" for="scenario-search">{{ 'scenarios.search.label' | t }}</label>
+    <input
+      id="scenario-search"
+      class="control"
+      type="search"
+      autocomplete="off"
+      [placeholder]="'scenarios.search.placeholder' | t"
+      [value]="store.query()"
+      (input)="search($event)"
+    />
+  </div>
+
+  <div class="tabs" role="group" [attr.aria-label]="'scenarios.tabs.label' | t">
+    @for (tab of tabs; track tab.status) {
+      <button type="button" class="tab" [attr.aria-pressed]="store.tab() === tab.status" (click)="store.showTab(tab.status)">
+        {{ tab.label | t }}
+      </button>
+    }
+  </div>
+
+  @if (editing() === null && store.actionError(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (store.loading()) {
+    <p class="note" role="status">{{ 'scenarios.loading' | t }}</p>
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.reload()">{{ 'scenarios.retry' | t }}</button>
+    </div>
+  } @else if (store.items().length === 0) {
+    <p class="note">
+      @if (store.query().trim() !== '') {
+        {{ 'scenarios.empty.search' | t }}
+      } @else if (store.tab() === 'archived') {
+        {{ 'scenarios.empty.archived' | t }}
+      } @else {
+        {{ 'scenarios.empty.active' | t }}
+      }
+    </p>
+  } @else {
+    <ul class="list">
+      @for (scenario of store.items(); track scenario.id) {
+        <li class="card">
+          <div class="card-text">
+            <h2 class="card-title">{{ scenario.title }}</h2>
+            <p class="meta">
+              {{ characterName(scenario) ?? ('scenarios.anyCharacter' | t) }}
+              @if (languageKey(scenario); as key) {
+                · {{ key | t }}
+              }
+            </p>
+            @if (scenario.description) {
+              <p class="excerpt">{{ scenario.description }}</p>
+            }
+          </div>
+          <div class="card-actions">
+            @if (scenario.status === 'active') {
+              <a class="button primary" [routerLink]="['/chats']" [queryParams]="{ scenario: scenario.id }">
+                {{ 'newChat.start' | t }}
+              </a>
+            }
+            <button type="button" class="button" (click)="edit(scenario)">{{ 'scenarios.edit' | t }}</button>
+            <button type="button" class="button" (click)="toggleArchive(scenario)">
+              {{ (scenario.status === 'archived' ? 'scenarios.unarchive' : 'scenarios.archive') | t }}
+            </button>
+            @if (confirmingDelete() === scenario.id) {
+              <span class="confirm" role="group" [attr.aria-label]="'scenarios.delete.confirm' | t: { title: scenario.title }">
+                <span>{{ 'scenarios.delete.confirm' | t: { title: scenario.title } }}</span>
+                <button type="button" class="button danger" (click)="confirmRemove(scenario)">
+                  {{ 'scenarios.delete.yes' | t }}
+                </button>
+                <button type="button" class="button" (click)="confirmingDelete.set(null)">
+                  {{ 'scenarios.delete.no' | t }}
+                </button>
+              </span>
+            } @else {
+              <button type="button" class="button danger" (click)="confirmingDelete.set(scenario.id)">
+                {{ 'scenarios.delete' | t }}
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to `character_assets` (P03.4a, revision `0008`), are described in their "Delivered in" notes below. The rest is planned, phases P02 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to `scenarios` (P03.7a, revision `0009`), are described in their "Delivered in" notes below. The rest is planned, phases P02 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -168,6 +168,13 @@ Partial unique index: `(character_id) WHERE is_primary = 1 AND kind = 'avatar' A
 | `status` | TEXT | `active`, `archived` |
 | `created_at`, `updated_at` | TEXT | |
 
+Delivered in P03.7a (revision `0009`): the table as above, with `CHECK`s on the title length (1 to 200) and the
+status, and the index `(status, updated_at DESC)`. `conversations.scenario_id` stays a plain column, with no foreign
+key: SQLite cannot add one without recreating `conversations`, which would drop its search triggers (revision `0005`).
+The scenario service clears `scenario_id` itself when it deletes a scenario, which is the documented SET NULL; the
+conversation keeps `scenario_snapshot_json`. A conversation started from a scenario stores the snapshot
+(`id`, `title`, `description`, `setting`, `opening_message`, `language`), and only that copy reaches its reply prompt.
+
 ### `conversations`
 
 | Column | Type | Rules |
@@ -191,7 +198,7 @@ Partial unique index: `(character_id) WHERE is_primary = 1 AND kind = 'avatar' A
 Indexes: `(status, pinned_at, last_message_at DESC)`, `(character_id, status)`.
 
 Delivered in revision `0003` (P02.5a) with `CHECK` lists, `json_valid` on the JSON columns and the two indexes.
-`scenario_id` is a plain column until `scenarios` exists. `characters` has all its columns but none of its child
+`scenario_id` is a plain column (see `scenarios` above for why it stays one). `characters` has all its columns but none of its child
 tables yet (P03.1a). The list orders pinned chats first (newest pin first), then by `last_message_at`, or
 `created_at` while a chat has no message. Restoring a deleted conversation sets `active`, because the status before
 the delete is not stored; cancelling its scheduled events joins the delete with `scheduled_events` (P07).

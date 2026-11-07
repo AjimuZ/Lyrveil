@@ -230,6 +230,22 @@ Delivered in P03.4a, all but `generate`, and not in `backend/openapi.json`:
 
 `GET`, `POST /scenarios`. `GET`, `PUT /scenarios/{id}`. `POST /scenarios/{id}/archive`.
 
+Delivered in P03.7a, not in `backend/openapi.json`, with two routes added to the list above: `POST
+/scenarios/{id}/unarchive` and `DELETE /scenarios/{id}`.
+
+- A scenario answers `{"id", "title", "description", "setting", "opening_message", "character_id", "language",
+  "status", "created_at", "updated_at"}`. `character_id` null means any character; `language` null inherits;
+  `status` is `active` or `archived`.
+- `POST` answers `201` and `PUT` replaces every editable field (`title`, `description`, `setting`, `opening_message`,
+  `character_id`, `language`; a field left out takes its default). The title is trimmed and must not be blank (`422
+  VALIDATION_ERROR`); the limits are 200 characters for the title and 2000 for each other text. A text that describes a
+  minor is `422 CONTENT_POLICY_BLOCKED` naming the field. An unknown `character_id` is `404`.
+- `GET` takes `status` (default `active`), `character_id` (the scenarios for that character and those for any
+  character) and `q` (every word must appear in the title, description, setting or opening message; case and accents
+  ignored). Newest change first.
+- `archive` and `unarchive` answer the scenario. `DELETE` answers `204` and removes it; the conversations that started
+  from it keep their copy and lose only the link. Every route answers `404` for an unknown scenario.
+
 ### Conversations
 
 | Method and path | Purpose |
@@ -249,8 +265,12 @@ Delivered in P03.4a, all but `generate`, and not in `backend/openapi.json`:
 Delivered in P02.5a: `GET` and `POST /conversations`, `GET`, `PATCH` and `DELETE /conversations/{id}`, and `undelete`.
 `GET` takes `status` (default `active`), `character_id` and `q`. A deleted chat answers `404`
 everywhere except `undelete`, which answers `409` when the chat is not deleted or 30 days have passed. `POST` answers
-`201`, `404` for an unknown character or any `scenario_id` (no scenarios exist yet) and `409` for an archived
-character. A row holds `avatar_url`, the thumbnail route of the character's primary avatar (null while it has none),
+`201`, `404` for an unknown character and `409` for an archived character. Since P03.7a a `scenario_id` is accepted: `404`
+for an unknown scenario, `409` for an archived scenario or one made for another character. The conversation stores a
+copy of the scenario, takes its language when the body gives none, and a non-empty opening message becomes its first
+message, written by the character. A row also holds `scenario_id` (null once the scenario is deleted) and
+`scenario_title` (from the copy). A character can have any number of conversations; `GET /conversations?character_id=`
+lists them all. A row holds `avatar_url`, the thumbnail route of the character's primary avatar (null while it has none),
 and lacks the last message and typing flag until messages exist. These routes are not
 in `backend/openapi.json` until it is next regenerated with Docker.
 

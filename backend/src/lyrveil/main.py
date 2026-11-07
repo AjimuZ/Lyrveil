@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import assets, characters, conversations, events, health, jobs, media, messages
+from lyrveil.api import assets, characters, conversations, events, health, jobs, media, messages, scenarios
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
     SecurityHeadersMiddleware,
@@ -152,6 +152,7 @@ def create_app(
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(characters.router, prefix=API_PREFIX)
     app.include_router(assets.router, prefix=API_PREFIX)
+    app.include_router(scenarios.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)

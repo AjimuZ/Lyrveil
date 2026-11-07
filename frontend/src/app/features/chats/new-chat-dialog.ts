@@ -5,6 +5,8 @@ import { RouterLink } from '@angular/router';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey } from '../../core/i18n/translator';
+import { Scenario } from '../scenarios/scenario.model';
+import { ScenariosStore } from '../scenarios/scenarios-store';
 import { ChatsStore } from './chats-store';
 import { Character, GrammaticalGender, LANGUAGE_CODES } from './chats.model';
 
@@ -54,6 +56,7 @@ type Step = 'pick' | 'create';
 })
 export class NewChatDialog {
   private readonly store = inject(ChatsStore);
+  private readonly scenarioStore = inject(ScenariosStore);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly genders = GENDER_OPTIONS;
@@ -67,6 +70,12 @@ export class NewChatDialog {
 
   protected readonly characterId = signal('');
   protected readonly language = signal('');
+  protected readonly scenarios = signal<readonly Scenario[]>([]);
+  protected readonly scenarioId = signal('');
+  /** The scenarios the chosen character can use: those for it and those for any character. */
+  protected readonly choices = computed(() =>
+    this.scenarios().filter((scenario) => scenario.character_id === null || scenario.character_id === this.characterId()),
+  );
 
   protected readonly firstName = signal('');
   protected readonly lastName = signal('');
@@ -86,19 +95,34 @@ export class NewChatDialog {
     return /^\d+$/.test(text) && value >= MIN_AGE && value <= MAX_AGE;
   });
 
-  /** Shows the dialog on the picker, or on the character form when no character exists yet. */
-  async open(): Promise<void> {
+  /**
+   * Shows the dialog on the picker, or on the character form when no character exists yet. `scenarioId` chooses a
+   * scenario in advance, and its character too when the scenario is for one; a scenario that is no longer active is
+   * ignored. The scenarios are optional: a failure to load them leaves the picker without that choice.
+   */
+  async open(scenarioId: string | null = null): Promise<void> {
     this.error.set(null);
     this.characterId.set('');
     this.language.set('');
+    this.scenarioId.set('');
+    this.scenarios.set([]);
     this.resetForm();
     this.step.set('pick');
     this.loading.set(true);
     this.dialog().nativeElement.showModal();
     try {
-      const found = await this.store.listCharacters();
+      const [found, offered] = await Promise.all([
+        this.store.listCharacters(),
+        this.scenarioStore.listActive().catch((): readonly Scenario[] => []),
+      ]);
       this.characters.set(found);
-      this.characterId.set(found[0]?.id ?? '');
+      this.scenarios.set(offered);
+      const preselected = offered.find((scenario) => scenario.id === scenarioId);
+      const forCharacter = found.find((character) => character.id === preselected?.character_id);
+      this.characterId.set(forCharacter?.id ?? found[0]?.id ?? '');
+      if (preselected !== undefined && this.choices().includes(preselected)) {
+        this.scenarioId.set(preselected.id);
+      }
       // Only an empty list changes the step. showModal can paint the previous view before the loading state, and a
       // click on "new character" there must not be undone when the list arrives.
       if (found.length === 0) {
@@ -133,7 +157,7 @@ export class NewChatDialog {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.store.startChat(this.characterId(), this.language() || null);
+      await this.store.startChat(this.characterId(), this.language() || null, this.scenarioId() || null);
       this.close();
     } catch (failure) {
       this.error.set(toApiError(failure));
@@ -159,12 +183,20 @@ export class NewChatDialog {
         primary_language: this.primaryLanguage(),
       });
       this.characters.update((current) => [created, ...current]);
-      this.characterId.set(created.id);
+      this.chooseCharacter(created.id);
       this.step.set('pick');
     } catch (failure) {
       this.error.set(toApiError(failure));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  /** Chooses a character and drops the chosen scenario when that character cannot use it. */
+  protected chooseCharacter(id: string): void {
+    this.characterId.set(id);
+    if (!this.choices().some((scenario) => scenario.id === this.scenarioId())) {
+      this.scenarioId.set('');
     }
   }
 

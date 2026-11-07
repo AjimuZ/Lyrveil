@@ -121,7 +121,7 @@ Every screen has loading, empty and error states. Every control has real behavio
 Avatar, name, last message (one line), time, unread count, typing indicator, and a pending-image or queue hint. Search covers names, titles and messages. Pinned chats come first, then activity. A context menu offers pin, archive, delete. **+** opens
 a picker: choose a character, an optional scenario and a language. The list has a separate tab for archived conversations.
 
-Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, the conversation screen of P02.6b. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03) and the scenario choice (P03). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
+Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, the conversation screen of P02.6b. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03). The scenario choice joined the picker in P03.7a (see screen 7). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
 
 ### 2. Conversation
 
@@ -276,6 +276,15 @@ Grid of thumbnails with virtual scrolling. Filters by character, conversation, p
 ### 7. Scenarios
 
 List with search, edit form (title, description, setting, opening message, optional character, language) and archive. **Inizia conversazione** opens the new chat picker. A note says that existing conversations keep their copy.
+
+Delivered in P03.7a (`features/scenarios/`): the route `/scenarios` loads `scenarios-screen.ts`. **Nuovo scenario** opens
+the form above the list (the title is required; a refusal of the server, such as a text about a minor, stays on the form
+with its reason); each card has **Inizia conversazione** (an active scenario only), **Modifica**, **Archivia** or
+**Ripristina**, and **Elimina** with an inline confirmation. Search (debounced 250 ms, over `GET /scenarios?q=`) and the
+**Attivi** and **Archiviati** tabs work as on the chat list. **Inizia conversazione** goes to `/chats?scenario=<id>`, where
+the list opens the new chat picker with that scenario chosen (and its character, when the scenario is for one) and then
+drops the parameter. The picker has a **Scenario** choice with the scenarios the chosen character can use. Not
+delivered: scenario text in the conversation's context panel (that panel is planned).
 
 ### 8. General settings
 

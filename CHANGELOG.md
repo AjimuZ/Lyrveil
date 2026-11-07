@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Scenarios. The **Scenari** screen creates, edits, searches, archives and deletes scenarios (title, description,
+  setting, opening message, an optional character and a language), and **Inizia conversazione** on a scenario opens the
+  new-chat picker with it chosen; the picker also has an optional **Scenario** choice. A chat started from a scenario
+  keeps its own copy: its opening message becomes the first message of the character, its description and setting reach
+  the reply prompt of that chat only, and editing, archiving or deleting the scenario afterwards changes nothing in it.
+  A scenario text that describes a minor is refused with `CONTENT_POLICY_BLOCKED`. A character can have any number of
+  conversations, each with its own history and context. The routes are `GET`, `POST /api/v1/scenarios`, `GET`, `PUT`,
+  `DELETE /api/v1/scenarios/{id}` and `POST /api/v1/scenarios/{id}/archive` and `.../unarchive`; they are not in
+  `backend/openapi.json` yet.
 - Three original demo characters (Nerea Falchi, Ilario Sant'Elmo and Tessa Moravi), adults with Italian voices in
   three registers, can be added on request with `POST /api/v1/characters/demo`. Nothing is loaded by default, loading
   twice adds nothing, and an existing character is never changed. The first-start question and the screen button are

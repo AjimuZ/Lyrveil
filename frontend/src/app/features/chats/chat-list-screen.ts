@@ -1,6 +1,6 @@
 // Screen 1 of docs/frontend.md: the conversation list with search, an archived tab, row actions and the new-chat dialog.
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal, viewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { AfterViewInit, ChangeDetectionStrategy, Component, OnInit, inject, signal, viewChild } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
@@ -28,9 +28,11 @@ interface Tab {
   // Esc closes an open row menu from anywhere, as docs/frontend.md (Keyboard) promises.
   host: { '(document:keydown.escape)': 'closeMenu()' },
 })
-export class ChatListScreen implements OnInit {
+export class ChatListScreen implements OnInit, AfterViewInit {
   protected readonly store = inject(ChatsStore);
   private readonly translator = inject(Translator);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly newChat = viewChild.required(NewChatDialog);
 
   protected readonly tabs: readonly Tab[] = [
@@ -42,6 +44,21 @@ export class ChatListScreen implements OnInit {
 
   ngOnInit(): void {
     void this.store.showTab(this.store.tab());
+  }
+
+  ngAfterViewInit(): void {
+    // `/chats?scenario=<id>` is where "Inizia conversazione" of a scenario lands: open the picker with it chosen, and
+    // drop the parameter so a reload does not open the picker again.
+    const scenario = this.route.snapshot.queryParamMap.get('scenario');
+    if (scenario !== null) {
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { scenario: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+      void this.newChat().open(scenario);
+    }
   }
 
   protected openNewChat(): void {

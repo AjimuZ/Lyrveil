@@ -133,12 +133,21 @@ export class ChatsStore {
   }
 
   /**
-   * Starts a chat with the character in `language` (null follows the character) and switches to the active tab so
-   * the new row is visible. Rejects with an ApiError.
+   * Starts a chat with the character in `language` (null follows the scenario, else the character), optionally from
+   * the scenario `scenarioId`, and switches to the active tab so the new row is visible. A character may have any
+   * number of chats. Rejects with an ApiError.
    */
-  async startChat(characterId: string, language: string | null): Promise<Conversation> {
+  async startChat(
+    characterId: string,
+    language: string | null,
+    scenarioId: string | null = null,
+  ): Promise<Conversation> {
     const created = await firstValueFrom(
-      this.api.post<Conversation>('/conversations', { character_id: characterId, language }),
+      this.api.post<Conversation>('/conversations', {
+        character_id: characterId,
+        language,
+        scenario_id: scenarioId,
+      }),
     );
     this.queryState.set('');
     this.deletedState.set(null);

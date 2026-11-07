@@ -22,6 +22,9 @@ export interface Conversation {
   readonly updated_at: string;
   /** The thumbnail route of the character's primary avatar; null (or absent) while it has none. */
   readonly avatar_url?: string | null;
+  /** The scenario the chat started from, null once it is deleted; `scenario_title` is the title of the chat's copy. */
+  readonly scenario_id?: string | null;
+  readonly scenario_title?: string | null;
 }
 
 export interface ConversationList {

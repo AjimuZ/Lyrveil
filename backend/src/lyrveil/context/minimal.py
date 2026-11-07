@@ -7,7 +7,7 @@ versioned Jinja2 files, replaces the text below in P04; until then it follows `s
 docs/prompting.md.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from lyrveil.domain.characters import CharacterProfile
@@ -82,9 +82,29 @@ def canonical_identity(character: CharacterProfile) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def stable_text(character: CharacterProfile, user: UserProfile, language: str) -> str:
-    """Returns the stable system text: block 1, a blank line, then block 2."""
-    return f"{global_instructions(character, user, language)}\n\n{canonical_identity(character)}"
+def scenario_block(snapshot: Mapping[str, object] | None) -> str:
+    """Returns the scenario lines of block 3 for the copy a conversation stored at its start, or "" when it started
+    without a scenario or the copy has no description and no setting. Only that one conversation's copy is read, so a
+    scenario edited or deleted later, or another chat of the same character, never changes it."""
+    if not snapshot:
+        return ""
+    description = str(snapshot.get("description") or "").strip()
+    setting = str(snapshot.get("setting") or "").strip()
+    if not description and not setting:
+        return ""
+    lines = [f"Scenario: {snapshot.get('title') or ''}".strip(), description]
+    if setting:
+        lines.append(f"Ambientazione: {setting}")
+    return "\n".join(line for line in lines if line)
+
+
+def stable_text(
+    character: CharacterProfile, user: UserProfile, language: str, scenario: Mapping[str, object] | None = None
+) -> str:
+    """Returns the stable system text: block 1, a blank line, block 2, and the scenario block when the chat has one."""
+    text = f"{global_instructions(character, user, language)}\n\n{canonical_identity(character)}"
+    block = scenario_block(scenario)
+    return f"{text}\n\n{block}" if block else text
 
 
 def split_current_message(messages: Sequence[Message]) -> tuple[list[Turn], str] | None:
@@ -106,10 +126,17 @@ def split_current_message(messages: Sequence[Message]) -> tuple[list[Turn], str]
     return None
 
 
-def chat_parts(character: CharacterProfile, user: UserProfile, language: str, history: Sequence[Turn]) -> ChatParts:
-    """Returns the ChatParts of a P02 reply: the stable text and `history`, with empty dynamic blocks."""
+def chat_parts(
+    character: CharacterProfile,
+    user: UserProfile,
+    language: str,
+    history: Sequence[Turn],
+    scenario: Mapping[str, object] | None = None,
+) -> ChatParts:
+    """Returns the ChatParts of a P02 reply: the stable text (with the chat's own scenario copy, if any) and `history`,
+    with empty dynamic blocks."""
     return ChatParts(
-        stable_text=stable_text(character, user, language),
+        stable_text=stable_text(character, user, language, scenario),
         history=tuple(history),
         state="",
         memories="",
