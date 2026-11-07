@@ -9,7 +9,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P02 | A real streaming chat with the default text profile | In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending |
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | In progress: automated exit passed; hardware and manual part (P03.EXIT-HW) pending |
 | P04 | Memory and consistency | In progress: automated exit passed; quality part (P04.10) pending |
-| P05 | Images in messages | Planned |
+| P05 | Images in messages | In progress: automated exit passed; hardware part (P05.EXIT-HW) and measurement part (P05.8) pending |
 | P06 | Automatic GPU orchestration and recovery | Planned |
 | P07 | Proactive messages and messaging details | Planned |
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | Planned |
@@ -150,6 +150,10 @@ Evidence:
 - [ ] P05.8 Measure image VRAM and time per preset. Update defaults. Run the parameter grid for each image profile, the image identity protocol and the measured levers: PAG, identity weight, and the tall and wide sizes. Apply the preset rule and the default rule.
 
 Exit: T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09, T-IMG-13 to T-IMG-18 pass. T-GPU-01, T-GPU-06, T-QLT-02 and T-QLT-07 pass. AC-07, AC-13 and AC-14 hold.
+
+Evidence:
+
+- [P05 automated exit: the `unit`, `integration`, `e2e`, `docker` and `lint` levels, with T-CHR-12, T-CON-07, T-IMG-01 to T-IMG-03, T-IMG-05 to T-IMG-09 and T-IMG-13 to T-IMG-18 (the unit part of T-IMG-14)](verification/2026-11-07-p05-exit.md). The hardware part (T-GPU-01, T-GPU-06, AC-07, AC-13, AC-14) is pending with P05.EXIT-HW, and the measurement and quality part (the real-GPU part of T-IMG-14, T-QLT-02, T-QLT-07) is pending with P05.8, so the phase is not done.
 
 ## P06: Orchestration
 

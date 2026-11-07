@@ -86,7 +86,8 @@ test('a manual request shows the progress of both passes and then the image (T-I
   await expect(dialog).toBeHidden();
 
   // The request is the user's message, and the character's placeholder waits for the job.
-  await expect(page.getByText('una foto di te seduta al porto')).toBeVisible();
+  // Exact, because the closed dialog's hint also quotes this example in its longer text.
+  await expect(page.getByText('una foto di te seduta al porto', { exact: true })).toBeVisible();
   await expect(page.getByText("In coda: l'immagine arriverà a breve.")).toBeVisible();
   const placeholder = await imageMessage(page, id);
   expect(placeholder.status).toBe('queued');
@@ -254,7 +255,8 @@ test('a generated avatar is followed through its job and shown as the primary on
   await page.getByRole('button', { name: 'Genera un avatar' }).click();
   const status = page.getByTestId('avatar-generation');
   // The first text comes from the real queue, whose position depends on the jobs earlier specs left waiting.
-  await expect(status).toHaveText(/^In coda: posizione \d+$/);
+  // A regular expression is matched against the raw text, which the template pads with spaces.
+  await expect(status).toHaveText(/^\s*In coda: posizione \d+\s*$/);
   await expect(status).toHaveText("Preparo la scena dell'avatar…", { timeout: 10_000 });
   await expect(status).toHaveText("Disegno l'avatar…", { timeout: 10_000 });
 

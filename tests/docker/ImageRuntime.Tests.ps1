@@ -91,8 +91,8 @@ sys.exit(1)
 
     function Get-LockRequirement {
         # Returns the requirements of requirements.lock, each on one line: continuation lines joined, comments and blank
-        # lines dropped.
-        $text = [System.IO.File]::ReadAllText($script:LockFile) -replace "\\\r?\n\s*", ' '
+        # lines dropped. The space before each continuation backslash goes with it, so the parts are joined by one space.
+        $text = [System.IO.File]::ReadAllText($script:LockFile) -replace '\s*\\\r?\n\s*', ' '
         return @($text -split "\r?\n" | ForEach-Object { ($_ -replace '\s+#.*$', '').Trim() } |
                 Where-Object { $_ -and -not $_.StartsWith('#') })
     }

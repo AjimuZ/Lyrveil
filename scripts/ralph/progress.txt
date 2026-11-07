@@ -194,6 +194,8 @@
 - Keep the grid on thumbnail URLs only, with loading=lazy and content-visibility: auto on cells; open the original only in the lightbox.
 - To test exclusivity, wrap `FakeContainerGate` so that each start checks that the other container is not running and the card's memory is released, and records any violation. Tie it to the `FakeGpuProbe`, setting `runtime_mib` on start and stop, so release drops can be checked against the footprint measured at load.
 - Calls to the control API block, so the scheduler runs them via `anyio.to_thread.run_sync`. Never call them on the event loop.
+- A test or spec that has never run should be treated as unverified. Its first run in an exit task often exposes faults in the test itself, and those are fixed in the test, not in product code.
+- Record failed first runs in the evidence file together with the fix. List the last passing run in the results table.
 
 ---
 
@@ -1739,4 +1741,16 @@ The docker level was not run either.
   - The backend log allowlist has no `mode` field, so the requested mode is logged in `state`.
   - Recovery now calls `ProcessSupervisor.verify_settled()` before `IDLE` when it stopped nothing itself. Lifecycle tests with a frozen supervisor clock must keep the fake memory stable, or the settle loop never times out.
   - Still for P06.3: `images.max_wait_seconds`, `images.max_in_a_row`, the `waiting` phase and preemption. For P06: the timed retry out of `ERROR` (including `GPU_RELEASE_UNVERIFIED`) and the VRAM checks.
+---
+
+## 2026-11-07T20:14:24Z - P05.EXIT
+- Ran the unit, integration, e2e, docker and lint levels for the P05 exit. All tests the exit names pass at the automated level. The e2e and docker levels failed on first run because of bugs in two specs and one Pester helper that had never run, and I fixed those. I wrote the dated evidence file, added an Evidence list to the P05 section, and set the phase table to "In progress: automated exit passed". P05 is not marked done. P05.8 and P05.EXIT-HW stay pending, and T-GPU-01, T-GPU-06, T-QLT-02, T-QLT-07, AC-07, AC-13, AC-14 and the real-GPU part of T-IMG-14 are recorded as not run.
+- Files changed: tests/e2e/specs/image-request.spec.mjs, tests/docker/ImageRuntime.Tests.ps1, docs/verification/2026-11-07-p05-exit.md, docs/roadmap.md, docs/README.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The Bash tool cuts the middle of long output. When `scripts/lyrveil.cmd test docker` output is large, it is saved to a file, so read it with Grep for `[-]`, `Tests Passed` and `Pester 5`.
+  - The `docker` level has no file filter. A failure inside a long run can only be diagnosed by reading the test, or the saved output if the shell kept it.
+  - The first run of ImageRuntime.Tests.ps1 was the P05 exit. PowerShell double-quoted strings pass `\r` and `\n` to the regex engine unchanged, so use single-quoted patterns and absorb the space before a continuation backslash.
+  - Playwright `toHaveText` with a regular expression matches the raw element text, including template padding, so allow `\s*` around the text. `getByText` is a substring match, so use `{ exact: true }` when a dialog hint quotes the same example.
+  - The remaining P05 work is P05.8 and P05.EXIT-HW. Both need real models and the GPU, and the owner's review is blocked on them. The phase table says P05 is in progress with the automated exit passed.
+  - The e2e browser parts of T-IMG-07, T-IMG-08 and T-CHR-12 use scripted frames and routes. The real mode switch and real image files are not shown in the browser.
 ---

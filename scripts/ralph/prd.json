@@ -2038,8 +2038,8 @@
         "The P05 section lists the evidence, and the phase table shows the automated part as passed and the hardware part (P05.8, P05.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 86,
-      "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "passes": true,
+      "notes": "Ran the unit, integration, e2e, docker and lint levels for the P05 exit. All tests the exit names pass at the automated level. The e2e and docker levels failed on first run because of bugs in two specs and one Pester helper that had never run, and I fixed those. I wrote the dated evidence file, added an Evidence list to the P05 section, and set the phase table to \"In progress: automated exit passed\". P05 is not marked done. P05.8 and P05.EXIT-HW stay pending, and T-GPU-01, T-GPU-06, T-QLT-02, T-QLT-07, AC-07, AC-13, AC-14 and the real-GPU part of T-IMG-14 are recorded as not run.",
       "dependsOn": [
         "P05.1",
         "P05.2a",
