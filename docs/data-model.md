@@ -712,6 +712,19 @@ keys cascade) and its `memory_fts` row. The tombstone's `value_hash` is the fing
 a memory with no source it is the conversation's `last_extracted_seq`, at least 1. A memory it superseded keeps its row
 and loses `superseded_by_id`.
 
+Since P04.7, invalidation after a message change writes in the transaction of the change
+([Delivered in P04.7](memory-engine.md#delivered-in-p047)). A memory whose changed source leaves another one gets a
+revision by `consistency` with reason `source_changed`, loses its `memory_sources` rows whose message is deleted or
+shows another variant, and a lower `confidence`; one with no source left becomes `invalidated` (reason `invalidated`)
+and keeps its rows. A locked memory only gets `needs_review = 1`, with no revision. The repairs record reasons
+`replacement_invalidated` and `conflict_cleared`. A re-evaluation that brings an invalidated memory back records actor
+`extraction` with reason `reevaluation`; a memory it stores as older history is inserted `superseded` with `valid_to`
+and `superseded_by_id`, and a temporary one already past its expiry `expired`. Episodes move between `active` and
+`invalidated` and lose stale `episodic_sources` rows the same way, without revisions. Checkpoints covering the changed
+seq become `invalidated` through the one column their trigger allows. The run row of a `memory_reevaluation` records
+the window it read, which lies before the cursor; a window whose run was completed before the job was queued restarts
+that row with `attempt + 1`.
+
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON
 column, and an empty profile row for each character that already existed. `primary_avatar_asset_id` is a plain column until

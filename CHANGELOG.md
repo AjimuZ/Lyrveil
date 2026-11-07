@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Editing, deleting or regenerating a message now updates what the character remembers from it. In the same save, the
+  memories, events, relationship and mood changes and summaries that rested on the old text stop being used: a memory
+  that another message also supports stays, with a little less confidence, and a memory you locked is never changed,
+  only marked for your review. The messages around the change are then read again in the background, so what still
+  holds comes back on its original memory, and a relationship change is never counted twice. Deleting the message
+  where you said something changed (for example a new job) brings the earlier fact back. The summaries covering the
+  message are written again. Re-reading old messages never lets an old message undo a newer fact. Not yet: the Memory
+  Studio view of memories marked for review.
 - Relationship state per chat. Each memory extraction now also records how the relationship moved (familiarity, trust,
   confidence and tension), the character's current mood, the topics left open and closed, goals and changes in the
   story, each with the reason and the messages it came from. Changes are small and bounded: at most 8 points per
@@ -18,7 +26,7 @@ No application exists yet. This section records the design documentation.
   it in words ("vi state conoscendo, sei prudente con…", the mood, the open topics), never as numbers. A state change
   in one chat never affects another chat. The extraction prompt now lists the open topics so the model can close
   them. Not yet: the current topic, a scenario's starting relationship, the user's corrections and the Memory Studio
-  view, and recomputing the state when a message is edited or deleted, which comes with the invalidation step.
+  view. Since the invalidation step, the state is recomputed when a message is edited or deleted.
 - Replies now use the chat's memory and the whole character card. Each reply's prompt holds the global rules, the full
   identity with its traits, interests and background, the communication style with the example exchanges (in saved
   order, as many as fit about 500 tokens), the chat's summaries of older messages, the memories most relevant to the

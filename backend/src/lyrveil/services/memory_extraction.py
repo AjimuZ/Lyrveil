@@ -12,6 +12,11 @@ memory, no state, no message and no cursor; the job retries with the backoff of 
 An item with an unknown E/P label or a source outside the window is dropped and counted; a proposed `current_topic` has
 no state event yet and is counted as deferred. No message, prompt, memory, state text or model output is ever logged;
 `raw_output` stays in the run row.
+
+The same service runs `memory_reevaluation` (docs/memory-engine.md, Invalidation after message changes): the window of
+the range around a changed message, read again after the cursor has passed it. It never moves the cursor, brings
+invalidated memories and episodes with the same fingerprint back (MemoryConsistencyService), and leaves out the state
+changes that would count twice or undo a newer state. `queue_reevaluation` queues it.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -27,7 +32,7 @@ from lyrveil.catalog import TextTemplate
 from lyrveil.consistency.state import LARGE_MIN_EPISODE_IMPORTANCE
 from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
-from lyrveil.domain.identifiers import new_id, to_utc_text
+from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.domain.memory_extraction import (
     SCHEMA_VERSION,
     TARGETED_RELATIONS,
@@ -35,6 +40,7 @@ from lyrveil.domain.memory_extraction import (
     ExtractedMemory,
     ExtractionResult,
     RelationshipEvent,
+    StateUpdate,
 )
 from lyrveil.domain.messages import Author
 from lyrveil.events.hub import EventHub
@@ -55,6 +61,7 @@ from lyrveil.memory.window import (
 )
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import memory_extraction as repository
+from lyrveil.persistence import relationship as state_repository
 from lyrveil.persistence.memory_index import index_episode
 from lyrveil.ports.text_runtime import TextRuntime, TextRuntimeError
 from lyrveil.prompts import extraction
@@ -82,6 +89,9 @@ MAX_QUERY_TERMS = 64
 SCAN_LIMIT = 200
 MAX_PARTICIPANTS = 12
 MAX_PARTICIPANT_CHARS = 80
+# docs/memory-engine.md (Invalidation after message changes): a re-evaluation reads this many messages on each side of
+# the changed one.
+REEVALUATION_SPAN = 6
 EPISODE_LINK = "related"
 _NOT_A_RESULT = "La risposta non è un risultato di estrazione valido."
 
@@ -153,6 +163,56 @@ def queue_extraction_if_due(
         return None
 
 
+def queue_reevaluation(connection: Connection, queue: JobQueue, conversation_id: str, seq: int) -> Job | None:
+    """Queues a `memory_reevaluation` job for the messages around `seq`, in the caller's write transaction, and
+    returns it (docs/memory-engine.md, Invalidation after message changes, step 6).
+
+    The range runs from `seq - REEVALUATION_SPAN` to `seq + REEVALUATION_SPAN`, cut to the messages extraction has
+    passed (1 to `last_extracted_seq`): later ones are read by the next extraction anyway. Returns None, writing
+    nothing, when extraction has not passed `seq`, for a missing or deleted conversation, when a queued job already
+    names the same range, or when the queue is full (logged).
+    """
+    conversation = conversation_repository.get(connection, conversation_id)
+    if conversation is None or conversation.status is ConversationStatus.DELETED:
+        return None
+    cursor = repository.cursor(connection, conversation_id)
+    if seq > cursor:
+        return None
+    payload = {"from_seq": max(1, seq - REEVALUATION_SPAN), "to_seq": min(seq + REEVALUATION_SPAN, cursor)}
+    if queue.has_queued(connection, JobKind.MEMORY_REEVALUATION, conversation_id, payload):
+        return None
+    try:
+        return queue.enqueue(
+            connection,
+            JobKind.MEMORY_REEVALUATION,
+            payload,
+            conversation_id=conversation_id,
+            character_id=conversation.character_id,
+        )
+    except QueueFullError:
+        logger.info("memory_reevaluation_not_queued", conversation_id=conversation_id, state="queue_full")
+        return None
+
+
+def _completed_before(run: repository.Run, job: Job) -> bool:
+    """Tells whether a completed run ended before `job` was queued, so before the message change that queued it: what
+    that run stored may have been invalidated since. A run that ended later is this job's own earlier attempt or one
+    that already read the change."""
+    return run.finished_at is not None and from_utc_text(run.finished_at) < job.created_at
+
+
+def _reevaluation_range(job: Job) -> tuple[int, int] | None:
+    """Returns the range `(from_seq, to_seq)` a `memory_reevaluation` job names, or None for a `memory_extraction` job.
+    Raises JobFailedError INTERNAL, not retryable, for a range that is not two integers with
+    `1 <= from_seq <= to_seq`."""
+    if job.kind is not JobKind.MEMORY_REEVALUATION:
+        return None
+    first, last = job.payload.get("from_seq"), job.payload.get("to_seq")
+    if type(first) is not int or type(last) is not int or not 1 <= first <= last:
+        raise JobFailedError(INTERNAL, None, retryable=False)
+    return first, last
+
+
 @dataclass(frozen=True)
 class _Skipped:
     """A run that needs no generation. `reason` is `conversation_deleted`, `nothing_to_extract` or
@@ -164,7 +224,8 @@ class _Skipped:
 
 @dataclass(frozen=True)
 class _Prepared:
-    """A started run: its window, what its prompt shows, and the labels the model may use."""
+    """A started run: its window, what its prompt shows, and the labels the model may use. `reevaluation` is true for
+    a `memory_reevaluation` run, whose window lies before the cursor and never moves it."""
 
     run_id: str
     run_attempt: int
@@ -175,12 +236,16 @@ class _Prepared:
     prompt: ExtractionPrompt
     memory_refs: Mapping[str, repository.ShownMemory]
     episode_refs: Mapping[str, repository.ShownEpisode]
+    reevaluation: bool = False
 
 
 @dataclass
 class _Counts:
     """What a run did with the model's items; stored in the job's result and logged. `conflict_ids` are the new
-    uncertain memories that fire `memory.conflict`. `state_events` counts the history rows of the state. Only
+    uncertain memories that fire `memory.conflict`. `state_events` counts the history rows of the state. The
+    `*_reactivated` counts are invalidated rows the run brought back. For a re-evaluation, `state_skipped` counts the
+    relationship events left out because an applied row already cites one of their messages, and
+    `state_update_skipped` tells that the state update was left out because applied rows cite later messages. Only
     `top_episode_importance`, the highest importance of an episode the run stored or confirmed, stays out of the
     result: it decides whether a `large` relationship change is allowed."""
 
@@ -188,10 +253,14 @@ class _Counts:
     memories_confirmed: int = 0
     memories_superseded: int = 0
     memories_uncertain: int = 0
+    memories_reactivated: int = 0
     episodes_added: int = 0
     episodes_confirmed: int = 0
+    episodes_reactivated: int = 0
     sources_added: int = 0
     state_events: int = 0
+    state_skipped: int = 0
+    state_update_skipped: bool = False
     dropped_items: int = 0
     blocked_items: int = 0
     deferred_items: int = 0
@@ -201,7 +270,8 @@ class _Counts:
 
 
 class MemoryExtractionService:
-    """Runs one extraction per call, as the JobHandler of `memory_extraction` (lyrveil.jobs.handlers).
+    """Runs one extraction per call, as the JobHandler of `memory_extraction` and `memory_reevaluation`
+    (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `template` is the prompt family of
     the loaded text model and `user` names the user in the prompt. `settings` gives the trigger threshold that a
@@ -236,22 +306,27 @@ class MemoryExtractionService:
         self._clock = clock
 
     async def __call__(self, job: Job, context: RunContext) -> JobOutcome:
-        """Analyzes the next window of the job's conversation and returns JobDone with `status` and what it stored.
+        """Analyzes the next window of the job's conversation, or for `memory_reevaluation` the window of the range its
+        payload names (`{"from_seq", "to_seq"}`), and returns JobDone with `status` and what it stored.
 
         `status` is `completed` (with `run_id`, `run_attempt`, `from_seq`, `to_seq`, `attempts` and the counts of
         _Counts), `already_extracted` (the window's run was completed before: no generation, the cursor moves past
         it), `nothing_to_extract`, `conversation_deleted`, or `superseded` (the window's messages changed while the
-        model ran: nothing is written and the trigger is checked again). After a completed run, publishes
-        `memory.conflict` with `memory_id` and `conversation_id` for each id of `conflict_ids`. Raises JobFailedError
-        STRUCTURED_OUTPUT_INVALID, retryable, when the output and its repair are both refused; a TextRuntimeError goes
-        through for the scheduler to retry. Either way the run is recorded `failed` and nothing else changes. Raises
-        INTERNAL for a job without a conversation.
+        model ran: nothing is written and the trigger is checked again). A re-evaluation reads the readable messages of
+        its range up to the cursor, never moves the cursor, and generates again for a window whose run was completed
+        before the job was queued, since the change that queued it may have invalidated what that run stored. After a
+        completed run, publishes `memory.conflict` with `memory_id` and `conversation_id` for each id of
+        `conflict_ids`. Raises JobFailedError STRUCTURED_OUTPUT_INVALID, retryable, when the output and its repair are
+        both refused; a TextRuntimeError goes through for the scheduler to retry. Either way the run is recorded
+        `failed` and nothing else changes. Raises INTERNAL, not retryable, for a job without a conversation or a
+        re-evaluation range that is not valid.
         """
         if self._runtime is None:
             raise RuntimeError("the extraction handler needs a text runtime")
         if job.conversation_id is None:
             raise JobFailedError(INTERNAL, None, retryable=False)
-        prepared = await to_thread.run_sync(self._prepare, job, job.conversation_id)
+        named = _reevaluation_range(job)
+        prepared = await to_thread.run_sync(self._prepare, job, job.conversation_id, named)
         if isinstance(prepared, _Skipped):
             logger.info(
                 "memory_extraction_skipped", job_id=job.id, conversation_id=job.conversation_id, state=prepared.reason
@@ -302,10 +377,11 @@ class MemoryExtractionService:
                 )
         return JobDone(outcome)
 
-    def _prepare(self, job: Job, conversation_id: str) -> _Prepared | _Skipped:
+    def _prepare(self, job: Job, conversation_id: str, named: tuple[int, int] | None) -> _Prepared | _Skipped:
         """Selects the window and starts its run in one transaction, or tells why no generation is needed. Temporary
         memories past their expiry become `expired` first, so the prompt never shows them. A window whose run was
-        completed moves the cursor past it here, and the trigger is checked for what follows."""
+        completed moves the cursor past it here, and the trigger is checked for what follows. `named` is the range of a
+        re-evaluation, None for an extraction."""
         moment = self._clock()
         now = to_utc_text(moment)
 
@@ -315,14 +391,25 @@ class MemoryExtractionService:
                 return _Skipped("conversation_deleted")
             self._consistency.expire(connection, conversation_id, moment)
             cursor = repository.cursor(connection, conversation_id)
-            after = repository.messages_after(connection, conversation_id, cursor, limit=SCAN_LIMIT)
-            window = select_window(after, cursor)
+            if named is None:
+                after = repository.messages_after(connection, conversation_id, cursor, limit=SCAN_LIMIT)
+                window = select_window(after, cursor)
+            else:
+                first, last = named[0], min(named[1], cursor)
+                found = (
+                    repository.messages_after(connection, conversation_id, first - 1, limit=SCAN_LIMIT, up_to_seq=last)
+                    if first <= last
+                    else []
+                )
+                window = select_window(found, first - 1)
             if window is None:
                 return _Skipped("nothing_to_extract")
             run = repository.find_run(connection, conversation_id, window.hash, PROMPT_VERSION, SCHEMA_VERSION)
-            if run is not None and run.status == "completed":
+            if run is not None and run.status == "completed" and named is None:
                 repository.advance_cursor(connection, conversation_id, window.to_seq)
                 queue_extraction_if_due(connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id)
+                return _Skipped("already_extracted", run.id)
+            if run is not None and run.status == "completed" and not _completed_before(run, job):
                 return _Skipped("already_extracted", run.id)
             if run is None:
                 run_id, run_attempt = new_id(), 1
@@ -371,6 +458,7 @@ class MemoryExtractionService:
                 prompt=prompt,
                 memory_refs=memory_refs,
                 episode_refs=episode_refs,
+                reevaluation=named is not None,
             )
 
         return write(self._engine, work)
@@ -389,7 +477,7 @@ class MemoryExtractionService:
 
         The window is read again first: if the cursor moved or a message of the window changed while the model ran,
         the run becomes `superseded`, nothing else is written, and the trigger is checked again for the current
-        messages.
+        messages. A re-evaluation checks its messages only, and leaves the cursor and the trigger alone.
         """
         moment = self._clock()
         now = to_utc_text(moment)
@@ -403,24 +491,28 @@ class MemoryExtractionService:
         }
 
         def work(connection: Connection) -> dict[str, Any]:
-            cursor = repository.cursor(connection, conversation_id)
+            moved = not prepared.reevaluation and repository.cursor(connection, conversation_id) != window.from_seq - 1
             again = repository.messages_after(
                 connection, conversation_id, window.from_seq - 1, limit=SCAN_LIMIT, up_to_seq=window.to_seq
             )
             current = select_window(again, window.from_seq - 1)
-            if cursor != window.from_seq - 1 or current is None or current.hash != window.hash:
+            if moved or current is None or current.hash != window.hash:
                 repository.finish_run(
                     connection, prepared.run_id, "superseded", raw_output=result.text, error_code=None, now=now
                 )
-                queue_extraction_if_due(connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id)
+                if not prepared.reevaluation:
+                    queue_extraction_if_due(
+                        connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id
+                    )
                 return {"status": "superseded", **base}
             counts = self._apply(connection, prepared, result.value, moment)
             repository.finish_run(
                 connection, prepared.run_id, "completed", raw_output=result.text, error_code=None, now=now
             )
-            repository.advance_cursor(connection, conversation_id, window.to_seq)
-            queue_extraction_if_due(connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id)
-            return {
+            if not prepared.reevaluation:
+                repository.advance_cursor(connection, conversation_id, window.to_seq)
+                queue_extraction_if_due(connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id)
+            outcome: dict[str, Any] = {
                 "status": "completed",
                 **base,
                 "attempts": result.attempts,
@@ -428,8 +520,10 @@ class MemoryExtractionService:
                 "memories_confirmed": counts.memories_confirmed,
                 "memories_superseded": counts.memories_superseded,
                 "memories_uncertain": counts.memories_uncertain,
+                "memories_reactivated": counts.memories_reactivated,
                 "episodes_added": counts.episodes_added,
                 "episodes_confirmed": counts.episodes_confirmed,
+                "episodes_reactivated": counts.episodes_reactivated,
                 "sources_added": counts.sources_added,
                 "state_events": counts.state_events,
                 "dropped_items": counts.dropped_items,
@@ -438,12 +532,20 @@ class MemoryExtractionService:
                 "memory_ids": counts.memory_ids,
                 "conflict_ids": counts.conflict_ids,
             }
+            if prepared.reevaluation:
+                outcome["state_skipped"] = counts.state_skipped
+                outcome["state_update_skipped"] = counts.state_update_skipped
+            return outcome
 
         return write(self._engine, work)
 
     def _apply(self, connection: Connection, prepared: _Prepared, result: ExtractionResult, now: datetime) -> _Counts:
         """Applies the items of `result` that the pipeline stores and counts the rest. Requires the caller's write
-        transaction."""
+        transaction.
+
+        A re-evaluation reads messages whose state may still stand, so it leaves out what would count twice or undo a
+        newer state: a relationship event that cites a message an applied state row already cites, and the whole state
+        update when applied rows cite a message after its window."""
         by_seq = {message.seq: message for message in prepared.window.messages}
         scope = RunScope(
             run_id=prepared.run_id,
@@ -451,6 +553,7 @@ class MemoryExtractionService:
             conversation_id=prepared.conversation_id,
             language=prepared.language,
             now=now,
+            reevaluation=prepared.reevaluation,
         )
         counts = _Counts()
         for item in result.memories:
@@ -458,11 +561,20 @@ class MemoryExtractionService:
         for episode in result.episodes:
             _apply_episode(connection, prepared, episode, by_seq, now, counts)
         # The state goes last, because a `large` relationship change needs an important episode of this run.
+        cited: frozenset[str] = frozenset()
+        update = result.state
+        if prepared.reevaluation:
+            cited, newest = state_repository.cited_messages(connection, prepared.conversation_id)
+            if newest is not None and newest > prepared.window.to_seq and update != StateUpdate():
+                update = StateUpdate()
+                counts.state_update_skipped = True
         events: list[tuple[RelationshipEvent, list[str]]] = []
         for event in result.relationship_events:
             sources = _sources(event.source_seqs, by_seq)
             if sources is None:
                 counts.dropped_items += 1
+            elif any(source.message_id in cited for source in sources):
+                counts.state_skipped += 1
             else:
                 events.append((event, [source.message_id for source in sources]))
         run = StateRun(
@@ -474,7 +586,7 @@ class MemoryExtractionService:
             large_allowed=counts.top_episode_importance >= LARGE_MIN_EPISODE_IMPORTANCE,
             now=now,
         )
-        applied = self._state.apply_run(connection, run, events, result.state)
+        applied = self._state.apply_run(connection, run, events, update)
         counts.state_events += applied.rows_added
         counts.dropped_items += applied.dropped
         counts.deferred_items += applied.deferred
@@ -511,7 +623,10 @@ class MemoryExtractionService:
         if not applied.added:
             counts.memories_confirmed += 1
             return
-        counts.memories_added += 1
+        if applied.reactivated:
+            counts.memories_reactivated += 1
+        else:
+            counts.memories_added += 1
         counts.memory_ids.append(applied.memory_id)
         if applied.conflict:
             counts.conflict_ids.append(applied.memory_id)
@@ -565,6 +680,17 @@ def _apply_episode(
     if same is not None:
         counts.sources_added += repository.add_episode_sources(connection, same.id, sources)
         counts.episodes_confirmed += 1
+        return
+    revived = repository.invalidated_episode_by_fingerprint(connection, prepared.conversation_id, episode_print)
+    if revived is not None:
+        # Step 7 of the invalidation, for episodes: the same event read again brings its row back.
+        repository.reactivate_episode(connection, revived, item.importance, to_utc_text(now))
+        repository.drop_stale_episode_sources(connection, revived)
+        counts.sources_added += repository.add_episode_sources(connection, revived, sources)
+        for other in linked:
+            if other is not None:
+                repository.link_episodes(connection, revived, other.id, EPISODE_LINK)
+        counts.episodes_reactivated += 1
         return
     participants = [name.strip()[:MAX_PARTICIPANT_CHARS] for name in item.participants if name.strip()]
     episode = repository.NewEpisode(

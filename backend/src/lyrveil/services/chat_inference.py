@@ -15,7 +15,8 @@ corrective notes, come in P04.8. No message text, prompt or token is ever logged
 
 After a finished reply is stored and announced, the use of its memories is recorded and the memory extraction trigger
 runs (lyrveil.services.memory_extraction.queue_extraction_if_due), each in its own transaction, so a failure there
-never undoes the reply.
+never undoes the reply. A regenerated reply that extraction had already passed also queues its re-evaluation
+(queue_reevaluation), since its regeneration invalidated what the earlier variant supported.
 """
 
 import time
@@ -78,7 +79,7 @@ from lyrveil.ports.text_runtime import (
     TextRuntimeError,
 )
 from lyrveil.prompts.formatter import formatter_for
-from lyrveil.services.memory_extraction import queue_extraction_if_due
+from lyrveil.services.memory_extraction import queue_extraction_if_due, queue_reevaluation
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
 
@@ -348,21 +349,23 @@ class ChatInferenceService:
                 # Use counters only tune recency of use; the stored reply must not become a failed job over them.
                 logger.error("memory_use_failed", job_id=job.id, exc_info=True)
         try:
-            await to_thread.run_sync(self._queue_extraction, reply.conversation_id)
+            await to_thread.run_sync(self._queue_extraction, reply.conversation_id, reply.seq)
         except Exception:
             # The reply is already stored and announced: a failing trigger must not turn it into a failed job. The next
             # reply checks the trigger again.
             logger.error("memory_extraction_trigger_failed", job_id=job.id, exc_info=True)
         return JobDone({"message_id": reply.message_id, "variant_id": reply.variant_id})
 
-    def _queue_extraction(self, conversation_id: str) -> None:
+    def _queue_extraction(self, conversation_id: str, seq: int) -> None:
         """The extraction trigger of docs/backend.md (Job handlers), in its own transaction after the reply's commit:
-        queues a `memory_extraction` job when the chat is due for one, and a `summary_checkpoint` job when a summary is
-        due. Blocks: run it in a thread."""
+        queues a `memory_extraction` job when the chat is due for one, a `summary_checkpoint` job when a summary is
+        due, and a `memory_reevaluation` job when extraction had already passed the reply's `seq` (a regeneration).
+        Blocks: run it in a thread."""
 
         def work(connection: Connection) -> None:
             queue_extraction_if_due(connection, self._queue, conversation_id, self._extraction)
             queue_summary_if_due(connection, self._queue, conversation_id, self._summaries)
+            queue_reevaluation(connection, self._queue, conversation_id, seq)
 
         write(self._engine, work)
 

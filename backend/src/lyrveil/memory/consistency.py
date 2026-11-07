@@ -6,7 +6,9 @@ The model only proposes. `decide` takes a resolved item and the memories it coul
 always keeps these invariants: an inference never supersedes or demotes a stated or confirmed memory, a locked memory
 is never changed, a temporary item never changes a lasting memory, an `identity_candidate` never changes another
 memory, and two active lasting memories with the same single-valued subject never keep different values. `is_blocked`
-is guard 6: a tombstone of a deleted memory stops the same source from bringing it back.
+is guard 6: a tombstone of a deleted memory stops the same source from bringing it back. `after_source_change` is what
+an edit, deletion or variant switch of one source message does to a memory (docs/memory-engine.md, Invalidation after
+message changes).
 """
 
 from collections.abc import Sequence
@@ -44,6 +46,15 @@ INFERENCE_CONFLICT = "inference_conflict"
 EXPIRED = "expired"
 # The reason of the revision a user's edit records.
 USER_EDIT = "edit"
+# Revision reasons of invalidation after a message change, and of re-evaluation.
+SOURCE_CHANGED = "source_changed"
+INVALIDATED = "invalidated"
+REPLACEMENT_INVALIDATED = "replacement_invalidated"
+CONFLICT_CLEARED = "conflict_cleared"
+REEVALUATION = "reevaluation"
+# docs/memory-engine.md (Invalidation after message changes): the confidence a memory loses with one of its sources.
+LOST_SOURCE_CONFIDENCE = 0.1
+SUPERSEDED = "superseded"
 
 
 def subject_key(subject: str | None) -> str | None:
@@ -172,7 +183,7 @@ def is_blocked(
 @dataclass(frozen=True)
 class KnownMemory:
     """An existing memory as the rules see it. `source_max_seq` is the seq of its newest source message, None when it
-    has none."""
+    has none. `valid_from` is when it started to hold (UTC text), None when unknown."""
 
     id: str
     kind: str
@@ -187,6 +198,7 @@ class KnownMemory:
     conflict_group_id: str | None
     fingerprint: str
     source_max_seq: int | None
+    valid_from: str | None = None
 
 
 @dataclass(frozen=True)
@@ -227,10 +239,12 @@ class Decision:
     with `status`, `provenance`, `confidence` and `needs_review`. `supersede` become `superseded` by it; `demote`
     become `uncertain` in its conflict group; `group` join that group with their status kept (a stated or confirmed
     memory an inference conflicts with). `in_conflict` puts the new memory in a group: `conflict_group_id` when one of
-    the members already has one, otherwise a new one.
+    the members already has one, otherwise a new one. With `superseded_by`, the item is older than that memory: it is
+    stored `superseded` by it, as history, and nothing else changes.
     """
 
     confirm: KnownMemory | None = None
+    superseded_by: KnownMemory | None = None
     status: str = "active"
     provenance: str = ""
     confidence: float = 0.0
@@ -307,6 +321,24 @@ def _guards_subject(proposal: Proposal) -> bool:
     )
 
 
+def _newer_memory(
+    proposal: Proposal, relation: str, target: KnownMemory | None, rivals: Sequence[KnownMemory]
+) -> KnownMemory | None:
+    """Returns the memory the item would change (its target, or a guard-3 rival with another value) whose newest source
+    comes after every source of the item, the newest such one, or None.
+
+    Only a re-evaluation of old messages meets one, since a normal window comes after every message analyzed before.
+    Such an item is older information than the memory: changing the memory would let an old message undo a newer one.
+    """
+    touched: list[KnownMemory] = []
+    if target is not None and relation in (UPDATE, CORRECTION, CONTRADICTION):
+        touched.append(target)
+    if _guards_subject(proposal):
+        touched.extend(r for r in rivals if values_differ(r.value_text, proposal.value_text, proposal.language))
+    newer = [m for m in touched if m.source_max_seq is not None and m.source_max_seq > proposal.source_max_seq]
+    return max(newer, key=lambda m: (m.source_max_seq or 0, m.id), default=None)
+
+
 def decide(
     proposal: Proposal,
     target: KnownMemory | None,
@@ -321,10 +353,11 @@ def decide(
     active lasting memories with the item's subject (guard 3), empty when it is not single-valued. All belong to the
     item's conversation.
 
-    Order: the effective relation (_effective), then deduplication, then what the relation and guard 3 ask of each
-    memory, then the lock (guard 4: the memory is left alone and the new one is `uncertain` with `needs_review`) and
-    the inference limit (guard 2: the memory keeps its status and joins the group, the inference is `uncertain`). A
-    correction that supersedes its target is stored `user_confirmed` with confidence 1.0.
+    Order: the effective relation (_effective), then deduplication, then the age check, then what the relation and
+    guard 3 ask of each memory, then the lock (guard 4: the memory is left alone and the new one is `uncertain` with
+    `needs_review`) and the inference limit (guard 2: the memory keeps its status and joins the group, the inference is
+    `uncertain`). A correction that supersedes its target is stored `user_confirmed` with confidence 1.0. The age check:
+    an item that would change a memory resting on a later message (_newer_memory) is stored `superseded` by it.
     """
     relation, target = _effective(proposal, target)
     if relation == "duplicate":
@@ -333,6 +366,11 @@ def decide(
     twin = _duplicate_of(proposal, same, similar, target.id if replaces_target and target is not None else None)
     if twin is not None:
         return Decision(confirm=twin)
+    newer = _newer_memory(proposal, relation, target, rivals)
+    if newer is not None:
+        return Decision(
+            status=SUPERSEDED, provenance=proposal.provenance, confidence=proposal.confidence, superseded_by=newer
+        )
 
     wanted: list[tuple[KnownMemory, bool, str]] = []
     if target is not None:
@@ -383,3 +421,30 @@ def decide(
         in_conflict=bool(members),
         conflict_group_id=next((m.memory.conflict_group_id for m in members if m.memory.conflict_group_id), None),
     )
+
+
+@dataclass(frozen=True)
+class SourceChange:
+    """What one changed source message does to a memory. `action` is `review` (a locked memory: only `needs_review`
+    is set), `weaken` (the changed sources are dropped and the confidence becomes `confidence`) or `invalidate`
+    (status `invalidated`, sources kept)."""
+
+    action: str
+    confidence: float
+
+
+def after_source_change(*, locked: bool, valid_sources_left: int, provenance: str, confidence: float) -> SourceChange:
+    """Returns what a memory gets when a message it cites was edited, deleted or shown in another variant.
+
+    `valid_sources_left` counts its sources that still name a visible message in its active variant. A locked memory
+    is never changed. With a valid source left, the memory keeps holding with LOST_SOURCE_CONFIDENCE less (never below
+    0); a `user_confirmed` memory keeps 1.0, because the user's confirmation stands and the schema ties it to 1.0.
+    Without one, nothing supports it any more and it awaits re-evaluation.
+    """
+    if locked:
+        return SourceChange("review", confidence)
+    if valid_sources_left > 0:
+        if provenance == "user_confirmed":
+            return SourceChange("weaken", confidence)
+        return SourceChange("weaken", max(0.0, round(confidence - LOST_SOURCE_CONFIDENCE, 2)))
+    return SourceChange("invalidate", confidence)

@@ -111,8 +111,8 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     """Runs the job worker while the context is open (startup step 7), when the app has a database and a Worker.
 
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
-    CharacterCreatorService, `memory_extraction` with MemoryExtractionService, `summary_checkpoint` with
-    SummaryService, and is kept in
+    CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
+    `summary_checkpoint` with SummaryService, and is kept in
     `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed text and stays `streaming`
     for the next start to mark `interrupted`; its lease is not released and expires by itself.
     """
@@ -153,6 +153,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             JobKind.CHAT_REGENERATE: replies,
             JobKind.CHARACTER_DRAFT: drafts,
             JobKind.MEMORY_EXTRACTION: memories,
+            JobKind.MEMORY_REEVALUATION: memories,
             JobKind.SUMMARY_CHECKPOINT: summaries,
         }
         scheduler = JobScheduler(engine, JobQueue(), handlers, worker.leases, worker.current_mode)

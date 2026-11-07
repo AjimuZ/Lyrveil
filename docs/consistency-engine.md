@@ -110,8 +110,10 @@ memories and episodes, so the state rows are written with the run or not at all.
   threads, 5 goals and 10 narrative changes. Dropped items are counted in the job's `dropped_items`, and its
   `state_events` counts the rows written.
 - **Replay after invalidation.** `CharacterStateManager.invalidate(connection, conversation_id, message_ids, now)` marks
-  `invalidated` the applied rows that cite one of the messages and stores the replay of the rest. Nothing calls it yet:
-  invalidation after a message change is P04.7.
+  `invalidated` the applied rows that cite one of the messages and stores the replay of the rest. Since P04.7 an edit,
+  deletion, regeneration or variant switch of a message calls it in the transaction of the change, and a
+  re-evaluation proposes the state of its window again, without counting twice a relationship change a remaining row
+  holds or overriding a newer state ([Delivered in P04.7](memory-engine.md#delivered-in-p047)).
 - **Isolation.** Every read, write and invalidation names one conversation, and the fold reads one conversation's
   rows, so a change in one chat never reaches another (T-CON-03).
 - **Prompt.** A chat with a `relationship_states` row has block 4 ([Block 4](prompting.md#block-4-state-and-time)). The

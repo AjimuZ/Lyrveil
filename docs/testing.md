@@ -436,6 +436,25 @@ memories and notes share the stable text and the history, and no old turn carrie
 extraction, retrieval, conversation and message files (119 passed) passed, and `scripts/lyrveil.cmd test lint`
 passed; the full levels were not run.
 
+Delivered in P04.7: `backend/tests/integration/test_memory_invalidation.py` changes messages through `MessageService` on
+a migrated SQLite file and runs the queued jobs with a scripted runtime. T-MEM-19, edit: the memory resting only on the
+edited message becomes `invalidated` with a revision and keeps its source, one with another source loses the stale row
+and 0.1 of confidence, the episode and the state row citing it are invalidated (the state replays to the same trust, no
+mood), the level-0 and level-1 checkpoints covering it are invalidated, and a re-evaluation of seq 1 to 9 and a summary
+of 1 to 5 are queued; the re-evaluation, which shows no invalidated memory, brings the memory and episode back on their
+rows with the new variant as source, skips the relationship event a remaining row cites and restores the mood, and the
+summary job writes version 2. T-MEM-19, deletion: deleting the message of an update invalidates the new fact and makes
+the superseded one active again with a revision, and an empty re-evaluation leaves it so. T-MEM-20: editing the source
+of a locked memory changes only `needs_review`, with no revision, and the re-evaluation stores the new value uncertain
+for review and leaves the locked row as it was. T-MEM-18: a run cut by a crash during generation leaves the memory
+tables and both cursors as the previous run left them; after a new engine on the same file and
+`recover_interrupted_jobs`, the job runs through the real `JobScheduler`, the same run completes with attempt 2 and
+the cursor reaches 20. `backend/tests/unit/test_memory_consistency.py` adds the age check of `decide` and
+`after_source_change`. In this change `scripts/lyrveil.cmd test unit` with the new file and the consistency unit file
+passed (18 tests), the same command with the extraction, summary, message, reply-streaming, state, retrieval, context
+builder, queue, scenario, app, import-rule and policy files passed (157 tests), the OpenAPI document and contract tests
+passed (5), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |
@@ -468,10 +487,16 @@ character: changes, a closed thread and the next extraction prompt of one chat l
 state row and block 4 identical, and invalidating with the other chat's messages changes nothing), and the database half
 of T-MEM-23 (6 seeded sequences of 20 steps through `CharacterStateManager`: after each step the stored row equals the
 replay of the rows read back, and its values equal the independent reading over the changes asked for and not
-invalidated). T-MEM-01 now also checks the state row of its one valid relationship event. Since nothing calls
+invalidated). T-MEM-01 now also checks the state row of its one valid relationship event. Since nothing called
 `invalidate` on a real message edit or deletion before P04.7, T-MEM-23 drives the invalidation directly. In this change
 `scripts/lyrveil.cmd test unit` with both new files, the extraction, context builder, reply streaming, summary, index and
 migration files passed (113 tests), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
+Delivered in P04.7: `backend/tests/integration/test_memory_invalidation.py` holds T-CON-04: a character with a trait and
+a visual profile, 1000 synthetic messages, all 84 extraction windows (each proposing a new age for the character, a
+fact, a relationship event and a mood) and all 29 summary steps (24 chunks, 5 rollups) leave the SHA-256 of every row of
+`characters`, `character_traits`, `character_visual_profiles` and `character_versions` unchanged, with every proposed
+age stored as an `identity_candidate` only. Its memory tests are listed under [Memory](#memory).
 
 ### Messaging
 

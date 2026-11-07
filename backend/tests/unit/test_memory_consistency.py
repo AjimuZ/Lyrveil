@@ -13,8 +13,10 @@ from lyrveil.memory.consistency import (
     SUBJECT_CONFLICT,
     KnownMemory,
     Proposal,
+    SourceChange,
     SourceRef,
     Tombstone,
+    after_source_change,
     checked_provenance,
     decide,
     is_blocked,
@@ -222,3 +224,36 @@ def test_a_tombstone_blocks_a_candidate_whose_every_source_is_old_or_known() -> 
     assert not is_blocked([], fingerprint="x", subject_key=None, value_hash=None, sources=[SourceRef(1, None)]), (
         "nothing deleted, nothing blocked"
     )
+
+
+def test_an_item_older_than_the_memory_it_would_change_is_stored_as_history() -> None:
+    """A re-evaluation reads old messages: an item whose sources all come before a memory's newest source never
+    supersedes or demotes that memory, whether it targets it or meets it through guard 3. It is stored superseded by
+    the newest such memory, and a target as old as the item still makes a contradiction."""
+    newer = known(VERDI, value_text="Verdi & Co", source_max_seq=30, valid_from="2026-06-01T00:00:00.000Z")
+    old = proposal(ROSSI, value_text="Studio Rossi", source_max_seq=10)
+
+    targeted = decide(replace(old, relation="update"), newer, None, [], [])
+    met = decide(old, None, None, [], [newer])
+    for decision in (targeted, met):
+        assert (decision.status, decision.superseded_by) == ("superseded", newer)
+        assert (decision.supersede, decision.demote, decision.group, decision.in_conflict) == ((), (), (), False)
+
+    same_age = decide(replace(old, relation="update", source_max_seq=30), newer, None, [], [])
+    assert (same_age.status, same_age.superseded_by) == ("uncertain", None)
+    assert [change.memory.id for change in same_age.demote] == ["e1"]
+
+
+def test_a_changed_source_flags_weakens_or_invalidates_a_memory() -> None:
+    """docs/memory-engine.md (Invalidation after message changes), step 2."""
+
+    def change(
+        locked: bool = False, left: int = 1, provenance: str = "stated", confidence: float = 0.95
+    ) -> SourceChange:
+        return after_source_change(locked=locked, valid_sources_left=left, provenance=provenance, confidence=confidence)
+
+    assert change(locked=True, left=0) == SourceChange("review", 0.95), "a locked memory is only flagged"
+    assert change() == SourceChange("weaken", 0.85)
+    assert change(left=2, provenance="inferred", confidence=0.05) == SourceChange("weaken", 0.0), "never below 0"
+    assert change(provenance="user_confirmed", confidence=1.0) == SourceChange("weaken", 1.0), "tied to 1.0"
+    assert change(left=0).action == "invalidate"

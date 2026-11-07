@@ -288,8 +288,8 @@ stemming yet: a word matches only itself.
 | --- | --- |
 | `GET /conversations/{id}/messages?before_seq=&limit=` | History, newest page first. |
 | `POST /conversations/{id}/messages` | Send. See the example below. |
-| `PATCH /messages/{id}` | Edit. Adds a variant and triggers re-evaluation. |
-| `DELETE /messages/{id}` | Soft delete. Triggers re-evaluation. |
+| `PATCH /messages/{id}` | Edit. Adds a variant, invalidates derived data and triggers re-evaluation. |
+| `DELETE /messages/{id}` | Soft delete. Invalidates derived data and triggers re-evaluation. |
 | `POST /messages/{id}/regenerate` | Last character message only. Adds a variant. |
 | `GET /messages/{id}/variants` | All versions. |
 | `POST /messages/{id}/variants/{variant_id}/activate` | Last character message only. |
@@ -334,8 +334,12 @@ Delivered in P02.5b, all except `remember` and `diagnostics` (P04, P06):
   the start. Deleted messages are left out and their `seq` is not reused. Queued, streaming, failed and interrupted
   replies are listed with their status, which is how a reload recovers the chat.
 - **Edit** (`PATCH`) adds an `edited` variant, makes it active and sets `edited_at`; the same text again changes nothing.
-  It answers `409` for a system message or one still queued or streaming. It starts no re-evaluation yet (P04.7).
+  It answers `409` for a system message or one still queued or streaming.
 - **Delete** answers `204`, `404` when already deleted and `409` for a message still queued or streaming.
+- **Derived data.** Since P04.7 an edit, a deletion, a regeneration and a variant switch invalidate, in the same
+  transaction, the memories, episodes, state rows and summaries that rested on the message, and queue a
+  `memory_reevaluation` job and the summaries to write again; the answer is unchanged
+  ([Delivered in P04.7](memory-engine.md#delivered-in-p047)).
 - **Regenerate** answers `202` with the message, the new `variant_id` and the `chat_regenerate` job. It applies only to
   the last visible message of an active chat when a character wrote it and it is not queued or streaming (`409`
   otherwise). The new `generated` variant is active at once, so the message is `queued` with empty text and the older

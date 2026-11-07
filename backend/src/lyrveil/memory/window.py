@@ -80,8 +80,9 @@ class WindowMessage:
 class Window:
     """What one run analyzes: the readable messages from `from_seq` to `to_seq`, oldest first, and their hash.
 
-    Always holds: `from_seq` is the cursor plus one, `to_seq` is the seq of the last message, 1 to MAX_WINDOW_MESSAGES
-    messages, and `messages` hold only readable messages. Passing the window moves the cursor to `to_seq`.
+    Always holds: `from_seq` is where reading started (the cursor plus one, or the start of a re-evaluation range),
+    `to_seq` is the seq of the last message, 1 to MAX_WINDOW_MESSAGES messages, and `messages` hold only readable
+    messages. Passing an extraction window moves the cursor to `to_seq`; a re-evaluation window never moves it.
     """
 
     from_seq: int

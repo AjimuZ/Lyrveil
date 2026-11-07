@@ -153,6 +153,9 @@
 - Compute derived state only as a pure fold over the history rows, and rewrite the stored row from a fold of the rows read back after every change. Then the stored value equals a replay of the history by construction, and invalidating a row needs no special case.
 - Rows from one run share their `created_at`; order such rows by `created_at, rowid`, because UUIDv7 ids made in the same millisecond have no defined order.
 - Inside test loops, Ruff B023 flags lambdas that capture loop variables even when they are called at once. Move the call into a module-level helper that takes the values as parameters.
+- Run derived-data invalidation in the caller's write transaction of the user change, and queue only the model work, so the change and its invalidation commit together or not at all.
+- When re-reading old input, guard against double counting and overriding newer state by checking what applied rows already cite and whether newer rows exist, instead of trusting the model.
+- ruff format joins a signature or call onto one line when it fits in exactly 120 characters; count before wrapping, or let `test lint` report the diff.
 
 ---
 
@@ -1276,4 +1279,47 @@ I found no injected instructions in the files I read.
   - The extraction prompt is `extraction.v3`. `ExtractionPrompt.open_threads` lists the state's threads under 'Discorsi in sospeso:'.
   - `user_correction` rows are ignored by the replay. P04.9 must define their encoding (which field a text correction targets) and add it to `consistency.state.replay`.
   - Block 4 band phrases are in `context/blocks.py` `STATE_BANDS`, in the second person. The documented user-side table in consistency-engine.md is meant for the UI (P04.9).
+---
+
+## 2026-11-07T15:52:29Z - P04.7
+- P04.7 is implemented. Editing, deleting, regenerating a message or switching its variant now updates what was derived from it, in the same transaction as the change. Re-evaluation then rebuilds what still holds.
+
+**What happens on a message change** (`services/invalidation.py`, SQL in `persistence/invalidation.py`):
+- **Memories.** A locked memory only gets `needs_review`: no revision, nothing else changes. A memory that still has another valid source loses the stale one and 0.1 of confidence, with a revision (`source_changed`). A memory with no source left becomes `invalidated` and keeps its sources.
+- **Repairs (my own addition).** When a memory in use is invalidated, the last member left in its conflict group leaves the group. The fact it had superseded becomes active again, unless that would clash with a fingerprint or a single-valued subject already in use. So deleting "Ho cambiato lavoro… Verdi" brings "Studio Rossi" back.
+- **Episodes** follow the same rule, without confidence. The state rows that cite the message are invalidated and the state is replayed.
+- **Summaries.** Checkpoints covering the message are invalidated, and their level-0 range is queued to be summarized again.
+- **Re-evaluation.** A `memory_reevaluation` job is queued for seq−6 to seq+6, cut to the extraction cursor. A regenerated reply queues its job once it is stored.
+
+**Re-evaluation run** (`MemoryExtractionService`, now registered for this job kind):
+- It reads the range without moving the cursor.
+- An item with the fingerprint of an invalidated memory or episode brings that row back, with a revision (`reevaluation`) and the new sources.
+- A relationship event already cited by a remaining state row is skipped. The mood/thread update is skipped when newer state exists.
+- New age check in `decide`: an item older than the memory it would change is stored `superseded` instead. Without it, re-reading old messages would put newer facts in doubt.
+- A window whose run completed before the job was queued is generated again. This is the one exception to "a completed run is never repeated".
+
+**Checks run:**
+- The new integration file (T-MEM-18, two T-MEM-19 cases, T-MEM-20, T-CON-04) plus the consistency unit file: 18 passed.
+- The existing extraction, summary, message, reply-streaming, state, retrieval, context-builder, queue, scenario, app, import-rule and policy files: 157 passed.
+- The OpenAPI document and contract tests: 5 passed.
+- `scripts/lyrveil.cmd test lint` passed.
+- I did not run the full unit, integration, e2e or docker levels.
+
+**Known limits** (written down in memory-engine.md):
+- An invalidated rollup is rebuilt only if it was the newest of its level.
+- With 13 readable messages in the range, the newest one is not re-read.
+- Relationship events from invalidated rows outside the range are not proposed again.
+- A locked episode has no `needs_review` column, so it is left as it is.
+
+I found no instructions planted in the files I read.
+- Files changed: backend/src/lyrveil/services/invalidation.py, backend/src/lyrveil/persistence/invalidation.py, backend/src/lyrveil/services/messages.py, backend/src/lyrveil/services/memory_extraction.py, backend/src/lyrveil/services/memory_consistency.py, backend/src/lyrveil/services/summaries.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/memory/consistency.py, backend/src/lyrveil/memory/window.py, backend/src/lyrveil/persistence/memory_extraction.py, backend/src/lyrveil/persistence/relationship.py, backend/src/lyrveil/persistence/summaries.py, backend/src/lyrveil/jobs/queue.py, backend/src/lyrveil/api/messages.py, backend/src/lyrveil/main.py, backend/tests/integration/test_memory_invalidation.py, backend/tests/unit/test_memory_consistency.py, CHANGELOG.md, docs/memory-engine.md, docs/consistency-engine.md, docs/backend.md, docs/api.md, docs/data-model.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `MessageService` now takes `zone`; the routes pass `app.state.settings.zone`. It calls `InvalidationService.message_changed(connection, message, now)` inside the write transaction of edit, delete, regenerate and activate_variant. Pass it the message reloaded after the change.
+  - A source row holds while its message is not deleted and `active_variant_id` equals the row's `variant_id` (`persistence.memory_extraction.VALID_SOURCE`). Only invalidated and locked memories keep stale source rows.
+  - `queue_reevaluation` (services/memory_extraction.py) queues only when seq <= last_extracted_seq, with the range cut to the cursor. Payloads are `{"from_seq", "to_seq"}` in that key order, because `JobQueue.has_queued` compares the stored JSON text.
+  - A re-evaluation result adds `state_skipped` and `state_update_skipped`. Every extraction result now adds `memories_reactivated` and `episodes_reactivated`.
+  - `KnownMemory` has an optional `valid_from`, and `Decision` an optional `superseded_by` (the age check). `NewMemory` has `valid_to`. `RunScope` has `reevaluation`.
+  - The P04.9 Memory Studio should surface `needs_review` (set on locked memories by invalidation) and the invalidated memories, and use the revision reasons source_changed, invalidated, replacement_invalidated, conflict_cleared and reevaluation.
+  - To run a single integration file: `scripts/lyrveil.cmd test unit tests/integration/<file>.py`.
+  - To test a crash in the middle of a job: mark the job running with `queue.start`, then make the fake runtime raise a `BaseException` subclass so no handler catches it. After that, dispose the engine, open a new one on `database_path` and call `recover_interrupted_jobs`.
 ---

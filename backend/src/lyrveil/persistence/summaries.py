@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy import Connection, RowMapping, text
 
-from lyrveil.memory.summaries import ACTIVE, SUPERSEDED, Checkpoint
+from lyrveil.memory.summaries import ACTIVE, INVALIDATED, SUPERSEDED, Checkpoint
 
 _COLUMNS = "id, level, from_seq, to_seq, version, status, token_count, source_hash"
 
@@ -194,6 +194,35 @@ def supersede(connection: Connection, conversation_id: str, level: int, from_seq
         {"id": conversation_id, "level": level, "from_seq": from_seq, "to_seq": to_seq},
     )
     return int(result.rowcount)
+
+
+def invalidate_covering(connection: Connection, conversation_id: str, seq: int) -> int:
+    """Marks `invalidated` the active checkpoints of the conversation, of every level, whose range holds `seq`, and
+    returns how many there were. Nothing else about them changes."""
+    result = connection.execute(
+        text(
+            f"UPDATE conversation_summaries SET status = '{INVALIDATED}' WHERE conversation_id = :id "
+            f"AND from_seq <= :seq AND to_seq >= :seq AND status = '{ACTIVE}'"
+        ),
+        {"id": conversation_id, "seq": seq},
+    )
+    return int(result.rowcount)
+
+
+def invalidated_ranges(connection: Connection, conversation_id: str, seq: int) -> list[tuple[int, int]]:
+    """Returns the level-0 ranges `(from_seq, to_seq)` of the conversation that hold `seq` and whose newest version is
+    `invalidated`: those that need summarizing again. Rollups are not listed."""
+    rows = connection.execute(
+        text(
+            "SELECT DISTINCT c.from_seq, c.to_seq FROM conversation_summaries AS c WHERE c.conversation_id = :id "
+            f"AND c.level = 0 AND c.from_seq <= :seq AND c.to_seq >= :seq AND c.status = '{INVALIDATED}' "
+            "AND c.version = (SELECT max(o.version) FROM conversation_summaries AS o "
+            "WHERE o.conversation_id = c.conversation_id AND o.level = 0 AND o.from_seq = c.from_seq "
+            "AND o.to_seq = c.to_seq) ORDER BY c.from_seq"
+        ),
+        {"id": conversation_id, "seq": seq},
+    ).all()
+    return [(first, last) for first, last in rows]
 
 
 def has_active_summary_job(connection: Connection, conversation_id: str, exclude_job_id: str | None) -> bool:

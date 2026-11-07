@@ -4,7 +4,9 @@ extraction run, and expires temporary memories (docs/memory-engine.md, Consisten
 Every method works in the caller's write transaction and never commits, so a run's changes are written with its run
 row and cursor or not at all. A change to an existing memory always appends its earlier row to `memory_revisions`
 first and keeps its sources; only a duplicate changes a memory without a new version. A candidate that matches a
-tombstone of a deleted memory is not stored unless one of its sources is newer than the deleted memory's.
+tombstone of a deleted memory is not stored unless one of its sources is newer than the deleted memory's. A candidate
+with the fingerprint of an `invalidated` memory brings that row back, with a revision and its new sources, instead of
+adding another (docs/memory-engine.md, Invalidation after message changes, step 7).
 """
 
 from collections.abc import Sequence
@@ -13,7 +15,7 @@ from datetime import datetime
 
 from sqlalchemy import Connection
 
-from lyrveil.domain.identifiers import new_id, to_utc_text
+from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.domain.memory_extraction import ExtractedMemory, stored_confidence
 from lyrveil.domain.messages import Author
 from lyrveil.memory import consistency
@@ -33,20 +35,24 @@ CONFLICT_EVENT_IMPORTANCE = 3
 
 @dataclass(frozen=True)
 class RunScope:
-    """The run whose items are applied: its conversation, character and language, and the time of its commit."""
+    """The run whose items are applied: its conversation, character and language, and the time of its commit.
+    `reevaluation` is true for a `memory_reevaluation` run, which reads messages the cursor has already passed: a
+    temporary memory then lasts from its newest source message, not from the run."""
 
     run_id: str
     character_id: str
     conversation_id: str
     language: str
     now: datetime
+    reevaluation: bool = False
 
 
 @dataclass(frozen=True)
 class Applied:
-    """What one item did. `memory_id` is the memory inserted (`added`) or confirmed. `superseded` and `uncertain`
-    count the existing memories it superseded or made uncertain. `conflict` is true when the new memory is stored
-    `uncertain` with a conflict importance of at least CONFLICT_EVENT_IMPORTANCE, which needs the user's review."""
+    """What one item did. `memory_id` is the memory inserted or brought back (`added`; `reactivated` when it was an
+    invalidated row) or confirmed. `superseded` and `uncertain` count the existing memories it superseded or made
+    uncertain. `conflict` is true when the memory is stored `uncertain` with a conflict importance of at least
+    CONFLICT_EVENT_IMPORTANCE, which needs the user's review."""
 
     memory_id: str
     added: bool
@@ -54,6 +60,7 @@ class Applied:
     superseded: int = 0
     uncertain: int = 0
     conflict: bool = False
+    reactivated: bool = False
 
 
 @dataclass(frozen=True)
@@ -179,9 +186,23 @@ def _insert(
 ) -> Applied:
     """Writes a decision that inserts: first the changes to existing memories, each with its revision, then the new
     memory with its sources and index row, then the links of what it superseded. Superseding first frees the
-    fingerprint of a replaced target, and linking last satisfies the foreign key."""
+    fingerprint of a replaced target, and linking last satisfies the foreign key.
+
+    An `invalidated` memory of the conversation with the item's fingerprint is brought back instead of inserting
+    another row: a revision, the decision's status, the new sources, and its stale sources dropped. A temporary item
+    that a re-evaluation finds already past its expiry is stored `expired`."""
     now = to_utc_text(scope.now)
     valid_from = max(source.created_at for source in sources)
+    status = decision.status
+    expires_at = None
+    if proposal.durability == "temporary":
+        base = from_utc_text(valid_from) if scope.reevaluation else scope.now
+        ends = consistency.expiry(item.valid_until, base)
+        expires_at = to_utc_text(ends)
+        if ends <= scope.now and status in _IN_USE:
+            status = consistency.EXPIRED
+    newer = decision.superseded_by
+    valid_to = None if newer is None else (newer.valid_from or valid_from)
     group_id = (decision.conflict_group_id or new_id()) if decision.in_conflict else None
     for change in decision.supersede:
         repository.supersede_memory(
@@ -199,8 +220,11 @@ def _insert(
                 run_id=scope.run_id,
                 now=now,
             )
+    revived = repository.invalidated_by_fingerprint(
+        connection, scope.character_id, scope.conversation_id, proposal.fingerprint
+    )
     memory = repository.NewMemory(
-        id=new_id(),
+        id=revived or new_id(),
         character_id=scope.character_id,
         conversation_id=scope.conversation_id,
         kind=proposal.kind,
@@ -212,19 +236,34 @@ def _insert(
         importance=proposal.importance,
         confidence=decision.confidence,
         valid_from=valid_from,
-        expires_at=(
-            to_utc_text(consistency.expiry(item.valid_until, scope.now)) if proposal.durability == "temporary" else None
-        ),
+        expires_at=expires_at,
         fingerprint=proposal.fingerprint,
         language=scope.language,
-        status=decision.status,
+        status=status,
         needs_review=decision.needs_review,
         conflict_group_id=group_id,
+        valid_to=valid_to,
     )
-    repository.insert_memory(connection, memory, now)
+    if revived is None:
+        repository.insert_memory(connection, memory, now)
+        if newer is not None:
+            repository.link_superseded(connection, [memory.id], newer.id)
+    else:
+        repository.reactivate_memory(
+            connection,
+            revived,
+            memory,
+            superseded_by_id=None if newer is None else newer.id,
+            reason=consistency.REEVALUATION,
+            run_id=scope.run_id,
+            now=now,
+        )
+        repository.drop_stale_memory_sources(connection, revived)
     repository.link_superseded(connection, [change.memory.id for change in decision.supersede], memory.id)
     added = repository.add_memory_sources(connection, memory.id, sources)
-    index_memory(connection, memory.id, memory.content, memory.subject_key, scope.language)
+    stored = repository.known_memory(connection, memory.id)
+    assert stored is not None, "the memory was written above"
+    index_memory(connection, memory.id, stored.content, stored.subject_key, scope.language)
     members = (*decision.demote, *decision.group)
     importance = max([proposal.importance, *(change.memory.importance for change in members)])
     return Applied(
@@ -233,5 +272,6 @@ def _insert(
         sources_added=added,
         superseded=len(decision.supersede),
         uncertain=len(decision.demote),
-        conflict=decision.status == "uncertain" and importance >= CONFLICT_EVENT_IMPORTANCE,
+        conflict=status == "uncertain" and importance >= CONFLICT_EVENT_IMPORTANCE,
+        reactivated=revived is not None,
     )

@@ -2,12 +2,13 @@
 
 A send saves first (docs/architecture.md, invariant 5): the user's message and the reply placeholder are committed in
 one transaction, and the reply job is queued in a second one. A crash between the two leaves a message without a job,
-and a retry with the same `client_message_id` queues the missing job without writing the message again. Deleting and
-editing do not start derived-data work yet: the notification joins them with memory invalidation (P04.7).
+and a retry with the same `client_message_id` queues the missing job without writing the message again. An edit, a
+deletion, a regeneration and a variant switch invalidate the memories, episodes, state rows and summaries derived from
+the message in their own transaction (InvalidationService), and queue the jobs that rebuild them.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 from sqlalchemy import Connection, Engine
@@ -38,6 +39,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
 from lyrveil.persistence.search import match_query, search_messages
+from lyrveil.services.invalidation import InvalidationService
 
 _NO_CHAT = "Conversazione non trovata."
 _NO_MESSAGE = "Messaggio non trovato."
@@ -53,14 +55,22 @@ def _utc_now() -> datetime:
 class MessageService:
     """Reads and changes the messages of `engine`, and queues their reply jobs on `queue`.
 
-    `clock` returns the aware current time; tests pass a fake one. A message of a deleted conversation, or a deleted
+    `clock` returns the aware current time; tests pass a fake one. `zone` is the deployment time zone, which the state
+    replay of an invalidation needs; the routes pass `LYRVEIL_TZ`. A message of a deleted conversation, or a deleted
     message, is hidden from every method: it raises NotFoundError.
     """
 
-    def __init__(self, engine: Engine, queue: JobQueue | None = None, clock: Callable[[], datetime] = _utc_now) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        queue: JobQueue | None = None,
+        clock: Callable[[], datetime] = _utc_now,
+        zone: tzinfo = UTC,
+    ) -> None:
         self._engine = engine
         self._clock = clock
         self._queue = queue or JobQueue(clock=clock)
+        self._invalidation = InvalidationService(self._queue, zone)
 
     def send(
         self, conversation_id: str, content: str, *, client_message_id: str | None = None, intent: str = "auto"
@@ -170,12 +180,14 @@ class MessageService:
     def edit(self, message_id: str, content: str) -> Message:
         """Replaces the text of a user or character message with a new `edited` variant, made active, and returns it.
 
-        Editing to the text already shown changes nothing. An edited failed or interrupted reply becomes complete.
-        Raises NotFoundError, ValidationFailedError and PayloadTooLargeError as `send` does, and ConflictError for a
-        system message or one still being produced.
+        Editing to the text already shown changes nothing. An edited failed or interrupted reply becomes complete. In
+        the same transaction, what was derived from the old text is invalidated and its rebuilding queued
+        (InvalidationService.message_changed). Raises NotFoundError, ValidationFailedError and PayloadTooLargeError as
+        `send` does, and ConflictError for a system message or one still being produced.
         """
         _check_text(content)
-        now = to_utc_text(self._clock())
+        moment = self._clock()
+        now = to_utc_text(moment)
 
         def work(connection: Connection) -> Message:
             message, _ = _visible_message(connection, message_id)
@@ -203,35 +215,42 @@ class MessageService:
                 status=MessageStatus.COMPLETE.value,
                 edited_at=now,
             )
-            return _reload(connection, message.id)
+            edited = _reload(connection, message.id)
+            self._invalidation.message_changed(connection, edited, moment)
+            return edited
 
         return write(self._engine, work)
 
     def delete(self, message_id: str) -> None:
-        """Soft-deletes the message: it leaves the history and every read, and its row and variants stay stored.
+        """Soft-deletes the message: it leaves the history and every read, and its row and variants stay stored. In
+        the same transaction, what was derived from it is invalidated and its rebuilding queued.
 
         Raises NotFoundError when it does not exist or is already deleted, and ConflictError while it is queued or
         streaming.
         """
-        now = to_utc_text(self._clock())
+        moment = self._clock()
+        now = to_utc_text(moment)
 
         def work(connection: Connection) -> None:
             message, _ = _visible_message(connection, message_id)
             _require_settled(message)
             repository.update_message(connection, message.id, deleted_at=now)
+            self._invalidation.message_changed(connection, _reload(connection, message.id), moment)
 
         write(self._engine, work)
 
     def regenerate(self, message_id: str) -> Regeneration:
         """Adds a `generated` variant to the last character message, makes it the active one and queues a
         `chat_regenerate` job to fill it. The earlier variants stay as alternatives, selectable with
-        `activate_variant`; the message is `queued` and its text empty until the job writes.
+        `activate_variant`; the message is `queued` and its text empty until the job writes. What was derived from the
+        variant shown before is invalidated in the same transaction; the stored reply queues its re-evaluation.
 
         Raises NotFoundError, and ConflictError when the message is not the last visible message of an active
         conversation, is not a character's, is still being produced, or the queue is full (the new variant is then
         marked failed and the older ones stay selectable).
         """
-        now = to_utc_text(self._clock())
+        moment = self._clock()
+        now = to_utc_text(moment)
 
         def prepare(connection: Connection) -> tuple[Message, str, str, str]:
             message, conversation = _visible_message(connection, message_id)
@@ -252,7 +271,9 @@ class MessageService:
             repository.update_message(
                 connection, message.id, content="", active_variant_id=variant_id, status=MessageStatus.QUEUED.value
             )
-            return _reload(connection, message.id), variant_id, conversation.character_id, conversation.id
+            queued = _reload(connection, message.id)
+            self._invalidation.message_changed(connection, queued, moment)
+            return queued, variant_id, conversation.character_id, conversation.id
 
         message, variant_id, character_id, conversation_id = write(self._engine, prepare)
         job = self._queue_job(
@@ -277,12 +298,14 @@ class MessageService:
 
     def activate_variant(self, message_id: str, variant_id: str) -> Message:
         """Makes `variant_id` the shown version of the last character message and returns the message. Its text and
-        status become the variant's. Choosing the active variant changes nothing.
+        status become the variant's. Choosing the active variant changes nothing. In the same transaction, what was
+        derived from the variant shown before is invalidated and its rebuilding queued.
 
         Raises NotFoundError for a missing message or a variant of another message, and ConflictError when the message
         is not the last visible message of its conversation, is not a character's, is still being produced, or the
         variant is still streaming.
         """
+        moment = self._clock()
 
         def work(connection: Connection) -> Message:
             message, _ = _visible_message(connection, message_id)
@@ -302,7 +325,9 @@ class MessageService:
                 active_variant_id=variant.id,
                 status=MessageStatus(variant.status.value).value,
             )
-            return _reload(connection, message.id)
+            switched = _reload(connection, message.id)
+            self._invalidation.message_changed(connection, switched, moment)
+            return switched
 
         return write(self._engine, work)
 

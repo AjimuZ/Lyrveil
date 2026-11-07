@@ -6,7 +6,9 @@ P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` in
 ([Delivered in P04.2a](#delivered-in-p042a)). Delivered in P04.2b: the consistency rules without tombstones
 ([Delivered in P04.2b](#delivered-in-p042b)). Delivered in P04.2c: user edits with revisions and deletion with
 tombstones ([Delivered in P04.2c](#delivered-in-p042c)). Delivered in P04.3: `FtsMemoryRetriever` with its scoring and
-selection, not yet called by replies ([Delivered in P04.3](#delivered-in-p043)). Everything else is planned.
+selection ([Delivered in P04.3](#delivered-in-p043)). Delivered in P04.4 and P04.5: summaries and the context builder.
+Delivered in P04.7: invalidation after message changes and re-evaluation
+([Delivered in P04.7](#delivered-in-p047)). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -107,7 +109,8 @@ cause a mode change and yield to any foreground job
 ### Idempotency and failure
 
 - `memory_extraction_runs` is unique on window hash, prompt version and schema version. A
-  completed run is never repeated.
+  completed run is never repeated, except by a re-evaluation queued after it
+  ([Delivered in P04.7](#delivered-in-p047)).
 - Memory writes and the advance of `last_extracted_seq` share one transaction.
 - A failure changes no memory and no cursor. Messages are never touched. The job retries
   after 1, 5 and 30 minutes.
@@ -185,8 +188,8 @@ Windows and triggers are `lyrveil/memory/window.py`, the SQL is `lyrveil/persist
   threshold is `ExtractionSettings.every_messages`, default 10, refused outside 8 to 12; it is a constructor value
   until the settings store exists. The patterns are `backend/src/lyrveil/prompts/it/significant_patterns.txt`: a phrase
   matches at the start of a word of the text with case, accents and runs of spaces ignored, and may end inside a word.
-  Only Italian has a list, so other languages have the window trigger only. "Ricorda questo", the idle flush and
-  re-evaluation are not delivered.
+  Only Italian has a list, so other languages have the window trigger only. "Ricorda questo" and the idle flush are not
+  delivered; re-evaluation came with P04.7 ([Delivered in P04.7](#delivered-in-p047)).
 - **Window.** The messages after `last_extracted_seq`, in order, up to the first reply still `queued` or `streaming`.
   Deleted, failed, empty and system messages are passed over; the first 12 others form the window, from the cursor plus
   one to the last of them. The 2 readable messages before it are the context. `window_hash` is the SHA-256 of message
@@ -344,7 +347,7 @@ deduplication, what the relation and guard 3 ask of each existing memory, then t
   now counts only relationship events. Since P04.6 relationship events are applied, `state_events` counts the state
   rows a run wrote, and `deferred_items` counts only a proposed `current_topic`.
 - **Not delivered.** `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
-  reply prompt, which needs retrieval and the context builder (P04.3, P04.5); invalidation (P04.7). Only Italian has
+  reply prompt, which needs retrieval and the context builder (P04.3, P04.5). Invalidation came with P04.7. Only Italian has
   change cues, so in another language a changed single-valued value always becomes a contradiction. Tombstones came
   with P04.2c.
 
@@ -373,8 +376,8 @@ User edits and deletions (`MemoryService`, `services/memories.py`) and guard 6 i
   `blocked_items` of the job result; nothing else is returned to the model.
 - **Not delivered.** Routes (P04.9), tombstones for shared memories (the scope is not written yet), and tombstones for
   episodes. A window never holds a message at or before the cursor, so in the running pipeline a block shows up
-  when the model restates a deleted fact from a message with the same content, or once invalidation (P04.7) analyzes
-  old messages again; the same-source case is covered by calling `apply` directly.
+  when the model restates a deleted fact from a message with the same content, or when a re-evaluation (P04.7)
+  analyzes old messages again; the same-source case is covered by calling `apply` directly.
 
 `tests/integration/test_memory_extraction.py` holds T-MEM-08 and T-MEM-09 and `tests/unit/test_memory_consistency.py`
 the pure `is_blocked` ([Testing](testing.md#memory)).
@@ -642,9 +645,9 @@ the SQL `lyrveil/persistence/summaries.py`, the table `conversation_summaries`
   recent messages, earlier ones while each ends right before the one after and fits the budget, then the active
   rollup of the highest level that ends before all of them and costs at most 200 tokens. It returns the gaps in
   coverage for the prompt assembly to log. Since P04.5 every reply prompt calls it, through `active_summaries`.
-- **Not delivered.** The invalidation of checkpoints when a covered message is edited or deleted, and the
-  re-summarization it queues ([Invalidation](#invalidation-after-message-changes)); the `summary.*` settings as user settings; re-evaluation.
-  Rollups are built from the checkpoints' text and lists, not the original messages.
+- **Not delivered.** The `summary.*` settings as user settings. Rollups are built from the checkpoints' text and lists,
+  not the original messages. Since P04.7 an edited or deleted covered message invalidates its checkpoints and queues the
+  range again ([Delivered in P04.7](#delivered-in-p047)).
 
 `tests/integration/test_summaries.py` holds T-MEM-16 and the scheduler half of T-MEM-17; `tests/unit/test_summaries.py`
 the policy half of T-MEM-17 and the pure rules ([Testing](testing.md#memory)).
@@ -825,6 +828,73 @@ when another variant becomes active.
    new revision and new sources.
 
 Everything except the model work runs in the same transaction as the message change.
+
+### Delivered in P04.7
+
+`InvalidationService` (`services/invalidation.py`, SQL in `persistence/invalidation.py`) runs steps 1 to 6;
+`MessageService` calls it in the transaction of `edit`, `delete`, `regenerate` and `activate_variant`, so the change and
+its invalidation commit together. Step 7 is in `MemoryConsistencyService` and the episode path of extraction. The
+re-evaluation is `MemoryExtractionService`, registered for `memory_reevaluation`.
+
+- **What a source is.** A source row holds while its message is not deleted and still shows the variant the row names.
+  A memory or episode is affected when it has a row of the changed message that no longer holds; a row of the variant
+  shown again after a switch back holds again and is not touched. Memories of any status but `invalidated` are
+  affected, including superseded history.
+- **Memories (step 2).** The pure rule is `consistency.after_source_change`. A locked memory only gets `needs_review`:
+  no revision, no new version, no change of `updated_at`, sources kept. With a source left that holds, the stale rows
+  are dropped and the confidence falls by 0.1 (never below 0), with a revision by `consistency`, reason
+  `source_changed`; a `user_confirmed` memory keeps 1.0, which the schema requires. Otherwise the memory becomes
+  `invalidated` with a revision, reason `invalidated`, and keeps its sources, links and index row.
+- **Repairs.** Not in the steps above and decided here, so re-evaluation can restore what still holds without the
+  model: when a memory in use is invalidated, the last member in use of its conflict group leaves the group (an
+  uncertain one becomes active unless it waits for review; reason `conflict_cleared`), then each memory it had
+  superseded becomes `active` again with `valid_to` and the link cleared (reason `replacement_invalidated`). Neither
+  happens to a locked memory, nor when a memory in use already has that fingerprint, nor when another lasting memory in
+  use holds a different value of the same single-valued subject. Deleting "Ho cambiato lavoro, ora sono da Verdi"
+  therefore gives "Lavora allo Studio Rossi" back.
+- **Episodes (step 3).** The same rule without confidence: a locked episode is left alone (episodes have no
+  `needs_review` column), one with a source left loses the stale rows, others become `invalidated`. The state row's list
+  of recent episodes is written again when one is invalidated.
+- **State (step 4).** `CharacterStateManager.invalidate` with the changed message. A run's text events cite its whole
+  window, so a change to any window message invalidates them.
+- **Summaries (step 5).** Every active checkpoint of any level whose range holds the seq becomes `invalidated`. Each
+  level-0 range holding the seq whose newest version is invalidated gets a `summary_checkpoint` job with payload
+  `{"from_seq", "to_seq"}`, which writes the next version ([Delivered in P04.4](#delivered-in-p044)), unless a queued job
+  already names that range. Rollups are not queued: an invalidated rollup is built again only when it was the newest of
+  its level, by the usual rollup trigger once its checkpoints are active again.
+- **Re-evaluation queue (step 6).** `queue_reevaluation` queues `memory_reevaluation` with `{"from_seq": seq - 6,
+  "to_seq": seq + 6}` cut to 1 and `last_extracted_seq`, only when extraction has passed the seq (later messages are
+  read by the next extraction) and no queued job names the same range. A regeneration queues none while its reply is
+  pending: the stored reply queues it from `ChatInferenceService`. A full queue skips a job, logged as
+  `memory_reevaluation_not_queued` or `summary_not_queued`, and invalidates all the same.
+- **Re-evaluation run.** The window is the readable messages of the range up to the cursor, at most 12 from its start,
+  with the 2 readable messages before it as context; the cursor never moves and the extraction trigger is not checked.
+  The run is idempotent like an extraction, with one exception: a window whose run was completed before the job was
+  queued is generated again, restarting that run with `attempt + 1`, because the change that queued the job may have
+  invalidated what it stored. The commit checks the window's messages only.
+- **State in a re-evaluation.** A relationship event that cites a message an applied state row already cites is left
+  out (`state_skipped`), so a change already counted is not counted twice. The whole state update is left out
+  (`state_update_skipped`) when applied rows cite a message after the window, so an old window never overrides a newer
+  mood, thread or goal.
+- **Older information.** A re-evaluation reads old messages, so `decide` gained an age check: an item that would
+  supersede or demote a memory resting on a later message (its target, or a guard-3 rival with another value) is
+  stored `superseded` by that memory instead, with `valid_to` set to its `valid_from`, and changes nothing. A normal
+  window always comes after every analyzed message, so only re-evaluation meets it. A temporary item of a
+  re-evaluation lasts from its newest source message, and one already past its expiry is stored `expired`.
+- **Reactivation (step 7).** An item that would store a new memory with the fingerprint of an `invalidated` memory of
+  the conversation brings that row back instead: a revision by `extraction`, reason `reevaluation`, the decision's
+  status, provenance, confidence, review flag and group, the higher importance, its stale sources dropped and the new
+  ones added. Its text stays. An episode with the fingerprint of an invalidated one is made `active` again the same
+  way. A tombstone still blocks either.
+- **Result.** Every extraction result adds `memories_reactivated` and `episodes_reactivated`; a re-evaluation also
+  adds `state_skipped` and `state_update_skipped`. Each invalidation logs `derived_data_invalidated` with counts.
+- **Not delivered.** The Memory Studio's view of `needs_review` and of invalidated memories (P04.9). Rollups that were
+  not the newest of their level stay invalidated, and the prompt covers their range with other checkpoints or leaves a
+  logged gap. A re-evaluation reads at most 12 messages, so with 13 readable ones in the range the newest is not read
+  again. Relationship events of the invalidated rows outside the range are not proposed again.
+
+`tests/integration/test_memory_invalidation.py` holds T-MEM-18, T-MEM-19, T-MEM-20 and T-CON-04;
+`tests/unit/test_memory_consistency.py` the age check and `after_source_change` ([Testing](testing.md#memory)).
 
 ## Settings
 

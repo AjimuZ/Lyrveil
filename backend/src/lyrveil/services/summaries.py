@@ -141,6 +141,37 @@ def queue_summary_if_due(
         return None
 
 
+def queue_resummarize(
+    connection: Connection, queue: JobQueue, conversation_id: str, from_seq: int, to_seq: int
+) -> Job | None:
+    """Queues a `summary_checkpoint` job that summarizes the level-0 range `from_seq` to `to_seq` again, in the
+    caller's write transaction, and returns it; invalidation after a message change calls it for each checkpoint it
+    invalidated.
+
+    Returns None, writing nothing, for a missing or deleted conversation, when a queued job already names that range
+    (it reads the messages when it runs, so one is enough), or when the queue is full (logged; the range keeps no
+    active checkpoint until it is summarized again). A running job does not count, since it may have read the
+    messages before the change.
+    """
+    conversation = conversation_repository.get(connection, conversation_id)
+    if conversation is None or conversation.status is ConversationStatus.DELETED:
+        return None
+    payload = {"from_seq": from_seq, "to_seq": to_seq}
+    if queue.has_queued(connection, JobKind.SUMMARY_CHECKPOINT, conversation_id, payload):
+        return None
+    try:
+        return queue.enqueue(
+            connection,
+            JobKind.SUMMARY_CHECKPOINT,
+            payload,
+            conversation_id=conversation_id,
+            character_id=conversation.character_id,
+        )
+    except QueueFullError:
+        logger.info("summary_not_queued", conversation_id=conversation_id, state="queue_full")
+        return None
+
+
 @dataclass(frozen=True)
 class _Skipped:
     """A run that needs no generation. `reason` is `conversation_deleted` or `nothing_to_summarize`."""

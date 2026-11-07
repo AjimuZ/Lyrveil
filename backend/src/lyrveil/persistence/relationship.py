@@ -1,5 +1,6 @@
 """SQL of the Character State Manager: the applied rows of `character_state_history` in the order they were written, new
-rows, their invalidation by source message, and the one `relationship_states` row of a conversation.
+rows, their invalidation by source message, the messages the applied rows cite, and the one `relationship_states` row
+of a conversation.
 
 Every function works on a connection the caller owns and never commits, and reads or writes the rows of one
 conversation only.
@@ -126,6 +127,21 @@ def invalidate_citing(connection: Connection, conversation_id: str, message_ids:
         {"invalidated": INVALIDATED, "applied": APPLIED, "id": conversation_id, "message_ids": list(message_ids)},
     )
     return int(result.rowcount)
+
+
+def cited_messages(connection: Connection, conversation_id: str) -> tuple[frozenset[str], int | None]:
+    """Returns the ids of the messages the conversation's applied rows cite, and the highest seq among them (None
+    when no applied row cites a message that still exists)."""
+    rows = connection.execute(
+        text(
+            "SELECT DISTINCT source.value, msg.seq FROM character_state_history AS history, "
+            "json_each(history.source_message_ids_json) AS source LEFT JOIN messages AS msg ON msg.id = source.value "
+            "WHERE history.conversation_id = :id AND history.status = :applied"
+        ),
+        {"id": conversation_id, "applied": APPLIED},
+    ).all()
+    newest = max((seq for _, seq in rows if seq is not None), default=None)
+    return frozenset(str(message_id) for message_id, _ in rows), newest
 
 
 def load_state(connection: Connection, conversation_id: str) -> StoredState | None:

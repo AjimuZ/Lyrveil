@@ -182,6 +182,21 @@ class JobQueue:
         )
         return self._get(connection, job_id)
 
+    def has_queued(
+        self, connection: Connection, kind: JobKind, conversation_id: str, payload: Mapping[str, Any]
+    ) -> bool:
+        """Tells whether a job of `kind` for the conversation waits `queued` with this payload, compared as the JSON
+        `enqueue` stores (so with the same key order). A running job does not count: it may have read its input
+        before the change that asks again."""
+        found = connection.execute(
+            text(
+                "SELECT 1 FROM generation_jobs WHERE kind = :kind AND conversation_id = :id AND status = 'queued' "
+                "AND payload_json = :payload LIMIT 1"
+            ),
+            {"kind": kind.value, "id": conversation_id, "payload": _json(payload)},
+        ).first()
+        return found is not None
+
     def get(self, connection: Connection, job_id: str) -> Job | None:
         """Returns the job, or None when no job has that id."""
         row = connection.execute(

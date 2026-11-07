@@ -126,11 +126,12 @@ def _wake_worker(request: Request) -> None:
 
 
 def get_service(request: Request) -> MessageService:
-    """Returns the service on the application's engine; startup always opens one before it serves routes."""
+    """Returns the service on the application's engine, in the deployment time zone; startup always opens one before
+    it serves routes."""
     engine: Engine | None = request.app.state.engine
     if engine is None:
         raise RuntimeError("the message routes need a database")
-    return MessageService(engine)
+    return MessageService(engine, zone=request.app.state.settings.zone)
 
 
 Service = Depends(get_service)
@@ -174,15 +175,20 @@ def send_message(
 
 
 @router.patch("/messages/{message_id}", response_model=MessageOut)
-def edit_message(message_id: str, body: EditMessage, service: MessageService = Service) -> MessageOut:
-    """Edits a message by adding an `edited` variant. 404 for a missing message, 409 while it is being produced."""
-    return _message(service.edit(message_id, body.content))
+def edit_message(message_id: str, body: EditMessage, request: Request, service: MessageService = Service) -> MessageOut:
+    """Edits a message by adding an `edited` variant, and invalidates what was derived from the old text. 404 for a
+    missing message, 409 while it is being produced."""
+    edited = service.edit(message_id, body.content)
+    _wake_worker(request)
+    return _message(edited)
 
 
 @router.delete("/messages/{message_id}", status_code=204)
-def delete_message(message_id: str, service: MessageService = Service) -> Response:
-    """Soft-deletes a message; 404 when it does not exist or is already deleted, 409 while it is being produced."""
+def delete_message(message_id: str, request: Request, service: MessageService = Service) -> Response:
+    """Soft-deletes a message and invalidates what was derived from it; 404 when it does not exist or is already
+    deleted, 409 while it is being produced."""
     service.delete(message_id)
+    _wake_worker(request)
     return Response(status_code=204)
 
 
@@ -201,6 +207,11 @@ def list_variants(message_id: str, service: MessageService = Service) -> Variant
 
 
 @router.post("/messages/{message_id}/variants/{variant_id}/activate", response_model=MessageOut)
-def activate_variant(message_id: str, variant_id: str, service: MessageService = Service) -> MessageOut:
-    """Shows another version of the last character message. 409 for any other message."""
-    return _message(service.activate_variant(message_id, variant_id))
+def activate_variant(
+    message_id: str, variant_id: str, request: Request, service: MessageService = Service
+) -> MessageOut:
+    """Shows another version of the last character message, and invalidates what was derived from the one shown
+    before. 409 for any other message."""
+    switched = service.activate_variant(message_id, variant_id)
+    _wake_worker(request)
+    return _message(switched)

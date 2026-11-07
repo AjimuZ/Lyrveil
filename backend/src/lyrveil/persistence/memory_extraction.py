@@ -1,6 +1,6 @@
 """SQL of memory extraction: the messages of a window, the cursor, the runs, the memories and episodes a run shows and
-writes, the changes the consistency rules make with their revisions, the tombstones that block a candidate, and the
-conversation's extraction jobs.
+writes, the changes the consistency rules make with their revisions, the reactivation of invalidated memories and
+episodes by a re-evaluation, the tombstones that block a candidate, and the conversation's extraction jobs.
 
 Every function works on a connection the caller owns and never commits. Writers open that connection with the WRITE
 option of lyrveil.persistence.database, so the service decides what one transaction holds: a run's memories, sources,
@@ -29,23 +29,27 @@ _SHOWN_STATUSES = "('active', 'uncertain')"
 _SHOWN = f"m.status IN {_SHOWN_STATUSES} AND m.kind <> 'identity_candidate'"
 _KNOWN_COLUMNS = """
 m.id, m.kind, m.content, m.subject_key, m.value_text, m.provenance, m.durability, m.status, m.importance,
-m.locked, m.conflict_group_id, m.fingerprint,
+m.locked, m.conflict_group_id, m.fingerprint, m.valid_from,
 (SELECT max(msg.seq) FROM memory_sources AS s JOIN messages AS msg ON msg.id = s.message_id WHERE s.memory_id = m.id)
 AS source_max_seq
 """
 _KNOWN_SELECT = f"SELECT {_KNOWN_COLUMNS} FROM memories AS m"
+# A source that still holds: its message is visible and shows the variant the source read. `src` is the source row and
+# `msg` its message.
+VALID_SOURCE = "msg.deleted_at IS NULL AND msg.active_variant_id = src.variant_id"
 
 
 @dataclass(frozen=True)
 class Run:
     """One row of `memory_extraction_runs`, as the pipeline needs it. `status` is running, completed, failed or
-    superseded."""
+    superseded; `finished_at` (UTC text) is when it last ended, None while it runs."""
 
     id: str
     status: str
     attempt: int
     from_seq: int
     to_seq: int
+    finished_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,7 +72,8 @@ class ShownEpisode:
 @dataclass(frozen=True)
 class NewMemory:
     """The columns of a conversation memory that extraction inserts, at version 1. `status` is `active` or
-    `uncertain`."""
+    `uncertain`, `superseded` (with `valid_to`) for history older than a memory in use, or `expired` for a temporary
+    one a re-evaluation finds already past its expiry."""
 
     id: str
     character_id: str
@@ -88,6 +93,7 @@ class NewMemory:
     status: str = "active"
     needs_review: bool = False
     conflict_group_id: str | None = None
+    valid_to: str | None = None
 
 
 @dataclass(frozen=True)
@@ -182,8 +188,9 @@ def find_run(
     row = (
         connection.execute(
             text(
-                "SELECT id, status, attempt, from_seq, to_seq FROM memory_extraction_runs WHERE conversation_id = :id "
-                "AND window_hash = :hash AND prompt_version = :prompt AND schema_version = :schema"
+                "SELECT id, status, attempt, from_seq, to_seq, finished_at FROM memory_extraction_runs "
+                "WHERE conversation_id = :id AND window_hash = :hash AND prompt_version = :prompt "
+                "AND schema_version = :schema"
             ),
             {"id": conversation_id, "hash": window_hash, "prompt": prompt_version, "schema": schema_version},
         )
@@ -193,7 +200,12 @@ def find_run(
     if row is None:
         return None
     return Run(
-        id=row["id"], status=row["status"], attempt=row["attempt"], from_seq=row["from_seq"], to_seq=row["to_seq"]
+        id=row["id"],
+        status=row["status"],
+        attempt=row["attempt"],
+        from_seq=row["from_seq"],
+        to_seq=row["to_seq"],
+        finished_at=row["finished_at"],
     )
 
 
@@ -229,7 +241,8 @@ def insert_run(
 
 def restart_run(connection: Connection, run_id: str, window: Window) -> None:
     """Marks a failed, superseded or interrupted run `running` again for its next attempt, with the window's range
-    (the same messages may now follow another cursor). The output and error of the previous attempt are cleared."""
+    (the same messages may now follow another cursor). The output and error of the previous attempt are cleared. A
+    re-evaluation also restarts a run completed before the change that queued it."""
     connection.execute(
         text(
             "UPDATE memory_extraction_runs SET status = 'running', attempt = attempt + 1, from_seq = :from_seq, "
@@ -306,6 +319,7 @@ def _known_memory(row: RowMapping) -> KnownMemory:
         conflict_group_id=row["conflict_group_id"],
         fingerprint=row["fingerprint"],
         source_max_seq=row["source_max_seq"],
+        valid_from=row["valid_from"],
     )
 
 
@@ -422,11 +436,11 @@ def insert_memory(connection: Connection, memory: NewMemory, now: str) -> None:
     connection.execute(
         text(
             "INSERT INTO memories (id, character_id, scope, conversation_id, kind, content, subject_key, value_text, "
-            "provenance, durability, status, importance, confidence, needs_review, valid_from, expires_at, "
+            "provenance, durability, status, importance, confidence, needs_review, valid_from, valid_to, expires_at, "
             "conflict_group_id, fingerprint, language, created_at, updated_at) VALUES (:id, :character_id, "
             "'conversation', :conversation_id, :kind, :content, :subject_key, :value_text, :provenance, :durability, "
-            ":status, :importance, :confidence, :needs_review, :valid_from, :expires_at, :conflict_group_id, "
-            ":fingerprint, :language, :now, :now)"
+            ":status, :importance, :confidence, :needs_review, :valid_from, :valid_to, :expires_at, "
+            ":conflict_group_id, :fingerprint, :language, :now, :now)"
         ),
         {
             "id": memory.id,
@@ -443,6 +457,7 @@ def insert_memory(connection: Connection, memory: NewMemory, now: str) -> None:
             "confidence": memory.confidence,
             "needs_review": int(memory.needs_review),
             "valid_from": memory.valid_from,
+            "valid_to": memory.valid_to,
             "expires_at": memory.expires_at,
             "conflict_group_id": memory.conflict_group_id,
             "fingerprint": memory.fingerprint,
@@ -572,6 +587,73 @@ def add_memory_sources(connection: Connection, memory_id: str, sources: Sequence
     return added
 
 
+def invalidated_by_fingerprint(
+    connection: Connection, character_id: str, conversation_id: str, fingerprint: str
+) -> str | None:
+    """Returns the id of the conversation's `invalidated` memory with this fingerprint, the most recently changed one
+    when there are several, or None."""
+    found: str | None = connection.execute(
+        text(
+            "SELECT id FROM memories WHERE character_id = :character_id AND conversation_id = :id "
+            "AND fingerprint = :fingerprint AND status = 'invalidated' ORDER BY updated_at DESC, id DESC LIMIT 1"
+        ),
+        {"character_id": character_id, "id": conversation_id, "fingerprint": fingerprint},
+    ).scalar()
+    return found
+
+
+def reactivate_memory(
+    connection: Connection,
+    memory_id: str,
+    memory: NewMemory,
+    *,
+    superseded_by_id: str | None,
+    reason: str,
+    run_id: str,
+    now: str,
+) -> None:
+    """Records a revision by `extraction` with `reason` and brings an invalidated memory back with the status,
+    provenance, confidence, review flag, conflict group, durability, expiry and `valid_to` of `memory`, the new
+    reading of the same fact; its importance only rises. Its text, subject and fingerprint stay. The caller drops its
+    stale sources, adds the new ones and refreshes its index row in the same transaction."""
+    revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
+    connection.execute(
+        text(
+            "UPDATE memories SET status = :status, provenance = :provenance, confidence = :confidence, "
+            "needs_review = :needs_review, conflict_group_id = :conflict_group_id, durability = :durability, "
+            "expires_at = :expires_at, valid_to = :valid_to, superseded_by_id = :superseded_by_id, "
+            "importance = max(importance, :importance) WHERE id = :id"
+        ),
+        {
+            "id": memory_id,
+            "status": memory.status,
+            "provenance": memory.provenance,
+            "confidence": memory.confidence,
+            "needs_review": int(memory.needs_review),
+            "conflict_group_id": memory.conflict_group_id,
+            "durability": memory.durability,
+            "expires_at": memory.expires_at,
+            "valid_to": memory.valid_to,
+            "superseded_by_id": superseded_by_id,
+            "importance": memory.importance,
+        },
+    )
+
+
+def drop_stale_memory_sources(connection: Connection, memory_id: str) -> int:
+    """Removes the memory's sources that no longer hold (their message is deleted or shows another variant) and
+    returns how many it removed."""
+    result = connection.execute(
+        text(
+            "DELETE FROM memory_sources WHERE memory_id = :id AND NOT EXISTS (SELECT 1 FROM messages AS msg "
+            "WHERE msg.id = memory_sources.message_id AND msg.deleted_at IS NULL "
+            "AND msg.active_variant_id = memory_sources.variant_id)"
+        ),
+        {"id": memory_id},
+    )
+    return int(result.rowcount)
+
+
 def recent_episodes(connection: Connection, conversation_id: str, limit: int) -> list[ShownEpisode]:
     """Returns up to `limit` active episodes of the conversation, the most recent first."""
     rows = (
@@ -603,6 +685,44 @@ def find_episode_by_fingerprint(connection: Connection, conversation_id: str, fi
         .first()
     )
     return None if row is None else ShownEpisode(id=row["id"], title=row["title"])
+
+
+def invalidated_episode_by_fingerprint(connection: Connection, conversation_id: str, fingerprint: str) -> str | None:
+    """Returns the id of the conversation's `invalidated` episode with this fingerprint, the most recently changed one
+    when there are several, or None."""
+    found: str | None = connection.execute(
+        text(
+            "SELECT id FROM episodic_memories WHERE conversation_id = :id AND fingerprint = :fingerprint "
+            "AND status = 'invalidated' ORDER BY updated_at DESC, id DESC LIMIT 1"
+        ),
+        {"id": conversation_id, "fingerprint": fingerprint},
+    ).scalar()
+    return found
+
+
+def reactivate_episode(connection: Connection, episode_id: str, importance: int, now: str) -> None:
+    """Makes an invalidated episode `active` again; its importance only rises, its text stays. The caller drops its
+    stale sources and adds the new ones in the same transaction."""
+    connection.execute(
+        text(
+            "UPDATE episodic_memories SET status = 'active', importance = max(importance, :importance), "
+            "updated_at = :now WHERE id = :id"
+        ),
+        {"id": episode_id, "importance": importance, "now": now},
+    )
+
+
+def drop_stale_episode_sources(connection: Connection, episode_id: str) -> int:
+    """Removes the episode's sources that no longer hold and returns how many it removed."""
+    result = connection.execute(
+        text(
+            "DELETE FROM episodic_sources WHERE episode_id = :id AND NOT EXISTS (SELECT 1 FROM messages AS msg "
+            "WHERE msg.id = episodic_sources.message_id AND msg.deleted_at IS NULL "
+            "AND msg.active_variant_id = episodic_sources.variant_id)"
+        ),
+        {"id": episode_id},
+    )
+    return int(result.rowcount)
 
 
 def insert_episode(connection: Connection, episode: NewEpisode, now: str) -> None:

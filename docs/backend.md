@@ -64,13 +64,13 @@ orchestrator/
 | `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. Delivered in P03.3: the drafts, as the `character_draft` handler. |
 | `CharacterAssetService` | `services` | Character assets: upload, crop, list, primary avatar, delete, and the files of the media routes. Delivered in P03.4a, without generated avatars (P05). |
 | `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. |
-| `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; the notification joins with P04.7 and search with P02.5d. |
+| `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; search with P02.5d; the notification with P04.7, through `InvalidationService` (`services/invalidation.py`) in the transaction of each change ([Delivered in P04.7](memory-engine.md#delivered-in-p047)). |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |
 | `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. Delivered in P04.3 as `FtsMemoryRetriever` in `services/memory_retrieval.py`, over `persistence/memory_retrieval.py` and the pure rules of `memory/retrieval.py`; no reply calls it until the context builder (P04.5). |
-| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry. P04.2c adds the tombstone guard; invalidation is P04.7. User edits and deletions are in `services/memories.py` (`MemoryService`). |
+| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry. P04.2c adds the tombstone guard. P04.7 adds the reactivation of invalidated memories and the age check; the invalidation itself is `InvalidationService`. User edits and deletions are in `services/memories.py` (`MemoryService`). |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
-| `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. Delivered in P04.6 as `services/character_state.py`, over the pure rules of `consistency/state.py` and the SQL of `persistence/relationship.py`; extraction runs call it, and invalidation after a message change (P04.7) will ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). |
+| `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. Delivered in P04.6 as `services/character_state.py`, over the pure rules of `consistency/state.py` and the SQL of `persistence/relationship.py`; extraction runs call it, and since P04.7 invalidation after a message change does ([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). |
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
@@ -396,6 +396,14 @@ Delivered in P04.2c: guard 6 in `MemoryConsistencyService.apply` (an item a tomb
 as `blocked_items` and writes nothing), and `MemoryService` (`services/memories.py`, SQL in `persistence/memories.py`)
 with `edit` and `delete` as single write transactions. No HTTP route calls them yet (`PATCH` and `DELETE
 /memories/{id}` come with P04.9). See [Delivered in P04.2c](memory-engine.md#delivered-in-p042c).
+
+Delivered in P04.7: `memory_reevaluation`, run by `MemoryExtractionService` and registered in the lifespan beside
+`memory_extraction`. Its payload `{"from_seq", "to_seq"}` names the range; the run reads it up to the cursor, never
+moves the cursor, and its `result_json` adds `state_skipped` and `state_update_skipped`. `MessageService` invalidates
+derived data through `InvalidationService` in the transaction of an edit, deletion, regeneration or variant switch, and
+the edit, delete and activate routes wake the worker for the jobs it queues. A regenerated reply that extraction had
+passed queues its re-evaluation from `ChatInferenceService`, in the transaction of the extraction trigger. See
+[Delivered in P04.7](memory-engine.md#delivered-in-p047).
 
 ### Retry policy
 
