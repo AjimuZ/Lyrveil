@@ -52,8 +52,9 @@ Every command exits 0 only when the level ran tests and all of them passed. An u
 
 ### The `docker` level
 
-Delivered with P01.8b, P01.6a, P01.6b and P01.6c ([setup evidence](verification/2026-11-06-setup.md),
-[lifecycle evidence](verification/2026-11-06-lifecycle.md), [models evidence](verification/2026-11-07-models.md)). It runs with the pinned Pester only;
+Delivered with P01.8b, P01.6a, P01.6b, P01.6c and P01.6d ([setup evidence](verification/2026-11-06-setup.md),
+[lifecycle evidence](verification/2026-11-06-lifecycle.md), [models evidence](verification/2026-11-07-models.md),
+[data files evidence](verification/2026-11-07-data-files.md)). It runs with the pinned Pester only;
 pytest joins it when a Docker test needs Python. The files:
 
 - `tests/docker/TestFakes.Tests.ps1` checks that no production image holds `tests/fakes` and that `compose.test.yaml`
@@ -84,13 +85,22 @@ pytest joins it when a Docker test needs Python. The files:
   and no `.part` file; a redirect to `http://` exits 1 and a redirect to HTTPS is followed. It also checks `-List`,
   `-Verify` (exit 4 and no record for a changed file), `-Remove` (refused for an active profile, asks first, and
   deletes nothing without an answer) and conflicting options.
+- `tests/docker/Data.Tests.ps1` (P01.6d) covers `import-model`, `backup` and `restore` against the project
+  `lyrveil-data-test`, started from nothing with setup. `import-model` copies a `.gguf` to `llm/` and a `.safetensors`
+  to `image/checkpoints/` with the same SHA-256, and refuses an existing name, keeping the file, another extension and
+  a name with a space. `backup` writes one backup into the data volume and copies it, with the same hash, to the
+  backup folder set by `LYRVEIL_BACKUP_DIR` in the test's `.env`, a folder in Pester's temporary drive. `restore`
+  refuses a backup whose manifest hash was changed, without asking, stopping or changing anything; without console
+  input it exits 5; after a yes it stops, replaces the data, keeps the previous data in `pre-restore-<time>/` and ends
+  with the ready line. The round trip of T-DCK-12 is completed in P03.7b and T-DCK-14 in P06.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
 `:setup-test`, and adds a fake `lyrveil-llm` so setup has a runtime container to create. Every command names the
 project with `-p`, `--env-file` points at `.env.example` or at a `.env` in Pester's temporary drive, and setup refuses
 to start unless the resolved configuration names only the test volumes. The test removes the project and both volumes
-afterwards and fails if a volume is left. No test uses a backup folder.
+afterwards and fails if a volume is left. Only `Data.Tests.ps1` uses a backup folder, its own in Pester's temporary
+drive, and never `%USERPROFILE%\Documents\Lyrveil\backups`.
 
 The lifecycle tests use `tests/docker/compose.lifecycle-test.yaml` the same way, with the volumes
 `lyrveil-lifecycle-test-data` and `lyrveil-lifecycle-test-models` and the tag `:lifecycle-test`. Because they start
@@ -105,6 +115,14 @@ The models tests use `tests/docker/compose.models-test.yaml` the same way, with 
 the project's own volume, so every URL the tool opens is the test server on the download network; nothing reaches the
 Internet. The file refuses to run unless the resolved configuration has the test project, the test volumes, no
 `container_name`, and the test catalog and CA.
+
+The data tests use `tests/docker/compose.data-test.yaml` the same way, with the volumes `lyrveil-data-test-data` and
+`lyrveil-data-test-models`, the tag `:data-test`, no `container_name`, no `env_file` and port 14212. The file refuses
+to run unless the resolved configuration has the test project, the test volumes, no `container_name` and port 14212,
+and unless the backup folder resolved from its `.env` is the one in the temporary drive.
+`tests/scripts/DataFiles.Tests.ps1`, at the `unit` level, checks without Docker that the one-off containers have no
+network and mount the Windows folder read-only, how `LYRVEIL_BACKUP_DIR` is resolved, and that wrong arguments,
+extensions and names are refused before any Docker call.
 
 ### The `e2e` level
 

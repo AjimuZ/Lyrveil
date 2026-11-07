@@ -1,9 +1,9 @@
 # Entry point of the Lyrveil management commands, run with Windows PowerShell 5.1 by scripts\lyrveil.cmd and the root .cmd files.
 #
 # Usage: scripts\lyrveil.cmd <command> [arguments]
-# Delivered commands: setup [options], start, stop, restart, status [-Json] and logs [service ...] [options], run by
-# the root .cmd files of the same names, models [options] and test <level> [pytest arguments]. import-model, backup and
-# restore are planned (docs/operations.md).
+# Commands: setup [options], start, stop, restart, status [-Json] and logs [service ...] [options], run by the root
+# .cmd files of the same names, models [options], import-model <file>, backup, restore <file> and test <level>
+# [pytest arguments] (docs/operations.md).
 # Exit status follows docs/operations.md: 0 on success, 1 on any failure, including an unknown command or level, 2 when
 # a preflight check fails, 3 when a health check fails or times out, 4 when a model file is missing or invalid, and 5
 # when the user declined.
@@ -22,6 +22,7 @@ $rest = @()
 if ($commandLine.Count -gt 0) { $command = $commandLine[0] }
 if ($commandLine.Count -gt 1) { $rest = @($commandLine | Select-Object -Skip 1) }
 $lifecycle = Join-Path $PSScriptRoot 'lib\Lifecycle.psm1'
+$dataFiles = Join-Path $PSScriptRoot 'lib\DataFiles.psm1'
 
 try {
     switch ($command) {
@@ -60,6 +61,21 @@ try {
             $status = Invoke-LyrveilModel -Root $repositoryRoot -Argument $rest
             exit ([int]$status)
         }
+        'import-model' {
+            Import-Module $dataFiles -Force
+            $status = Invoke-LyrveilImportModel -Root $repositoryRoot -Argument $rest
+            exit ([int]$status)
+        }
+        'backup' {
+            Import-Module $dataFiles -Force
+            $status = Invoke-LyrveilBackup -Root $repositoryRoot -Argument $rest
+            exit ([int]$status)
+        }
+        'restore' {
+            Import-Module $dataFiles -Force
+            $status = Invoke-LyrveilRestore -Root $repositoryRoot -Argument $rest
+            exit ([int]$status)
+        }
         'test' {
             Import-Module (Join-Path $PSScriptRoot 'lib\TestCommand.psm1') -Force
             $status = Invoke-LyrveilTest -Root $repositoryRoot -Argument $rest
@@ -67,7 +83,7 @@ try {
         }
         default {
             Write-Host "Unknown command '$command'. Usage: scripts\lyrveil.cmd <command>, or the .cmd files in the repository root."
-            Write-Host 'Delivered: setup, start, stop, restart, status, logs, models and test. import-model, backup and restore are planned (docs/operations.md).'
+            Write-Host 'Commands: setup, start, stop, restart, status, logs, models, import-model, backup, restore and test (docs/operations.md).'
             exit 1
         }
     }

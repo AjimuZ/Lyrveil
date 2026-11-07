@@ -23,7 +23,7 @@ $script:LogTail = 50
 # What start.cmd and stop.cmd cannot do yet, printed as warnings so that no run claims it was done.
 $script:ModelFilesPending = 'not checked, because the model catalog is not available yet (P02)'
 $script:TextModelPending = 'not started, because the model catalog and the runtimes are not available yet (P02). The app works for reading and editing'
-$script:BackupsPending = 'not copied to the Windows backup folder, because the backup command is not available yet'
+$script:BackupsPending = 'not copied to the Windows backup folder by this command yet (P03.7b). scripts\lyrveil.cmd backup makes a backup and copies them'
 $script:DrainPending = 'skipped, because the job queue and its drain command come with P02'
 $script:ReleasePending = 'skipped, because the orchestrator manages no runtime until P02'
 # What status.cmd cannot report yet. The keys are the JSON fields, which are null until then.

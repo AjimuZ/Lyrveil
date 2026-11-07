@@ -58,7 +58,7 @@ Evidence:
 - [x] P01.3 Backend skeleton: FastAPI, settings, structured logging, SQLite with verified WAL and FTS5, Alembic baseline, health routes.
 - [x] P01.4 Orchestrator skeleton: state machine table, `ContainerGate`, `GPUResourceMonitor`, control API with token, preflight.
 - [x] P01.5 Frontend skeleton: Angular 22 zoneless shell, routes, tokens, fonts, API types, WebSocket client.
-- [ ] P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`.
+- [x] P01.6 Scripts: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, and `scripts\lyrveil.ps1` with `models` driven by the model catalog, `import-model`, `backup`, `restore` and `test`.
 - [ ] P01.7 Security baseline: Host and Origin checks, headers, internal networks, non-root containers.
 - [ ] P01.8 Fakes, CI, lint and type gates. CI also checks documentation links, anchors, requirement coverage and Mermaid diagrams.
 

@@ -41,6 +41,11 @@ def head_revision() -> str:
     return head
 
 
+def known_revisions() -> frozenset[str]:
+    """Returns every revision of the migrations folder: a database at any other revision is newer than this code."""
+    return frozenset(script.revision for script in ScriptDirectory.from_config(_config()).walk_revisions())
+
+
 def migration_state(engine: Engine) -> MigrationState:
     """Returns the current and head revisions, reading the database without changing it."""
     head = head_revision()

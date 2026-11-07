@@ -108,7 +108,6 @@ function ConvertTo-Version {
 
 function Get-EnvFileValue {
     # Returns the value of Name in the dotenv file at Path, or $null when the file or the line is missing. Reads only.
-    # Not exported.
     [CmdletBinding()]
     [OutputType([string])]
     param([string]$Path, [string]$Name)
@@ -722,7 +721,7 @@ function Invoke-LyrveilSetup {
 }
 
 # The helpers after the first line are shared with Lifecycle.psm1, which runs start, stop, status and logs on the same
-# project, with the same Compose arguments, volumes and images as setup.
+# project, with the same Compose arguments, volumes and images as setup, and with DataFiles.psm1.
 Export-ModuleMember -Function Invoke-LyrveilSetup, Get-PreflightResult, Initialize-EnvironmentFile,
 Invoke-NativeCapture, Invoke-NativeShown, Get-PreflightFact, Write-PreflightReport, Get-ComposeArgument,
-Get-ComposeProject, Get-ObjectProperty, Get-ProjectVolume, Get-ServiceImage
+Get-ComposeProject, Get-ObjectProperty, Get-ProjectVolume, Get-ServiceImage, Get-EnvFileValue

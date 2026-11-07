@@ -15,7 +15,8 @@ backend/
     main.py              Composition root: builds adapters, services and the app
     settings.py          Typed environment settings
     logs.py              JSON logging with the field allowlist
-    cli.py               rebuild-search, drain, backup, restore-check
+    cli.py               backup, export-backups, restore-check, restore (P01.6d); rebuild-search, drain (planned)
+    tools/               One-shot tools: models.py (downloads), import_model.py (copies a custom model file)
     api/                 Routers, request and response schemas, error mapping, WebSocket
     domain/              Entities, enums, state rules. Pure, no I/O
     ports/               Protocols: TextRuntime, ImageRuntime, MemoryRetriever, Clock...

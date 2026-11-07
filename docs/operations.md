@@ -114,14 +114,15 @@ passes its arguments. The bypass applies to that process only. `scripts\lyrveil.
 
 Delivered so far: `scripts\lyrveil.cmd` and `scripts\lyrveil.ps1` with the `test` command ([Testing](testing.md#commands)),
 the six root entry points, `setup.cmd` with the parts listed under [`setup.cmd`](#setupcmd), and the lifecycle commands
-in `scripts/lib/Lifecycle.psm1` with the parts listed under each of them below, and `models` in
-`scripts/lib/Models.psm1` ([Model downloads](#model-downloads)). `import-model`, `backup` and `restore` are planned.
-Today, an unknown or unbuilt command exits 1 with a message, and so does an unknown argument.
+in `scripts/lib/Lifecycle.psm1` with the parts listed under each of them below, `models` in
+`scripts/lib/Models.psm1` ([Model downloads](#model-downloads)), and `import-model`, `backup` and `restore` in
+`scripts/lib/DataFiles.psm1` (P01.6d, [`import-model`](#scriptslyrveilcmd-import-model),
+[Backup and restore](#backup-and-restore)). An unknown command exits 1 with a message, and so does an unknown argument.
 
 Questions go through `Read-Confirmation` in `scripts/lib/ConsolePrompt.psm1`. When standard input is not the console,
 or PowerShell runs with `-NonInteractive`, it prints the question and answers no at once, so an unattended run never
 proceeds by default and the command exits 5. Setup asks no question yet; `models` asks for license acceptance and before
-`-Remove`.
+`-Remove`, and `restore` asks before it stops Lyrveil.
 
 All scripts set `$ErrorActionPreference = 'Stop'` and `Set-StrictMode -Version Latest`, check `$LASTEXITCODE` after
 every native command, are idempotent, and never delete persistent data.
@@ -242,6 +243,21 @@ copy runs in a container with no network and the file's folder mounted read-only
 `^[A-Za-z0-9._-]{1,128}\.(gguf|safetensors)$` and names already present are refused. The file is then registered in
 **Impostazioni > Modelli**.
 
+Delivered in P01.6d, in `scripts/lib/DataFiles.psm1` and `backend/src/lyrveil/tools/import_model.py`
+([evidence](verification/2026-11-07-data-files.md)). Registration in **Impostazioni > Modelli** comes with P06.
+
+- The command takes exactly one file, relative to the current folder. A missing file, another extension (matched with
+  case, so `.GGUF` is refused) and a name outside the pattern exit 1 before any Docker call. So does a folder that a
+  Docker mount cannot carry: not on a drive, or with a comma or a double quote.
+- Docker not running, a models volume that is missing or has no `io.lyrveil.volume` label, and a missing backend image
+  exit 2.
+- The copy runs `python -m lyrveil.tools.import_model` from the local backend image with `docker run --network none
+  --read-only --cap-drop ALL`, as `10001:10001`, with the file's folder mounted read-only at `/import` and the models
+  volume at `/models`. The tool imports the standard library only. It refuses a name already in the target folder
+  (exit 1), compares the size with the free space (exit 2), copies to a hidden temporary name, then hard-links it to
+  the final name, which fails when that name appeared meanwhile, so no file is ever replaced. It prints the size and
+  the SHA-256, and leaves nothing behind on a failure.
+
 ### `start.cmd`
 
 1. Verify Docker. Exit 2 with instructions if Docker Desktop is not running.
@@ -272,8 +288,9 @@ option.
 - Step 8: a service that is unhealthy, or not healthy within 120 s, exits 3 with the last 50 log lines of both
   services. After the health checks, start sends a GET to the published port of the frontend on `127.0.0.1` and exits 3
   if it does not answer.
-- Steps 6, 9 and 10 are not delivered: the model catalog and the runtimes come with P02, and the backup copy with the
-  backup command. Each prints a `WARNING` line and never fails the start.
+- Steps 6, 9 and 10 are not delivered: the model catalog and the runtimes come with P02, and the backup copy at start
+  with P03.7b; until then `scripts\lyrveil.cmd backup` copies the backups. Each prints a `WARNING` line and never fails
+  the start.
 - Step 11 prints a summary of the warnings, then the ready line as the last line. The URL uses the port that the
   Compose file publishes, 4200 by default.
 
@@ -287,8 +304,8 @@ option.
 It succeeds when services are already stopped. It never runs `down -v`, and the volumes are external, so even that
 command would keep them.
 
-Delivered in P01.6b: step 4, which keeps the containers. Steps 1 to 3 print a `WARNING` line, because the queue, the
-lifecycle manager and the backup command do not exist yet. Stop never runs `docker compose down` in any form. It exits
+Delivered in P01.6b: step 4, which keeps the containers. Steps 1 to 3 print a `WARNING` line, because the queue and
+the lifecycle manager do not exist yet, and the backup copy at stop comes with P03.7b. Stop never runs `docker compose down` in any form. It exits
 0 when the services are stopped, also when they were stopped already or Docker is not running, and 1 when
 `docker compose stop` fails or an argument is given.
 
@@ -637,6 +654,7 @@ Volume lyrveil-data, mounted at /data in the backend
   media/                     Images, thumbnails, assets. See Image generation
   runtime/                   Launch files
   backups/                   The newest 7 backups
+  pre-restore-<time>/        db, media and runtime as they were before a restore, kept until you delete them
 Volume lyrveil-models, mounted read-only at /models in the backend
   llm/                       Text model files, for example gemma-4-26B_q4_0-it.gguf
   image/checkpoints/         Image checkpoints, for example Illustrious-XL-v2.0.safetensors
@@ -674,6 +692,38 @@ Restore steps:
 5. Run `start.cmd`, which applies any pending migrations.
 
 An older-schema backup migrates forward at start. The backend also creates a backup before migrations.
+
+Delivered in P01.6d, in `scripts/lib/DataFiles.psm1` and `backend/src/lyrveil/cli.py`
+([evidence](verification/2026-11-07-data-files.md)): the `backup` and `restore` commands and the `cli.py` commands
+`backup`, `export-backups`, `restore-check` and `restore`. Every container runs the local backend image with
+`--network none --read-only --cap-drop ALL` as `10001:10001`. Not delivered yet: the daily backup and the pruning to 7
+in the volume, **Impostazioni > Dati**, the copy at start and stop, and the pre-migration backup (P03.7b); the T-DCK-12
+round trip with real content is verified in P03.7b.
+
+- The backup folder is `LYRVEIL_BACKUP_DIR` from `.env`, with `%VARIABLES%` expanded, or
+  `%USERPROFILE%\Documents\Lyrveil\backups` when it is empty. A value that is not an absolute folder on a drive, or
+  holds a comma or a double quote, exits 1. The folder is created when missing.
+- `backup` takes no argument. Docker not running, a missing or unlabelled data volume and a missing backend image
+  exit 2. `python -m lyrveil.cli backup`, with only the data volume mounted, copies `db/lyrveil.sqlite3` with the SQLite
+  backup API, so the backend may keep running, and adds every file of `media/`, except `media/.staging`, and of
+  `runtime/`. It writes `backups/lyrveil-<UTC time>.tar` under a temporary name, runs the same check as
+  `restore-check` on it, and only then gives it its name. A database that does not exist yet, or has no Alembic
+  revision, exits 1. `python -m lyrveil.cli export-backups` then copies, with the data volume read-only and the
+  Windows folder as its only writable mount, every `lyrveil-*.tar` that the folder lacks by name, through a `.part`
+  file. Nothing in the folder is overwritten or deleted.
+- `manifest.json`, the first member, holds `format` (`lyrveil-backup`), `format_version` 1, `created_at`,
+  `app_version`, `schema_revision` (the Alembic revision of the copied database) and, for each file, `path`, `bytes`
+  and `sha256`.
+- `restore <file>` takes exactly one file. Step 1 is `python -m lyrveil.cli restore-check` with only the file's folder
+  mounted, read-only. It refuses, with exit status 1 and without stopping anything, a file that is not an uncompressed
+  tar, a missing or invalid manifest, an entry the manifest does not list or one that is not a regular file, a path
+  outside `db/lyrveil.sqlite3`, `media/` and `runtime/`, a size or SHA-256 that differs, and a schema revision that the
+  installed migrations do not know, which means a newer app. Then the command asks; no answer exits 5. Step 2 runs
+  `stop.cmd`. Steps 3 and 4 are one `python -m lyrveil.cli restore`: it checks again, extracts to `.restore-<time>/`
+  in the data volume with every hash checked once more, then moves `db`, `media` and `runtime` to
+  `pre-restore-<time>/` and the extracted ones into place with renames. A failed rename puts everything back, and any
+  failure exits 1 with Lyrveil stopped. `backups/` and every other folder stay. Step 5 runs `start.cmd` and returns its
+  status.
 
 ## Upgrade
 

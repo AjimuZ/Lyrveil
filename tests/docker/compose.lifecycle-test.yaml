@@ -10,7 +10,7 @@
 #   - the app is published on 127.0.0.1:14210, never 4200 (an installation) or 14200 (the e2e level);
 #   - env_file is reset, so no container reads the repository's .env; the backend gets the settings below, with a
 #     token that guards only this project.
-# No test uses a backup folder: start and stop copy no backup until the backup command exists.
+# No test uses a backup folder: start and stop copy no backup until P03.7b.
 services:
   lyrveil-frontend:
     image: lyrveil/frontend:lifecycle-test

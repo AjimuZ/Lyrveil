@@ -118,6 +118,19 @@ No application exists yet. This section records the design documentation.
   `-List`, `-Verify` and `-Remove <id>` list, re-hash and delete files, and
   `-Remove` refuses an active profile and asks first. The catalog arrives with a
   later release, so until then the command only reports that it is missing.
+- `scripts\lyrveil.cmd import-model <file>` copies a `.gguf` into the text model
+  folder or a `.safetensors` into the image checkpoints of the models volume, in
+  a container with no network that reads the file's folder read-only. It refuses
+  other extensions, names outside `^[A-Za-z0-9._-]{1,128}\.(gguf|safetensors)$`
+  and names already present, and never replaces a file.
+- `scripts\lyrveil.cmd backup` writes `lyrveil-<UTC time>.tar` with the database,
+  media, launch files and a manifest of SHA-256 hashes into the data volume, then
+  copies every backup missing from the Windows backup folder
+  (`LYRVEIL_BACKUP_DIR`, by default `Documents\Lyrveil\backups`).
+- `scripts\lyrveil.cmd restore <file>` checks the backup first and refuses a
+  damaged one or one from a newer version without stopping anything. After a
+  confirmation it stops Lyrveil, keeps the current data in
+  `pre-restore-<time>`, puts the backup's data in place and starts again.
 
 ### Changed
 

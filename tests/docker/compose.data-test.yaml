@@ -1,0 +1,34 @@
+# Override of compose.yaml for tests/docker/Data.Tests.ps1, which runs import-model, backup and restore against the
+# project "lyrveil-data-test":
+#   docker compose -p lyrveil-data-test -f compose.yaml -f tests/docker/compose.data-test.yaml config
+# It keeps compose.yaml's services, health checks and external volumes, so the commands meet the real file, and changes
+# only what would reach a real installation:
+#   - the two external volumes get their own names, never "lyrveil-data" or "lyrveil-models";
+#   - every image is tagged ":data-test", so no build replaces the ":local" images of an installation;
+#   - container_name is reset, so no container takes the name of an installation's;
+#   - the app is published on 127.0.0.1:14212, never 4200 (an installation), 14200 (the e2e level), 14210 or 14211;
+#   - env_file is reset, so no container reads the repository's .env; the backend gets the settings below, with a
+#     token that guards only this project.
+# The backup folder is set by LYRVEIL_BACKUP_DIR in the test's own .env, in Pester's temporary drive.
+services:
+  lyrveil-frontend:
+    image: lyrveil/frontend:data-test
+    container_name: !reset null
+    ports: !override ["127.0.0.1:14212:8080"]
+  lyrveil-backend:
+    image: lyrveil/backend:data-test
+    container_name: !reset null
+    env_file: !reset []
+    environment:
+      LYRVEIL_CONTROL_TOKEN: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      LYRVEIL_TZ: Europe/Rome
+  lyrveil-orchestrator:
+    image: lyrveil/orchestrator:data-test
+    container_name: !reset null
+    env_file: !reset []
+  lyrveil-models:
+    image: lyrveil/backend:data-test
+
+volumes:
+  lyrveil-data: {external: true, name: lyrveil-data-test-data}
+  lyrveil-models: {external: true, name: lyrveil-data-test-models}
