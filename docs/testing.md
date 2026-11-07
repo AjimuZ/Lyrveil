@@ -287,7 +287,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
-| T-MSG-01 | Create a chat | Integration, E2E | P02 |
+| T-MSG-01 | Create a chat. Delivered: `backend/tests/integration/test_conversations.py` and `test_characters.py`, and the first test of `tests/e2e/specs/chat-list.spec.mjs` (minimal character form, new chat, reload) | Integration, E2E | P02 |
 | T-MSG-02 | Send is idempotent, and is committed before the job exists | Integration | P02 |
 | T-MSG-03 | Streaming: order, persistence every 2 s, final text | Integration, E2E | P02 |
 | T-MSG-04 | Regenerate adds variants, and alternatives can be selected | Integration, E2E | P02 |
@@ -297,7 +297,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-MSG-08 | History paging and recovery | Integration, E2E | P02 |
 | T-MSG-09 | Simultaneous conversations are served in order, with no mixed text | Integration, E2E | P02 |
 | T-MSG-10 | Read state and unread counts | Integration, E2E | P07 |
-| T-MSG-11 | Pin, archive, delete, restore, search | Integration, E2E | P02 |
+| T-MSG-11 | Pin, archive, delete, restore, search. Delivered: `test_conversations.py`, `test_messages.py` and the second test of `tests/e2e/specs/chat-list.spec.mjs` | Integration, E2E | P02 |
 | T-MSG-12 | WebSocket reconnect with replay and resync | Integration, E2E | P02 |
 | T-MSG-13 | Crash during streaming leaves `interrupted` | Integration | P02 |
 

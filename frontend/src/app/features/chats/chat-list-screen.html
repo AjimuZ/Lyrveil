@@ -1,0 +1,103 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.chats' | t }}</h1>
+    <button type="button" class="button primary" (click)="openNewChat()">{{ 'chats.new' | t }}</button>
+  </header>
+
+  <div class="search">
+    <label class="search-label" for="chat-search">{{ 'chats.search.label' | t }}</label>
+    <input
+      id="chat-search"
+      class="control"
+      type="search"
+      autocomplete="off"
+      [placeholder]="'chats.search.placeholder' | t"
+      [value]="store.query()"
+      (input)="search($event)"
+    />
+  </div>
+
+  <div class="tabs" role="group" [attr.aria-label]="'chats.tabs.label' | t">
+    @for (tab of tabs; track tab.status) {
+      <button type="button" class="tab" [attr.aria-pressed]="store.tab() === tab.status" (click)="store.showTab(tab.status)">
+        {{ tab.label | t }}
+      </button>
+    }
+  </div>
+
+  @if (store.actionError(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (store.justDeleted(); as deleted) {
+    <div class="notice" role="status">
+      <span>{{ 'chats.deleted' | t: { title: deleted.title } }}</span>
+      <button type="button" class="button" (click)="store.restoreDeleted()">{{ 'chats.restore' | t }}</button>
+      <button type="button" class="button" (click)="store.dismissDeleted()">{{ 'chats.dismiss' | t }}</button>
+    </div>
+  }
+
+  @if (store.loading()) {
+    <p class="note" role="status">{{ 'chats.loading' | t }}</p>
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.reload()">{{ 'chats.retry' | t }}</button>
+    </div>
+  } @else if (store.items().length === 0) {
+    <p class="note">
+      @if (store.query().trim() !== '') {
+        {{ 'chats.empty.search' | t }}
+      } @else if (store.tab() === 'archived') {
+        {{ 'chats.empty.archived' | t }}
+      } @else {
+        {{ 'chats.empty.active' | t }}
+      }
+    </p>
+  } @else {
+    <ul class="list">
+      @for (conversation of store.items(); track conversation.id) {
+        <li class="row">
+          <a class="chat" [routerLink]="['/chats', conversation.id]">
+            <span class="avatar" aria-hidden="true">{{ initial(conversation) }}</span>
+            <span class="text">
+              <span class="name">{{ conversation.title }}</span>
+              <span class="meta">{{ conversation.character_name }}</span>
+            </span>
+            <span class="side">
+              @if (conversation.pinned) {
+                <span class="pill">{{ 'chats.pinned' | t }}</span>
+              }
+              <time [attr.datetime]="conversation.last_message_at ?? conversation.created_at">{{ time(conversation) }}</time>
+            </span>
+          </a>
+          <button
+            type="button"
+            class="more"
+            [attr.aria-label]="'chats.actions' | t: { title: conversation.title }"
+            [attr.aria-expanded]="openMenu() === conversation.id"
+            [attr.aria-controls]="'chat-menu-' + conversation.id"
+            (click)="toggleMenu(conversation)"
+          >
+            <span aria-hidden="true">⋯</span>
+          </button>
+          @if (openMenu() === conversation.id) {
+            <div class="menu" [id]="'chat-menu-' + conversation.id">
+              <button type="button" class="menu-item" (click)="run(conversation, 'pin')">
+                {{ (conversation.pinned ? 'chats.action.unpin' : 'chats.action.pin') | t }}
+              </button>
+              <button type="button" class="menu-item" (click)="run(conversation, 'archive')">
+                {{ (conversation.status === 'archived' ? 'chats.action.unarchive' : 'chats.action.archive') | t }}
+              </button>
+              <button type="button" class="menu-item danger" (click)="run(conversation, 'delete')">
+                {{ 'chats.action.delete' | t }}
+              </button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <lyr-new-chat-dialog />
+</section>

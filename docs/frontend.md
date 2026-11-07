@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). No screen uses them yet, and nothing starts the socket yet: the shell will call `connect()` when it shows connection state. Every real screen is planned, phases P01 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer, and nothing starts the socket yet: the shell will call `connect()` when it shows connection state. Every other real screen is planned, phases P02 to P08.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -120,6 +120,8 @@ Every screen has loading, empty and error states. Every control has real behavio
 
 Avatar, name, last message (one line), time, unread count, typing indicator, and a pending-image or queue hint. Search covers names, titles and messages. Pinned chats come first, then activity. A context menu offers pin, archive, delete. **+** opens
 a picker: choose a character, an optional scenario and a language. The list has a separate tab for archived conversations.
+
+Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, still the placeholder. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03) and the scenario choice (P03). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
 
 ### 2. Conversation
 

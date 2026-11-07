@@ -1,0 +1,119 @@
+<dialog class="dialog" #dialog aria-labelledby="new-chat-title" (close)="closed()">
+  @if (step() === 'pick') {
+    <h2 class="title" id="new-chat-title">{{ 'newChat.title' | t }}</h2>
+  } @else {
+    <h2 class="title" id="new-chat-title">{{ 'character.form.title' | t }}</h2>
+  }
+
+  @if (error(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (loading()) {
+    <p class="note" role="status">{{ 'newChat.loading' | t }}</p>
+  } @else if (step() === 'pick') {
+    @if (characters().length > 0) {
+      <div class="field">
+        <label for="new-chat-character">{{ 'newChat.character' | t }}</label>
+        <select id="new-chat-character" class="control" (change)="characterId.set(valueOf($event))">
+          @for (character of characters(); track character.id) {
+            <option [value]="character.id" [selected]="character.id === characterId()">{{ character.full_name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="new-chat-language">{{ 'newChat.language' | t }}</label>
+        <select id="new-chat-language" class="control" (change)="language.set(valueOf($event))">
+          <option value="" [selected]="language() === ''">{{ 'newChat.languageDefault' | t }}</option>
+          @for (option of languages; track option.value) {
+            <option [value]="option.value" [selected]="option.value === language()">{{ option.label | t }}</option>
+          }
+        </select>
+      </div>
+    }
+    <div class="actions">
+      <button type="button" class="button" (click)="close()">{{ 'newChat.cancel' | t }}</button>
+      <button type="button" class="button" (click)="showForm()">{{ 'newChat.newCharacter' | t }}</button>
+      @if (characters().length > 0) {
+        <button type="button" class="button primary" [disabled]="busy() || characterId() === ''" (click)="start()">
+          {{ 'newChat.start' | t }}
+        </button>
+      }
+    </div>
+  } @else {
+    @if (characters().length === 0 && error() === null) {
+      <p class="note">{{ 'newChat.noCharacters' | t }}</p>
+    }
+    <form class="form" novalidate (submit)="saveCharacter($event)">
+      <div class="field">
+        <label for="character-first-name">{{ 'character.firstName' | t }}</label>
+        <input
+          id="character-first-name"
+          class="control"
+          type="text"
+          autocomplete="off"
+          maxlength="80"
+          [value]="firstName()"
+          [attr.aria-invalid]="attempted() && !firstNameValid()"
+          [attr.aria-describedby]="attempted() && !firstNameValid() ? 'character-first-name-error' : null"
+          (input)="firstName.set(valueOf($event))"
+        />
+        @if (attempted() && !firstNameValid()) {
+          <p class="field-error" id="character-first-name-error">{{ 'character.error.firstName' | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="character-last-name">{{ 'character.lastName' | t }}</label>
+        <input
+          id="character-last-name"
+          class="control"
+          type="text"
+          autocomplete="off"
+          maxlength="80"
+          [value]="lastName()"
+          (input)="lastName.set(valueOf($event))"
+        />
+      </div>
+      <div class="field">
+        <label for="character-age">{{ 'character.age' | t }}</label>
+        <input
+          id="character-age"
+          class="control"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          [attr.aria-describedby]="attempted() && !ageValid() ? 'character-age-hint character-age-error' : 'character-age-hint'"
+          [value]="age()"
+          [attr.aria-invalid]="attempted() && !ageValid()"
+          (input)="age.set(valueOf($event))"
+        />
+        <p class="hint" id="character-age-hint">{{ 'character.ageHint' | t }}</p>
+        @if (attempted() && !ageValid()) {
+          <p class="field-error" id="character-age-error">{{ 'character.error.age' | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="character-gender">{{ 'character.gender' | t }}</label>
+        <select id="character-gender" class="control" (change)="gender.set(asGender(valueOf($event)))">
+          @for (option of genders; track option.value) {
+            <option [value]="option.value" [selected]="option.value === gender()">{{ option.label | t }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="character-language">{{ 'character.language' | t }}</label>
+        <select id="character-language" class="control" (change)="primaryLanguage.set(valueOf($event))">
+          @for (option of languages; track option.value) {
+            <option [value]="option.value" [selected]="option.value === primaryLanguage()">{{ option.label | t }}</option>
+          }
+        </select>
+      </div>
+      <div class="actions">
+        <button type="button" class="button" (click)="characters().length > 0 ? backToPicker() : close()">
+          {{ (characters().length > 0 ? 'character.back' : 'newChat.cancel') | t }}
+        </button>
+        <button type="submit" class="button primary" [disabled]="busy()">{{ 'character.save' | t }}</button>
+      </div>
+    </form>
+  }
+</dialog>

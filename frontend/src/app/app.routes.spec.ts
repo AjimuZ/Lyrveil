@@ -1,4 +1,6 @@
 import { Location } from '@angular/common';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -35,7 +37,10 @@ describe('routes', () => {
   });
 
   it('redirects the root and unknown paths to the chat list', async () => {
-    TestBed.configureTestingModule({ providers: [provideRouter(routes, withComponentInputBinding())] });
+    // The chat list requests its rows on entry, so it needs an HTTP client; the requests stay unanswered here.
+    TestBed.configureTestingModule({
+      providers: [provideRouter(routes, withComponentInputBinding()), provideHttpClient(), provideHttpClientTesting()],
+    });
     const harness = await RouterTestingHarness.create();
 
     await harness.navigateByUrl('/');

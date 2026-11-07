@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The chat list screen at `/chats`: search over names, titles and messages, an **Attive** and an **Archiviate** tab,
+  and a menu on each chat to pin, archive or unarchive, and delete, with a **Ripristina** notice after a delete. **Nuova
+  conversazione** opens a dialog that picks a character and a language, or creates a character with a minimal form
+  (name, optional last name, age of at least 18, how it speaks of itself, language) until the Creator arrives in P03.
+  A chat opens a placeholder until the conversation screen is delivered (P02.6b). Previews, unread counts, avatars and
+  scenarios are not shown, because nothing behind them exists yet. The backend gains `GET` and `POST /api/v1/characters`
+  for the form.
 - Search in the backend: `GET /api/v1/conversations/{id}/search?q=` over message text and `q` on the chat list over
   titles and messages, with FTS5 (migration `0005`). Accents are ignored ("perche" finds "perché"); search text is
   plain words, so operators, quotes and parentheses never raise or change a query. No stemming yet.

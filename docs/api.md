@@ -112,6 +112,14 @@ All paths are under `/api/v1`.
 | `GET /characters/format-schema` | JSON Schema of the exchange format. |
 | `POST /characters/drafts` | Body `{"description": "..."}`. Starts `character_draft`. The job result is an unsaved draft. |
 
+Delivered in P02.6a, for the minimal character form of the chat list: `GET /characters` (`status` `active` or `archived`,
+default `active`; `q` keeps the names that contain it, ignoring case; newest update first) and `POST /characters` with
+`{"first_name", "last_name", "age", "grammatical_gender", "primary_language"}`. `POST` answers `201` with the character
+and `422 VALIDATION_ERROR` with an Italian `detail` for an empty or over-long name, an age under 18 or over 120, a gender
+outside `femminile`, `maschile` and `non_indicato`, or a language other than `it`, `en`, `fr`, `de` and `es`. It writes
+no version row, since no version table exists until the Creator (P03.1a). Every other route of this table is planned. These
+routes are not in `backend/openapi.json` until it is next regenerated with Docker.
+
 ### Assets
 
 | Method and path | Purpose |

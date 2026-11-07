@@ -24,3 +24,22 @@ class CharacterProfile:
     @property
     def full_name(self) -> str:
         return self.first_name if not self.last_name else f"{self.first_name} {self.last_name}"
+
+
+@dataclass(frozen=True)
+class CharacterSummary:
+    """A character as the list and the new-chat picker show it. `status` is `active` or `archived`."""
+
+    id: str
+    first_name: str
+    last_name: str | None
+    age: int
+    grammatical_gender: str
+    primary_language: str
+    status: str
+    created_at: str
+    updated_at: str
+
+    @property
+    def full_name(self) -> str:
+        return self.first_name if not self.last_name else f"{self.first_name} {self.last_name}"

@@ -17,7 +17,11 @@ function unavailable(path: string, screen: TextKey): Route {
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'chats' },
-  unavailable('chats', 'screen.chats'),
+  {
+    path: 'chats',
+    loadComponent: () => import('./features/chats/chat-list-screen').then((module) => module.ChatListScreen),
+    data: { screen: 'screen.chats' satisfies TextKey },
+  },
   unavailable('chats/:conversationId', 'screen.conversation'),
   unavailable('characters', 'screen.characters'),
   unavailable('characters/new', 'screen.characterNew'),

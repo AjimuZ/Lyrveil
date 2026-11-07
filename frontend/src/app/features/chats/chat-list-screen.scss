@@ -1,0 +1,225 @@
+:host {
+  display: block;
+  padding: var(--ob-space-5);
+}
+
+.screen {
+  max-width: 760px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ob-space-3);
+  margin-bottom: var(--ob-space-4);
+}
+
+.title {
+  margin: 0;
+}
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+  margin-bottom: var(--ob-space-3);
+}
+
+.search-label {
+  color: var(--ob-text-muted);
+}
+
+.control {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+
+  &::placeholder {
+    color: var(--ob-text-muted);
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: var(--ob-space-2);
+  margin-bottom: var(--ob-space-4);
+}
+
+.tab,
+.button,
+.more,
+.menu-item {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-4);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover {
+    background: var(--ob-hover);
+  }
+}
+
+.tab[aria-pressed="true"] {
+  background: var(--ob-selected);
+  border-color: var(--ob-control-border);
+}
+
+.button {
+  border-color: var(--ob-control-border);
+
+  &.primary {
+    background: var(--ob-primary);
+    color: var(--ob-bg);
+    border-color: var(--ob-primary);
+
+    &:hover {
+      background: var(--ob-primary-hover);
+    }
+  }
+}
+
+.note {
+  margin: 0;
+  color: var(--ob-text-muted);
+}
+
+.error {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-danger);
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ob-space-3);
+  margin-bottom: var(--ob-space-3);
+  padding: var(--ob-space-3);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--ob-space-2);
+}
+
+.chat {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ob-space-3);
+  min-width: 0;
+  min-height: 56px;
+  padding: var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  text-decoration: none;
+
+  &:hover {
+    background: var(--ob-hover);
+  }
+}
+
+.avatar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--ob-bubble-user);
+  color: var(--ob-primary-hover);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-md);
+  font-family: var(--ob-font-pixel);
+  font-size: 18px;
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--ob-text-muted);
+}
+
+.side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--ob-space-1);
+  color: var(--ob-text-muted);
+}
+
+.pill {
+  padding: 0 var(--ob-space-2);
+  color: var(--ob-primary-hover);
+  border: 1px solid var(--ob-accent);
+  border-radius: var(--ob-radius-sm);
+  font-size: 12px;
+}
+
+.menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  margin-top: var(--ob-space-1);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  box-shadow: var(--ob-shadow-overlay);
+}
+
+.menu-item {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+
+  &.danger {
+    color: var(--ob-danger);
+  }
+}

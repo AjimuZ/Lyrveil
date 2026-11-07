@@ -932,8 +932,8 @@
         "All text comes from `it.json` and all colors from the tokens."
       ],
       "priority": 40,
-      "passes": false,
-      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "passes": true,
+      "notes": "Delivered screen 1 at /chats. It has search, Attive and Archiviate tabs, a row menu (pin, archive or unarchive, delete), a Ripristina notice after a delete, and a new-chat dialog. The dialog has a character and language picker and a minimal character form, and all text comes from it.json. The backend had no characters API, so I added GET and POST /api/v1/characters for the form. Checks that passed: `test lint`, `test unit` (frontend 35 tests, backend 282, orchestrator 543), `test integration` (backend 95, orchestrator 200), and `test e2e` (7 Playwright tests in all, both new specs and the 5 existing ones, against the Compose test project). The docker level was not run.",
       "dependsOn": [
         "P02.5a",
         "P02.5d"

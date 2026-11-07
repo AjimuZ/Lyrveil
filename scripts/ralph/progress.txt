@@ -85,6 +85,10 @@
 - Keep one shared dict builder for public documents, such as `message_document`, and have REST models validate from it (`Model.model_validate(...)`), so REST and events never disagree on shape.
 - Turn user text into FTS5 queries by extracting \w+ words and double-quoting each one. Never pass raw user text to MATCH.
 - Keep FTS tables in step with their source rows through SQL triggers in the same transaction while no application-side transformation (such as stemming) is needed.
+- A list screen keeps its state in a root-provided store of readonly signals. Actions call REST and then reload, and a reload overtaken by a newer one is dropped by a ticket counter.
+- Open a modal with a native <dialog> element and showModal(), which gives Esc, focus trapping and focus return for free. Row menus are disclosure buttons (aria-expanded, plain buttons), not role=menu, so no arrow-key behavior is implied. Close them with a host binding on document:keydown.escape, because the template lint rejects key handlers on non-focusable elements.
+- Catalog keys must be literal TextKey values. For dynamic labels, use typed option arrays or objects with `satisfies Record<..., TextKey>`, and render them with `option.label | t`.
+- e2e: wait for a control that appears on both outcomes of an async step (for example the Annulla button) instead of waiting for a loading text to disappear, which passes before the loading text has rendered.
 
 ---
 
@@ -703,4 +707,16 @@ Doc findings: the retry table gives extraction three waits but only 3 attempts, 
   - persistence/search.py match_query is the only place user text becomes an FTS5 MATCH expression. Reuse it for memory search (T-MEM-07).
   - Adding a migration means updating tests/integration/test_migrations.py: HEAD, known_revisions and the table sets. FTS5 adds shadow tables (_data, _idx, _content, _docsize, _config) to sqlite_master.
   - The new routes are not in backend/openapi.json until it is regenerated with Docker. `rebuild-search`, memory_fts and episode_fts are not delivered.
+---
+
+## 2026-11-07T03:30:51Z - P02.6a
+- Delivered screen 1 at /chats. It has search, Attive and Archiviate tabs, a row menu (pin, archive or unarchive, delete), a Ripristina notice after a delete, and a new-chat dialog. The dialog has a character and language picker and a minimal character form, and all text comes from it.json. The backend had no characters API, so I added GET and POST /api/v1/characters for the form. Checks that passed: `test lint`, `test unit` (frontend 35 tests, backend 282, orchestrator 543), `test integration` (backend 95, orchestrator 200), and `test e2e` (7 Playwright tests in all, both new specs and the 5 existing ones, against the Compose test project). The docker level was not run.
+- Files changed: backend/src/lyrveil/api/characters.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/domain/characters.py, backend/src/lyrveil/main.py, backend/tests/integration/test_characters.py, frontend/src/app/features/chats/chats.model.ts, frontend/src/app/features/chats/chats-store.ts, frontend/src/app/features/chats/chats-store.spec.ts, frontend/src/app/features/chats/activity-time.ts, frontend/src/app/features/chats/activity-time.spec.ts, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/chats/chat-list-screen.html, frontend/src/app/features/chats/chat-list-screen.scss, frontend/src/app/features/chats/new-chat-dialog.ts, frontend/src/app/features/chats/new-chat-dialog.html, frontend/src/app/features/chats/new-chat-dialog.scss, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/i18n/it.json, tests/e2e/specs/chat-list.spec.mjs, CHANGELOG.md, docs/api.md, docs/frontend.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The backend had no characters API. P02.6a added GET and POST /api/v1/characters (api/characters.py, services/characters.py, persistence/characters.py). The service validates, so every refusal carries an Italian detail; age must be 18 to 120 and the language one of it, en, fr, de, es. There is no character version table yet.
+  - The conversation and character routes are still missing from backend/openapi.json, so the frontend types in features/chats/chats.model.ts are written by hand. Replace them with the generated types after the next Docker regeneration of the document.
+  - The chat list shows no preview, unread count, typing flag, avatar image or scenario choice, because the backend does not supply them yet. unread_count is next_seq - 1 - last_read_seq and nothing marks chats read, so it would be wrong for any chat with messages. P02.6b or later should add the preview and typing flag; the unread count waits for the read state in P07.
+  - A row links to /chats/:conversationId, which is still the unavailable placeholder. P02.6b replaces only that route's loadComponent. Starting a chat stays on the list and does not navigate; P02.6b can add the navigation.
+  - The e2e tests share one database per run, so chat-list.spec.mjs uses names unique to the run (a timestamp plus a counter). Any new e2e spec should do the same. `scripts/lyrveil.cmd test e2e` took about a minute here with cached layers, and every e2e test passed.
+  - The tool allowlist let `scripts/lyrveil.cmd test lint|unit|integration|e2e` run, but denied `npm --prefix ...` and `cd frontend` chains.
 ---
