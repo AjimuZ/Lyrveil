@@ -26,7 +26,7 @@ Each assumption is verified by a named check. A failure triggers the stated deci
 | A-05 | SDXL at 1024 x 1024, and the **Alta** second pass at 1536 x 1536, fit in the VRAM left after the desktop | T-GPU-06, T-IMG-14 | The tiled workflow is the default for that machine |
 | A-06 | A full mode switch takes under 150 s | T-GPU-07 | Keep the design and improve the wait messages. Batching rules limit how often switches happen |
 | A-07 | The default text profile's Italian reaches the quality targets | T-QLT-01 | Improve templates and examples, then samplers. Then the [default rule](models.md#defaults-and-how-they-can-change) applies. Record any limit in the README |
-| A-08 | FTS5 with Snowball stemming reaches recall at 8 of 80 % | T-MEM-22 | Tune weights and stop words. Record the result. Embeddings need a new ADR |
+| A-08 | FTS5 with Snowball stemming reaches recall at 8 of 80 % | T-MEM-22. First run (P04.3): 58 of 61, 95.1 %, on the synthetic set; the three misses are paraphrases | Tune weights and stop words. Record the result. Embeddings need a new ADR |
 | A-09 | GBNF grammar gives valid JSON with acceptable speed | T-GPU-05 | Generic JSON grammar plus validation and repair |
 | A-10 | Group 0 lets a non-root user use the Docker socket on Docker Desktop | P01.4. The socket's mode was measured | Run that one container as user 0, with all capabilities dropped |
 | A-14 | Compose volume subpaths work with external volumes on Docker Desktop for Windows | T-DCK-04, T-DCK-13 | Mount whole volumes and keep launch files in a third small volume |

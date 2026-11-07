@@ -119,7 +119,7 @@ Evidence:
 
 - [x] P04.1 Memory tables, FTS5, stemming and stop-word lists.
 - [x] P04.2 Extraction pipeline with idempotency, consistency rules and tombstones.
-- [ ] P04.3 `FtsMemoryRetriever` and scoring.
+- [x] P04.3 `FtsMemoryRetriever` and scoring.
 - [ ] P04.4 Progressive summaries and rollups.
 - [ ] P04.5 Full `ContextBuilder` with runtime token counts, length bands and the anchor.
 - [ ] P04.6 `CharacterStateManager`, bounded updates, replay.

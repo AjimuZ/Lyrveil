@@ -5,7 +5,8 @@ P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` in
 [Stemming](#stemming). Delivered in P04.2a: the extraction pipeline without the consistency rules
 ([Delivered in P04.2a](#delivered-in-p042a)). Delivered in P04.2b: the consistency rules without tombstones
 ([Delivered in P04.2b](#delivered-in-p042b)). Delivered in P04.2c: user edits with revisions and deletion with
-tombstones ([Delivered in P04.2c](#delivered-in-p042c)). Everything else is planned.
+tombstones ([Delivered in P04.2c](#delivered-in-p042c)). Delivered in P04.3: `FtsMemoryRetriever` with its scoring and
+selection, not yet called by replies ([Delivered in P04.3](#delivered-in-p043)). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -506,6 +507,40 @@ Ricordi pertinenti:
 | `[passato]` | `superseded` under past intent |
 | `[episodio]` | Episodes |
 
+### Delivered in P04.3
+
+The contract is `ports/memory_retriever.py` (`RetrievalQuery`, `RetrievalResult`, `RetrievedMemory`, `ScoreParts`,
+`MemoryRetriever`). `FtsMemoryRetriever` is `services/memory_retrieval.py`, over the SQL of
+`persistence/memory_retrieval.py` and the pure rules of `memory/retrieval.py`.
+
+- **Scope.** Every candidate query filters in SQL by character, then by conversation, or by `scope = shared` when
+  `include_shared` is true **and** the conversation belongs to the character with `shares_memory = 1`, so a wrong flag
+  alone reads nothing shared. Statuses, expiry (`expires_at` after `now`) and `identity_candidate` are filtered in the
+  same query. Episodes have no shared scope and are read only for their own conversation.
+- **Candidates.** Up to 64 FTS matches of the query's stems (at most 48 distinct stems), up to 16 standing memories, the
+  other uncertain members of any conflict group a candidate belongs to, and up to 16 matching active episodes. A query
+  with no searchable word gets the standing memories only.
+- **Scoring** as in the table above, with the weights normalized to a sum of 1. BM25 is normalized separately for
+  memories and episodes, since they come from two indexes. Not in the table and decided here: an episode scores kind
+  0.6 (like `narrative_event`), confidence 1.0 and status factor 1.0, and its content is `title: description`; `topic`
+  compares the stems of the topic with those of the text and subject key; a future `updated_at` counts as age 0.
+- **Selection.** Ties go to memories, then to the identifier. A superseded memory under past intent does not compete
+  with the memory in use of its subject, so `[passato]` can stand beside the current fact. A conflict group enters
+  whole or not at all. A unit that does not fit the budget, `max_items` or a cap per kind is skipped, and smaller ones
+  after it can still enter. The budget covers the item lines, not the block header, which is the context builder's.
+- **Token cost.** Each line `- <label> <content>` is priced by an injected function. The default,
+  `estimate_tokens`, is one token per three characters plus one, rounded up: it only packs the block, and the final
+  prompt is still counted by the runtime and reduced from the lowest scores ([Token counting](#token-counting)).
+- **Past intent.** `is_past_intent` in `memory/retrieval.py` reads `prompts/it/past_cues.txt`; other languages have no list
+  yet, so they never have past intent.
+- **Use counters.** `FtsMemoryRetriever.record_use` sets `last_used_at` and adds 1 to `use_count`, leaving `updated_at`
+  alone, so use does not count as recency. Its caller, after the reply is committed, arrives with the context builder.
+- **Not delivered.** The call from replies and the prompt block (P04.5), the `memory.retrieval.*` settings as
+  user settings (the weights are a `RetrievalWeights` argument for now), and past-intent cues outside Italian.
+
+`tests/integration/test_memory_retrieval.py` holds T-MEM-05, T-MEM-15, T-CON-01, T-CON-02 and T-MEM-22;
+`tests/unit/test_memory_retrieval.py` the pure rules ([Testing](testing.md#memory)).
+
 ## Contradictions
 
 | Situation | Recognized as | Result |
@@ -701,3 +736,9 @@ Everything except the model work runs in the same transaction as the message cha
 Tests are listed in [Testing](testing.md#memory). P04 also runs a retrieval evaluation on a
 synthetic fixture of 3 conversations and 60 questions. The target is recall at 8 of at least
 80 %. When it fails, tune weights and stop words. Do not add a model.
+
+The fixture is `backend/tests/fixtures/memory_retrieval/evaluation.json`, inside the backend because only `backend/` is
+copied into its test stage. Each conversation has 20 memories, including a superseded one and a boundary, and one
+episode. Most questions share at least one word stem with their target among distractors that share others; three are
+paraphrases with no shared stem. The first run (P04.3) found 58 of 61 relevant items, 95.1 %; the three misses are the
+paraphrases, the known limit of [ADR 0011](decisions/0011-memory-retrieval-fts5-without-embeddings.md).

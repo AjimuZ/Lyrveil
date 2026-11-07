@@ -28,6 +28,13 @@ No application exists yet. This section records the design documentation.
 - Memory edits and deletions, backend only. Correcting a memory keeps its earlier text as a revision. Deleting a memory
   removes its text, history and sources and leaves only hashes, so analyzing the same messages again cannot bring it
   back, while a later message that states the fact again can. Nothing in the app calls this yet.
+- Memory retrieval, backend only. For each reply it can pick the few memories and events of this chat that matter
+  most, by the words of the last messages, importance, how recent they are, the current topic and the kind of memory,
+  with rules, promises and locked memories always considered. It fits them into a token budget, keeps both sides of a
+  conflict together and marks each one as sure, uncertain, story, for now, past or event. A memory of one chat never
+  reaches another chat or another character; memories shared across chats are read only when the chat has sharing on.
+  On a synthetic set of 60 questions it finds 58 of the 61 expected memories within the first 8. Replies do not use it
+  yet.
 - Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
   job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
   data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from

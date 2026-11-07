@@ -141,6 +141,9 @@
 - Phrase lists per language live in prompts/<code>/<name>.txt and load with lyrveil.memory.window.phrase_patterns(language, file_name); match with is_significant.
 - Write the tombstone before deleting the row, in the same transaction, so no deletion leaves nothing behind.
 - Keep the pure decision (`is_blocked`) separate from the SQL that reads the tombstones, so unit tests cover the rule and integration tests cover the wiring.
+- With SQLAlchemy text() and an IN list, keep the SQL in a module constant and write `text(SQL).bindparams(bindparam('name', expanding=True))`. This also avoids ruff-format ambiguity around chained calls.
+- For scope isolation, check the conversation's own opt-in in SQL (EXISTS on conversations.shares_memory) as well as the caller's flag, so a wrong flag alone cannot leak data.
+- When a SQL string would land near 120 columns, run lint: ruff format may join implicit string concatenations that fit.
 
 ---
 
@@ -1134,4 +1137,39 @@ Not covered: the 'Applica al profilo' half of T-CON-05 (P04.9); the reply-prompt
   - A tombstone's `value_hash` is the fingerprint of the value (`consistency.value_hash`), so a reworded value such as `studio rossi.` still matches.
   - `memories.delete` relies on cascades for `memory_revisions` and `memory_sources`. It removes the `memory_fts` row by hand, with no trigger.
   - Tombstones are only read and written for conversation memories. Shared-scope memories and episodes have none yet.
+---
+
+## 2026-11-07T14:10:14Z - P04.3
+- P04.3 is implemented: `FtsMemoryRetriever` with the scoring and selection described in docs/memory-engine.md and ADR 0011.
+
+- **Port:** `ports/memory_retriever.py` holds `RetrievalQuery`, `RetrievalResult` (items, token cost, candidate count, `.ids` for `previous_ids`), `RetrievedMemory`, `ScoreParts` and the `MemoryRetriever` Protocol.
+- **Pure rules:** `memory/retrieval.py` holds `RetrievalWeights` (normalized), BM25 normalization per item type, the recency part with a 0.5 floor, the topic part, the kind and status factors, the locked and previous-reply bonuses capped at 1, the labels, line rendering, a deliberately high `estimate_tokens`, and `is_past_intent` (reads the new `prompts/it/past_cues.txt`). Selection does these steps in order:
+  - sort by score;
+  - keep one memory per subject (a superseded one under past intent sits beside the current fact);
+  - add a conflict group whole or not at all;
+  - cap at 6 per kind and 3 episodes;
+  - skip any unit that does not fit the budget or `max_items`.
+- **SQL:** `persistence/memory_retrieval.py` applies every hard filter in SQL: character; conversation, or the shared scope only when the query flag is set and the conversation itself has `shares_memory = 1`; status; expiry; no `identity_candidate`. Candidate routes: 64 FTS matches, 16 standing memories, the other conflict-group members, and 16 episodes. It also has `record_use`.
+- **Service:** `services/memory_retrieval.py` runs one read transaction, then scores and selects. `record_use` updates `last_used_at` and `use_count`.
+
+Tests:
+- `tests/integration/test_memory_retrieval.py` covers T-MEM-05, T-MEM-15, T-CON-01, T-CON-02 and T-MEM-22, plus the use counters.
+- `tests/unit/test_memory_retrieval.py` covers the pure rules.
+- T-MEM-22 uses `backend/tests/fixtures/memory_retrieval/evaluation.json` (3 conversations, 60 questions). It is in `backend/tests/fixtures`, not the root `tests/fixtures`, because only `backend/` is copied into the test stage.
+- Recall at 8 was 58 of 61 (95.1 %) against the 80 % target. The three misses are paraphrases I added on purpose to show ADR 0011's synonym limit; with direct word matches only it was 61/61.
+
+Checks run:
+- `scripts/lyrveil.cmd test unit tests/unit/test_memory_retrieval.py tests/integration/test_memory_retrieval.py tests/unit/test_memory_text.py tests/integration/test_memory_index.py`: 49 passed.
+- `scripts/lyrveil.cmd test lint`: passed.
+- The full unit, integration, e2e and docker levels were not run.
+
+Not delivered: the call from replies and the prompt block (P04.5), the `memory.retrieval.*` keys as user settings (weights are a constructor argument for now), and past-intent cues for languages other than Italian.
+- Files changed: backend/src/lyrveil/ports/memory_retriever.py, backend/src/lyrveil/memory/retrieval.py, backend/src/lyrveil/memory/__init__.py, backend/src/lyrveil/persistence/memory_retrieval.py, backend/src/lyrveil/services/memory_retrieval.py, backend/src/lyrveil/prompts/it/past_cues.txt, backend/tests/integration/test_memory_retrieval.py, backend/tests/unit/test_memory_retrieval.py, backend/tests/fixtures/memory_retrieval/evaluation.json, CHANGELOG.md, docs/memory-engine.md, docs/testing.md, docs/backend.md, docs/risks.md
+- **Learnings for future iterations:**
+  - The ContextBuilder (P04.5) should call `FtsMemoryRetriever(engine).retrieve_relevant_memories(RetrievalQuery(...))`. It passes `include_shared=conversation.shares_memory`, `past_intent=is_past_intent(latest_user_text, language)` and `previous_ids=` the `.ids` of the previous result. It calls `record_use(ids, now)` after the reply commits.
+  - The token budget covers only the item lines (`RetrievedMemory.line` = `- <label> <content>`), not the 'Ricordi pertinenti:' header. The default cost is `estimate_tokens`, a high estimate (characters / 3 + 1). A runtime-backed cost can be injected through `token_cost=`.
+  - The retrieval API is synchronous, so a runtime token count, which is async, must be cached or precomputed before it is injected as `token_cost`.
+  - The evaluation fixture lives in `backend/tests/fixtures/` because the backend test stage copies only `backend/tests` and `tests/fakes/*.py` from the root.
+  - Episodes are scored with kind 0.6, confidence 1.0 and status factor 1.0, and are rendered as `title: description` with `[episodio]`.
+  - `memory.retrieval.*` weights are not yet read from user settings: pass `RetrievalWeights(...)` to the constructor.
 ---

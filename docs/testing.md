@@ -379,6 +379,24 @@ reworded memory with the same subject and value are blocked; a later source with
 tests/unit/test_memory_consistency.py tests/integration/test_memory_extraction.py` passed (24 tests); the full levels
 were not run.
 
+Delivered in P04.3: `backend/tests/integration/test_memory_retrieval.py` runs `FtsMemoryRetriever` on a migrated SQLite
+file. T-MEM-05: the order follows the weighted score, whose parts each item keeps (two matches normalized to 0.5 and
+1.0, a locked memory joining with no match, an unrelated one never a candidate); the topic and the previous selection
+raise the score, the latter by exactly 0.05; a budget, `max_items`, six items per kind and three episodes bound the
+selection; one memory per subject wins, a conflict group enters whole and labeled `[incerto]` or not at all; only active
+and uncertain memories are seen, superseded ones join under past intent as `[passato]`, and expired, contradicted,
+invalidated and identity-candidate rows never do; episodes render as `[episodio]`, and a query of stop words or FTS
+syntax leaves only the standing memories. T-MEM-15 and T-CON-02: two chats of one character see nothing of each other,
+and the shared scope is read only with the query's flag and the conversation's `shares_memory = 1`. T-CON-01: character
+B finds nothing of character A, even with A's conversation id, shared memory, a locked memory and the exact words.
+T-MEM-22, listed at the Quality level, runs here because it needs no model: on
+`backend/tests/fixtures/memory_retrieval/evaluation.json` (3 conversations, 60 questions) recall at 8 was 58 of 61,
+95.1 %, against the 80 % target; the misses are the three paraphrase questions. The same file checks the use counters.
+`backend/tests/unit/test_memory_retrieval.py` holds the pure rules (normalization, recency floor, cap at 1, normalized
+weights, labels, Italian past-intent cues). In this change `scripts/lyrveil.cmd test unit
+tests/unit/test_memory_retrieval.py tests/integration/test_memory_retrieval.py` passed (20 tests) and
+`scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |

@@ -1,1 +1,1 @@
-"""Memory engine: text preparation for the full-text index now; extraction and retrieval follow in P04."""
+"""Memory engine: the pure rules of text preparation, extraction windows, consistency and retrieval."""

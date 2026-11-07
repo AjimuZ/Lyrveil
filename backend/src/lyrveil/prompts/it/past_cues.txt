@@ -1,0 +1,17 @@
+# Past-intent cues of docs/memory-engine.md (Retrieval, Past intent): when the latest user message contains one,
+# retrieval also offers superseded memories, labeled [passato]. One phrase per line. Matching ignores case and accents,
+# starts at the beginning of a word and may end inside one. Phrases with an apostrophe are written without it
+# ("anno scorso" for "l'anno scorso"), because typed apostrophes vary.
+prima
+una volta
+anno scorso
+ai tempi
+ti ricordi quando
+ricordi quando
+in passato
+un tempo
+da piccol
+quando ero
+lavoravo
+abitavo
+vivevo

@@ -26,7 +26,8 @@ backend/
     memory/              MemoryManager, extraction, retrieval, consistency, summaries; text.py and stopwords/*.txt
                          (normalization, stop words, Snowball stems, safe FTS queries; P04.1; fingerprints, P04.2a),
                          window.py (extraction windows and triggers; P04.2a), consistency.py (the pure consistency
-                         rules; P04.2b; the tombstone guard, P04.2c), the rest planned
+                         rules; P04.2b; the tombstone guard, P04.2c), retrieval.py (scoring, selection, labels
+                         and past-intent cues; P04.3), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
     context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
@@ -65,7 +66,7 @@ orchestrator/
 | `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; the notification joins with P04.7 and search with P02.5d. |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |
-| `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. |
+| `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. Delivered in P04.3 as `FtsMemoryRetriever` in `services/memory_retrieval.py`, over `persistence/memory_retrieval.py` and the pure rules of `memory/retrieval.py`; no reply calls it until the context builder (P04.5). |
 | `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry. P04.2c adds the tombstone guard; invalidation is P04.7. User edits and deletions are in `services/memories.py` (`MemoryService`). |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
 | `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. |
@@ -129,7 +130,8 @@ class LifecycleClient(Protocol):
 Other ports: `MemoryRetriever`
 ([contract](memory-engine.md#retrieval-contract)), `TokenCounter`, `Clock`, `MediaStore`,
 `EventPublisher`, `UnitOfWork`. `EventPublisher` is delivered in `ports/events.py` (P02.5c), with `EventHub` as its
-adapter.
+adapter. `MemoryRetriever` is delivered in `ports/memory_retriever.py` (P04.3), with `FtsMemoryRetriever` as its
+implementation.
 
 Adding a model means writing a new adapter or changing a model file. No service changes.
 
