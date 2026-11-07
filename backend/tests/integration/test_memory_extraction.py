@@ -1,5 +1,5 @@
-"""T-MEM-01, T-MEM-02, T-MEM-03, T-MEM-10 to T-MEM-13, T-CON-05 and the scheduler half of T-MEM-17: memory extraction
-on a real database.
+"""T-MEM-01 to T-MEM-03, T-MEM-08 to T-MEM-13, T-CON-05 and the scheduler half of T-MEM-17: memory extraction and
+the user's edits and deletions on a real database.
 
 The extraction job runs through the real JobScheduler under a granted llm lease, or by calling the handler directly,
 with MemoryExtractionService and a scripted in-process text runtime. Checks that valid output stores its items with
@@ -18,14 +18,16 @@ from typing import Any
 import pytest
 from sqlalchemy import Connection, Engine, RowMapping, text
 
+from lyrveil.domain.errors import ConflictError, ValidationFailedError
 from lyrveil.domain.identifiers import new_id, to_utc_text
+from lyrveil.domain.memory_extraction import ExtractedMemory
 from lyrveil.domain.messages import Author, MessageStatus, VariantSource, VariantStatus, content_hash
 from lyrveil.events.hub import EventHub
 from lyrveil.jobs.handlers import JobDone, RunContext
 from lyrveil.jobs.policy import JobKind, JobStatus, RequiredMode
 from lyrveil.jobs.queue import Job, JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, read, write
-from lyrveil.memory.window import ExtractionSettings
+from lyrveil.memory.window import ExtractionSettings, WindowMessage
 from lyrveil.orchestration.client import Lease, LeaseMode, LeaseOutcome
 from lyrveil.persistence import messages as message_repository
 from lyrveil.persistence.memory_index import match_memory_ids
@@ -33,6 +35,8 @@ from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.ports.text_runtime import TextChunk, TextRequest, TextRuntimeInfo
 from lyrveil.services.chat_inference import ChatInferenceService
 from lyrveil.services.conversations import ConversationService
+from lyrveil.services.memories import MemoryEdit, MemoryService
+from lyrveil.services.memory_consistency import Blocked, MemoryConsistencyService, RunScope
 from lyrveil.services.memory_extraction import EXTRACTION_GRAMMAR, MemoryExtractionService, queue_extraction_if_due
 from lyrveil.services.messages import MessageService
 
@@ -787,3 +791,117 @@ async def test_an_identity_candidate_is_not_applied_until_the_user_applies_it(mi
     assert count(migrated, "memory_revisions") == 0
     assert [dict(row) for row in rows(migrated, "SELECT * FROM characters")] == card
     assert count(migrated, "character_versions") == 0
+
+
+@pytest.mark.anyio
+async def test_editing_a_memory_creates_a_revision(migrated: Engine, clock: Clock) -> None:
+    """T-MEM-08: an edit appends the row as it was to `memory_revisions` (actor `user`), moves the memory to the next
+    version, refreshes its index row, keeps its sources, and refuses a text another memory already has."""
+    chat = Chat(migrated, clock)
+    await chat.extract(output([memory(), memory(content="Ha un gatto di nome Briciola.", subject="user.pet")]))
+    stored = chat.memories()
+    old = stored["Lavora allo Studio Rossi."]
+    service = MemoryService(migrated, clock)
+
+    edited = service.edit(old["id"], MemoryEdit(content="Lavora da Verdi & Co.", value="Verdi & Co", importance=5))
+
+    assert (edited.version, edited.content, edited.value_text, edited.importance) == (
+        2,
+        "Lavora da Verdi & Co.",
+        "Verdi & Co",
+        5,
+    )
+    assert edited.fingerprint != old["fingerprint"]
+    assert (edited.status, edited.subject_key) == ("active", "user.employer")
+    [revision] = rows(migrated, "SELECT * FROM memory_revisions")
+    assert (revision["memory_id"], revision["version"], revision["actor"], revision["reason"]) == (
+        old["id"],
+        1,
+        "user",
+        "edit",
+    )
+    assert revision["run_id"] is None
+    snapshot = json.loads(revision["snapshot_json"])
+    assert (snapshot["content"], snapshot["importance"], snapshot["fingerprint"]) == (
+        "Lavora allo Studio Rossi.",
+        4,
+        old["fingerprint"],
+    )
+    sources = rows(migrated, "SELECT message_id FROM memory_sources WHERE memory_id = :id", id=old["id"])
+    assert [row["message_id"] for row in sources] == [chat.message_ids[0]], "an edit keeps the sources"
+    assert read(migrated, lambda connection: match_memory_ids(connection, "Verdi", "it", 10)) == [old["id"]]
+    assert read(migrated, lambda connection: match_memory_ids(connection, "Rossi", "it", 10)) == []
+
+    service.edit(old["id"], MemoryEdit(content="Lavora da Verdi & Co."))
+    assert count(migrated, "memory_revisions") == 1, "a change that alters nothing writes nothing"
+    with pytest.raises(ConflictError):
+        service.edit(old["id"], MemoryEdit(content="Ha un gatto di nome Briciola."))
+    with pytest.raises(ValidationFailedError):
+        service.edit(old["id"], MemoryEdit(importance=9))
+    assert count(migrated, "memory_revisions") == 1
+    assert chat.memories()["Lavora da Verdi & Co."]["version"] == 2
+
+
+@pytest.mark.anyio
+async def test_a_deleted_memory_leaves_a_tombstone_that_blocks_the_same_source_only(
+    migrated: Engine, clock: Clock
+) -> None:
+    """T-MEM-09: deletion removes the text, revisions and sources and adds a tombstone of hashes; the same source, or
+    a message with the same content, cannot recreate the memory, and a later source can."""
+    chat = Chat(migrated, clock)
+    first = await chat.extract(output([memory()]))
+    gone = chat.memories()["Lavora allo Studio Rossi."]
+    MemoryService(migrated, clock).delete(gone["id"])
+
+    assert count(migrated, "memories") == 0
+    assert (count(migrated, "memory_sources"), count(migrated, "memory_revisions")) == (0, 0)
+    assert read(migrated, lambda connection: match_memory_ids(connection, "Rossi", "it", 10)) == []
+    [tombstone] = rows(migrated, "SELECT * FROM memory_tombstones")
+    assert (tombstone["fingerprint"], tombstone["subject_key"], tombstone["source_max_seq"]) == (
+        gone["fingerprint"],
+        "user.employer",
+        1,
+    )
+    assert json.loads(tombstone["source_hashes_json"]) == [content_hash(CHAT[0][1])]
+    assert "Rossi" not in json.dumps(dict(tombstone)), "a tombstone keeps hashes, never text"
+
+    service = MemoryConsistencyService()
+    scope = RunScope(
+        run_id=first["run_id"],
+        character_id=rows(migrated, "SELECT character_id FROM conversations")[0]["character_id"],
+        conversation_id=chat.conversation_id,
+        language="it",
+        now=START,
+    )
+
+    def window_message(seq: int, content: str) -> WindowMessage:
+        return WindowMessage(
+            message_id=chat.message_ids[0],
+            seq=seq,
+            author=Author.USER,
+            status=MessageStatus.COMPLETE,
+            deleted=False,
+            content=content,
+            variant_id=None,
+            content_hash=content_hash(content),
+            created_at=to_utc_text(START),
+        )
+
+    def apply(item: dict[str, Any], source: WindowMessage) -> object:
+        proposed = ExtractedMemory.model_validate(item)
+        return write(migrated, lambda connection: service.apply(connection, scope, proposed, None, [source]))
+
+    assert apply(memory(), window_message(1, CHAT[0][1])) == Blocked(), "the same source"
+    assert apply(memory(), window_message(40, CHAT[0][1])) == Blocked(), "a later message with the same content"
+    differently_worded = memory(content="Adesso lavora allo Studio Rossi.", value="studio rossi")
+    assert apply(differently_worded, window_message(1, CHAT[0][1])) == Blocked(), "same subject and value"
+    assert count(migrated, "memories") == 0
+
+    returned = await chat.extract(
+        output([memory(source_seqs=[11])]),
+        (Author.USER, "Lavoro ancora allo Studio Rossi, sai?"),
+        (Author.CHARACTER, "Lo ricordo."),
+    )
+
+    assert (returned["memories_added"], returned["blocked_items"]) == (1, 0)
+    assert list(chat.memories()) == ["Lavora allo Studio Rossi."], "a later source brings the memory back"

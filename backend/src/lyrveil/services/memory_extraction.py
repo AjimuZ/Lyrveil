@@ -64,7 +64,7 @@ from lyrveil.prompts.structured import (
     StructuredResult,
     generate_structured,
 )
-from lyrveil.services.memory_consistency import MemoryConsistencyService, RunScope
+from lyrveil.services.memory_consistency import Blocked, MemoryConsistencyService, RunScope
 
 # Generated once from the schema, so the grammar always follows the model.
 EXTRACTION_GRAMMAR = schema_to_gbnf(ExtractionResult)
@@ -186,6 +186,7 @@ class _Counts:
     episodes_confirmed: int = 0
     sources_added: int = 0
     dropped_items: int = 0
+    blocked_items: int = 0
     deferred_items: int = 0
     memory_ids: list[str] = field(default_factory=list)
     conflict_ids: list[str] = field(default_factory=list)
@@ -277,6 +278,7 @@ class MemoryExtractionService:
             superseded_count=int(outcome.get("memories_superseded", 0)),
             conflict_count=len(outcome.get("conflict_ids", [])),
             dropped_count=int(outcome.get("dropped_items", 0)),
+            blocked_count=int(outcome.get("blocked_items", 0)),
             deferred_count=int(outcome.get("deferred_items", 0)),
             attempt_count=result.attempts,
         )
@@ -415,6 +417,7 @@ class MemoryExtractionService:
                 "episodes_confirmed": counts.episodes_confirmed,
                 "sources_added": counts.sources_added,
                 "dropped_items": counts.dropped_items,
+                "blocked_items": counts.blocked_items,
                 "deferred_items": counts.deferred_items,
                 "memory_ids": counts.memory_ids,
                 "conflict_ids": counts.conflict_ids,
@@ -467,6 +470,9 @@ class MemoryExtractionService:
         applied = self._consistency.apply(connection, scope, item, None if target is None else target.id, sources)
         if applied is None:
             counts.dropped_items += 1
+            return
+        if isinstance(applied, Blocked):
+            counts.blocked_items += 1
             return
         counts.sources_added += applied.sources_added
         counts.memories_superseded += applied.superseded

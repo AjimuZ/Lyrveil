@@ -26,7 +26,7 @@ backend/
     memory/              MemoryManager, extraction, retrieval, consistency, summaries; text.py and stopwords/*.txt
                          (normalization, stop words, Snowball stems, safe FTS queries; P04.1; fingerprints, P04.2a),
                          window.py (extraction windows and triggers; P04.2a), consistency.py (the pure consistency
-                         rules; P04.2b), the rest planned
+                         rules; P04.2b; the tombstone guard, P04.2c), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
     context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
@@ -66,7 +66,7 @@ orchestrator/
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |
 | `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. |
-| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry; tombstones are P04.2c and invalidation P04.7. |
+| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry. P04.2c adds the tombstone guard; invalidation is P04.7. User edits and deletions are in `services/memories.py` (`MemoryService`). |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
 | `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. |
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
@@ -376,6 +376,11 @@ Delivered in P04.2b: the consistency rules step. `MemoryConsistencyService` (`se
 each memory item in the run's commit transaction, with the pure rules of `memory/consistency.py`, and expires temporary
 memories when a run starts. The lifespan passes the event hub to `MemoryExtractionService`, which publishes
 `memory.conflict` after the commit. See [Delivered in P04.2b](memory-engine.md#delivered-in-p042b).
+
+Delivered in P04.2c: guard 6 in `MemoryConsistencyService.apply` (an item a tombstone stops is counted in the job result
+as `blocked_items` and writes nothing), and `MemoryService` (`services/memories.py`, SQL in `persistence/memories.py`)
+with `edit` and `delete` as single write transactions. No HTTP route calls them yet (`PATCH` and `DELETE
+/memories/{id}` come with P04.9). See [Delivered in P04.2c](memory-engine.md#delivered-in-p042c).
 
 ### Retry policy
 

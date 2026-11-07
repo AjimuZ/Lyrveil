@@ -369,6 +369,16 @@ this change `scripts/lyrveil.cmd test unit tests/unit/test_memory_consistency.py
 tests/unit/test_memory_text.py tests/integration/test_memory_extraction.py tests/integration/test_memory_index.py`
 passed (70 tests) and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
 
+Delivered in P04.2c: `backend/tests/integration/test_memory_extraction.py` also holds T-MEM-08 (an edit through
+`MemoryService` appends one revision with actor `user` and reason `edit` holding the earlier row, moves the memory to
+version 2 with a new fingerprint, refreshes the index row, keeps the sources, writes nothing for an unchanged edit, and
+refuses a duplicate text and an importance of 9) and T-MEM-09 (a deletion leaves one tombstone with hashes and no text
+and removes the memory, its sources and its index row; the same source, a later message with the same content and a
+reworded memory with the same subject and value are blocked; a later source with new content stores the memory again).
+`backend/tests/unit/test_memory_consistency.py` covers `is_blocked`. In this change `scripts/lyrveil.cmd test unit
+tests/unit/test_memory_consistency.py tests/integration/test_memory_extraction.py` passed (24 tests); the full levels
+were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |

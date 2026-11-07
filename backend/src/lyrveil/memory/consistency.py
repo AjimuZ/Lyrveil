@@ -5,7 +5,8 @@ database and writes the decision.
 The model only proposes. `decide` takes a resolved item and the memories it could touch, and returns a Decision that
 always keeps these invariants: an inference never supersedes or demotes a stated or confirmed memory, a locked memory
 is never changed, a temporary item never changes a lasting memory, an `identity_candidate` never changes another
-memory, and two active lasting memories with the same single-valued subject never keep different values.
+memory, and two active lasting memories with the same single-valued subject never keep different values. `is_blocked`
+is guard 6: a tombstone of a deleted memory stops the same source from bringing it back.
 """
 
 from collections.abc import Sequence
@@ -41,6 +42,8 @@ SUBJECT_CHANGE = "subject_change"
 SUBJECT_CONFLICT = "subject_conflict"
 INFERENCE_CONFLICT = "inference_conflict"
 EXPIRED = "expired"
+# The reason of the revision a user's edit records.
+USER_EDIT = "edit"
 
 
 def subject_key(subject: str | None) -> str | None:
@@ -104,6 +107,66 @@ def values_differ(first: str | None, second: str | None, language: str | None) -
     if first is None or second is None:
         return False
     return fingerprint(first, language) != fingerprint(second, language)
+
+
+def value_hash(value: str | None, language: str | None) -> str | None:
+    """Returns the hash a tombstone keeps of a subject's value (the fingerprint of the value, so "Verdi & Co" and
+    "verdi e co." agree), or None when there is no value. The value itself is never stored."""
+    return None if value is None else fingerprint(value, language)
+
+
+@dataclass(frozen=True)
+class Tombstone:
+    """What a deleted memory left (docs/memory-engine.md, Deletion and tombstones): hashes and keys only.
+    `source_max_seq` is the seq of its newest source message and `source_hashes` the content hashes of its sources."""
+
+    fingerprint: str
+    subject_key: str | None
+    value_hash: str | None
+    source_hashes: frozenset[str]
+    source_max_seq: int
+
+
+@dataclass(frozen=True)
+class SourceRef:
+    """A source message of a candidate, as a tombstone compares it. `content_hash` is None for a message without an
+    active variant, which never matches a hash."""
+
+    seq: int
+    content_hash: str | None
+
+
+def is_blocked(
+    tombstones: Sequence[Tombstone],
+    *,
+    fingerprint: str,
+    subject_key: str | None,
+    value_hash: str | None,
+    sources: Sequence[SourceRef],
+) -> bool:
+    """Guard 6. Tells whether a candidate may not be stored because the user deleted that memory.
+
+    A tombstone blocks when the candidate has its fingerprint, or its subject key and value hash, and every source is
+    at or before the tombstone's `source_max_seq` or has a content hash it lists. One source that is newer and new is
+    fresh information, so the memory can come back.
+    """
+    for tombstone in tombstones:
+        same_text = tombstone.fingerprint == fingerprint
+        same_value = (
+            tombstone.subject_key is not None
+            and tombstone.subject_key == subject_key
+            and tombstone.value_hash is not None
+            and tombstone.value_hash == value_hash
+        )
+        if not (same_text or same_value):
+            continue
+        if all(
+            source.seq <= tombstone.source_max_seq
+            or (source.content_hash is not None and source.content_hash in tombstone.source_hashes)
+            for source in sources
+        ):
+            return True
+    return False
 
 
 @dataclass(frozen=True)

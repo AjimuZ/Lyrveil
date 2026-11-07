@@ -13,10 +13,14 @@ from lyrveil.memory.consistency import (
     SUBJECT_CONFLICT,
     KnownMemory,
     Proposal,
+    SourceRef,
+    Tombstone,
     checked_provenance,
     decide,
+    is_blocked,
     jaccard,
     stem_set,
+    value_hash,
 )
 from lyrveil.memory.text import fingerprint
 
@@ -188,3 +192,33 @@ def test_a_target_with_the_same_words_that_stays_in_use_is_confirmed() -> None:
     target = known()
     decision = decide(proposal(ROSSI, relation="contradiction", value_text="Studio Rossi"), target, target, [], [])
     assert decision.confirm == target
+
+
+def test_a_tombstone_blocks_a_candidate_whose_every_source_is_old_or_known() -> None:
+    """Guard 6: same text, or same subject and value, with no source newer than the deleted memory's (T-MEM-09)."""
+    tombstone = Tombstone(
+        fingerprint=fingerprint(ROSSI, LANGUAGE),
+        subject_key="user.employer",
+        value_hash=value_hash("Studio Rossi", LANGUAGE),
+        source_hashes=frozenset({"h1"}),
+        source_max_seq=5,
+    )
+
+    def blocked(text: str, value: str | None, *sources: SourceRef) -> bool:
+        return is_blocked(
+            [tombstone],
+            fingerprint=fingerprint(text, LANGUAGE),
+            subject_key="user.employer",
+            value_hash=value_hash(value, LANGUAGE),
+            sources=sources,
+        )
+
+    assert blocked(ROSSI, "Studio Rossi", SourceRef(5, "h9"))
+    assert blocked("Adesso lavora allo Studio Rossi.", "studio rossi.", SourceRef(2, None)), "same subject and value"
+    assert blocked(ROSSI, None, SourceRef(9, "h1")), "a newer message with a listed content hash"
+    assert not blocked(ROSSI, "Studio Rossi", SourceRef(6, "h9")), "a newer, new source is fresh information"
+    assert not blocked(ROSSI, "Studio Rossi", SourceRef(2, "h9"), SourceRef(6, "h9")), "one new source is enough"
+    assert not blocked(VERDI, "Verdi & Co", SourceRef(2, "h1")), "another fact is not blocked"
+    assert not is_blocked([], fingerprint="x", subject_key=None, value_hash=None, sources=[SourceRef(1, None)]), (
+        "nothing deleted, nothing blocked"
+    )

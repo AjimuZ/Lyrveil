@@ -373,6 +373,9 @@ live asset, or whose stored path leaves the media root, answers `404 NOT_FOUND`.
 
 ### Memory
 
+Not routed yet. P04.2c delivers the service behind `PATCH` and `DELETE /memories/{id}` (`MemoryService.edit` and
+`delete`); the routes come with the Memory Studio (P04.9).
+
 | Method and path | Purpose |
 | --- | --- |
 | `GET /memories?character_id=&conversation_id=&scope=&kind=&provenance=&status=&locked=&q=&cursor=` | Search and filter. `character_id` is required. |

@@ -1,5 +1,6 @@
 """SQL of memory extraction: the messages of a window, the cursor, the runs, the memories and episodes a run shows and
-writes, the changes the consistency rules make with their revisions, and the conversation's extraction jobs.
+writes, the changes the consistency rules make with their revisions, the tombstones that block a candidate, and the
+conversation's extraction jobs.
 
 Every function works on a connection the caller owns and never commits. Writers open that connection with the WRITE
 option of lyrveil.persistence.database, so the service decides what one transaction holds: a run's memories, sources,
@@ -14,7 +15,7 @@ from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.identifiers import new_id
 from lyrveil.domain.messages import Author, MessageStatus
-from lyrveil.memory.consistency import KnownMemory
+from lyrveil.memory.consistency import KnownMemory, Tombstone
 from lyrveil.memory.window import Window, WindowMessage
 
 _WINDOW_SELECT = """
@@ -373,6 +374,48 @@ def subject_rivals(connection: Connection, conversation_id: str, subject: str) -
     return [_known_memory(row) for row in rows]
 
 
+def matching_tombstones(
+    connection: Connection,
+    character_id: str,
+    conversation_id: str,
+    fingerprint: str,
+    subject: str | None,
+    value_hash: str | None,
+) -> list[Tombstone]:
+    """Returns the tombstones of the character's conversation that can block a candidate: those with its fingerprint,
+    and those with its subject key and value hash. The comparison with the sources is `consistency.is_blocked`."""
+    rows = (
+        connection.execute(
+            text(
+                "SELECT fingerprint, subject_key, value_hash, source_hashes_json, source_max_seq "
+                "FROM memory_tombstones WHERE character_id = :character_id AND conversation_id = :id "
+                "AND (fingerprint = :fingerprint OR "
+                "(subject_key IS NOT NULL AND subject_key IS :subject AND value_hash IS NOT NULL "
+                "AND value_hash IS :value_hash))"
+            ),
+            {
+                "character_id": character_id,
+                "id": conversation_id,
+                "fingerprint": fingerprint,
+                "subject": subject,
+                "value_hash": value_hash,
+            },
+        )
+        .mappings()
+        .all()
+    )
+    return [
+        Tombstone(
+            fingerprint=row["fingerprint"],
+            subject_key=row["subject_key"],
+            value_hash=row["value_hash"],
+            source_hashes=frozenset(json.loads(row["source_hashes_json"])),
+            source_max_seq=row["source_max_seq"],
+        )
+        for row in rows
+    ]
+
+
 def insert_memory(connection: Connection, memory: NewMemory, now: str) -> None:
     """Adds a conversation memory at version 1 with the status of `memory`. Its sources and index row are the
     caller's to add."""
@@ -420,9 +463,10 @@ def raise_memory_importance(connection: Connection, memory_id: str, importance: 
     )
 
 
-def _revise(connection: Connection, memory_id: str, *, actor: str, reason: str, run_id: str | None, now: str) -> None:
+def revise(connection: Connection, memory_id: str, *, actor: str, reason: str, run_id: str | None, now: str) -> None:
     """Appends the memory's row as it is now to `memory_revisions`, under its current version, and moves the memory
-    to the next version. The caller changes the row right after, in the same transaction."""
+    to the next version. The caller changes the row right after, in the same transaction. `actor` is `extraction`,
+    `user` or `consistency`."""
     row = connection.execute(text("SELECT * FROM memories WHERE id = :id"), {"id": memory_id}).mappings().one()
     connection.execute(
         text(
@@ -451,7 +495,7 @@ def supersede_memory(
 ) -> None:
     """Records a revision and marks the memory `superseded`, valid until `valid_to`. Its sources stay. Call
     link_superseded once the memory that replaces it exists."""
-    _revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
+    revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
     connection.execute(
         text("UPDATE memories SET status = 'superseded', valid_to = :valid_to WHERE id = :id"),
         {"id": memory_id, "valid_to": valid_to},
@@ -479,7 +523,7 @@ def join_conflict(
 ) -> None:
     """Records a revision and puts the memory in the conflict group, `uncertain` when asked, otherwise with its status
     kept."""
-    _revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
+    revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
     connection.execute(
         text(
             "UPDATE memories SET conflict_group_id = :group_id, "
@@ -502,7 +546,7 @@ def expire_memories(connection: Connection, conversation_id: str, reason: str, n
         ).scalars()
     )
     for memory_id in expired:
-        _revise(connection, memory_id, actor="consistency", reason=reason, run_id=None, now=now)
+        revise(connection, memory_id, actor="consistency", reason=reason, run_id=None, now=now)
         connection.execute(text("UPDATE memories SET status = 'expired' WHERE id = :id"), {"id": memory_id})
     return expired
 

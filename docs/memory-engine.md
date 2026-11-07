@@ -4,7 +4,8 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Impleme
 P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` indexes, and the text preparation of
 [Stemming](#stemming). Delivered in P04.2a: the extraction pipeline without the consistency rules
 ([Delivered in P04.2a](#delivered-in-p042a)). Delivered in P04.2b: the consistency rules without tombstones
-([Delivered in P04.2b](#delivered-in-p042b)). Everything else is planned.
+([Delivered in P04.2b](#delivered-in-p042b)). Delivered in P04.2c: user edits with revisions and deletion with
+tombstones ([Delivered in P04.2c](#delivered-in-p042c)). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -338,13 +339,41 @@ deduplication, what the relation and guard 3 ask of each existing memory, then t
   each new memory stored `uncertain` when the highest importance among it and the memories it conflicts with is at
   least 3. The job's result adds `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items`
   now counts only relationship events.
-- **Not delivered.** Tombstones (P04.2c); `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
+- **Not delivered.** `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
   reply prompt, which needs retrieval and the context builder (P04.3, P04.5); invalidation (P04.7). Only Italian has
-  change cues, so in another language a changed single-valued value always becomes a contradiction.
+  change cues, so in another language a changed single-valued value always becomes a contradiction. Tombstones came
+  with P04.2c.
 
 `tests/unit/test_memory_consistency.py` holds T-MEM-04, T-MEM-14 and the other rules of `decide`;
 `tests/integration/test_memory_extraction.py` holds T-MEM-10 to T-MEM-13 and the extraction half of T-CON-05
 ([Testing](testing.md#memory)).
+
+### Delivered in P04.2c
+
+User edits and deletions (`MemoryService`, `services/memories.py`) and guard 6 in `MemoryConsistencyService.apply`.
+
+- **Edit.** Changes the text, subject, value or importance (text 1 to 280 characters, importance 1 to 5). The whole row
+  as it was goes to `memory_revisions` with `actor = user`, `reason = edit` and no run; the memory moves to the next
+  version, its fingerprint follows the new text and its index row is refreshed. Status, provenance, confidence, lock and
+  sources are kept: a locked memory can be edited, since the lock only stops automation. An edit that alters nothing
+  writes nothing. A new text equal to another memory in use of the same owner is refused with `ConflictError`.
+- **Delete.** One transaction adds the tombstone and removes the memory row, its revisions, sources and index row. The
+  tombstone keeps the fingerprint, subject key, the fingerprint of the value as `value_hash`, the sorted content hashes
+  of the sources and the seq of the newest source; no text. A memory with no source takes the conversation's cursor (at
+  least 1), so no message already read can bring it back. A memory it had superseded stays superseded and loses the link.
+- **Guard 6.** Runs after `decide`, so only an item that would store a new memory can be blocked; an item that repeats a
+  memory in use is a duplicate and adds its sources. The tombstones read are those of the same character and
+  conversation with the candidate's fingerprint, or with its subject key and value hash. The item is blocked when every
+  source is at or before `source_max_seq`, or has a content hash the tombstone lists (`consistency.is_blocked`); a
+  single source that is newer and has new content lets it through. A blocked item writes nothing and is counted in
+  `blocked_items` of the job result; nothing else is returned to the model.
+- **Not delivered.** Routes (P04.9), tombstones for shared memories (the scope is not written yet), and tombstones for
+  episodes. A window never holds a message at or before the cursor, so in the running pipeline a block shows up
+  when the model restates a deleted fact from a message with the same content, or once invalidation (P04.7) analyzes
+  old messages again; the same-source case is covered by calling `apply` directly.
+
+`tests/integration/test_memory_extraction.py` holds T-MEM-08 and T-MEM-09 and `tests/unit/test_memory_consistency.py`
+the pure `is_blocked` ([Testing](testing.md#memory)).
 
 ## Retrieval
 

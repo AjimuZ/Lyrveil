@@ -3,7 +3,8 @@ extraction run, and expires temporary memories (docs/memory-engine.md, Consisten
 
 Every method works in the caller's write transaction and never commits, so a run's changes are written with its run
 row and cursor or not at all. A change to an existing memory always appends its earlier row to `memory_revisions`
-first and keeps its sources; only a duplicate changes a memory without a new version.
+first and keeps its sources; only a duplicate changes a memory without a new version. A candidate that matches a
+tombstone of a deleted memory is not stored unless one of its sources is newer than the deleted memory's.
 """
 
 from collections.abc import Sequence
@@ -16,7 +17,7 @@ from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.memory_extraction import ExtractedMemory, stored_confidence
 from lyrveil.domain.messages import Author
 from lyrveil.memory import consistency
-from lyrveil.memory.consistency import Decision, KnownMemory, Proposal
+from lyrveil.memory.consistency import Decision, KnownMemory, Proposal, SourceRef
 from lyrveil.memory.text import fingerprint, match_query
 from lyrveil.memory.window import WindowMessage, is_significant, phrase_patterns
 from lyrveil.persistence import memory_extraction as repository
@@ -55,6 +56,11 @@ class Applied:
     conflict: bool = False
 
 
+@dataclass(frozen=True)
+class Blocked:
+    """An item a tombstone stopped: it matched a deleted memory and none of its sources is new."""
+
+
 class MemoryConsistencyService:
     """The deterministic half of extraction: the model proposes items and this service decides what is stored."""
 
@@ -65,9 +71,11 @@ class MemoryConsistencyService:
         item: ExtractedMemory,
         target_id: str | None,
         sources: Sequence[WindowMessage],
-    ) -> Applied | None:
+    ) -> Applied | Blocked | None:
         """Applies one valid item and returns what it did, or None when its target is no longer in use (an earlier
-        item of the same run superseded or expired it), which writes nothing.
+        item of the same run superseded or expired it), or Blocked when a tombstone of a memory the user deleted stops
+        it (guard 6); both write nothing. A tombstone only stops an item that would store a new memory: one that
+        repeats a memory in use is a duplicate, and adds its sources as usual.
 
         Requires: `sources` are the item's window messages, at least one, in seq order; `target_id` is the memory its
         `target_ref` names, or None; `item.content` is not blank.
@@ -97,6 +105,8 @@ class MemoryConsistencyService:
         decision = consistency.decide(proposal, target, same, similar, rivals)
         if decision.confirm is not None:
             return _confirm(connection, decision.confirm, proposal.importance, sources, to_utc_text(scope.now))
+        if _blocked(connection, scope, proposal, sources):
+            return Blocked()
         return _insert(connection, scope, item, proposal, decision, sources)
 
     def expire(self, connection: Connection, conversation_id: str, now: datetime) -> list[str]:
@@ -130,6 +140,21 @@ def _proposal(item: ExtractedMemory, sources: Sequence[WindowMessage], language:
         has_user_source=by_user,
         source_max_seq=max(source.seq for source in sources),
         change_cue=any(source.author is Author.USER and is_significant(source.content, cues) for source in sources),
+    )
+
+
+def _blocked(connection: Connection, scope: RunScope, proposal: Proposal, sources: Sequence[WindowMessage]) -> bool:
+    """Guard 6: tells whether a tombstone of this conversation stops the candidate (consistency.is_blocked)."""
+    hashed = consistency.value_hash(proposal.value_text, scope.language)
+    tombstones = repository.matching_tombstones(
+        connection, scope.character_id, scope.conversation_id, proposal.fingerprint, proposal.subject_key, hashed
+    )
+    return consistency.is_blocked(
+        tombstones,
+        fingerprint=proposal.fingerprint,
+        subject_key=proposal.subject_key,
+        value_hash=hashed,
+        sources=[SourceRef(source.seq, source.content_hash) for source in sources],
     )
 
 

@@ -664,8 +664,8 @@ Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes
 ([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). A source row names the message, its active variant at
 extraction time and that variant's `content_hash`. The cursor only moves forward and leaves `updated_at` alone. A run
 row is written `running` before generation and ends `completed`, `failed` or `superseded`; a later attempt on the same
-window reuses the row with `attempt + 1`. Nothing writes `memory_tombstones`, `character_state_history` or
-`relationship_states` yet, and `raw_output` is not yet removed after 30 days.
+window reuses the row with `attempt + 1`. Nothing writes `character_state_history` or `relationship_states` yet, and
+`raw_output` is not yet removed after 30 days.
 
 Since P04.2b the consistency rules ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)) also write
 `memory_revisions` and the columns `status` (`uncertain`, `superseded`, `expired`), `valid_to`, `superseded_by_id`,
@@ -674,6 +674,14 @@ row before the change, as SQLite returns it (booleans as 0 or 1), and its `versi
 moves to `version + 1`. `actor` is `extraction` for a change an item made, with its `run_id`, and `consistency` for an
 expiry. A new memory that supersedes another is inserted after the old one leaves `active`, so the unique fingerprint
 index holds even when both have the same text, and `superseded_by_id` is set once the new row exists.
+
+Since P04.2c, `MemoryService` writes the user's changes ([Delivered in P04.2c](memory-engine.md#delivered-in-p042c)). An
+edit appends a revision with `actor = user` and `reason = edit` and moves the memory to the next version. A deletion
+writes one `memory_tombstones` row and removes the `memories` row, its `memory_revisions` and `memory_sources` (their
+keys cascade) and its `memory_fts` row. The tombstone's `value_hash` is the fingerprint of the memory's value, its
+`source_hashes_json` the sorted distinct `content_hash` of its sources, and `source_max_seq` the newest source `seq`; for
+a memory with no source it is the conversation's `last_extracted_seq`, at least 1. A memory it superseded keeps its row
+and loses `superseded_by_id`.
 
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON

@@ -139,6 +139,8 @@
 - Keep model-output policy as a pure decision function (inputs: resolved item plus the existing rows it may touch; output: a frozen Decision) and let a thin service read the inputs and write the decision in the caller's transaction; unit-test the rules without a database.
 - Every automated change to a memory row goes through a revise-then-update helper that snapshots the whole row into memory_revisions under its current version and bumps version, in the same transaction.
 - Phrase lists per language live in prompts/<code>/<name>.txt and load with lyrveil.memory.window.phrase_patterns(language, file_name); match with is_significant.
+- Write the tombstone before deleting the row, in the same transaction, so no deletion leaves nothing behind.
+- Keep the pure decision (`is_blocked`) separate from the SQL that reads the tombstones, so unit tests cover the rule and integration tests cover the wiring.
 
 ---
 
@@ -1112,4 +1114,24 @@ Not covered: the 'Applica al profilo' half of T-CON-05 (P04.9); the reply-prompt
   - MemoryExtractionService takes `events: EventHub | None`; it publishes memory.conflict on the loop thread after the commit returns, never inside the worker thread.
   - Integration helper `Chat` in tests/integration/test_memory_extraction.py runs consecutive windows of one chat with scripted outputs; `Chat.shown()` returns the existing-memory lines of the last prompt (after the worked example, which also contains 'Studio Rossi').
   - `scripts/lyrveil.cmd test unit <paths>` accepts integration test paths too, which is a fast way to run one integration file.
+---
+
+## 2026-11-07T13:53:30Z - P04.2c
+- Added user memory edits that record a revision and deletion that leaves a tombstone. Extraction now skips a candidate that a tombstone blocks. Both new integration tests and the new unit test pass, together with the neighbouring memory tests (28 in the last run), and `scripts/lyrveil.cmd test lint` passes. The full unit, integration, e2e and docker levels were not run. Nothing in the running app calls the new service yet: the `PATCH` and `DELETE /memories/{id}` routes belong to P04.9.
+
+- **Edit:** `MemoryService.edit` in `services/memories.py` (SQL in `persistence/memories.py`) appends the earlier row to `memory_revisions` with actor `user` and reason `edit`, and moves the memory to the next version. It refreshes the full-text index row, keeps the sources and the lock, and writes nothing when nothing changes. It refuses a text that another memory in use already has, and an out-of-range importance.
+- **Delete:** `MemoryService.delete` writes the tombstone and removes the memory, its revisions, sources and index row in one transaction. The tombstone keeps hashes and keys only, with no text. A memory with no source uses the conversation's extraction cursor as its newest-source position.
+- **Tombstone check:** the check is `is_blocked` in `memory/consistency.py`. It runs after `decide`, so only an item that would store a new memory can be blocked. A candidate is blocked when it matches by fingerprint, or by subject and value hash, and every source is at or before the deleted memory's newest source or has a content hash the tombstone lists. A blocked item writes nothing and is counted as `blocked_items` in the job result.
+- **Tests:** T-MEM-08 and T-MEM-09 are in `tests/integration/test_memory_extraction.py`, plus a unit test of `is_blocked`. The same-source block is tested by calling `apply` directly, because a normal extraction window never contains messages at or before the cursor.
+- **Docs:** `memory-engine.md` (new "Delivered in P04.2c" section), `data-model.md`, `backend.md`, `api.md`, `testing.md` and `CHANGELOG.md`.
+- **Not done:** routes (P04.9), tombstones for shared memories, and tombstones for episodes.
+- Files changed: backend/src/lyrveil/memory/consistency.py, backend/src/lyrveil/persistence/memory_extraction.py, backend/src/lyrveil/persistence/memories.py, backend/src/lyrveil/services/memories.py, backend/src/lyrveil/services/memory_consistency.py, backend/src/lyrveil/services/memory_extraction.py, backend/tests/integration/test_memory_extraction.py, backend/tests/unit/test_memory_consistency.py, CHANGELOG.md, docs/memory-engine.md, docs/data-model.md, docs/backend.md, docs/api.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The Memory Studio routes (P04.9) should call `MemoryService` (`services/memories.py`) for `PATCH` and `DELETE /memories/{id}`. It raises NotFoundError, ValidationFailedError and ConflictError.
+  - `persistence.memory_extraction.revise` is now public (it was `_revise`); `actor` is `extraction`, `user` or `consistency`.
+  - Guard 6 runs after `consistency.decide` inside `MemoryConsistencyService.apply` and returns `Blocked()`. The extraction service counts it as `blocked_items` in the job result.
+  - A window never holds a message at or before the cursor, and a completed run is skipped, so a normal extraction cannot re-read the deleted memory's source. Test the same-source case by calling `apply` directly. The real case arrives with invalidation (P04.7).
+  - A tombstone's `value_hash` is the fingerprint of the value (`consistency.value_hash`), so a reworded value such as `studio rossi.` still matches.
+  - `memories.delete` relies on cascades for `memory_revisions` and `memory_sources`. It removes the `memory_fts` row by hand, with no trigger.
+  - Tombstones are only read and written for conversation memories. Shared-scope memories and episodes have none yet.
 ---

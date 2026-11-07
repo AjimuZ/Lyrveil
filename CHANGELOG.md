@@ -24,8 +24,10 @@ No application exists yet. This section records the design documentation.
   fact. A guess never overrides what the user said, and a fact about the user that only the character said is stored
   as a guess. A repeated or near-identical fact adds its sources to the one already stored. Locked memories never
   change, and proposals to change the character's profile are kept aside and never applied. Every change to a memory
-  keeps the earlier version. Blocking a deleted memory from coming back, resolving conflicts and the Memory Studio are
-  not delivered yet.
+  keeps the earlier version. Resolving conflicts and the Memory Studio are not delivered yet.
+- Memory edits and deletions, backend only. Correcting a memory keeps its earlier text as a revision. Deleting a memory
+  removes its text, history and sources and leaves only hashes, so analyzing the same messages again cannot bring it
+  back, while a later message that states the fact again can. Nothing in the app calls this yet.
 - Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
   job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
   data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from
