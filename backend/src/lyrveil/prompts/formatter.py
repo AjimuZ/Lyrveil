@@ -75,10 +75,17 @@ class PromptFormatter(ABC):
     family: ClassVar[TextTemplate]
     # Control text that ends a reply in this family, before the user-name stop sequence.
     _end_sequences: ClassVar[tuple[str, ...]]
+    # The family's other control text, which a reply never holds either but which is not a stop sequence.
+    _other_control: ClassVar[tuple[str, ...]] = ()
 
     def stop_sequences(self, user_display_name: str) -> tuple[str, ...]:
         """Returns the family's stop sequences for a chat with `user_display_name` (docs/prompting.md)."""
         return (*self._end_sequences, f"\n{user_display_name}:")
+
+    def control_texts(self) -> tuple[str, ...]:
+        """Returns every control text of the family: the end sequences, then the other markers of its template. Reply
+        check V2 ends a reply where one of them appears (lyrveil.consistency.checks.TurnCutoff)."""
+        return (*self._end_sequences, *self._other_control)
 
     def chat(self, parts: ChatParts, current_message: str) -> FormattedPrompt:
         """Renders a reply: stable text, history, then a last user turn with the frame and `current_message`."""
@@ -114,6 +121,7 @@ class Gemma4Formatter(PromptFormatter):
 
     family: ClassVar[TextTemplate] = "gemma4"
     _end_sequences: ClassVar[tuple[str, ...]] = ("<turn|>", "<|turn>")
+    _other_control: ClassVar[tuple[str, ...]] = ("<|channel>", "<channel|>")
 
     def _render(self, system_text: str, history: Sequence[Turn], last_user_text: str) -> FormattedPrompt:
         roles = {"user": "user", "character": "model"}
@@ -134,6 +142,7 @@ class MistralV3TekkenFormatter(PromptFormatter):
 
     family: ClassVar[TextTemplate] = "mistral_v3_tekken"
     _end_sequences: ClassVar[tuple[str, ...]] = ("</s>", "[INST]")
+    _other_control: ClassVar[tuple[str, ...]] = ("[/INST]",)
 
     def _render(self, system_text: str, history: Sequence[Turn], last_user_text: str) -> FormattedPrompt:
         prefix = "".join(f"[INST]{turn.text}[/INST]" if turn.role == "user" else f"{turn.text}</s>" for turn in history)

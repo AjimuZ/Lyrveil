@@ -1,0 +1,41 @@
+# V5 (docs/consistency-engine.md, Recorded): the character talks about being a model or about prompts. Each phrase of
+# [talk] in the reply is one hit, unless the user's message holds a phrase of [talk] or [asked], which means the user
+# asked. Matching ignores case and accents and needs whole words. "In quanto ai" and "come modello" are left out,
+# because "in quanto ai prezzi" and "come modello di vita" are plain Italian.
+[talk]
+intelligenza artificiale
+in quanto ia
+in quanto modello
+modello linguistico
+modello di linguaggio
+sono un'ia
+sono un ia
+sono un'ai
+sono un ai
+sono un bot
+sono un chatbot
+chatbot
+assistente virtuale
+il mio prompt
+prompt di sistema
+le mie istruzioni
+sono stato programmato
+sono stata programmata
+i miei sviluppatori
+
+[asked]
+ia
+bot
+robot
+modello
+prompt
+istruzioni
+programmato
+programmata
+sei reale
+sei vera
+sei vero
+sei una persona
+sei umana
+sei umano
+persona reale

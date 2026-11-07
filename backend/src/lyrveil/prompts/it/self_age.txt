@@ -1,0 +1,18 @@
+# V10 (docs/consistency-engine.md, Corrected): the phrases with which the character states its age. {n} stands for
+# the age, in digits or, in Italian, in words ("trentun"); {end} for the end of a clause (punctuation or the end of the
+# text). A stated age other than the card's is a hit. The phrases ignore case and accents. A word of [not_before] right
+# after the phrase makes it a duration or a difference, so it does not count ("ho 3 anni di esperienza").
+[phrases]
+ho {n} anni
+ho appena compiuto {n} anni
+
+[not_before]
+di
+da
+fa
+più
+meno
+prima
+dopo
+in
+per

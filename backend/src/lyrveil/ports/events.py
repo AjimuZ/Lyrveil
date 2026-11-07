@@ -7,6 +7,7 @@ from typing import Any, Protocol
 TYPING_STARTED = "typing.started"
 TYPING_STOPPED = "typing.stopped"
 MESSAGE_DELTA = "message.delta"
+MESSAGE_RESTARTED = "message.restarted"
 MESSAGE_COMPLETED = "message.completed"
 MESSAGE_FAILED = "message.failed"
 MESSAGE_UPDATED = "message.updated"

@@ -323,8 +323,9 @@ Dai del {{ comm.address_form }} a {{ user.display_name }}. {{ length_text }} {{ 
 
 `anchor_traits` holds the first sentence of up to two main traits, in their saved order; a sentence ends at the first
 `.`, `!`, `?` or `…` followed by a space, and one without an ending gets a period. `notes` holds
-up to two corrective notes, chosen by the [consistency engine](consistency-engine.md#reply-checks) (from P04.8; P04.5
-renders the anchor with the notes it is given):
+up to two corrective notes, chosen by the [consistency engine](consistency-engine.md#reply-checks). Since P04.8b the
+texts are in `prompts/it/notes.txt`. The note of a corrective generation comes first, then the adaptive notes, oldest
+first ([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)):
 
 | Trigger | Note | Lasts |
 | --- | --- | --- |
@@ -483,6 +484,11 @@ Stored in `prompts/it/calques.txt` and used by validator V9. Initial entries:
 | `Ho realizzato che` | Calque of "I realized" |
 | `Sono qui per te` repeated | Stock phrase. Flagged after the second use in a conversation |
 | `In quanto AI`, `Come modello`, `intelligenza artificiale` when not asked | Character break |
+
+Delivered in P04.8b. `^` marks an opening and `+` a phrase that counts only once one of the last 10 replies holds it
+too. `Fa senso` is listed in its calque uses (`questo fa senso`, `non fa senso`, `fa senso che`), because `mi fa senso`
+is correct Italian. The character-break row is checked by V5 from `prompts/it/model_talk.txt`, which leaves out `come
+modello` and `in quanto ai`: `come modello di vita` and `in quanto ai prezzi` are plain Italian.
 
 ### Italian quality protocol
 

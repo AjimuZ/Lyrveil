@@ -5,7 +5,9 @@ P04. Delivered in P04.2b: extraction never writes canonical data, and an item th
 stored as a memory that no prompt shows and that changes nothing else
 ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Code does not yet detect a card change the model did not
 label; "Applica al profilo" is P04.9. Delivered in P04.6: the Character State Manager with bounded updates and replay
-([Delivered in P04.6](#delivered-in-p046)).
+([Delivered in P04.6](#delivered-in-p046)). Delivered in P04.8a and P04.8b: the reply normalizer
+([Delivered in P04.8a](#delivered-in-p048a)), the reply checks V1 to V13, the corrective generation and the adaptive
+notes ([Delivered in P04.8b](#delivered-in-p048b)).
 
 The engine stops a character from changing identity, personality or knowledge without a
 reason. Model output is treated as a proposal. Deterministic code decides what is stored and
@@ -209,11 +211,8 @@ and V3, and before V4 and the client. Its rules only remove or reshape text, and
   text with it.
 - **Record.** `checks_json` holds `{"normalizer": {"N1": 1, ...}}`, with a count for each rule that fired: N1 the label
   and the quotes; N2 each heading, rule, table row, fence line and `**` marker; N3 each removed span; N4 its cut or
-  ellipsis; N5 each removed run of emoji and each shortened run of blank lines. P04.8b adds the checks and the
-  regeneration count.
-- **Not delivered.** The reply checks V1 to V13 and the corrective generation (P04.8b). V2 and V3 are the stop
-  sequences only, so nothing yet removes control text or a user turn that the runtime lets through. An empty
-  normalized reply is stored as it is, until V1 retries it.
+  ellipsis; N5 each removed run of emoji and each shortened run of blank lines. Since P04.8b the record also holds
+  the reply checks and the regenerations ([Delivered in P04.8b](#delivered-in-p048b)).
 
 `tests/unit/test_reply_normalizer.py` holds T-CON-09 and the single rules. `tests/integration/test_reply_streaming.py`
 checks that the reply path publishes and stores only normalized text, with its `checks_json`.
@@ -243,7 +242,7 @@ These run on each sentence during streaming.
 | --- | --- | --- |
 | V6 | The character calls itself by another name, such as `mi chiamo` or `sono` followed by a capitalized name other than its own | All supported |
 | V10 | The character states another age, such as `ho 31 anni` | All supported |
-| V11 | First-person agreement contradicts `grammatical_gender`, such as `sono stanco` for `femminile` or `mi sono alzata` for `maschile`. Skipped for `non_indicato` and inside quotation marks. Closed list in `prompts/it/gender_first_person.txt` | Italian |
+| V11 | First-person agreement contradicts `grammatical_gender`, such as `sono stanco` for `femminile` or `mi sono alzata` for `maschile`. Skipped for `non_indicato` and inside quotation marks. Closed list in `prompts/it/gender_agreement.txt` | Italian |
 
 A hit aborts the generation, publishes `message.restarted` and generates once more with the matching note
 in the [anchor](prompting.md#block-9-anchor). If the second reply hits again, it is delivered and the hit
@@ -268,6 +267,74 @@ These do not interrupt the reply. They feed the diagnostic view, the adaptive no
 Two consecutive V7 hits, or one V8, V9 or V13 hit, add the matching note to the anchor of the next 3
 replies. At most two notes are active, and a new note replaces the oldest one. Notes are fixed texts, so
 they never quote the reply.
+
+### Delivered in P04.8b
+
+`consistency/checks.py` holds the checks, the V2 and V3 cut, the sentence splitter and the adaptive notes, over the
+lists of `prompts/<language>/`. `ChatInferenceService` runs them on every reply
+([Streaming persistence](backend.md#streaming-persistence)).
+
+- **Order while streaming.** The runtime's text goes through `TurnCutoff` (V2, V3), then the normalizer. The text the
+  normalizer releases is cut into sentences: a sentence ends at a line break, or at whitespace after `.`, `!`, `?` or
+  `…` and any closing quotes, brackets or asterisks. A sentence is checked as soon as it ends, and the released piece
+  that ended it is published only if no check stops the generation. The words of the sentence itself were already
+  shown, which is why a stop is announced with `message.restarted`. Every step reads one character at a time, so no
+  verdict depends on how the reply was split.
+- **Folding and quotations.** Text is compared lowercase and without accents, and every apostrophe reads as `'`. A
+  quotation runs from `"`, `“`, `«` or `„` to its closing quote, or to the end of the line. V6 and V10 to V13 skip
+  quotations, since they are reported speech. V4 reads them.
+- **V1.** A delivered text that is empty, such as one the V3 cut leaves empty, is generated once more from the same
+  prompt. It shows no text, so no `message.restarted` is sent. A second empty reply ends `failed` with empty text and
+  the job error `REPLY_EMPTY`.
+- **V2 and V3.** `TurnCutoff` ends the reply where one of these begins: control text of the template family, `[Contesto
+  per` or `[Messaggio di` (V2), or a line that opens with the user's name and `:` (V3). It holds back only an end of the
+  text that may still start one. The control texts are the stop sequences plus `<|channel>` and `<channel|>` for
+  `gemma4`, and `[/INST]` for `mistral_v3_tekken`. Everything after the cut is dropped, the runtime is asked to abort,
+  and the reply ends as if the runtime had stopped there, so N4 does not run. This drops what follows the control text
+  instead of keeping it, because control text ends a turn.
+- **V4.** `content_guard.find_reply_violation` refuses a sentence that holds a sexual term together with a minor term,
+  a child's costume or act, a childhood reference or an age under 18. A minor term alone passes, since a character may
+  speak of a child. A hit stops any generation. The reply ends `failed` with the fixed notice "Questa risposta è stata
+  bloccata: accostava minori e contenuti sessuali." and the job error `CONTENT_POLICY_BLOCKED`. The client first gets
+  `message.restarted`, which drops the streamed words, then `message.updated` with the notice.
+- **V5.** A phrase of `model_talk.txt` (`[talk]`) is a hit, unless the user's message holds one of `[talk]` or
+  `[asked]`. Only Italian and English have the list.
+- **V6.** A phrase of `self_name.txt`, such as `mi chiamo` or `sono`, followed by a capitalized word that is not a word
+  of the character's full name or of `[not_names]`. A phrase after a negation (`non sono Luca`) does not count. English
+  leaves out `I'm`, French `je suis`, and German `ich bin`, because a capitalized nationality or noun follows them.
+- **V7.** The same first 3 folded words as one of the character's last 10 replies, or a `difflib` ratio of at least 0.9
+  between the word lists.
+- **V8.** In a reply of at least 8 words, more words are stop words of another supported language than of the chat's
+  language. The stop words are those of the memory index (`memory/stopwords/`).
+- **V9.** A phrase of `prompts/it/calques.txt`. `^` marks an opening, which counts only at the start of the reply, and
+  `+` a phrase that counts only when one of the last 10 replies holds it too (`sono qui per te`). The character-break
+  phrases of the calque table are V5's.
+- **V10.** A phrase of `self_age.txt`, such as `ho {n} anni`, with an age other than the card's, in digits or, in
+  Italian, in words (`trentun`). A word of `[not_before]` right after it (`ho 5 anni di esperienza`) means a duration.
+- **V11 and V12.** A lead of `gender_agreement.txt` (`sono`, `mi sono` and others for V11; `sei`, `ti sei` and others
+  for V12), at most one adverb, then a stem ending in `o` or `a` that contradicts the gender. Plural endings and words
+  that are also adverbs (`solo`, `certo`) are left out. V12 reads `user.grammatical_gender`.
+- **V13.** The forms of `address_forms.txt`. For a `tu` character, `Lei`, `Suo`, `Sua`, `Suoi` and `Sue` count only
+  capitalized and inside a sentence, and courtesy forms such as `mi scusi` count anywhere. For a `lei` character,
+  `tu`, `ti`, `te`, `tuo` and imperatives such as `dimmi` count. `La` and `Le` are left out, because a place such as
+  `La Spezia` would count.
+- **Corrective generation.** In the first generation, V6, V10 or V11 stops the stream: the runtime is asked to abort,
+  the stored text is cleared, `message.restarted` names the check, and the prompt is built again with the check's note
+  first in the anchor, then the adaptive notes, two at most. The second generation is stopped only by V4, so its V6,
+  V10 or V11 hits are delivered and recorded. A run makes at most three generations: the first, one corrective
+  generation and one V1 retry.
+- **Adaptive notes.** `load_context_request` reads the `checks` of the chat's last 4 replies before the reply
+  (`complete` or `interrupted`, with text, active variant) and derives the active notes from them
+  (`active_notes`). Nothing is kept in memory, so the notes survive a restart, and a regenerated reply gets the notes
+  its first variant had. Notes started by the same reply are taken in the order V7, V8, V9, V13. The texts are in
+  `prompts/it/notes.txt`, the same for every chat language, since every prompt block is Italian.
+- **Record.** `checks_json` is `{"normalizer": {...}, "checks": {"V9": 1, ...}, "restarts": ["V6"],
+  "regenerations": 1}`. `checks` counts each check that fired on the delivered text, V2 and V3 included. `restarts`
+  names the check that discarded each earlier generation (`V1`, `V6`, `V10` or `V11`), and `regenerations` is their
+  number. A failed reply records the same, with `{"V4": 1}` for V4.
+
+`tests/unit/test_reply_checks.py` holds T-CON-08. `tests/integration/test_reply_streaming.py` holds T-CON-10, with the
+V1 and V4 endings.
 
 ## Consistency protocol
 

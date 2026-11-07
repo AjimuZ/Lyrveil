@@ -74,7 +74,7 @@ orchestrator/
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
-| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the stream and the persistence, under the lease the scheduler holds; since P04.5 the context is `ContextBuilder`'s; since P04.8a the stream goes through the normalizer; the checks and the corrective generation join with P04.8b. |
+| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the stream and the persistence, under the lease the scheduler holds; since P04.5 the context is `ContextBuilder`'s; since P04.8a the stream goes through the normalizer; since P04.8b through the reply checks, with the corrective generation and the adaptive notes. |
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
@@ -269,15 +269,30 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   the backend stops is queued again. With no user message left before the reply (the user deleted it) the run fails
   with `INTERNAL`.
 - Since P04.8a every token goes through the card's `ReplyNormalizer` in `ChatInferenceService._stream`, the one path a
-  generated reply text takes; the corrective generation of P04.8b reuses it. Deltas, flushes, the failure text and
+  generated reply text takes; the corrective generation of P04.8b goes through it again. Deltas, flushes, the failure text and
   the stored reply all hold only released text, so the client, the database and later prompts never see a label,
   Markdown or a removed span. Text still held back when a run fails or is cancelled is dropped. When N4 cuts a reply
   that the length limit stopped, the words after the cut were already shown: `message.completed` carries the delivered
   text, which replaces them ([Reply normalization](consistency-engine.md#delivered-in-p048a)).
+- Since P04.8b the V2 and V3 cut runs before the normalizer, and each sentence the normalizer releases is checked
+  ([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)). A run makes at most three generations under the
+  same lease and `genkey`, each through `_stream` with a new normalizer:
+
+  | Moment | Database | Events |
+  | --- | --- | --- |
+  | V6, V10 or V11 in the first generation | The runtime is asked to abort and the rest of its stream is dropped; text emptied | `message.restarted` with the check, then the corrective generation's deltas from offset 0 |
+  | V2 or V3 | The reply ends at the cut, and the runtime is asked to abort | None of its own |
+  | Empty reply (V1), first time | Nothing was shown; the same prompt runs again | None |
+  | Empty reply again | Variant and message `failed` with empty text and their `checks_json`; job `REPLY_EMPTY`, not retried | `typing.stopped`, `message.updated`, `message.failed` |
+  | V4 in any generation | The runtime is asked to abort; variant and message `failed` with the fixed notice; job `CONTENT_POLICY_BLOCKED`, not retried | `message.restarted`, `typing.stopped`, `message.updated` with the notice, `message.failed` |
+
+  The finish reason `aborted` marks a reply `interrupted` only when someone else aborted it, not when this run did.
+  The adaptive notes are read by `load_context_request` from the `checks_json` of the chat's last 4 replies.
 
 `tests/integration/test_reply_streaming.py` holds T-MSG-03 (token order, the flush times against a fake clock, the
 stored text), T-MSG-09, T-MSG-12 through the application's `/ws` with its lifespan worker, T-MSG-13 through a restart
-of `main()`, the retry path, T-SEC-06, and a reply normalized before it is shown or stored, with its `checks_json`.
+of `main()`, the retry path, T-SEC-06, a reply normalized before it is shown or stored, with its `checks_json`, and
+T-CON-10 with the V1 and V4 endings.
 `tests/unit/test_event_hub.py` covers the replay rules and the bounded queue.
 
 ### Startup sequence

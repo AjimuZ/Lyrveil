@@ -225,7 +225,10 @@ These checks are best-effort filters over models that can produce unwanted conte
 ### Character data
 
 Delivered in P03.6a: the first two rows of the table, in `lyrveil.consistency.content_guard`. The image rows come with
-P05 and the generated-text row with the reply checks of P04. The reasons for these rules are in
+P05. The generated-text row was delivered in P04.8b as reply check V4 (`find_reply_violation`): it reads each streamed
+sentence with the same lists and readings, and refuses only a sentence that holds a sexual term together with a minor
+term, a childhood reference or an age under 18. The reply then ends `failed` with a fixed notice
+([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)). The reasons for these rules are in
 [ADR 0037](decisions/0037-content-guard-rules-for-character-text.md).
 
 - **Where.** `CharacterService` checks every card it stores: create, save, proposal, duplicate, restore and import, through

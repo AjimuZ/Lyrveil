@@ -1,0 +1,112 @@
+# V11 and V12 (docs/consistency-engine.md, Corrected and Recorded): Italian gender agreement in the first and in the
+# second person. A hit is a lead of [first_person] (V11) or [second_person] (V12), at most one adverb of [adverbs], then
+# a stem of [stems] ending in "o" (masculine) or "a" (feminine) that differs from the gender of the speaker the lead
+# names: the card's `grammatical_gender` for V11, the user's for V12. Plural endings never count, and text inside
+# quotation marks is skipped. Matching ignores case and accents and needs whole words. The list is closed on purpose:
+# words that are also adverbs ("solo", "certo") are left out, because "sono solo stanca" must not count.
+[first_person]
+sono
+io sono
+mi sono
+mi sento
+ti sono
+ne sono
+me ne sono
+ci sono
+
+[second_person]
+sei
+tu sei
+ti sei
+ti senti
+ne sei
+te ne sei
+ci sei
+
+[adverbs]
+molto
+così
+davvero
+proprio
+un po'
+un po
+già
+ancora
+tanto
+troppo
+sempre
+anche
+più
+abbastanza
+parecchio
+veramente
+
+[stems]
+abituat
+addormentat
+agitat
+alzat
+andat
+annoiat
+arrabbiat
+arrivat
+bell
+brav
+calm
+carin
+cascat
+commoss
+content
+contrariat
+convint
+cresciut
+curios
+decis
+delus
+dispiaciut
+distratt
+distrutt
+divertit
+diventat
+emozionat
+entrat
+fidanzat
+fortunat
+gelos
+grat
+impegnat
+imbarazzat
+innamorat
+laureat
+nat
+nervos
+occupat
+offes
+orgoglios
+partit
+passat
+pazz
+pers
+piccol
+pigr
+preoccupat
+pront
+rimast
+riuscit
+sedut
+sicur
+sorpres
+spaventat
+sposat
+stanc
+stat
+stuf
+stupit
+svegli
+svegliat
+tornat
+tranquill
+trasferit
+uscit
+venut
+vestit

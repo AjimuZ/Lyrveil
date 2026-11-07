@@ -271,8 +271,12 @@ exists (P04).
 
 Since P04.8a the stored text of a generated reply is the normalized one, and a finished run writes `checks_json` as
 `{"normalizer": {...}}`, the count of each normalizer rule that fired
-([Delivered in P04.8a](consistency-engine.md#delivered-in-p048a)). A failed run leaves it NULL. The reply checks and
-the regeneration count join it in P04.8b.
+([Delivered in P04.8a](consistency-engine.md#delivered-in-p048a)). Since P04.8b it is
+`{"normalizer": {...}, "checks": {...}, "restarts": [...], "regenerations": N}`: the reply checks that fired on the
+delivered text with their counts, the check that discarded each earlier generation, and their number
+([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)). A reply that a check ended `failed` (V1 twice, V4)
+records the same; any other failed run leaves it NULL. The `checks` of the last replies are what the adaptive notes
+are derived from.
 
 ## Memory tables
 

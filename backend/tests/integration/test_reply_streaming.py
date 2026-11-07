@@ -1,5 +1,6 @@
 """Checks reply streaming on a real database: T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13, T-SEC-06 (integration level),
-and that the reply normalizer stands between the runtime and both the client and the database (P04.8a).
+that the reply normalizer stands between the runtime and both the client and the database (P04.8a), and T-CON-10:
+the corrective generation after a V6, V10 or V11 hit, the adaptive notes, and the V1 and V4 endings (P04.8b).
 
 The text runtime is a fake that keeps the TextRuntime contract; the job worker, the event hub, the WebSocket
 route and the database are the real ones. The WebSocket is spoken in raw ASGI messages on the test's own event
@@ -24,6 +25,7 @@ from starlette.types import Message as AsgiMessage
 
 import lyrveil.main as backend
 from lyrveil.domain.identifiers import new_id
+from lyrveil.domain.messages import Message
 from lyrveil.events.hub import EventHub
 from lyrveil.jobs.policy import JobKind, JobStatus, RequiredMode
 from lyrveil.jobs.queue import Job, JobQueue
@@ -65,12 +67,14 @@ class FakeRuntime:
 
     `after_token(index)` runs when the handler asks for the token after `index`. `failures` are raised, one per
     stream, after its first token. `hold_after` makes a stream stop after that many tokens and wait forever, calling
-    `on_hold` first, as a generation cut by a crash does. `finish_reason` ends every stream.
+    `on_hold` first, as a generation cut by a crash does. `finish_reason` ends every stream. `aborted` records the
+    genkey of each abort; the stream goes on, as when the runtime has already sent its last tokens.
     """
 
     def __init__(self, answer: Callable[[str], str] = lambda current: f"Risposta a {current}") -> None:
         self.answer = answer
         self.requests: list[TextRequest] = []
+        self.aborted: list[str] = []
         self.failures: list[Exception] = []
         self.after_token: Callable[[int], None] | None = None
         self.hold_after: int | None = None
@@ -100,6 +104,7 @@ class FakeRuntime:
         return self.answer(current_message(request.prompt))
 
     async def abort(self, genkey: str) -> bool:
+        self.aborted.append(genkey)
         return True
 
     async def info(self) -> TextRuntimeInfo:
@@ -454,7 +459,205 @@ async def test_a_reply_is_normalized_before_it_is_shown_or_stored_and_its_varian
     assert published[-1][0] == "message.completed"
     assert published[-1][1]["message"]["content"] == delivered
     assert stored(migrated, reply.id) == ("complete", delivered, "complete", delivered)
-    assert checks_of(migrated, reply.id) == {"normalizer": {"N1": 1, "N2": 2, "N3": 1, "N4": 1}}
+    assert checks_of(migrated, reply.id) == {
+        "normalizer": {"N1": 1, "N2": 2, "N3": 1, "N4": 1},
+        "checks": {},
+        "restarts": [],
+        "regenerations": 0,
+    }
+
+
+def answers(*texts: str) -> Callable[[str], str]:
+    """Returns an answer for FakeRuntime that gives `texts` in order, one per generation, then the last one again."""
+    queue = list(texts)
+
+    def answer(_current: str) -> str:
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    return answer
+
+
+def set_gender(engine: Engine, conversation_id: str, gender: str) -> None:
+    """Sets the `grammatical_gender` of the chat's character."""
+    write(
+        engine,
+        lambda connection: connection.execute(
+            text(
+                "UPDATE characters SET grammatical_gender = :gender "
+                "WHERE id = (SELECT character_id FROM conversations WHERE id = :id)"
+            ),
+            {"gender": gender, "id": conversation_id},
+        ),
+    )
+
+
+DELIVERED = "Ciao! Sono Alba, piacere."
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("wrong", "check", "note", "gender"),
+    [
+        ("Ciao! Mi chiamo Luca. Come stai?", "V6", "Ti chiami Alba.", "non_indicato"),
+        ("Ciao! Ho 41 anni. Tu invece?", "V10", "Hai 30 anni.", "non_indicato"),
+        ("Ciao! Sono stanco morto. E tu?", "V11", "Parli di te al femminile.", "femminile"),
+    ],
+)
+async def test_a_corrected_check_stops_the_stream_and_regenerates_once_with_its_note_in_the_anchor(
+    migrated: Engine, wrong: str, check: str, note: str, gender: str
+) -> None:
+    """T-CON-10, first half."""
+    chat = new_chat(migrated)
+    set_gender(migrated, chat, gender)
+    reply = MessageService(migrated).send(chat, "Ciao").reply
+    runtime = FakeRuntime(answers(wrong, DELIVERED))
+    hub = EventHub("boot")
+    _, scheduler = worker_for(migrated, runtime, hub, flush_interval_s=0.0)
+    finished = await scheduler.run_once()
+    assert finished is not None
+    assert finished.status is JobStatus.COMPLETED
+
+    # The hit stopped the first generation, and the second one ran with the note in the anchor.
+    first, second = runtime.requests
+    assert runtime.aborted == [finished.genkey]
+    assert first.genkey == second.genkey == finished.genkey
+    assert second.prompt.count(note) == first.prompt.count(note) + 1
+    published = events(hub)
+    kinds = [kind for kind, _ in published]
+    assert kinds.count("message.restarted") == 1
+    restart = kinds.index("message.restarted")
+    assert published[restart][1] == {"message_id": reply.id, "variant_id": reply.active_variant_id, "check": check}
+    # What the first generation showed before its sentence ended is discarded; the second starts again at offset 0.
+    shown = "".join(delta["text"] for delta in deltas_of(published[:restart], reply.id))
+    assert shown
+    assert wrong.startswith(shown)
+    after = deltas_of(published[restart:], reply.id)
+    assert after[0]["offset"] == 0
+    assert "".join(delta["text"] for delta in after) == DELIVERED
+    assert kinds[-2:] == ["typing.stopped", "message.completed"]
+    assert stored(migrated, reply.id) == ("complete", DELIVERED, "complete", DELIVERED)
+    record = {"normalizer": {}, "checks": {}, "restarts": [check], "regenerations": 1}
+    assert checks_of(migrated, reply.id) == record
+
+
+@pytest.mark.anyio
+async def test_a_second_hit_is_delivered_and_recorded(migrated: Engine) -> None:
+    """T-CON-10: the corrective generation is the last one, so its hit reaches the user and the record."""
+    reply = MessageService(migrated).send(new_chat(migrated), "Ciao").reply
+    wrong = "Ciao! Mi chiamo Luca. Come stai?"
+    runtime = FakeRuntime(answers(wrong))
+    hub = EventHub("boot")
+    _, scheduler = worker_for(migrated, runtime, hub, flush_interval_s=0.0)
+    finished = await scheduler.run_once()
+    assert finished is not None
+    assert finished.status is JobStatus.COMPLETED
+
+    assert len(runtime.requests) == 2
+    assert runtime.aborted == [finished.genkey]
+    assert [kind for kind, _ in events(hub)].count("message.restarted") == 1
+    assert stored(migrated, reply.id) == ("complete", wrong, "complete", wrong)
+    record = {"normalizer": {}, "checks": {"V6": 1}, "restarts": ["V6"], "regenerations": 1}
+    assert checks_of(migrated, reply.id) == record
+
+
+NOTE_V8 = "Scrivi solo in italiano."
+NOTE_V9 = "Evita le frasi fatte e i calchi dall'inglese."
+NOTE_V13 = "Dai del tu a Utente, sempre."
+
+
+@pytest.mark.anyio
+async def test_adaptive_notes_start_last_three_replies_and_stay_at_most_two(migrated: Engine) -> None:
+    """T-CON-10, second half: notes started by V9, V8 and V13 hits on three replies in a row."""
+    chat = new_chat(migrated)
+    replies = (
+        "Certamente, ci vediamo domani al porto.",  # V9: an assistant opening.
+        "I really think that we should go to the harbour tomorrow morning.",  # V8: English in an Italian chat.
+        "E Lei come sta oggi?",  # V13: `Lei` from a character set to `tu`.
+        "Va bene, a domani allora.",
+        "Perfetto, porto il pane.",
+        "Ottimo, ci sentiamo.",
+        "Buona serata.",
+    )
+    runtime = FakeRuntime(answers(*replies))
+    _, scheduler = worker_for(migrated, runtime, EventHub("boot"))
+    sent: list[Message] = []
+    for number in range(len(replies)):
+        sent.append(MessageService(migrated).send(chat, f"Messaggio {number}").reply)
+        finished = await scheduler.run_once()
+        assert finished is not None
+        assert finished.status is JobStatus.COMPLETED
+
+    assert [stored(migrated, reply.id)[1] for reply in sent] == list(replies)
+    assert [checks_of(migrated, reply.id)["checks"] for reply in sent[:4]] == [{"V9": 1}, {"V8": 1}, {"V13": 1}, {}]
+    notes = [
+        tuple(note for note in (NOTE_V9, NOTE_V8, NOTE_V13) if note in request.prompt) for request in runtime.requests
+    ]
+    assert notes == [
+        (),
+        (NOTE_V9,),
+        (NOTE_V9, NOTE_V8),
+        # At most two: the V13 note replaces the oldest one.
+        (NOTE_V8, NOTE_V13),
+        (NOTE_V8, NOTE_V13),
+        # Each note lasts the 3 replies after the one that started it.
+        (NOTE_V13,),
+        (),
+    ]
+
+
+@pytest.mark.anyio
+async def test_a_blocked_sentence_ends_the_reply_failed_with_a_notice(migrated: Engine) -> None:
+    """V4: the stream stops at the sentence, and the reply keeps a fixed notice instead of its text."""
+    reply = MessageService(migrated).send(new_chat(migrated), "Ciao").reply
+    runtime = FakeRuntime(lambda _current: "Ti racconto una cosa. Da bambina ha avuto esperienze sessuali. Fine.")
+    hub = EventHub("boot")
+    _, scheduler = worker_for(migrated, runtime, hub, flush_interval_s=0.0)
+    finished = await scheduler.run_once()
+    assert finished is not None
+    assert (finished.status, finished.error_code) == (JobStatus.FAILED, "CONTENT_POLICY_BLOCKED")
+
+    assert len(runtime.requests) == 1
+    assert runtime.aborted == [finished.genkey]
+    notice = "Questa risposta è stata bloccata: accostava minori e contenuti sessuali."
+    assert stored(migrated, reply.id) == ("failed", notice, "failed", notice)
+    assert checks_of(migrated, reply.id) == {"normalizer": {}, "checks": {"V4": 1}, "restarts": [], "regenerations": 0}
+    published = events(hub)
+    assert [kind for kind, _ in published][-4:] == [
+        "message.restarted",
+        "typing.stopped",
+        "message.updated",
+        "message.failed",
+    ]
+    assert published[-4][1]["check"] == "V4"
+    assert published[-2][1]["message"]["content"] == notice
+    assert published[-1][1] == {"message_id": reply.id, "error_code": "CONTENT_POLICY_BLOCKED"}
+
+
+@pytest.mark.anyio
+async def test_an_empty_reply_is_generated_once_more_and_fails_when_empty_again(migrated: Engine) -> None:
+    """V1: a reply that the V3 cut leaves empty is generated again from the same prompt, without a restart event."""
+    chat = new_chat(migrated)
+    first = MessageService(migrated).send(chat, "Ciao").reply
+    runtime = FakeRuntime(answers("Utente: ciao", "Eccomi qui."))
+    hub = EventHub("boot")
+    _, scheduler = worker_for(migrated, runtime, hub, flush_interval_s=0.0)
+    finished = await scheduler.run_once()
+    assert finished is not None
+    assert finished.status is JobStatus.COMPLETED
+    assert runtime.requests[0].prompt == runtime.requests[1].prompt
+    assert stored(migrated, first.id) == ("complete", "Eccomi qui.", "complete", "Eccomi qui.")
+    assert checks_of(migrated, first.id) == {"normalizer": {}, "checks": {}, "restarts": ["V1"], "regenerations": 1}
+    assert "message.restarted" not in [kind for kind, _ in events(hub)]
+
+    second = MessageService(migrated).send(chat, "E allora?").reply
+    runtime.answer = answers("Utente: e tu?")
+    failed = await scheduler.run_once()
+    assert failed is not None
+    assert (failed.status, failed.error_code) == (JobStatus.FAILED, "REPLY_EMPTY")
+    assert stored(migrated, second.id) == ("failed", "", "failed", "")
+    record = {"normalizer": {}, "checks": {"V3": 1}, "restarts": ["V1"], "regenerations": 1}
+    assert checks_of(migrated, second.id) == record
+    assert events(hub)[-1] == ("message.failed", {"message_id": second.id, "error_code": "REPLY_EMPTY"})
 
 
 def start(monkeypatch: pytest.MonkeyPatch, database_path: Path) -> list[FastAPI]:

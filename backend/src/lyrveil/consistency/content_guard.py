@@ -1,9 +1,9 @@
 """ContentGuard (docs/security.md, Content safeguards; ADR 0018): refuses character text that describes a minor.
 
 Deterministic Italian and English lists check every free text of a character card wherever a card enters (create,
-save, proposal, duplicate, restore, import, assisted draft), and the description of a draft request before the
-model runs. The age rule itself, 18 or more, belongs to the card schema and the database CHECK; this module adds the
-text.
+save, proposal, duplicate, restore, import, assisted draft), the description of a draft request before the model
+runs, and each sentence of a streamed reply, where only a minor next to a sexual term is refused (reply check V4). The
+age rule itself, 18 or more, belongs to the card schema and the database CHECK; this module adds the text.
 
 The rules are code. The module reads no setting, no environment variable and no file, and its callers call it
 without a condition, so neither a setting nor a configuration file can turn it off or change it. A unit test,
@@ -311,6 +311,29 @@ def find_violation(text: str) -> GuardRule | None:
         rule = _sentence_rule(sentence)
         if rule is not None:
             return rule
+    return None
+
+
+def find_reply_violation(text: str) -> GuardRule | None:
+    """Returns the rule that the first offending sentence of generated text breaks, or None: check V4 of the reply
+    checks (docs/consistency-engine.md, Blocking; docs/security.md, Content safeguards).
+
+    Generated text may speak of children, as a character's niece or its own past, so only a sentence that also holds a
+    sexual term outside SEXUAL_IDIOMS is refused: with a childhood reference it breaks CHILDHOOD_SEXUAL, with a minor
+    term or a child's costume or act MINOR_TERM, with an age from 0 to 17 stated as an age MINOR_AGE. Sentences,
+    readings and lists are those of `find_violation`. Pure and deterministic.
+    """
+    for sentence in _SENTENCE_END.split(_fold(text)):
+        readings = _readings(sentence)
+        if not any(_SEXUAL.search(_SEXUAL_IDIOMS.sub(" ", reading)) for reading in readings):
+            continue
+        for reading in readings:
+            if _CHILDHOOD.search(reading):
+                return GuardRule.CHILDHOOD_SEXUAL
+            if _COSTUME.search(reading) or _MINOR_TERMS.search(_NOT_MINOR.sub(" ", reading)):
+                return GuardRule.MINOR_TERM
+        if _MINOR_AGE.search(readings[0]) or _APPOSITIVE_AGE.search(_spaced(sentence, _NOT_LIGHT)):
+            return GuardRule.MINOR_AGE
     return None
 
 

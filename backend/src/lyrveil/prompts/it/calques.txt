@@ -1,0 +1,22 @@
+# V9 (docs/prompting.md, Calque and artifact list): calques, assistant formulas and stock phrases. Each phrase found is
+# one hit. Matching ignores case and accents and needs whole words. A phrase after "^" counts only at the start of the
+# reply. A phrase after "+" counts only when one of the character's last 10 replies holds it too, so its first use in
+# a conversation passes. The character-break phrases ("in quanto AI") are V5's, in model_talk.txt.
+[phrases]
+^certamente
+^assolutamente
+^ovviamente
+come posso aiutarti
+come posso esserti utile
+in cosa posso aiutarti
+spero che questo aiuti
+spero che questo ti aiuti
+non esitare a
+è importante notare
+questo fa senso
+non fa senso
+fa senso che
+fa molto senso
+fa più senso
+ho realizzato che
++sono qui per te

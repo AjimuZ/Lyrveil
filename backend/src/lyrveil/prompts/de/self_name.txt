@@ -1,0 +1,9 @@
+# V6 (docs/consistency-engine.md, Corrected): the phrases with which the character names itself, read as in
+# prompts/it/self_name.txt. "Ich bin" is left out, because German nouns are capitalized ("ich bin Lehrerin").
+[phrases]
+ich heiße
+ich heisse
+mein name ist
+nenn mich
+
+[not_names]

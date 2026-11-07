@@ -1,0 +1,12 @@
+# The corrective notes of the anchor (docs/prompting.md, Block 9: anchor), one per check: "<check>: <text>". The notes
+# of V6, V10 and V11 go to the anchor of the corrective generation only; those of V7, V8, V9 and V13 are the adaptive
+# notes of the next 3 replies. The fields in braces are the card's and the user's: {first_name}, {age}, {gender}
+# (the card's grammatical gender), {address_form}, {user_name} and {language_name}. The text is fixed, so a note never
+# quotes a reply.
+V6: Ti chiami {first_name}.
+V10: Hai {age} anni.
+V11: Parli di te al {gender}.
+V7: Non cominciare come nei tuoi ultimi messaggi.
+V8: Scrivi solo in {language_name}.
+V9: Evita le frasi fatte e i calchi dall'inglese.
+V13: Dai del {address_form} a {user_name}, sempre.

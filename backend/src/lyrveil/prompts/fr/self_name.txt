@@ -1,0 +1,8 @@
+# V6 (docs/consistency-engine.md, Corrected): the phrases with which the character names itself, read as in
+# prompts/it/self_name.txt. "Je suis" is left out, because it also comes before capitalized places and titles.
+[phrases]
+je m'appelle
+mon nom est
+appelle-moi
+
+[not_names]

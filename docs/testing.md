@@ -510,6 +510,28 @@ reach a delta or the database, whose N4 cut reaches `message.completed`, and who
 tests/unit/test_reply_normalizer.py` (41 passed), the same command with `tests/integration/test_reply_streaming.py`
 (7 passed), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
 
+Delivered in P04.8b: `backend/tests/unit/test_reply_checks.py` holds T-CON-08 on fixed texts. V2 and V3 are tested
+through the cut of each template family: control text, a frame marker, the user's turn, and a reply that opens with it,
+which leaves the empty text of V1. Each is tested in one piece and split at every chunk size. V4 blocks a minor next to
+a sexual term, quoted or not, and lets a child alone pass. V5 passes when the user asked. V6 covers its negation, the
+character's own names, `Lei` and a quoted name. V7 covers the first three words, a near copy and the 10-reply window.
+V8 covers English in an Italian chat, the reverse and a short reply. V9 covers the opening and repetition rules and `mi
+fa senso`. V10 covers digits and Italian words, durations, a quotation and English. V11 skips quotations, also across
+sentences, with typographic quotes and with an unpaired quote. It also skips `solo` as an adverb, plurals, invariable
+adjectives, `non_indicato` and other languages. V12 and V13 run on both address forms, with `tè`. The same file covers
+the sentence splitter at every chunk size, the first stop, the rules read from a card, the adaptive-note rules (start,
+3 replies, two at most, V7 twice), the record parser and the note texts. `backend/tests/integration/test_reply_streaming.py`
+holds T-CON-10. A V6, V10 or V11 hit stops the stream (the runtime gets the abort of the job's genkey), publishes
+`message.restarted` with the check, and generates once more with one more copy of the note in the prompt. The new
+deltas start at offset 0, and the variant records the restart. When the corrective generation hits again, its text is
+delivered and its hit recorded. Seven replies in one chat show the V9, V8 and V13 notes starting, lasting 3 replies,
+and the oldest giving way to keep two. The file also covers V4 (the notice, `CONTENT_POLICY_BLOCKED`, the event order)
+and V1 (one retry from the same prompt without a restart event, then `REPLY_EMPTY`). In this change
+`scripts/lyrveil.cmd test unit tests/unit/test_reply_checks.py` (63 passed), the same command with
+`tests/integration/test_reply_streaming.py` (14 passed, the 7 earlier tests included, one with the new `checks_json`
+shape), the same two with the content guard, prompt formatter, normalizer, context builder, state and import-rule files
+(266 passed), and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Messaging
 
 | ID | Test | Level | Phase |

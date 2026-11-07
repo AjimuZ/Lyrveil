@@ -1,0 +1,29 @@
+# V5 (docs/consistency-engine.md, Recorded): the character talks about being a model or about prompts, read as in
+# prompts/it/model_talk.txt.
+[talk]
+as an ai
+i am an ai
+i'm an ai
+language model
+artificial intelligence
+ai assistant
+virtual assistant
+chatbot
+system prompt
+my prompt
+my instructions
+my programming
+i was programmed
+
+[asked]
+ai
+bot
+robot
+model
+prompt
+instructions
+programmed
+are you real
+are you human
+are you a person
+real person

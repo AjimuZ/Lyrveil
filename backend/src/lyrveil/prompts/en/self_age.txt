@@ -1,0 +1,13 @@
+# V10 (docs/consistency-engine.md, Corrected): the phrases with which the character states its age, read as in
+# prompts/it/self_age.txt. Ages are in digits.
+[phrases]
+i'm {n} years old
+i am {n} years old
+i'm {n}{end}
+i am {n}{end}
+i just turned {n}
+
+[not_before]
+ago
+more
+less

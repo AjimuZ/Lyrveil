@@ -1,0 +1,30 @@
+# V13 (docs/consistency-engine.md, Recorded): forms of each Italian address form. A reply of a character set to `tu`
+# is checked against [lei], one set to `lei` against [tu]; each form found is one hit. An entry that starts with a
+# capital letter counts only as written and inside a sentence, after a word or a comma, because "Lei" at the start of
+# a sentence may be "she". Other entries ignore case and need whole words; accents count, so "tè" is not "te". Text
+# inside quotation marks is skipped. "La" and "Le" are left out: a place such as "La Spezia" would count.
+[lei]
+Lei
+Suo
+Sua
+Suoi
+Sue
+mi scusi
+mi dica
+si accomodi
+si figuri
+si sieda
+non si preoccupi
+
+[tu]
+tu
+ti
+te
+tuo
+tua
+tuoi
+tue
+dimmi
+scusami
+figurati
+accomodati

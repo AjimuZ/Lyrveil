@@ -233,6 +233,21 @@ def prompt_messages(connection: Connection, conversation_id: str, before_seq: in
     return [_message(row) for row in reversed(rows)]
 
 
+def reply_checks(connection: Connection, conversation_id: str, before_seq: int, limit: int) -> list[str | None]:
+    """Returns the `checks_json` of the active variants of up to `limit` of the newest character replies below
+    `before_seq` that a prompt may read (as `prompt_messages` selects them), oldest first. None stands for a reply whose
+    variant recorded no checks, such as one written before the reply checks existed."""
+    rows = connection.execute(
+        text(
+            "SELECT v.checks_json FROM messages AS m LEFT JOIN message_variants AS v ON v.id = m.active_variant_id "
+            "WHERE m.conversation_id = :id AND m.deleted_at IS NULL AND m.seq < :before_seq AND m.author = 'character' "
+            "AND m.content != '' AND m.status IN ('complete', 'interrupted') ORDER BY m.seq DESC LIMIT :limit"
+        ),
+        {"id": conversation_id, "before_seq": before_seq, "limit": limit},
+    ).all()
+    return [row[0] for row in reversed(rows)]
+
+
 def streaming_messages(connection: Connection) -> list[Message]:
     """Returns every message whose status is `streaming`, in id order."""
     rows = connection.execute(text(f"{_MESSAGE_SELECT} WHERE m.status = 'streaming' ORDER BY m.id")).mappings().all()

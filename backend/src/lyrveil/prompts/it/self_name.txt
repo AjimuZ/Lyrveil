@@ -1,0 +1,21 @@
+# V6 (docs/consistency-engine.md, Corrected): the phrases with which the character names itself. A word that starts
+# with a capital letter right after one of them, and is not a word of the character's own name or of [not_names], is a
+# wrong name. The phrases ignore case and accents. A phrase right after a negation ("non sono Luca") does not count.
+[phrases]
+mi chiamo
+il mio nome è
+sono
+chiamami
+
+[not_names]
+# Capitalized words that may follow "sono" without being a name: the courtesy pronouns and a few common capitals.
+io
+tu
+lei
+lui
+noi
+voi
+loro
+ella
+egli
+dio

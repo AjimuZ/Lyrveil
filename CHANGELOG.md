@@ -10,6 +10,16 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Replies are now checked as they stream. If the character gives itself another name, states another age, or speaks
+  of itself in the wrong grammatical gender (Italian), the reply stops, the bubble clears, and the reply is written
+  once more with a reminder in its prompt; if the second reply makes the same mistake, it is kept. Text the model
+  writes past its turn, such as template control text or a line for the user, is cut off. An empty reply is retried
+  once and otherwise fails with a retry offered. A sentence that puts a minor next to sexual content stops the reply,
+  which is replaced by a notice and marked failed. Other slips are recorded without stopping the reply: talking about
+  being an AI unprompted, repeating how recent replies opened, the wrong language, stock phrases and calques (Italian),
+  the user's gender (Italian) and the wrong address form (Italian). A wrong language, a stock phrase or the wrong
+  address form, or two repeated openings in a row, add a short reminder to the next 3 replies, at most two reminders
+  at a time. Each reply records the checks that fired and how many times it was rewritten.
 - Replies now look the same whatever model wrote them. Before a reply is shown or saved, a leading speaker label
   ("Nerea:") and quotes around the whole reply are removed; Markdown headings, rules, tables and code fences become
   plain text and bold loses its asterisks; narration between asterisks follows the character's narration setting (none,
@@ -17,7 +27,7 @@ No application exists yet. This section records the design documentation.
   extra blank lines and spaces are tidied. A reply cut by the length limit ends on its last full sentence, or with
   "…" when that would drop more than half of it; the words after the cut can show for a moment while the reply
   streams. A reply can start appearing a little later, up to 40 characters, when it opens with something that may be
-  a label or a quote. Not yet: the reply checks and the corrective regeneration.
+  a label or a quote.
 - Editing, deleting or regenerating a message now updates what the character remembers from it. In the same save, the
   memories, events, relationship and mood changes and summaries that rested on the old text stop being used: a memory
   that another message also supports stays, with a little less confidence, and a memory you locked is never changed,

@@ -1,0 +1,10 @@
+# V6 (docs/consistency-engine.md, Corrected): the phrases with which the character names itself, read as in
+# prompts/it/self_name.txt. "I'm" and "I am" are left out, because "I'm Italian" starts a capitalized word too.
+[phrases]
+my name is
+my name's
+the name's
+call me
+
+[not_names]
+i

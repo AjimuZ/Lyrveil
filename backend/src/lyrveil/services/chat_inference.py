@@ -8,12 +8,14 @@ while the reply streams. After a crash the reply keeps what was written: `recove
 `interrupted` at the next start.
 
 The prompt is built by lyrveil.context.builder.ContextBuilder (docs/memory-engine.md, Context composition) in the
-family of `ReplySettings.template`, with the runtime's own token counts, the character's length band as `max_length`
-and the conversation's memories and summaries. Every token passes through the card's ReplyNormalizer
-(lyrveil.consistency.normalizer) in `_stream`, and only the text it releases is published and stored, so the client,
-the database and later prompts all see the normalized reply. The reply checks and the corrective generation, and with
-them `message.restarted` and the anchor's corrective notes, come in P04.8b. No message text, prompt or token is ever
-logged: the assembly is logged as counts.
+family of `ReplySettings.template`, with the runtime's own token counts, the character's length band as `max_length`,
+the conversation's memories and summaries, and the adaptive notes that the checks of the last replies started. Every
+token passes through the V2 and V3 cut and the card's ReplyNormalizer (lyrveil.consistency.normalizer) in `_stream`,
+and only the text the normalizer releases is published and stored, so the client, the database and later prompts all
+see the normalized reply. Each released sentence is checked (lyrveil.consistency.checks): a V4 hit ends the reply
+`failed` with a notice, and a V6, V10 or V11 hit stops the first generation, publishes `message.restarted` and
+generates once more with the matching note in the anchor; an empty reply (V1) is generated once more too. No message
+text, prompt or token is ever logged: the assembly is logged as counts, and the checks by their ids.
 
 After a finished reply is stored and announced, the use of its memories is recorded and the memory extraction trigger
 runs (lyrveil.services.memory_extraction.queue_extraction_if_due), each in its own transaction, so a failure there
@@ -24,7 +26,7 @@ never undoes the reply. A regenerated reply that extraction had already passed a
 import json
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 import anyio
@@ -32,8 +34,22 @@ from anyio import to_thread
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
+from lyrveil.consistency.checks import (
+    BLOCKING,
+    NOTE_REPLIES,
+    PREVIOUS_REPLIES,
+    STOPPING,
+    CheckRules,
+    SentenceSplitter,
+    TurnCutoff,
+    active_notes,
+    check_reply,
+    first_stop,
+    note_text,
+    recorded_checks,
+)
 from lyrveil.consistency.normalizer import NormalizedReply, NormalizerRules, ReplyNormalizer
-from lyrveil.context.blocks import state_lines
+from lyrveil.context.blocks import MAX_NOTES, state_lines
 from lyrveil.context.builder import (
     Assembly,
     ContextBuilder,
@@ -45,7 +61,16 @@ from lyrveil.context.builder import (
 )
 from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
-from lyrveil.domain.messages import PENDING, Message, MessageStatus, VariantStatus, content_hash, message_document
+from lyrveil.domain.errors import ContentPolicyBlockedError
+from lyrveil.domain.messages import (
+    PENDING,
+    Author,
+    Message,
+    MessageStatus,
+    VariantStatus,
+    content_hash,
+    message_document,
+)
 from lyrveil.jobs.handlers import (
     INTERNAL,
     LEASE_LOST,
@@ -70,6 +95,7 @@ from lyrveil.ports.events import (
     MESSAGE_COMPLETED,
     MESSAGE_DELTA,
     MESSAGE_FAILED,
+    MESSAGE_RESTARTED,
     MESSAGE_UPDATED,
     TYPING_STARTED,
     TYPING_STOPPED,
@@ -82,7 +108,7 @@ from lyrveil.ports.text_runtime import (
     TextRuntime,
     TextRuntimeError,
 )
-from lyrveil.prompts.formatter import formatter_for
+from lyrveil.prompts.formatter import PromptFormatter, formatter_for
 from lyrveil.services.memory_extraction import queue_extraction_if_due, queue_reevaluation
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
@@ -92,6 +118,11 @@ FLUSH_INTERVAL_S = 2.0
 # The newest messages a prompt reads before the token budget trims them; the summaries cover what lies before.
 MAX_HISTORY_MESSAGES = 100
 _NOTHING_TO_ANSWER = "Non c'è un messaggio a cui rispondere."
+# The job error of a reply that came out empty (V1) twice, and of one that V4 blocked.
+REPLY_EMPTY = "REPLY_EMPTY"
+CONTENT_POLICY_BLOCKED = ContentPolicyBlockedError.code
+# What a reply that V4 blocked keeps instead of its text: fixed, so it never quotes the reply.
+BLOCKED_NOTICE = "Questa risposta è stata bloccata: accostava minori e contenuti sessuali."
 
 logger = get_logger(__name__)
 
@@ -138,14 +169,57 @@ class _Reply:
 
 @dataclass(frozen=True)
 class _Generated:
-    """A finished generation: its normalized text, the size of its prompt, the memories and episodes its block 5
-    held, and the normalizer's part of `checks_json`."""
+    """A finished reply: its normalized text, the size of its last prompt, the memories and episodes its block 5
+    held, and its `checks_json` (`_checks_record`)."""
 
     text: str
     status: MessageStatus
     prompt_tokens: int
     memory_ids: tuple[str, ...]
     checks: Mapping[str, object]
+
+
+@dataclass
+class _Pipeline:
+    """What stands between the runtime and the client during one generation: the V2 and V3 cut, the card's
+    normalizer, and the sentence splitter of the streaming checks."""
+
+    cutoff: TurnCutoff
+    normalizer: ReplyNormalizer
+    sentences: SentenceSplitter
+
+
+@dataclass(frozen=True)
+class _Pass:
+    """One generation streamed: `stopped` names the check that discarded it, and then `normalized` is None; otherwise
+    `normalized` is the delivered text and `finish` how the generation ended."""
+
+    normalized: NormalizedReply | None
+    finish: FinishReason
+    stopped: str | None = None
+
+
+class _CheckFailedError(JobFailedError):
+    """A reply check ended the run for good: `check` is V1 (empty twice) or V4 (blocked). `text` is what the reply
+    keeps, "" or BLOCKED_NOTICE, and `checks` its `checks_json`. Never retried by the scheduler."""
+
+    def __init__(self, code: str, check: str, text: str, checks: Mapping[str, object]) -> None:
+        super().__init__(code, retryable=False)
+        self.check = check
+        self.text = text
+        self.checks = checks
+
+
+def _checks_record(normalized: Mapping[str, int], checks: Mapping[str, int], restarts: list[str]) -> dict[str, object]:
+    """Returns a variant's `checks_json`: the normalizer's counts, the counts of the reply checks that fired on the
+    delivered text (V2 and V3 included), the check that discarded each earlier generation, oldest first, and their
+    number."""
+    return {
+        "normalizer": dict(normalized),
+        "checks": dict(checks),
+        "restarts": list(restarts),
+        "regenerations": len(restarts),
+    }
 
 
 def _presence(reply: _Reply) -> dict[str, str]:
@@ -197,12 +271,13 @@ def load_context_request(
     previous_memory_ids: frozenset[str] = frozenset(),
 ) -> ContextRequest | None:
     """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
-    readable messages before it, the scenario copy the chat started with, the chat's active checkpoints and its state
-    as block 4 (empty until a run has written one).
+    readable messages before it, the scenario copy the chat started with, the chat's active checkpoints, its state
+    as block 4 (empty until a run has written one), and as `notes` the adaptive notes that the checks recorded on its
+    last replies started (lyrveil.consistency.checks.active_notes).
 
     Everything is keyed by this conversation, so another chat of the same character adds nothing; memories are read
-    later by the builder, under the same scope. Returns None when no user message has text. The conversation must
-    exist.
+    later by the builder, under the same scope. The notes read only replies before `before_seq`, so a regenerated reply
+    gets the notes its first variant had. Returns None when no user message has text. The conversation must exist.
     """
     conversation = conversation_repository.get(connection, conversation_id)
     assert conversation is not None
@@ -214,12 +289,17 @@ def load_context_request(
     history, current = split
     stored_state = state_repository.load_state(connection, conversation_id)
     state = StateText() if stored_state is None else StateText(*state_lines(stored_state.state, user))
+    language = conversation.effective_language
+    # The newest NOTE_REPLIES replies start notes, and the one before them tells whether a V7 hit was the second.
+    recent = repository.reply_checks(connection, conversation_id, before_seq, NOTE_REPLIES + 1)
+    started = active_notes([recorded_checks(checks) for checks in recent])
+    notes = tuple(note_text(check, stored.card, user, language) for check in started)
     return ContextRequest(
         character_id=conversation.character_id,
         conversation_id=conversation_id,
         card=stored.card,
         user=user,
-        language=conversation.effective_language,
+        language=language,
         shares_memory=conversation.shares_memory,
         history=history,
         current=current,
@@ -230,6 +310,7 @@ def load_context_request(
         now=now,
         scenario=scenario_repository.snapshot_of(connection, conversation_id),
         state=state,
+        notes=notes,
         previous_memory_ids=previous_memory_ids,
     )
 
@@ -275,15 +356,21 @@ class ChatInferenceService:
     for its next one, so a restart only loses that small bonus. The state a run leaves, besides the job's own:
 
     - finished: variant and message `complete` with the whole normalized text and the variant's `checks_json`
-      holding the normalizer's counts, or `interrupted` when the runtime reports the generation aborted; then
+      (`_checks_record`), or `interrupted` when the runtime reports that someone else aborted the generation; then
       `message.completed`, then the use of its memories, then a
       `memory_extraction` job when the chat is due and a `summary_checkpoint` job when a summary is due;
     - failed with a retry coming (a retryable failure with attempts left, a lost lease, a preemption):
       message back to `queued` with empty text, so the next run starts clean; then `message.updated`;
     - failed for good: variant and message `failed` with the text released so far; then `message.failed`;
+    - blocked by V4: `message.restarted`, then variant and message `failed` with BLOCKED_NOTICE and their
+      `checks_json`, then `message.updated` and `message.failed` with CONTENT_POLICY_BLOCKED; empty twice (V1): the
+      same with empty text, no `message.restarted` and REPLY_EMPTY;
     - cancelled by the shutdown (`close`): the released text flushed, the reply left `streaming` for the next start.
 
-    Text the normalizer still held back when a run failed or was cancelled is dropped with it.
+    One run makes at most three generations: the first, one corrective generation after a V6, V10 or V11 hit, and one
+    more after an empty reply. Each discarded generation that had shown text is announced with `message.restarted` and
+    its text is cleared from the database before the next one starts. Text the normalizer still held back when a run
+    failed or was cancelled is dropped with it.
     """
 
     def __init__(
@@ -424,20 +511,77 @@ class ChatInferenceService:
         return write(self._engine, work)
 
     async def _generate(self, job: Job, reply: _Reply, context: RunContext, streamed: list[str]) -> _Generated:
-        """Builds the prompt, then streams the reply through the card's normalizer (`_stream`). `streamed` collects
-        the released text, so a failure handler sees what was already shown."""
+        """Builds the prompt and streams generations (`_stream`) until one is delivered, under the reply checks.
+
+        A V6, V10 or V11 hit in the first generation discards it (`_restart`), and the prompt is built again with the
+        check's note first in the anchor, then the adaptive notes, MAX_NOTES at most. Only V4 stops that corrective
+        generation, so a second hit is delivered and recorded. An empty reply (V1) is generated once more from the same
+        prompt. Raises _CheckFailedError REPLY_EMPTY for a second empty reply and CONTENT_POLICY_BLOCKED for a V4 hit.
+        `streamed` collects the text the current generation released, so a failure handler sees what is shown.
+        """
         wanted = await to_thread.run_sync(self._load_context, reply)
         if wanted is None:
             raise JobFailedError(INTERNAL, _NOTHING_TO_ANSWER, retryable=False)
-        settings = self._settings
-        formatter = formatter_for(settings.template)
-        assembly = await self._builder.build(wanted, formatter, settings.max_length)
+        formatter = formatter_for(self._settings.template)
+        rules = CheckRules.for_chat(wanted.card, wanted.user, wanted.language)
+        previous = [message.content for message in wanted.history if message.author is Author.CHARACTER]
+        restarts: list[str] = []
+        corrected = False
+        assembly = await self._assemble(job, reply, wanted, formatter)
+        request = self._request(assembly, formatter, context.genkey)
+        while True:
+            pipeline = _Pipeline(
+                TurnCutoff(formatter.control_texts(), wanted.user.display_name),
+                ReplyNormalizer(NormalizerRules.for_card(wanted.card)),
+                SentenceSplitter(),
+            )
+            done = await self._stream(reply, request, pipeline, rules, BLOCKING if corrected else STOPPING, streamed)
+            stopped = done.stopped
+            if stopped is not None and stopped in BLOCKING:
+                record = _checks_record({}, {stopped: 1}, restarts)
+                raise _CheckFailedError(CONTENT_POLICY_BLOCKED, stopped, BLOCKED_NOTICE, record)
+            if stopped is not None:
+                restarts.append(stopped)
+                corrected = True
+                await self._restart(job, reply, stopped, streamed)
+                notes = (note_text(stopped, wanted.card, wanted.user, wanted.language), *wanted.notes)
+                assembly = await self._assemble(job, reply, replace(wanted, notes=notes[:MAX_NOTES]), formatter)
+                request = self._request(assembly, formatter, context.genkey)
+                continue
+            normalized = done.normalized
+            assert normalized is not None
+            cut_check = pipeline.cutoff.cut
+            cut: dict[str, int] = {} if cut_check is None else {cut_check: 1}
+            if not normalized.text.strip():
+                if "V1" in restarts:
+                    raise _CheckFailedError(REPLY_EMPTY, "V1", "", _checks_record(normalized.fired, cut, restarts))
+                restarts.append("V1")
+                await self._restart(job, reply, "V1", streamed)
+                continue
+            found = check_reply(
+                normalized.text, rules, previous=previous[-PREVIOUS_REPLIES:], user_message=wanted.current.content
+            )
+            checks = dict(sorted({**found, **cut}.items(), key=lambda item: int(item[0][1:])))
+            status = MessageStatus.INTERRUPTED if done.finish == "aborted" else MessageStatus.COMPLETE
+            memory_ids = tuple(item.id for item in assembly.memories)
+            record = _checks_record(normalized.fired, checks, restarts)
+            return _Generated(normalized.text, status, assembly.token_total, memory_ids, record)
+
+    async def _assemble(self, job: Job, reply: _Reply, wanted: ContextRequest, formatter: PromptFormatter) -> Assembly:
+        """Builds the prompt of `wanted` and logs its counts."""
+        assembly = await self._builder.build(wanted, formatter, self._settings.max_length)
         _log_assembly(job.id, reply.conversation_id, assembly)
-        request = TextRequest(
+        return assembly
+
+    def _request(self, assembly: Assembly, formatter: PromptFormatter, genkey: str) -> TextRequest:
+        """Returns the runtime request of a built prompt, with the reply settings' samplers and the family's stop
+        sequences."""
+        settings = self._settings
+        return TextRequest(
             prompt=assembly.prompt.text,
             max_context_length=assembly.context_limit,
             max_length=assembly.max_length,
-            genkey=context.genkey,
+            genkey=genkey,
             temperature=settings.temperature,
             top_p=settings.top_p,
             top_k=settings.top_k,
@@ -450,40 +594,76 @@ class ChatInferenceService:
             dry_sequence_breakers=settings.dry_sequence_breakers,
             stop_sequence=formatter.stop_sequences(settings.user.display_name),
         )
-        normalizer = ReplyNormalizer(NormalizerRules.for_card(wanted.card))
-        normalized, finish = await self._stream(reply, request, normalizer, streamed)
-        status = MessageStatus.INTERRUPTED if finish == "aborted" else MessageStatus.COMPLETE
-        memory_ids = tuple(item.id for item in assembly.memories)
-        return _Generated(normalized.text, status, assembly.token_total, memory_ids, normalized.checks())
 
     async def _stream(
-        self, reply: _Reply, request: TextRequest, normalizer: ReplyNormalizer, streamed: list[str]
-    ) -> tuple[NormalizedReply, FinishReason]:
+        self,
+        reply: _Reply,
+        request: TextRequest,
+        pipeline: _Pipeline,
+        rules: CheckRules,
+        stop_on: frozenset[str],
+        streamed: list[str],
+    ) -> _Pass:
         """Streams one generation of `request` into the reply: the path every generated reply text takes.
 
-        Each runtime token goes through `normalizer`; the text it releases is appended to `streamed`, published as a
-        `message.delta` and flushed to the database every `flush_interval_s` seconds, so nothing the normalizer
-        holds back or removes is ever shown or stored. At the end the held text is published too, and the returned
-        reply holds the delivered text and the finish reason. When N4 cuts a reply that the length limit stopped, no
-        delta can take back text already shown: `message.completed` carries the delivered text, which replaces it.
-        Raises RuntimeStreamDroppedError when the stream ends without its final chunk, or what the runtime raises.
+        Each runtime token goes through the pipeline's cut (V2, V3) and normalizer. The sentences the released text
+        completes are checked first; then the text is appended to `streamed`, published as a `message.delta` and
+        flushed to the database every `flush_interval_s` seconds, so nothing the normalizer holds back or removes is
+        ever shown or stored. A sentence that breaks a check of `stop_on` stops the generation: the text that
+        completed it is not published, the runtime is asked to abort, the rest of the stream is read and dropped, and
+        the pass names the check. A cut aborts the runtime too, and the reply ends at the cut with the finish reason
+        `stop`. At the end the held text is checked and published as well, and the pass holds the delivered text and
+        the finish reason. When N4 cuts a reply that the length limit stopped, no delta can take back text already
+        shown: `message.completed` carries the delivered text, which replaces it. Raises RuntimeStreamDroppedError
+        when the stream ends without its final chunk, or what the runtime raises.
         """
         offset = 0
         finish: FinishReason | None = None
+        stopped: str | None = None
+        ended = False  # This run asked the runtime to abort: the rest of the stream is dropped.
         last_flush = self._monotonic()
         async for chunk in self._runtime.stream(request):
             if chunk.final:
                 finish = chunk.finish_reason
                 continue
-            offset = self._publish(reply, normalizer.feed(chunk.token), offset, streamed)
-            if self._monotonic() - last_flush >= self._flush_interval_s:
+            if ended:
+                continue
+            released = pipeline.normalizer.feed(pipeline.cutoff.feed(chunk.token))
+            stopped = first_stop(pipeline.sentences.feed(released), rules, stop_on)
+            if stopped is None:
+                offset = self._publish(reply, released, offset, streamed)
+            if stopped is not None or pipeline.cutoff.cut is not None:
+                ended = True
+                await self._runtime.abort(request.genkey)
+            elif self._monotonic() - last_flush >= self._flush_interval_s:
                 await to_thread.run_sync(self._flush, reply, "".join(streamed))
                 last_flush = self._monotonic()
         if finish is None:
             raise RuntimeStreamDroppedError("the stream ended without its final chunk")
-        normalized = normalizer.finish(finish)
-        self._publish(reply, normalized.tail, offset, streamed)
-        return normalized, finish
+        if stopped is not None:
+            return _Pass(None, finish, stopped)
+        if pipeline.cutoff.cut is not None:
+            finish = "stop"
+        held = pipeline.normalizer.feed(pipeline.cutoff.finish())
+        normalized = pipeline.normalizer.finish(finish)
+        last = held + normalized.tail
+        stopped = first_stop([*pipeline.sentences.feed(last), *pipeline.sentences.finish()], rules, stop_on)
+        if stopped is not None:
+            return _Pass(None, finish, stopped)
+        self._publish(reply, last, offset, streamed)
+        return _Pass(normalized, finish)
+
+    async def _restart(self, job: Job, reply: _Reply, check: str, streamed: list[str]) -> None:
+        """Discards the generation that `check` stopped before the next one starts: the stored text is cleared and
+        `message.restarted` is published, so the client drops the bubble's text and the next deltas start again at
+        offset 0. An empty reply (V1) shows no text, so its retry publishes nothing."""
+        logger.info("reply_restarted", job_id=job.id, conversation_id=reply.conversation_id, check=check)
+        if check == "V1" and not streamed:
+            return
+        streamed.clear()
+        await to_thread.run_sync(self._flush, reply, "")
+        restarted = {"message_id": reply.message_id, "variant_id": reply.variant_id, "check": check}
+        self._events.publish(MESSAGE_RESTARTED, restarted)
 
     def _publish(self, reply: _Reply, text: str, offset: int, streamed: list[str]) -> int:
         """Publishes `text` as the reply's next `message.delta` at `offset` and appends it to `streamed`, unless it
@@ -540,12 +720,37 @@ class ChatInferenceService:
         await self._settle(job, reply, text, LEASE_LOST, retry=job.attempt < job.max_attempts)
 
     async def _failed(self, job: Job, reply: _Reply, text: str, error: Exception) -> None:
+        if isinstance(error, _CheckFailedError):
+            await self._check_failed(job, reply, error)
+            return
         if isinstance(error, JobPreemptedError):
             # Preemption costs no attempt: the job always runs again.
             await self._settle(job, reply, text, LEASE_LOST, retry=True)
             return
         code, retryable = _failure(error)
         await self._settle(job, reply, text, code, retry=retryable and job.attempt < job.max_attempts)
+
+    async def _check_failed(self, job: Job, reply: _Reply, error: _CheckFailedError) -> None:
+        """Stores the end of a run that a reply check failed: variant and message `failed` with the error's text and
+        `checks_json`. Then publishes `message.restarted` for V4, so the client drops the words it streamed,
+        `typing.stopped`, `message.updated` with the stored message, so the client shows the notice, and
+        `message.failed`."""
+        message = await to_thread.run_sync(
+            self._write, reply, error.text, MessageStatus.FAILED, VariantStatus.FAILED, error.checks
+        )
+        if error.check in BLOCKING:
+            restarted = {"message_id": reply.message_id, "variant_id": reply.variant_id, "check": error.check}
+            self._events.publish(MESSAGE_RESTARTED, restarted)
+        self._events.publish(TYPING_STOPPED, _presence(reply))
+        self._events.publish(MESSAGE_UPDATED, {"message": message_document(message)})
+        self._events.publish(MESSAGE_FAILED, {"message_id": reply.message_id, "error_code": error.code})
+        logger.info(
+            "reply_failed",
+            job_id=job.id,
+            conversation_id=reply.conversation_id,
+            error_code=error.code,
+            check=error.check,
+        )
 
     async def _settle(self, job: Job, reply: _Reply, text: str, code: str, *, retry: bool) -> None:
         """Stores the end of a failed run: back to `queued` with empty text when the scheduler will run it

@@ -58,6 +58,8 @@ Job errors, reported through `job.updated`:
 | `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. |
 | `GENERATION_TIMEOUT`, `GENERATION_STALLED` | Over the total time, or no progress. |
 | `STRUCTURED_OUTPUT_INVALID` | JSON failed validation after all attempts. |
+| `REPLY_EMPTY` | A reply was empty again after its retry (check V1). Not retried; the interface offers regeneration. |
+| `CONTENT_POLICY_BLOCKED` | A safeguard refused generated text: a draft after its repair, or a reply sentence (check V4). Not retried. |
 | `RUNTIME_UNAVAILABLE` | Runtime stopped responding. |
 | `LEASE_LOST` | The lease expired or the orchestrator restarted. |
 | `JOB_CANCELLED` | The user cancelled. |
@@ -457,14 +459,18 @@ Rules of the delivered server, beyond the protocol below:
   resumes from it. `N` is 0 before the first event.
 - A connection that falls more than 2000 events behind loses its queued events and gets one `resync.required` instead,
   so a slow client cannot make the backend's memory grow.
-- Published so far, by the reply job only: `typing.started`, `message.delta`, `typing.stopped`, `message.completed`,
-  `message.failed`, and `message.updated` when a failed run will be retried and the reply goes back to `queued` with
-  empty text. The REST routes, the job states, the GPU state and the rest publish nothing yet.
+- Published so far, by the reply job only: `typing.started`, `message.delta`, `message.restarted`, `typing.stopped`,
+  `message.completed`, `message.failed`, and `message.updated` when a failed run will be retried and the reply goes
+  back to `queued` with empty text, or when a reply check ended it `failed` (its content is then the V4 notice, or
+  empty). The REST routes, the job states, the GPU state and the rest publish nothing yet.
 - `message.delta` `offset` counts UTF-16 code units of the text before the delta, the index unit of JavaScript strings.
   Since P04.8a the deltas are the text the [reply normalizer](consistency-engine.md#reply-normalization) releases, not
   the runtime's tokens: one delta can join several tokens, and a token the normalizer holds back gives no delta. The
   deltas joined are the reply's text, except when N4 cuts a reply that the length limit stopped; the content of
-  `message.completed` is then shorter and replaces the streamed text. `message.restarted` comes with P04.8b.
+  `message.completed` is then shorter and replaces the streamed text.
+- Since P04.8b `message.restarted` comes when a [reply check](consistency-engine.md#delivered-in-p048b) discards the
+  text streamed so far: `check` is `V6`, `V10` or `V11` before the corrective generation, whose deltas start again at
+  offset 0, or `V4` before the reply ends `failed` with a notice.
 
 Server frames:
 
