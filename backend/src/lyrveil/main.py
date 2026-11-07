@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import characters, conversations, events, health, jobs, messages
+from lyrveil.api import assets, characters, conversations, events, health, jobs, media, messages
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
     SecurityHeadersMiddleware,
@@ -28,6 +28,7 @@ from lyrveil.jobs.policy import JobKind, RequiredMode
 from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
+from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
 from lyrveil.orchestration.client import OrchestratorClient
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.persistence.database import (
@@ -54,6 +55,7 @@ EXIT_INVALID_SETTINGS = 78
 # EX_UNAVAILABLE: the database is missing WAL or FTS5, or cannot be opened or migrated.
 EXIT_DATABASE_UNAVAILABLE = 69
 DATABASE_PATH = DEFAULT_DATABASE_PATH
+MEDIA_ROOT = DEFAULT_MEDIA_ROOT
 
 
 def _llm_mode() -> RequiredMode:
@@ -115,12 +117,15 @@ def create_app(
     engine: Engine | None = None,
     control_probe: Callable[[], bool] = probe_control_api,
     worker: Worker | None = None,
+    media_store: MediaStore | None = None,
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
 
     `engine` is the verified and migrated database, kept in `app.state.engine`; without it `/health/ready` answers
-    503. `control_probe` tells whether the control API answers and may be replaced in tests. With `worker` and an
-    `engine`, the application's lifespan runs the job worker; without them queued jobs wait. `app.state.events` is
+    503. `media_store` holds the asset files, in `app.state.media`; by default it is the store at `/data/media`, which
+    is touched only when a route writes or reads a file. `control_probe` tells whether the control API answers and may
+    be replaced in tests. With `worker` and an `engine`, the application's lifespan runs the job worker; without them
+    queued jobs wait. `app.state.events` is
     the EventHub that `/ws` serves. The OpenAPI document is served at /api/v1/openapi.json. The interactive
     documentation pages are disabled, because they load scripts from a CDN and the application works offline.
 
@@ -143,12 +148,15 @@ def create_app(
     app.state.events = EventHub(app.state.boot_id)
     app.state.worker = worker
     app.state.scheduler = None
+    app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(characters.router, prefix=API_PREFIX)
+    app.include_router(assets.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(events.router)
+    app.include_router(media.router)
     headers = documented_headers(settings.http_port)
     app.add_exception_handler(DomainError, domain_error_handler)
     app.add_exception_handler(Exception, internal_error_handler(headers))
@@ -169,8 +177,9 @@ def main() -> int:
     the database, verifies WAL and FTS5, applies the migrations, marks the replies a restart cut `interrupted`
     (recover_interrupted_replies), and requeues or fails the other jobs it interrupted (JobQueue.recover_interrupted);
     if that fails it logs `DB_CAPABILITY_MISSING` or `database_unavailable` and returns 69, so the backend never
-    becomes ready on a database it cannot trust. Otherwise serves on port 8000 with a single worker, which the
-    in-process WebSocket hub and job worker require, until the server stops, and returns 0. The job worker streams
+    becomes ready on a database it cannot trust. Otherwise empties the media staging folder and serves on port 8000
+    with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
+    returns 0. The job worker streams
     replies from KoboldCpp under leases of the control API. The access log is off, because request paths and queries
     can carry user text.
     """
@@ -197,9 +206,16 @@ def main() -> int:
     except (SQLAlchemyError, OSError):
         logger.error("database_unavailable", exc_info=True)
         return EXIT_DATABASE_UNAVAILABLE
+    # Startup step 4 (docs/backend.md): no write is in flight yet, so whatever sits in the staging folder was cut.
+    # A failure here is logged and does not stop the start; the files are only wasted space.
+    media_store = MediaStore(MEDIA_ROOT)
+    try:
+        media_store.clear_staging()
+    except OSError:
+        logger.warning("media_staging_cleanup_failed", exc_info=True)
     worker = Worker(text_runtime=KoboldCppRuntime, leases=OrchestratorClient(settings.control_token))
     uvicorn.run(
-        create_app(settings, engine, worker=worker),
+        create_app(settings, engine, worker=worker, media_store=media_store),
         host=LISTEN_HOST,
         port=LISTEN_PORT,
         log_config=None,

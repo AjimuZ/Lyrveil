@@ -217,6 +217,18 @@ Delivered in P03.3, with these limits and choices:
 Uploads show this note: "Carica solo immagini che hai il diritto di usare. Non usare foto di persone reali senza il loro
 consenso."
 
+Delivered in P03.4a, backend only (`lyrveil.media`, `CharacterAssetService`, revision `0008`): upload, crop, variants,
+thumbnails, primary and delete, with the checks of [Security](security.md#input-validation). An upload keeps its own
+format, re-encoded without metadata; every asset also gets a WebP thumbnail, longest side 512 px. Files are named
+`assets/<character id>/<asset id>.<ext>` and `<asset id>.thumb.webp` below `data/media`, written through
+`data/media/.staging` with an atomic move. The first avatar of a character becomes its primary avatar; another one
+becomes primary only through `POST .../primary`, which clears the previous one in the same transaction and keeps
+`character_visual_profiles.primary_avatar_asset_id` in step. A crop takes a rectangle inside the image, trims a
+non-square one to its centred square, and stores the result as a new asset of the same kind with `crop_json` holding the
+rectangle and `source_asset_id`. Deleting the primary avatar is refused with `409` until another is chosen. Not
+delivered: generation and regeneration (P05), the upload and crop screens and the note above (frontend), and the copy
+of the primary avatar in a duplicate.
+
 Reference images are stored and shown. Version 1.0 workflows do not use them
 ([Image generation](image-generation.md#prepared-extensions)).
 
@@ -229,12 +241,12 @@ Reference images are stored and shown. Version 1.0 workflows do not use them
 | Purge | Preview of counts, confirmation by typing the first name, then a hard delete. See [Deletion policy](data-model.md#deletion-policy). |
 
 Delivered in P03.2b. The copy is named "<first name> (copia)" so the two tell apart in every list, and its history is its
-own: version 1, actor `duplicate`. Avatars do not exist yet, so only the card is copied; the primary avatar joins the copy
-with the assets (P03.3). Archiving hides the character from the active list and its conversations from the main
+own: version 1, actor `duplicate`. Only the card is copied: avatars exist since P03.4a, but copying the primary avatar
+into the duplicate is not delivered yet. Archiving hides the character from the active list and its conversations from the main
 conversation list; unarchiving shows both again. A purge deletes, in one transaction, the jobs that name the character,
 its conversations or their messages, then variants, messages, conversations, traits, visual profile, versions and the
-character, and is refused while one of those jobs runs. Memories, images, assets and files do not exist yet; their
-deletion (files after the commit) is added with them.
+character, and is refused while one of those jobs runs. Since P03.4a it also deletes the asset rows, and removes their
+files after the commit. Memories and images do not exist yet; their deletion is added with them.
 
 ## Exchange format
 

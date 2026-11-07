@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`). The rest is planned, phases P02 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to `character_assets` (P03.4a, revision `0008`), are described in their "Delivered in" notes below. The rest is planned, phases P02 to P07.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).
@@ -630,7 +630,7 @@ filter them out. `memory_fts`, `episode_fts` and `rebuild-search` are not delive
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON
 column, and an empty profile row for each character that already existed. `primary_avatar_asset_id` is a plain column until
-`character_assets` exists. `character_assets` is not delivered. The age bound is `CHECK (age >= 18)` on `characters`
+`character_assets` exists. `character_assets` came with revision `0008`, below. The age bound is `CHECK (age >= 18)` on `characters`
 (revision `0003`); the upper limit of 120 is the card's.
 
 Delivered in P03.1b (revision `0007`): `character_versions` as in [Character tables](#character-tables), with a unique
@@ -638,6 +638,16 @@ Delivered in P03.1b (revision `0007`): `character_versions` as in [Character tab
 refuses any UPDATE. The snapshot is the card as `CharacterCard.model_dump_json` writes it. The migration gives every
 existing character a version 1, actor `user`, built in SQL from its current rows. Each character creation writes version
 1, and each saved change or restore writes version `current_version_no + 1` in the same transaction as the card.
+
+Delivered in P03.4a (revision `0008`): `character_assets` as in [Character tables](#character-tables), with one added
+column, `thumb_path` (TEXT, NOT NULL): the WebP thumbnail every asset has, kept in the row because the media routes look
+paths up and never build them. CHECKs cover the kind, the source, the media type (`image/png`, `image/jpeg`,
+`image/webp`), positive sizes, `json_valid(crop_json)` and `is_primary = 0 OR (kind = 'avatar' AND deleted_at IS
+NULL)`; the partial unique index is `uq_character_assets_primary`, and `ix_character_assets_list` covers `(character_id,
+kind, created_at)`. `generated_image_id` and `character_visual_profiles.primary_avatar_asset_id` stay plain columns:
+`generated_images` does not exist, and adding a key to the profile would need a table rebuild, so the service keeps
+the profile column in step with `is_primary`, which is the source of truth. `crop_json` is
+`{"source_asset_id", "x", "y", "width", "height"}`. `sha256` is the hash of the stored, re-encoded file.
 
 ## Deletion policy
 
@@ -667,9 +677,13 @@ Delivered in P03.2b: archiving and purging a character (`CharacterService.archiv
 leaves out that character's conversations. A purge deletes, in this order, the `generation_jobs` rows whose
 `character_id`, `conversation_id` or `message_id` belongs to the character (those columns are still plain, so the SET NULL
 of the table is replaced by deleting the row), `message_variants`, `messages` (the triggers clear `message_fts`),
-`conversations` (and `conversation_fts`), `character_traits`, `character_visual_profiles`, `character_versions` and
-`characters`. It is refused with a conflict while one of those jobs is `running`. Memories, images and assets do not exist
-yet, so no file is removed. The deletion of a conversation on its own, the 30-day purge and the tombstones are not
+`conversations` (and `conversation_fts`), `character_traits`, `character_assets` (since P03.4a, deleted rows included),
+`character_visual_profiles`, `character_versions` and `characters`. It is refused with a conflict while one of those
+jobs is `running`. The asset paths are checked against the media root inside the transaction and the files are removed
+after the commit. Memories and images do not exist yet.
+
+Delivered in P03.4a: deleting an asset as in the table above (`CharacterAssetService.delete`), refused with a conflict
+for the primary avatar; the row keeps its data with `deleted_at` set. The deletion of a conversation on its own, the 30-day purge and the tombstones are not
 delivered.
 
 ## Migrations

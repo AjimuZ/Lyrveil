@@ -35,7 +35,15 @@ class ValidationFailedError(DomainError):
 
 
 class PayloadTooLargeError(DomainError):
-    """A message is over the size limit (413 `PAYLOAD_TOO_LARGE`)."""
+    """A message or an upload is over its size limit, in bytes or in pixels (413 `PAYLOAD_TOO_LARGE`)."""
 
     code = "PAYLOAD_TOO_LARGE"
     status = 413
+
+
+class UnsupportedMediaError(DomainError):
+    """An upload is not a PNG, JPEG or WebP image that decodes, or its declared type disagrees with its bytes (415
+    `UNSUPPORTED_MEDIA`)."""
+
+    code = "UNSUPPORTED_MEDIA"
+    status = 415

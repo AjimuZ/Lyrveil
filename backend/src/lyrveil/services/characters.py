@@ -18,6 +18,8 @@ from lyrveil.domain.characters import CharacterSummary, PurgeCounts, StoredChara
 from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.jobs.scheduler import read, write
+from lyrveil.media.store import MediaStore
+from lyrveil.persistence import assets as asset_repository
 from lyrveil.persistence import characters as repository
 from lyrveil.services.card_rules import validate_card
 
@@ -45,11 +47,15 @@ def _change_summary(changes: list[FieldChange]) -> str:
 
 
 class CharacterService:
-    """Reads and writes characters of `engine`. `clock` returns the aware current time; tests pass a fake one."""
+    """Reads and writes characters of `engine`. `clock` returns the aware current time; tests pass a fake one. `media`
+    holds the asset files a purge removes; without it a purge leaves them for the orphan cleanup."""
 
-    def __init__(self, engine: Engine, clock: Callable[[], datetime] = _utc_now) -> None:
+    def __init__(
+        self, engine: Engine, clock: Callable[[], datetime] = _utc_now, media: MediaStore | None = None
+    ) -> None:
         self._engine = engine
         self._clock = clock
+        self._media = media
 
     def create(self, raw_card: Mapping[str, Any]) -> CharacterSummary:
         """Returns a new active character at version 1. `raw_card` holds `identity` and, when given, `traits`,
@@ -100,15 +106,18 @@ class CharacterService:
         return found
 
     def purge(self, character_id: str, confirm_name: str) -> None:
-        """Hard-deletes the character with its conversations, messages, versions and card rows in one transaction, once
-        `confirm_name` equals its first name (surrounding spaces ignored, case kept). Nothing is deleted otherwise.
+        """Hard-deletes the character with its conversations, messages, versions, assets and card rows in one
+        transaction, once `confirm_name` equals its first name (surrounding spaces ignored, case kept). Nothing is
+        deleted otherwise.
 
         Raises NotFoundError for an unknown character, ValidationFailedError when the name does not match and
-        ConflictError while a job of the character is running. No file belongs to a character yet; when avatars and
-        images exist their files are removed after the commit (docs/data-model.md, Deletion policy).
+        ConflictError while a job of the character is running. The asset files are removed after the commit
+        (docs/data-model.md, Deletion policy); their paths are checked inside the transaction, so a path outside the
+        media root (MediaPathError) rolls the purge back.
         """
+        media = self._media
 
-        def work(connection: Connection) -> None:
+        def work(connection: Connection) -> list[str]:
             character = repository.get(connection, character_id)
             if character is None:
                 raise NotFoundError(_NO_CHARACTER)
@@ -116,9 +125,17 @@ class CharacterService:
                 raise ValidationFailedError(_NAME_MISMATCH)
             if repository.has_running_job(connection, character_id):
                 raise ConflictError(_JOB_RUNNING)
+            paths = asset_repository.file_paths(connection, character_id)
+            if media is not None:
+                for path in paths:
+                    media.resolve(path)
             repository.purge(connection, character_id)
+            return paths
 
-        write(self._engine, work)
+        paths = write(self._engine, work)
+        if media is not None:
+            for path in paths:
+                media.delete(path)
 
     def _insert_new(self, card: CharacterCard, *, actor: str, summary: str) -> CharacterSummary:
         """Stores `card` as a new active character at version 1 and returns it."""

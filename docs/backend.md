@@ -32,7 +32,7 @@ backend/
     persistence/         SQLAlchemy models, repositories, PersistenceService
     runtimes/            KoboldCppRuntime, ComfyUiRuntime
     orchestration/       OrchestratorClient
-    media/               MediaStore: staging, atomic moves, thumbnails
+    media/               MediaStore: staging, atomic moves, checked paths; Pillow checks, crops, thumbnails
     events/              EventHub: event ids, replay buffer, one bounded queue per WebSocket connection
   tests/
 
@@ -56,6 +56,7 @@ orchestrator/
 | --- | --- | --- |
 | `CharacterService` | `services` | CRUD, versioning, diff, restore, locks, duplicate, import and export. Sole writer of canonical data. |
 | `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. Delivered in P03.3: the drafts, as the `character_draft` handler. |
+| `CharacterAssetService` | `services` | Character assets: upload, crop, list, primary avatar, delete, and the files of the media routes. Delivered in P03.4a, without generated avatars (P05). |
 | `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. |
 | `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; the notification joins with P04.7 and search with P02.5d. |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
@@ -271,8 +272,10 @@ of `main()`, the retry path and T-SEC-06. `tests/unit/test_event_hub.py` covers 
 
 Delivered so far: steps 1 and 2, step 3 without the backup, because the backup service is planned and the
 baseline has no data to protect, step 5 ([Job queue](#job-queue), [Streaming persistence](#streaming-persistence)),
-and step 7 for the WebSocket hub, built with the application, and the job worker, started by its lifespan. Step 4,
-step 6 and the proactive evaluator of step 7 are planned. Until step 6 the worker assumes the `llm` mode: a lease the
+and step 7 for the WebSocket hub, built with the application, and the job worker, started by its lifespan. Step 4
+is delivered for the staging folder only (P03.4a, `MediaStore.clear_staging`, run after step 5; a failure is logged as
+`media_staging_cleanup_failed` and does not stop startup); orphan media cleanup, step 6 and the proactive evaluator of
+step 7 are planned. Until step 6 the worker assumes the `llm` mode: a lease the
 orchestrator refuses (`NOT_READY`) keeps a reply queued. In step 5 the replies are recovered before the other jobs,
 because they end their own jobs. A failure of either recovery stops startup like a migration failure. `main()` stops with exit status 69 and the log event
 `database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with

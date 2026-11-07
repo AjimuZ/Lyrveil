@@ -342,7 +342,8 @@ def has_running_job(connection: Connection, character_id: str) -> bool:
 def purge(connection: Connection, character_id: str) -> None:
     """Hard-deletes the character with everything it owns, children first because every key is RESTRICT: the jobs that
     name it, its message variants, messages and conversations (the search triggers clear their index rows), then its
-    traits, visual profile, versions and the character row. The caller owns the transaction and the confirmation."""
+    traits, asset rows, visual profile, versions and the character row. The caller owns the transaction, the
+    confirmation and the asset files, which it removes after the commit."""
     params = {"id": character_id}
     owned_conversations = "SELECT id FROM conversations WHERE character_id = :id"
     owned_messages = f"SELECT id FROM messages WHERE conversation_id IN ({owned_conversations})"
@@ -353,6 +354,7 @@ def purge(connection: Connection, character_id: str) -> None:
         f"DELETE FROM messages WHERE conversation_id IN ({owned_conversations})",
         "DELETE FROM conversations WHERE character_id = :id",
         "DELETE FROM character_traits WHERE character_id = :id",
+        "DELETE FROM character_assets WHERE character_id = :id",
         "DELETE FROM character_visual_profiles WHERE character_id = :id",
         "DELETE FROM character_versions WHERE character_id = :id",
         "DELETE FROM characters WHERE id = :id",

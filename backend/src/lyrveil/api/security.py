@@ -145,6 +145,7 @@ async def domain_error_handler(_request: Request, error: Exception) -> JSONRespo
         "CONFLICT": "Operazione non consentita",
         "VALIDATION_ERROR": "Dati non validi",
         "PAYLOAD_TOO_LARGE": "Contenuto troppo grande",
+        "UNSUPPORTED_MEDIA": "Formato non supportato",
     }
     return problem_response(error.status, error.code, titles.get(error.code, "Richiesta rifiutata"), error.detail)
 

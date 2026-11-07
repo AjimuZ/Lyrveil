@@ -110,6 +110,8 @@
 - Structured LLM output: Pydantic model → schema_to_gbnf grammar → generate_structured (validate, one repair, then StructuredOutputInvalidError) → JobFailedError(STRUCTURED_OUTPUT_INVALID, detail, retryable=False) in the handler.
 - When a derived schema must mirror another (draft vs card), keep an explicit exclusion list and a unit test that compares the JSON Schema of every remaining field path, so drift fails a test.
 - Routes that queue a job call `lyrveil.api.jobs.wake_worker(request)` after the commit; job details are read with `GET /jobs/{id}`, which never returns the payload.
+- Do not guard tests with pytest.skip for platform features; tests run in the Linux backend container.
+- Write files before their DB row and delete files after the row is gone, so a crash leaves at most an orphan file.
 
 ---
 
@@ -916,4 +918,14 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - A draft over an existing character keeps the stored English identity slots even when the Italian text changes; the visual_profile_translate job (P05) must re-translate unlocked slots after such a save.
   - P03.6 (content guard) must add the description check to CharacterCreatorService.start_draft and the generated card check to its validate callback.
   - The two new Creator specs wait real time (DRAFT_POLL_MS + 50 ms) for the poll; they were not run in this change.
+---
+
+## 2026-11-07T06:08:07Z - P03.4a
+- P03.4a is finished. The MediaStore, the Pillow image checks, uploads, crops, variants and thumbnails, the single primary avatar, the asset and media routes, migration 0008 and the docs all came from attempt 1 and were already in the tree. This attempt fixed the one reported problem: `test_delete_refuses_a_link_that_leads_outside` in `backend/tests/unit/test_media_store.py` caught OSError and called `pytest.skip`. It now creates the symbolic link directly, because the unit tests run in the Linux backend container, where that needs no privilege. Checks I ran: `scripts/lyrveil.cmd test lint` passed (docs, PSScriptAnalyzer, ruff, mypy --strict and the frontend lint and build). `scripts/lyrveil.cmd test unit tests/unit/test_media_store.py` passed 13 of 13 (T-SEC-08), with the link test running. `scripts/lyrveil.cmd test unit tests/integration/test_avatars.py` passed 27 of 27 (T-CHR-11, T-SEC-04, T-SEC-05). I did not run the full unit, integration, e2e or docker suites; the orchestrator runs those. The docs (testing.md, security.md, character-system.md, api.md, backend.md, data-model.md) and the CHANGELOG already describe what was delivered, so I did not change them.
+- Files changed: CHANGELOG.md, backend/pyproject.toml, backend/uv.lock, backend/migrations/versions/0008_character_assets.py, backend/src/lyrveil/api/assets.py, backend/src/lyrveil/api/media.py, backend/src/lyrveil/api/characters.py, backend/src/lyrveil/api/security.py, backend/src/lyrveil/domain/assets.py, backend/src/lyrveil/domain/errors.py, backend/src/lyrveil/main.py, backend/src/lyrveil/media/__init__.py, backend/src/lyrveil/media/images.py, backend/src/lyrveil/media/store.py, backend/src/lyrveil/persistence/assets.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/services/assets.py, backend/src/lyrveil/services/characters.py, backend/tests/integration/test_avatars.py, backend/tests/integration/test_migrations.py, backend/tests/unit/test_media_store.py, docs/api.md, docs/backend.md, docs/character-system.md, docs/data-model.md, docs/security.md, docs/testing.md
+- **Learnings for future iterations:**
+  - Backend tests run in the Linux container, so symbolic links can be created in tests without a skip guard; the orchestrator treats pytest.skip as a disabled test.
+  - MediaStore (lyrveil/media/store.py) takes root-relative paths built from generated ids only; resolve() is the single check, and save() writes via .staging plus os.replace.
+  - images.prepare_upload / images.crop are reusable for P05 generated images: they return EncodedImage with data, a WebP thumbnail and sha256.
+  - Media routes say the image routes arrive with P05; the purge and duplicate behaviour for avatars is partly noted as not delivered in CHANGELOG.
 ---

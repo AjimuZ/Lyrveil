@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. Delivered in P01.7a: the Host and Origin checks of the [local-only model](#local-only-model) on REST and on the `/ws` handshake, tested by T-SEC-01, and the [HTTP headers](#http-headers) from both nginx and the backend, tested by T-SEC-02. The content type rule (point 4) and the rest are planned, across all phases. P09 audits it.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. Delivered in P01.7a: the Host and Origin checks of the [local-only model](#local-only-model) on REST and on the `/ws` handshake, tested by T-SEC-01, and the [HTTP headers](#http-headers) from both nginx and the backend, tested by T-SEC-02. Delivered in P03.4a: the upload row of [Input validation](#input-validation) for character assets (`lyrveil.media.images`, tested by T-SEC-05) and, for those assets, the [File safety](#file-safety) rules on names, lookup by identifier, staging and the checked delete (`lyrveil.media.store`, tested by T-SEC-04 and T-SEC-08); orphan cleanup is not delivered. The content type rule (point 4) and the rest are planned, across all phases. P09 audits it.
 
 Lyrveil is a local, single-user application. It holds intimate text and images and controls Docker. The main threats are a malicious web page in the same browser, careless exposure on the network, a leak into logs or Git, and
 excessive authority in the service that controls containers.
@@ -89,6 +89,17 @@ Error responses are generic. An unexpected exception answers `500` with the code
 - `/media/...` routes take identifiers and look up the path in the database.
 - Every delete resolves the real path and verifies that it sits below `data/media`, at least one level down. A refusal is logged and stops the operation.
 - Orphan cleanup only touches files matching the identifier pattern below `data/media`.
+- Writes go to `data/media/.staging` first and move into place with an atomic rename; startup empties `.staging`. No read,
+  write or delete accepts a path that resolves into `.staging`, to `data/media` itself or to a file directly in it.
+
+Delivered in P03.4a for character assets. An upload is checked in this order: size (over 15 MB is `413
+PAYLOAD_TOO_LARGE`), magic bytes, which must be PNG, JPEG or WebP and agree with the declared type (`415
+UNSUPPORTED_MEDIA` otherwise), then the declared dimensions, refused with `413` before any pixel is decoded when a side
+is over 8192 or the pixels exceed `Image.MAX_IMAGE_PIXELS` (8192 x 8192; Pillow's `DecompressionBombWarning` is turned
+into the refusal). Pillow then decodes the first frame of that format only; any decoder failure is `415`. The pixels are
+copied into a new image, so EXIF, ICC profiles, XMP and text chunks are dropped, after the EXIF orientation is applied. A
+stored path that leaves the media root is answered 404 by the media routes and logged as `media_read_refused`; a delete
+logs `media_delete_refused` and rolls its transaction back.
 - The backend's root filesystem is read-only, and it can write only to `/data` and `/tmp`.
 
 ## Model files

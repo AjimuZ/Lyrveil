@@ -157,11 +157,12 @@ def _as_card(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_service(request: Request) -> CharacterService:
-    """Returns the service on the application's engine; startup always opens one before it serves routes."""
+    """Returns the service on the application's engine and media store; startup always opens one before it serves
+    routes."""
     engine: Engine | None = request.app.state.engine
     if engine is None:
         raise RuntimeError("the character routes need a database")
-    return CharacterService(engine)
+    return CharacterService(engine, media=request.app.state.media)
 
 
 Service = Depends(get_service)
@@ -259,9 +260,10 @@ def purge_preview(character_id: str, service: CharacterService = Service) -> Pur
 
 @router.post("/{character_id}/purge", status_code=204)
 def purge_character(character_id: str, body: PurgeBody, service: CharacterService = Service) -> Response:
-    """Deletes the character for good, with its conversations, messages and versions, once `confirm_name` equals its
-    first name. Answers 204. Answers 404 `NOT_FOUND` for an unknown character, 422 `VALIDATION_ERROR` when the name does
-    not match and 409 `CONFLICT` while a job of the character is running; nothing is deleted in those cases."""
+    """Deletes the character for good, with its conversations, messages, versions and assets (their files after the
+    commit), once `confirm_name` equals its first name. Answers 204. Answers 404 `NOT_FOUND` for an unknown character,
+    422 `VALIDATION_ERROR` when the name does not match and 409 `CONFLICT` while a job of the character is running;
+    nothing is deleted in those cases."""
     service.purge(character_id, body.confirm_name)
     return Response(status_code=204)
 

@@ -246,7 +246,7 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-CHR-08 | Version list, diff and restore. Restore creates a new version | Integration | P03 |
 | T-CHR-09 | A locked trait survives a draft and a proposal | Unit | P03 |
 | T-CHR-10 | Assisted draft: valid output, repaired output, repeated failure | Integration | P03 |
-| T-CHR-11 | Upload: valid, wrong bytes, too large. Metadata removed, crop, single primary avatar | Integration | P03 |
+| T-CHR-11 | Upload: valid, wrong bytes, too large. Metadata removed, crop, single primary avatar. Delivered: `backend/tests/integration/test_avatars.py` (PNG text and EXIF, JPEG EXIF, thumbnail, crop inside and outside the image, primary switch, primary delete refused, purge removes the files) | Integration | P03 |
 | T-CHR-12 | Avatar generation through the shared image job | Integration, GPU | P05 |
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
 | T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |
@@ -410,11 +410,11 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-SEC-01 | Wrong Host and wrong Origin are refused on REST and WebSocket. Delivered: `backend/tests/integration/test_local_only.py`, in process with Starlette's test client | Integration | P01 |
 | T-SEC-02 | Headers present on every response. Delivered: `tests/e2e/specs/security-headers.spec.mjs` checks the shell, a client route, a hashed and a missing asset, an API answer, an API 404 and a refused write through nginx, each header exactly once and no CORS header; `test_local_only.py` checks the backend's own headers | E2E | P01 |
 | T-SEC-03 | Markup in messages renders as text. Delivered: the first test of `tests/e2e/specs/conversation.spec.mjs` | E2E | P02 |
-| T-SEC-04 | Path traversal attempts on media and asset routes | Integration | P03 |
-| T-SEC-05 | Decompression bomb and disguised uploads are refused | Integration | P03 |
+| T-SEC-04 | Path traversal attempts on media and asset routes. Delivered: `test_avatars.py` sends encoded `..`, `\` and absolute paths to `/media/assets/...` and to the asset routes, and a row with a tampered path is neither served nor deleted | Integration | P03 |
+| T-SEC-05 | Decompression bomb and disguised uploads are refused. Delivered: `test_avatars.py`, with PNG headers of 20000 x 20000, 9000 x 9000 and 9000 x 10 pixels, HTML, SVG, GIF, broken PNG and JPEG bytes, and types that disagree with the bytes | Integration | P03 |
 | T-SEC-06 | Marker strings never reach logs | Integration | P02 |
 | T-SEC-07 | Content guard cases, including minors at each entry point | Unit | P03 |
-| T-SEC-08 | Delete refuses paths outside the media root | Unit | P03 |
+| T-SEC-08 | Delete refuses paths outside the media root. Delivered: `backend/tests/unit/test_media_store.py`: `..`, absolute paths, the root, files directly in it, the staging folder and a link that leads outside | Unit | P03 |
 | T-SEC-09 | Lint rule forbids `innerHTML` and `bypassSecurityTrust`. Delivered: `frontend/tools/eslint/unsafe-html.test.mjs` lints fixtures with the real configuration | Unit | P01 |
 
 ### Docker

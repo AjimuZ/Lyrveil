@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Character avatars and pictures, backend only: `POST /api/v1/characters/{id}/assets` uploads a PNG, JPEG or WebP image
+  (`avatar`, `profile` or `reference`) up to 15 MB and 8192 x 8192 pixels. Every upload is decoded and re-encoded, so
+  location, camera and editor metadata never reach the stored file, and gets a WebP thumbnail. The first avatar becomes
+  the primary one; `POST .../{asset_id}/primary` switches it, `POST .../{asset_id}/crop` saves a 512 x 512 crop as a new
+  picture and keeps the original, `GET .../assets` lists them and `DELETE` removes one, except the primary avatar. Files
+  are served at `/media/assets/{id}` and `/media/assets/{id}/thumbnail`. Oversized images and decompression bombs are
+  refused with `413`, files that are not real images or whose type is disguised with `415`. Purging a character now
+  removes its pictures too. The routes are not in `backend/openapi.json`; the upload and crop screens, generated
+  avatars and the avatar of a duplicate are not delivered yet.
 - **Bozza assistita** in the Character Creator: describe a character in Italian and the text model drafts every field of
   the card, which the form then shows for review. The draft is never saved by itself: the form stays unsaved, a note
   lists the fields the model proposed, and only **Salva personaggio** creates or changes the character. On the edit

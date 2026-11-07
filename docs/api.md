@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), the message routes listed under [Messages](#messages), and on `/ws` the `hello` with replay or `resync.required` and the reply events listed under [Event WebSocket](#event-websocket). The other events, the other error codes and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), the message routes listed under [Messages](#messages), the asset routes and the asset media routes delivered under [Assets](#assets) and [Images](#images), with `PAYLOAD_TOO_LARGE` and `UNSUPPORTED_MEDIA`, and on `/ws` the `hello` with replay or `resync.required` and the reply events listed under [Event WebSocket](#event-websocket). The other events, the other error codes and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -177,7 +177,8 @@ Delivered in P03.2b: duplicate, archive, unarchive and purge.
   their tables exist.
 - `POST /characters/{id}/purge` with `{"confirm_name": "..."}` answers `204` after it deletes, in one transaction, the
   jobs that name the character, its conversations or their messages, the message variants, messages, conversations,
-  traits, visual profile, versions and the character. The name must equal the first name (surrounding spaces ignored,
+  traits, asset rows, visual profile, versions and the character; the asset files are removed after the commit. The
+  preview does not count assets yet. The name must equal the first name (surrounding spaces ignored,
   capitals kept), otherwise `422 VALIDATION_ERROR`. `409 CONFLICT` while one of those jobs is running. `404 NOT_FOUND`
   for an unknown character. Nothing is deleted in any refusal.
 
@@ -191,6 +192,22 @@ Delivered in P03.2b: duplicate, archive, unarchive and purge.
 | `POST /characters/{id}/assets/{asset_id}/crop` | Body `{"x":0,"y":0,"width":512,"height":512}`. Saves a new variant. |
 | `POST /characters/{id}/assets/{asset_id}/primary` | Sets the primary avatar. |
 | `DELETE /characters/{id}/assets/{asset_id}` | Removes the file. |
+
+Delivered in P03.4a, all but `generate`, and not in `backend/openapi.json`:
+
+- An asset answers `{"id", "character_id", "kind", "source", "media_type", "width", "height", "byte_size", "sha256",
+  "crop", "is_primary", "created_at", "url", "thumbnail_url"}`; `url` and `thumbnail_url` are its media routes. `crop`
+  is null, or `{"source_asset_id", "x", "y", "width", "height"}` for a crop.
+- `GET .../assets` lists the live assets, newest first. `kind` is optional; an unknown kind is `422 VALIDATION_ERROR`.
+- `POST .../assets` takes the multipart fields `file` and `kind` (`avatar` by default) and answers `201`. `413
+  PAYLOAD_TOO_LARGE` over 15 MB or 8192 x 8192 pixels, `415 UNSUPPORTED_MEDIA` for bytes that are not PNG, JPEG or WebP,
+  that do not decode, or whose declared type disagrees, `422` for another kind. The first avatar becomes primary.
+- `POST .../crop` answers `201` with a new 512 x 512 asset of the same kind. `x` and `y` are at least 0, `width` and
+  `height` at least 1; a rectangle that leaves the image is `422`, a non-square one is trimmed to its centred square.
+- `POST .../primary` answers `200` with the asset; `422` for an asset that is not an avatar.
+- `DELETE` answers `204` and removes the file and the thumbnail; `409 CONFLICT` for the primary avatar.
+- Every route answers `404 NOT_FOUND` for an unknown character, and for an asset that is deleted or belongs to another
+  character.
 
 ### Scenarios
 
@@ -311,6 +328,10 @@ Files are served outside the JSON API:
 | `GET /media/assets/{id}` | Character asset. |
 
 Media is looked up by identifier. A request path never becomes a file path.
+
+Delivered in P03.4a: `GET /media/assets/{id}` and `GET /media/assets/{id}/thumbnail` (WebP, longest side 512 px), with
+`Cache-Control: private, max-age=31536000, immutable`, since a file never changes once written. An id that names no
+live asset, or whose stored path leaves the media root, answers `404 NOT_FOUND`. The image routes are planned (P05).
 
 ### Memory
 
