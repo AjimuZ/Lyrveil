@@ -179,6 +179,59 @@ Error messages hold paths, status codes and reasons, never prompt or reply text.
 reads the contract page and fails when the adapter's module names an `/api/` path missing from the
 KoboldCpp endpoint table, or when a request sends a field outside the GenerationInput table.
 
+### Image runtime
+
+Delivered in P05.2a: `ports/image_runtime.py` holds `ImageRuntime` with its types and errors, and
+`runtimes/comfyui.py` holds `ComfyUiRuntime`. No job uses it yet: the workflow templates and the image job come with
+the rest of P05.
+
+- `render(ImageRequest)` takes a workflow in API format and its `prompt_id`. It opens `WS /ws` with a new
+  `clientId`, then sends `POST /prompt`, because ComfyUI only sends a client's messages to a connection that is already
+  open. It yields `ImageProgress` events, then one `RenderFinished`: `success` with the output images of
+  `GET /history/{prompt_id}`, or `interrupted` with none.
+- `ProgressMap` turns messages into the [progress phases](image-generation.md#progress): `executing` of the
+  `CheckpointLoaderSimple` node is `loading`; `progress` of a `KSampler` that starts from `EmptyLatentImage` is
+  `sampling`, and of any other `KSampler` is `refining`, with the real `value` and `max`. The phases come from the graph,
+  so they hold for every workflow file whatever its node numbers. A `progress` message without valid counts reports
+  nothing.
+- Messages of other prompts, binary frames and frames that are not the documented JSON are skipped. The outcome rests on
+  the closing message: `execution_success`, `execution_error` or `execution_interrupted`.
+- The history entry may appear only after `execution_success`: `fake_comfy` records it after the message, and the
+  order in ComfyUI `v0.43.0` has not been read. The adapter asks `GET /history/{prompt_id}` again for up to 5 s before
+  it reports the entry missing.
+- `download(ImageOutput)` returns the bytes of `GET /view`, refusing an empty file and anything over 64 MiB.
+  Validating the image is the persistence stage's job.
+- `interrupt` sends `POST /interrupt` with no body and returns whether ComfyUI answered 200.
+- `info` returns `system.comfyui_version` and the devices of `GET /system_stats`. Comparing the version with the pin is
+  the caller's job.
+- The adapter calls only the six paths in its `ENDPOINTS`, all from [Runtime contracts](runtime-contracts.md#endpoints-1).
+  The HTTP client ignores proxy settings and follows no redirect; the WebSocket client ignores proxy settings and sends
+  no keepalive pings, because the stall timeout already detects a silent runtime.
+
+Timeouts are the [GPU orchestration](gpu-orchestration.md#timeouts) defaults: 300 s in total for a render, and 120 s
+without a message of the render's own prompt. Past either one, the adapter sends `POST /interrupt`, then raises. Other
+calls, and opening the WebSocket, wait 10 s, the adapter's own value.
+
+| Failure | Error | `code` |
+| --- | --- | --- |
+| No answer, refused connection, failed handshake, undocumented status | `ImageRuntimeUnavailableError` | `RUNTIME_UNAVAILABLE` |
+| The WebSocket ends before the closing message, as when the runtime crashes | `ImageConnectionLostError`, a subclass of the above | `RUNTIME_UNAVAILABLE` |
+| Invalid JSON, missing fields, no history entry or output image, a file empty or too large | `ImageResponseInvalidError`, a subclass of the above | `RUNTIME_UNAVAILABLE` |
+| `execution_error` whose exception names `OutOfMemoryError`, or an error answer that does | `ImageOutOfMemoryError` | `IMAGE_OOM` |
+| `POST /prompt` answers 400 with `error` and `node_errors` | `WorkflowRejectedError`, with the node identifiers | `INTERNAL` |
+| Any other `execution_error` | `RenderFailedError` | `INTERNAL` |
+| No message of the render within the stall timeout | `RenderStalledError` | `GENERATION_STALLED` |
+| Past the total timeout | `RenderTimeoutError` | `GENERATION_TIMEOUT` |
+
+A refused workflow and a node failure other than memory map to `INTERNAL`, because Lyrveil submits only its own files
+and a retry of the same graph would fail the same way. Error messages hold paths, status codes, node identifiers and
+exception types, never prompt text.
+
+`tests/unit/test_comfyui_runtime.py` runs the adapter against `fake_comfy` over real HTTP and WebSocket: a render with
+its progress and download, an interrupt, out of memory in the render and in the submission, a crash, a refused
+workflow, a stall and the total timeout. It holds T-IMG-05 for both passes of the documented **Alta** graph, and it
+reads the contract page and fails when the adapter's module names a path missing from the ComfyUI endpoint table.
+
 ### Prompt formatter
 
 Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.

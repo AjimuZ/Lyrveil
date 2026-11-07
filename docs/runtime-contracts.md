@@ -195,6 +195,12 @@ WebSocket messages used:
 | `execution_error` | `prompt_id`, details | Failure. Text matching `OutOfMemoryError` maps to `IMAGE_OOM`. |
 | `execution_interrupted` | `prompt_id`, `node_id`, `node_type`, `executed` | Cancelled. |
 
+`backend/src/lyrveil/runtimes/comfyui.py` implements these calls, delivered in P05.2a
+([Backend](backend.md#image-runtime)). It sends `POST /interrupt` with no body. It has run only against `fake_comfy`, so
+three readings wait for the GPU suite: the order of `execution_success` and the history entry, which the adapter
+tolerates by asking the history again for up to 5 s; the 400 body of a refused workflow; and the out-of-memory text of
+`execution_error`, read in `exception_type` and `exception_message`.
+
 ### Nodes used
 
 | Class | Inputs |

@@ -171,6 +171,8 @@
 - Runtime entrypoints read launch files as data: KEY=VALUE lines checked against anchored regexes, exit 78 naming the key but never the value, exit 64 for bad arguments, and --print-command for tests that need no GPU.
 - Python runtime images: a lock stage with `uv pip compile --generate-hashes --only-binary :all:`, exported with a scratch `lockfile` stage, then `uv pip sync --require-hashes`, plus an offline `--no-index` install of the upstream requirements to catch a stale lock.
 - Pester docker tests pass shell and Python scripts to containers in base64 arguments, and keep scripts free of double quotes, so Windows PowerShell 5.1 passes them unchanged.
+- Runtime adapters list every endpoint in an ENDPOINTS frozenset. Their unit test reads the matching section of docs/runtime-contracts.md and AST-scans the module for path-like string constants that are not in the table.
+- Use a TypeGuard[int] helper that excludes bool when narrowing JSON integers under mypy strict.
 
 ---
 
@@ -1464,4 +1466,42 @@ Because `compose.yaml` now has the service, I also changed the test setups. The 
   - In this session `docker compose --profile ai config` and `docker compose --profile ai build` were refused despite the task notes; plain `docker build`, `docker image inspect` and `scripts/lyrveil.cmd test lint` worked.
   - A temporary build stage (`RUN --network=none` as USER 10001) is a way to try container behavior when `docker run` is not allowed; remove the stage afterwards.
   - Every test override layered on compose.yaml must handle lyrveil-image like lyrveil-llm: setup replaces it with fakes.fake_comfy, while lifecycle, data and models give it an unused profile.
+---
+
+## 2026-11-07T17:57:43Z - P05.2a
+- Added the `ImageRuntime` port (backend/src/lyrveil/ports/image_runtime.py) and `ComfyUiRuntime` (backend/src/lyrveil/runtimes/comfyui.py). The adapter calls only the six ComfyUI endpoints of docs/runtime-contracts.md.
+
+How a render works:
+- It opens `WS /ws` with a new clientId, then sends `POST /prompt`. It yields `ImageProgress` events, then one `RenderFinished`, which is either `success` with the output images from `GET /history/{prompt_id}` or `interrupted`.
+- The history is retried for up to 5 s, because the entry can appear after `execution_success`.
+- `download` reads `GET /view` and refuses empty files and files over 64 MiB.
+- `interrupt` sends `POST /interrupt`, and `info` reads `GET /system_stats`.
+
+How ComfyUI messages become progress (`ProgressMap`):
+- `executing` of `CheckpointLoaderSimple` becomes `loading`.
+- `progress` of a KSampler fed by `EmptyLatentImage` becomes `sampling`. Any other KSampler becomes `refining`, the second pass of Alta.
+- These phases come from the workflow graph, not from node numbers.
+
+Error mapping:
+- Out of memory (in `execution_error`, or an error answer naming `OutOfMemoryError`) maps to `IMAGE_OOM`.
+- A crash, meaning the WebSocket closes before the closing message, maps to `ImageConnectionLostError` with code `RUNTIME_UNAVAILABLE`.
+- A workflow refused at validation (400) and other node failures map to `INTERNAL`.
+- A stall (120 s) or the total timeout (300 s) sends `POST /interrupt`, then raises `GENERATION_STALLED` or `GENERATION_TIMEOUT`.
+
+Frames of other prompts, binary frames and unparsable frames are skipped.
+
+Checks I ran:
+- `scripts/lyrveil.cmd test lint` passed.
+- `scripts/lyrveil.cmd test unit tests/unit/test_comfyui_runtime.py tests/unit/test_koboldcpp_runtime.py` passed: 34 tests, 15 of them new.
+- I did not run the full suites or the docker level, and the adapter has never run against real ComfyUI.
+
+Docs updated: backend.md has a new Image runtime section. runtime-contracts.md now notes the implementation and the three readings still unverified against real ComfyUI. testing.md points to the new test file. I did not change the changelog, because no user-visible behavior changed.
+- Files changed: backend/src/lyrveil/ports/image_runtime.py, backend/src/lyrveil/runtimes/comfyui.py, backend/src/lyrveil/runtimes/__init__.py, backend/tests/unit/test_comfyui_runtime.py, docs/backend.md, docs/runtime-contracts.md, docs/testing.md
+- **Learnings for future iterations:**
+  - ProgressMap.of(workflow) finds the phases from the graph: a KSampler whose latent_image comes from EmptyLatentImage is `sampling`, and any other KSampler is `refining`. The P05.2 workflow templates need no extra mapping, but they must keep that link shape.
+  - fake_comfy always sends progress for node "3" and executing for node "1". A test workflow must have its first-pass KSampler at node "3" to see sampling events.
+  - fake_comfy writes the history after it sends execution_success. ComfyUiRuntime asks the history again for up to history_wait_s, 5 s by default.
+  - The websockets 17.4 client works against scripted_server's WebSocket with ping_interval=None and proxy=None. On close it returns quickly, because the fake closes TCP after it sees the client's close frame.
+  - Error codes: a refused workflow and a node failure other than memory map to INTERNAL. GPU-suite readings still open: the 400 body, the order of execution_success and the history entry, and the OOM text in execution_error.
+  - Nothing uses ComfyUiRuntime yet. Wiring it into the image job, and storing info().version as comfyui_version, are left for later P05 tasks.
 ---
