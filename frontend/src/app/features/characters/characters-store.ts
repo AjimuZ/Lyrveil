@@ -1,12 +1,15 @@
 // Server access of the Character Creator and the profile: the tag vocabulary, one character's card, create and save,
-// versions with diff and restore, and duplicate, archive and purge.
+// the assisted draft and its job, versions with diff and restore, and duplicate, archive and purge.
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api-client';
 import { Character, Conversation, ConversationList } from '../chats/chats.model';
 import {
+  DraftResult,
+  JobDetail,
   PurgePreview,
+  QueuedJob,
   StoredCharacter,
   VersionDiff,
   VersionList,
@@ -54,6 +57,19 @@ export class CharactersStore {
   /** Saves the whole card. The server adds a version only when something changed. */
   update(id: string, card: Record<string, unknown>): Promise<StoredCharacter> {
     return firstValueFrom(this.api.put<StoredCharacter>(`/characters/${encodeURIComponent(id)}`, card));
+  }
+
+  /**
+   * Queues an assisted draft from `description`; with `characterId` it rewrites that character's card and keeps its
+   * locks. Nothing is saved: the job's result is a card for the Creator to show.
+   */
+  startDraft(description: string, characterId: string | null): Promise<QueuedJob> {
+    return firstValueFrom(this.api.post<QueuedJob>('/characters/drafts', { description, character_id: characterId }));
+  }
+
+  /** Reads the state, and once it completed the result, of the draft job `jobId`. */
+  draftJob(jobId: string): Promise<JobDetail<DraftResult>> {
+    return firstValueFrom(this.api.get<JobDetail<DraftResult>>(`/jobs/${encodeURIComponent(jobId)}`));
   }
 
   /** Lists the versions of a character, newest first. */

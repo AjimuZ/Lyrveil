@@ -176,6 +176,33 @@ export interface PurgePreview {
   readonly versions: number;
 }
 
+/** `POST /characters/drafts`: the queued `character_draft` job; `queue_position` 1 means it runs next. */
+export interface QueuedJob {
+  readonly id: string;
+  readonly kind: string;
+  readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly queue_position: number;
+}
+
+/** The `result` of a completed `character_draft` job: a whole card to review, not a saved character. */
+export interface DraftResult {
+  readonly card: CharacterCard;
+  /** Dotted paths of the fields the model filled in, the same paths as a version diff. */
+  readonly proposed_fields: readonly string[];
+  readonly character_id: string | null;
+  readonly attempts: number;
+}
+
+/** `GET /jobs/{id}`; `error_detail` is an Italian reason that never holds private text. */
+export interface JobDetail<Result = unknown> extends QueuedJob {
+  readonly stage: string;
+  readonly attempt: number;
+  readonly max_attempts: number;
+  readonly error_code: string | null;
+  readonly error_detail: string | null;
+  readonly result: Result | null;
+}
+
 /** One tag of the vocabulary file with the Italian words that map to it. */
 export interface VocabularyEntry {
   readonly tag: string;

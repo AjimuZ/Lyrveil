@@ -318,6 +318,19 @@ All structured tasks use the same flow ([ADR 0013](decisions/0013-structured-out
 
 Model output is untrusted: it is never executed, never placed in SQL or a path, and rendered as text.
 
+Delivered in P03.3, with the character draft as the first task:
+
+- `schema_to_gbnf` (`lyrveil/prompts/gbnf.py`) reads the model's JSON Schema, with `$defs` as rules. It writes every key
+  of an object in schema order, lists an integer range of up to 256 values (the age is `"18" | ... | "120"`), allows at
+  most one whitespace character between tokens, and bounds an array with nested optionals instead of `{m,n}`. Lengths
+  and patterns stay with validation. Any other construct, such as a free-key object or a float, raises
+  `UnsupportedSchemaError`.
+- `generate_structured` (`lyrveil/prompts/structured.py`) runs steps 2 to 5 under the caller's lease: the repair prompt
+  carries the refused output and the Italian reason, which names fields and never values. It raises
+  `StructuredOutputInvalidError`, which the job handler turns into `STRUCTURED_OUTPUT_INVALID`, not retried.
+- Templates are Python modules for now (`lyrveil/prompts/character_draft.py`), because the backend has no template
+  engine yet; the `.j2` names below are the planned files. The draft uses temperature 0.4.
+
 Each template holds one worked example of input and output. The example stays only if it does not
 lower the score of the [extraction evaluation](consistency-engine.md#extraction-evaluation)
 (T-QLT-06).

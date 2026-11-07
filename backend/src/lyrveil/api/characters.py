@@ -1,5 +1,6 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
-versions with diff and restore, duplicate, archive, purge, and the tag vocabulary the Creator offers.
+versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, and the assisted
+draft.
 
 The exchange routes of that section arrive with the rest of the Creator (P03). Not in the committed OpenAPI document
 yet, for the reason given in lyrveil.api.conversations.
@@ -8,12 +9,14 @@ yet, for the reason given in lyrveil.api.conversations.
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Engine
 
+from lyrveil.api.jobs import JobOut, wake_worker
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
 from lyrveil.images.tags import load_vocabulary
+from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.characters import CharacterService
 
 router = APIRouter(prefix="/characters", tags=["characters"], include_in_schema=False)
@@ -97,6 +100,15 @@ class PurgeBody(BaseModel):
     confirm_name: str
 
 
+class DraftBody(BaseModel):
+    """The length limit is checked by the service, which answers 422 with an Italian detail."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str
+    character_id: str | None = None
+
+
 def _version_out(version: VersionSummary) -> VersionOut:
     return VersionOut(
         version_no=version.version_no,
@@ -172,6 +184,21 @@ def create_character(body: Annotated[dict[str, Any], Body()], service: Character
     120, an empty name, a value outside the closed lists, an unknown field, a slot tag the vocabulary lacks or an outfit
     with a reserved key."""
     return _out(service.create(_as_card(body)))
+
+
+@router.post("/drafts", response_model=JobOut, status_code=202)
+def start_draft(body: DraftBody, request: Request) -> JobOut:
+    """Queues a `character_draft` job that drafts a card from `description` and answers it with `202`. The job's result
+    (`GET /jobs/{id}`) holds the card to review; no character is written until the user saves it. With `character_id`
+    the draft rewrites that character's card and keeps its locked traits and visual fields. Answers 422
+    `VALIDATION_ERROR` for a blank description or one over 2000 characters, 404 `NOT_FOUND` for an unknown character
+    and 409 `CONFLICT` when the queue is full."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    job = CharacterCreatorService(engine).start_draft(body.description, body.character_id)
+    wake_worker(request)
+    return JobOut(id=job.id, kind=job.kind, status=job.status, queue_position=job.queue_position)
 
 
 @router.get("/vocabulary", response_model=VocabularyOut)

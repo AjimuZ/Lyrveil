@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). Delivered in P02.5c: `events/hub.py` with the replay buffer, the events of `/ws`, `ChatInferenceService` as the handler of `chat_reply` and `chat_regenerate`, the job worker in the application's lifespan and the recovery of interrupted replies ([Streaming persistence](#streaming-persistence)). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). Delivered in P02.5c: `events/hub.py` with the replay buffer, the events of `/ws`, `ChatInferenceService` as the handler of `chat_reply` and `chat_regenerate`, the job worker in the application's lifespan and the recovery of interrupted replies ([Streaming persistence](#streaming-persistence)). Delivered in P03.3: `prompts/gbnf.py` and `prompts/structured.py` for structured output, and the `character_draft` handler ([Job handlers](#job-handlers)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -55,7 +55,7 @@ orchestrator/
 | Service | Package | Responsibility |
 | --- | --- | --- |
 | `CharacterService` | `services` | CRUD, versioning, diff, restore, locks, duplicate, import and export. Sole writer of canonical data. |
-| `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. |
+| `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. Delivered in P03.3: the drafts, as the `character_draft` handler. |
 | `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. |
 | `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; the notification joins with P04.7 and search with P02.5d. |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
@@ -348,6 +348,10 @@ for the next start to mark `interrupted`. Its lease is not released: it expires 
 | `summary_checkpoint` | Lease, structured generation, store a checkpoint. |
 | `memory_extraction`, `memory_reevaluation` | Lease, structured generation, consistency rules, commit with cursor. |
 | `maintenance` | `required_mode = none`. Retention, orphan cleanup, expiry of memories. |
+
+Delivered in P03.3: `character_draft`, run by `CharacterCreatorService` (`services/character_creator.py`), registered in
+the application's lifespan beside the reply handler. The safety check is not delivered (P03.6). See
+[Assisted creation](character-system.md#assisted-creation).
 
 ### Retry policy
 

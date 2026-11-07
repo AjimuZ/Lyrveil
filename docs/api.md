@@ -148,8 +148,19 @@ Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
   declared before `/characters/{id}`, so `vocabulary` is never read as an id.
 - Automatic sources are not routes yet. The service applies a proposal with `CharacterService.apply_proposal`, which
   keeps locked traits and locked visual fields and records actor `proposal`. Every route of this table that this
-  section does not describe as delivered (export, import, format schema and drafts) is planned. These routes are not in
+  section does not describe as delivered (export, import and format schema) is planned. These routes are not in
   `backend/openapi.json` until it is next regenerated with Docker.
+
+Delivered in P03.3: `POST /characters/drafts` ([Assisted creation](character-system.md#assisted-creation)).
+
+- The body is `{"description": "...", "character_id": null}`; unknown fields are refused. It answers `202` with
+  `{"id", "kind": "character_draft", "status": "queued", "queue_position"}` and writes nothing but the job. `422
+  VALIDATION_ERROR` for a blank description or one over 2000 characters, `404 NOT_FOUND` for an unknown `character_id`,
+  `409 CONFLICT` when the queue is full. The content guard of the draft request is not delivered (P03.6).
+- The job's result, read with `GET /jobs/{id}`, is `{"card", "proposed_fields", "character_id", "attempts"}`. No
+  character exists until the user saves `card` with `POST /characters`, or with `PUT /characters/{id}` for a draft over
+  a character; that draft already holds the stored locks. A draft refused twice ends `failed` with
+  `STRUCTURED_OUTPUT_INVALID` and an Italian `error_detail` that names the field, such as "L'età deve essere almeno 18.".
 
 Delivered in P03.2b: duplicate, archive, unarchive and purge.
 
@@ -339,6 +350,13 @@ Media is looked up by identifier. A request path never becomes a file path.
 | `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "gemma4"}`. The file must already be in its models folder. Starts the hash job and returns `202`. |
 | `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
 | `POST /backups`, `GET /backups` | Create and list. Restore is `scripts\lyrveil.cmd restore`, because it stops services. |
+
+Delivered in P03.3: `GET /jobs/{id}` (`lyrveil/api/jobs.py`). It answers `{"id", "kind", "status", "stage", "attempt",
+"max_attempts", "queue_position", "error_code", "error_detail", "result", "created_at", "finished_at"}`, or `404
+NOT_FOUND`. `queue_position` counts as for a send and is 0 once the job ended; `result` is `result_json`, null until the
+job completes. The payload is never returned, because it can hold private text such as a draft's description. The
+Creator polls this route while a draft runs, since `job.updated` is not published yet. The list, cancel and retry
+routes are planned. Not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ## Event WebSocket
 

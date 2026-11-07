@@ -258,6 +258,20 @@ test checks every table, the search index and the jobs; another character stays 
 `tests/e2e/specs/character-profile.spec.mjs`, which covers compare, restore (T-CHR-08), duplicate, archive and purge
 through the browser. The end-to-end spec was written but not run in this change.
 
+Delivered in P03.3: T-CHR-10 is `backend/tests/integration/test_character_drafts.py`. It queues a draft with
+`POST /characters/drafts`, runs it with the real `JobScheduler` under a granted llm lease, `CharacterCreatorService` and
+`KoboldCppRuntime` against `fake_kobold` over HTTP, and reads it with `GET /jobs/{id}`: valid output completes the job
+with a card and no character; an age of 16 is repaired once with the error and the refused output in the prompt; output
+that is not JSON then an age of 15 fails the job with `STRUCTURED_OUTPUT_INVALID` after exactly two generations. The same
+file checks that a draft over a character keeps its locked trait and field and leaves the stored card at version 1, and
+the route refusals. `backend/tests/unit/test_character_draft.py` holds the schema checks: `CharacterDraft` has every
+`CharacterCard` field except the documented exclusions, with the same JSON Schema for each, and the grammar generated
+from it, read by a small GBNF matcher in the test, accepts a whole draft and refuses an unknown or missing key, a value
+outside a closed list, too many outfits and an age outside 18 to 120. It also covers the T-CHR-09 case of a draft (locks,
+seed, English tags kept). `character-creator-screen.spec.ts` covers the assist panel. In this change both backend files
+passed (`scripts\lyrveil.cmd test unit tests/unit/test_character_draft.py`, 7 passed, and the same command with
+`tests/integration/test_character_drafts.py`, 5 passed); the frontend spec was not run.
+
 ### Memory
 
 | ID | Test | Level | Phase |

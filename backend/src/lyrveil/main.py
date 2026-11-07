@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lyrveil import __version__
-from lyrveil.api import characters, conversations, events, health, messages
+from lyrveil.api import characters, conversations, events, health, jobs, messages
 from lyrveil.api.security import (
     LocalOnlyMiddleware,
     SecurityHeadersMiddleware,
@@ -23,6 +23,7 @@ from lyrveil.api.security import (
 )
 from lyrveil.domain.errors import DomainError
 from lyrveil.events.hub import EventHub
+from lyrveil.jobs.handlers import JobHandler
 from lyrveil.jobs.policy import JobKind, RequiredMode
 from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, recover_interrupted_jobs
@@ -38,6 +39,7 @@ from lyrveil.persistence.database import (
 from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
+from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
 from lyrveil.settings import Settings, SettingsError, load_settings
 
@@ -78,7 +80,8 @@ class Worker:
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Runs the job worker for the life of the application (startup step 7), when it has a database and a Worker.
 
-    The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService and is kept in
+    The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
+    CharacterCreatorService, and is kept in
     `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed text and stays `streaming`
     for the next start to mark `interrupted`; its lease is not released and expires by itself.
     """
@@ -89,7 +92,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         return
     async with worker.text_runtime() as runtime:
         replies = ChatInferenceService(engine, runtime, app.state.events, worker.replies)
-        handlers = {JobKind.CHAT_REPLY: replies, JobKind.CHAT_REGENERATE: replies}
+        drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
+        handlers: dict[JobKind, JobHandler] = {
+            JobKind.CHAT_REPLY: replies,
+            JobKind.CHAT_REGENERATE: replies,
+            JobKind.CHARACTER_DRAFT: drafts,
+        }
         scheduler = JobScheduler(engine, JobQueue(), handlers, worker.leases, worker.current_mode)
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
@@ -139,6 +147,7 @@ def create_app(
     app.include_router(characters.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
+    app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(events.router)
     headers = documented_headers(settings.http_port)
     app.add_exception_handler(DomainError, domain_error_handler)

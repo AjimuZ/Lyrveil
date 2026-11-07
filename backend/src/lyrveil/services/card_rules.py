@@ -25,8 +25,9 @@ def _path(location: tuple[int | str, ...]) -> str:
     return ".".join(str(part) for part in location)
 
 
-def _detail(error: ValidationError) -> str:
-    """Returns the Italian detail for the first problem pydantic found. It names the field, never the value."""
+def describe_error(error: ValidationError) -> str:
+    """Returns the Italian detail for the first problem pydantic found in a card or a draft. It names the field, never
+    the value."""
     first = error.errors()[0]
     location, kind = first["loc"], first["type"]
     if not location:
@@ -105,5 +106,5 @@ def validate_card(raw: Mapping[str, Any]) -> CharacterCard:
     try:
         card = CharacterCard.model_validate(raw)
     except ValidationError as error:
-        raise ValidationFailedError(_detail(error)) from error
+        raise ValidationFailedError(describe_error(error)) from error
     return card.model_copy(update={"visual": _visual(card.visual, load_vocabulary())})

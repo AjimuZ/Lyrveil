@@ -1,5 +1,16 @@
 // Screen 3 of docs/frontend.md: the Character Creator, a Signal Forms editor of the whole card in four tabs.
-import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormField, form, provideSignalFormsConfig } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 
@@ -16,7 +27,7 @@ import {
   MAX_RECURRING_EXPRESSIONS,
   MAX_SLOT_TAGS,
 } from './card-rules';
-import { LOCKABLE_FIELDS, LockableField, Vocabulary } from './card.model';
+import { DraftResult, LOCKABLE_FIELDS, LockableField, QueuedJob, Vocabulary } from './card.model';
 import { CharactersStore } from './characters-store';
 import {
   ADDRESS_EXAMPLE,
@@ -39,11 +50,19 @@ import { clearDraft, readDraft, writeDraft } from './draft-storage';
 import { FieldShell } from './field-shell';
 import { HasUnsavedChanges } from './leave-guard';
 import { TagPicker } from './tag-picker';
+import { fieldLabelKey } from './version-diff';
 import { GENDER_OPTIONS, LANGUAGE_OPTIONS } from '../chats/new-chat-dialog';
 
 export type CreatorTab = 'identity' | 'personality' | 'communication' | 'appearance';
 
 type Phase = 'loading' | 'ready' | 'failed';
+/** The assisted draft: nothing asked, a job queued or running, a draft shown in the form, or a refusal. */
+type AssistState = 'idle' | 'waiting' | 'ready' | 'failed';
+
+/** How often the screen reads the draft job while it waits. */
+export const DRAFT_POLL_MS = 1000;
+/** The longest description the server accepts (`POST /characters/drafts`). */
+export const MAX_DESCRIPTION_LENGTH = 2000;
 
 /**
  * Creates a character (`/characters/new`) or edits one (`/characters/:id/edit`). The form model is a signal that
@@ -51,8 +70,13 @@ type Phase = 'loading' | 'ready' | 'failed';
  * invalid. A new character keeps a local draft in the browser until it is saved, and leaving with unsaved changes asks
  * first (`leaveWithConfirmation`). A refusal from the server stays on the screen with its explanation.
  *
- * Not delivered here, so no control is drawn for it: the assisted draft, import and export, the avatar actions, the
- * token counter of the examples and the first-chunk warning of the persistent prompt.
+ * The assist panel asks the server for a draft from a description (`POST /characters/drafts`) and reads its job every
+ * DRAFT_POLL_MS until it ends. A completed draft fills the form but is not the saved state: the form stays unsaved, the
+ * fields the model filled are listed, and only **Salva personaggio** stores it. Over an existing character the server
+ * keeps its locks.
+ *
+ * Not delivered here, so no control is drawn for it: import and export, the avatar actions, the token counter of the
+ * examples and the first-chunk warning of the persistent prompt.
  */
 @Component({
   selector: 'lyr-character-creator',
@@ -71,6 +95,7 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
   private readonly store = inject(CharactersStore);
   private readonly router = inject(Router);
   private readonly translator = inject(Translator);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** The character to edit, from the route; absent on `/characters/new`. */
   readonly id = input<string>();
@@ -114,6 +139,25 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
   protected readonly notice = signal<'created' | 'saved' | 'unchanged' | 'draft' | null>(null);
   protected readonly versionNo = signal<number | null>(null);
   protected readonly fullName = signal('');
+
+  protected readonly assistLimit = MAX_DESCRIPTION_LENGTH;
+  protected readonly assistText = signal('');
+  protected readonly assistState = signal<AssistState>('idle');
+  /** The draft job as last read, for its queue position and status while the screen waits. */
+  protected readonly assistJob = signal<QueuedJob | null>(null);
+  /** The Italian reason a draft was refused or failed. */
+  protected readonly assistError = signal('');
+  /** The card fields the last draft filled in, as dotted paths. */
+  protected readonly proposed = signal<readonly string[]>([]);
+  /** The labels of the proposed fields, once each, in card order; a path without a label is left out. */
+  protected readonly proposedLabels = computed(() => {
+    const keys = this.proposed()
+      .map((path) => fieldLabelKey(path))
+      .filter((key) => key !== null);
+    return [...new Set(keys)].map((key) => this.translator.t(key)).join(', ');
+  });
+  private pollTimer: ReturnType<typeof setTimeout> | undefined;
+  private destroyed = false;
 
   protected readonly vocabulary = signal(new Vocabulary([]));
   protected readonly model = signal<CreatorModel>(emptyModel());
@@ -159,6 +203,10 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
       if (this.phase() === 'ready' && this.id() === undefined) {
         untracked(() => (this.dirty() ? writeDraft(model) : clearDraft()));
       }
+    });
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      clearTimeout(this.pollTimer);
     });
   }
 
@@ -348,6 +396,71 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
   /** The user chose the form of address, so a formal register stops proposing *Lei*. */
   protected addressChosen(): void {
     this.followRegister = false;
+  }
+
+  protected assistInput(event: Event): void {
+    this.assistText.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /** Asks for a draft of the description; the screen then follows its job until it ends. */
+  protected async requestDraft(): Promise<void> {
+    const description = this.assistText().trim();
+    if (description === '' || this.assistState() === 'waiting') {
+      return;
+    }
+    this.assistState.set('waiting');
+    this.assistError.set('');
+    this.proposed.set([]);
+    try {
+      const job = await this.store.startDraft(description, this.id() ?? null);
+      this.assistJob.set(job);
+      this.followDraft(job.id);
+    } catch (failure) {
+      const error = toApiError(failure);
+      this.failDraft(error.detail ?? this.translator.t(error.textKey));
+    }
+  }
+
+  private followDraft(jobId: string): void {
+    this.pollTimer = setTimeout(() => void this.readDraft(jobId), DRAFT_POLL_MS);
+  }
+
+  private async readDraft(jobId: string): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+    try {
+      const job = await this.store.draftJob(jobId);
+      if (this.destroyed) {
+        return;
+      }
+      if (job.status === 'completed' && job.result !== null) {
+        this.showDraft(job.result);
+      } else if (job.status === 'failed' || job.status === 'cancelled') {
+        this.failDraft(job.error_detail ?? this.translator.t('creator.assist.failed'));
+      } else {
+        this.assistJob.set(job);
+        this.followDraft(jobId);
+      }
+    } catch (failure) {
+      const error = toApiError(failure);
+      this.failDraft(error.detail ?? this.translator.t(error.textKey));
+    }
+  }
+
+  /** Fills the form with the draft without taking it as the saved state, so it stays unsaved until the user saves. */
+  private showDraft(result: DraftResult): void {
+    this.model.set(toModel(result.card));
+    this.followGender = false;
+    this.followRegister = false;
+    this.proposed.set(result.proposed_fields);
+    this.assistState.set('ready');
+    this.notice.set(null);
+  }
+
+  private failDraft(reason: string): void {
+    this.assistError.set(reason);
+    this.assistState.set('failed');
   }
 
   /** Drops the restored draft and starts again from an empty form. */

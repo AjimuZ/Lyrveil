@@ -107,6 +107,9 @@
 - A destructive action takes a server-side confirmation (the typed name in the body) and a preview of counts, and the client disables its button until the same text matches. The server stays authoritative.
 - One row-level action runs at a time through a shared `run()` wrapper that sets `busy`, clears the previous notice and error, and turns a failure into an `ApiError` shown with the server's `detail`.
 - A service operation that mutates several tables runs in one `write()` transaction, and the persistence function lists its delete order explicitly.
+- Structured LLM output: Pydantic model → schema_to_gbnf grammar → generate_structured (validate, one repair, then StructuredOutputInvalidError) → JobFailedError(STRUCTURED_OUTPUT_INVALID, detail, retryable=False) in the handler.
+- When a derived schema must mirror another (draft vs card), keep an explicit exclusion list and a unit test that compares the JSON Schema of every remaining field path, so drift fails a test.
+- Routes that queue a job call `lyrveil.api.jobs.wake_worker(request)` after the commit; job details are read with `GET /jobs/{id}`, which never returns the payload.
 
 ---
 
@@ -891,4 +894,26 @@ Checks I ran: `test lint` passes. `test unit` passes, with 76 frontend, 297 back
   - The profile reuses the Creator's `creator.*` catalog labels for diff field names (`version-diff.ts`); a new card field needs a path entry there or the diff shows the raw dotted path.
   - The component-input `id` route binding reuses one profile component across `/characters/a` to `/characters/b`, so the screen loads from an `effect` on `id()` rather than `ngOnInit`.
   - The e2e specs for the Creator and the profile are unrun. The next task that can run e2e should run `character-creator.spec.mjs` and `character-profile.spec.mjs` first and fix selectors or axe findings. The profile spec also relies on `page.request.post/put` without an Origin header being accepted by the origin guard.
+---
+
+## 2026-11-07T05:50:41Z - P03.3
+- Assisted creation now works end to end. `POST /characters/drafts` checks the description (not blank, at most 2000 characters) and queues a `character_draft` job. The real JobScheduler runs that job under an llm lease, using `CharacterCreatorService` as its handler, registered in the app lifespan. The handler generates `CharacterDraft` under a GBNF grammar. That grammar is built from the schema at import by the new `schema_to_gbnf`. The output is checked first as a draft and then as a card with `validate_card`. If it is refused, the model gets one repair attempt with the Italian reason and its refused output in the prompt. A second refusal fails the job with STRUCTURED_OUTPUT_INVALID and that reason, and the job is not retried. A completed job's result is `{card, proposed_fields, character_id, attempts}` and no character is written. With `character_id`, `keep_locked` keeps the stored locked traits and visual fields, and the locks, seed, English slots and outfit tags are kept too; the stored card is not changed. A new `GET /jobs/{id}` returns a job's state and result but never its payload. In the Creator, a **Bozza assistita** panel queues a draft, polls that route every second showing the queue position, and fills the form without making it the saved state. A note lists the proposed fields by label. Only **Salva personaggio** goes on to save through the normal routes. A failed draft shows the server's reason.
+
+Checks I ran:
+- `scripts/lyrveil.cmd test lint` passed after I fixed two ruff-format diffs and one mypy finding.
+- `test unit tests/unit/test_character_draft.py`: 7 passed.
+- `test unit tests/integration/test_character_drafts.py` (T-CHR-10 with fake_kobold over HTTP): 5 passed. This covered valid output, repaired output, repeated failure, locks over an existing character, and route refusals.
+
+Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They only run with the whole unit level, which I left to the orchestrator. The content guard on the description is not delivered (P03.6), and the docs say so.
+- Files changed: backend/src/lyrveil/prompts/gbnf.py, backend/src/lyrveil/prompts/structured.py, backend/src/lyrveil/prompts/character_draft.py, backend/src/lyrveil/domain/card_draft.py, backend/src/lyrveil/services/character_creator.py, backend/src/lyrveil/services/card_rules.py, backend/src/lyrveil/api/jobs.py, backend/src/lyrveil/api/characters.py, backend/src/lyrveil/main.py, backend/tests/unit/test_character_draft.py, backend/tests/integration/test_character_drafts.py, frontend/src/app/features/characters/card.model.ts, frontend/src/app/features/characters/characters-store.ts, frontend/src/app/features/characters/character-creator-screen.ts, frontend/src/app/features/characters/character-creator-screen.html, frontend/src/app/features/characters/character-creator-screen.spec.ts, frontend/src/i18n/it.json, CHANGELOG.md, docs/api.md, docs/backend.md, docs/character-system.md, docs/frontend.md, docs/prompting.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test integration` takes no arguments, but `test unit tests/integration/<file>.py` runs one integration file with pytest in the backend container (the integration conftest applies), which is how T-CHR-10 was checked.
+  - The backend has no Jinja dependency (adding one needs a uv.lock regeneration in Docker), so structured-task prompts are Python modules in lyrveil/prompts/; the .j2 names in docs/prompting.md are still planned files.
+  - `generate_structured` (prompts/structured.py) and `schema_to_gbnf` (prompts/gbnf.py) are reusable for the other structured tasks (visual_profile_translate, extraction, summaries): pass a prompt builder taking `Repair | None` and a validate callback that raises OutputRejectedError with an Italian, value-free detail.
+  - schema_to_gbnf raises UnsupportedSchemaError for free-key objects and floats; a model with such fields needs the converter extended first. It enumerates integer ranges of up to 256 values, so an unbounded int becomes any integer.
+  - `card_rules._detail` is now public as `describe_error`, for draft validation errors.
+  - The backend publishes no job.updated events yet; the Creator polls `GET /jobs/{id}` (api/jobs.py). When job events arrive, replace the polling in character-creator-screen.ts.
+  - A draft over an existing character keeps the stored English identity slots even when the Italian text changes; the visual_profile_translate job (P05) must re-translate unlocked slots after such a save.
+  - P03.6 (content guard) must add the description check to CharacterCreatorService.start_draft and the generated card check to its validate callback.
+  - The two new Creator specs wait real time (DRAFT_POLL_MS + 50 ms) for the poll; they were not run in this change.
 ---

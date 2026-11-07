@@ -7,8 +7,9 @@ with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks 
 ([Versions and locks](#versions-and-locks)). Delivered in P03.2a: the Creator screens for creating and editing a card
 (`/characters/new`, `/characters/:id/edit`; see [Frontend screen 3](frontend.md#3-character-creator)) and
 `GET /characters/vocabulary`. Delivered in P03.2b: the profile ([Frontend screen 4](frontend.md#4-character-profile)),
-duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-purge)). Planned: locks in the translation
-job, assets, assisted creation, and the exchange format.
+duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-purge)). Delivered in P03.3: assisted
+creation ([Assisted creation](#assisted-creation)), without the content guard. Planned: locks in the translation job,
+assets, the content guard (P03.6), and the exchange format.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -175,6 +176,32 @@ Flow:
 6. Saving goes through the normal `POST /characters`, which starts the tag translation.
 
 If an image is being generated, the job waits, and the Creator shows the queue state.
+
+Delivered in P03.3, with these limits and choices:
+
+- `POST /characters/drafts` takes `{"description": "...", "character_id": null}` and answers `202` with the job. The
+  description is trimmed, must not be blank and has at most 2000 characters. **The content guard does not run yet**: it
+  arrives with P03.6, so step 1 is only the length check today. The grammar still keeps the age between 18 and 120.
+- `CharacterDraft` (`lyrveil.domain.card_draft`) leaves out `traits.locked`, `visual.identity_en`,
+  `visual.usual_outfit_en`, `visual.outfits.tags_en`, `visual.persistent_negative_en`, `visual.locked_fields`,
+  `visual.seed_policy` and `visual.base_seed` (`DRAFT_EXCLUDED_FIELDS`). Its grammar is generated from the model at
+  start-up by `schema_to_gbnf` (`lyrveil.prompts.gbnf`), and every key is written, so the model fills every field.
+  A unit test fails when the draft stops mirroring the card or the grammar stops matching the draft.
+- The handler (`CharacterCreatorService`, `lyrveil.services.character_creator`) runs under the llm lease the scheduler
+  holds. It validates the output as `CharacterDraft`, then as a card with `validate_card`, and repairs once with the
+  Italian reason and the refused output in the prompt (`lyrveil.prompts.structured`). A second refusal fails the job
+  with `STRUCTURED_OUTPUT_INVALID` and that reason in `error_detail`, without a retry; a runtime failure is retried as
+  for chat jobs.
+- The result in `result_json` is `{"card", "proposed_fields", "character_id", "attempts"}`: a whole card that
+  `POST /characters` accepts as it is, and the dotted paths of the fields the model filled (for a new character the
+  name, the age and every field that differs from its default; over a character the fields it changed).
+- With `character_id`, the model sees the current card as data and the draft replaces it: `keep_locked` puts back the
+  locked traits and visual fields, and the locks, the seed policy, the English slots, the negative prompt and the
+  English tags of an outfit whose key stays are kept from the stored card. The English slots therefore do not follow
+  a changed Italian description until the tag translation exists. The stored card does not change.
+- The prompt is Python (`lyrveil.prompts.character_draft`), not a Jinja file, because the backend has no template
+  engine yet. It has the shared shape of [Structured tasks](prompting.md#structured-tasks) and an original worked
+  example, which a unit test validates as a draft.
 
 ## Avatars and images
 

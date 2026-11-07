@@ -39,6 +39,47 @@
       }
     }
 
+    <section class="group" aria-labelledby="creator-assist-title">
+      <h2 id="creator-assist-title" class="persistent-title">{{ 'creator.assist.title' | t }}</h2>
+      <label class="note" for="creator-assist">{{
+        (id() === undefined ? 'creator.assist.hint' : 'creator.assist.hintEdit') | t
+      }}</label>
+      <textarea
+        id="creator-assist"
+        class="control"
+        rows="3"
+        [attr.maxlength]="assistLimit"
+        [value]="assistText()"
+        [disabled]="assistState() === 'waiting'"
+        (input)="assistInput($event)"
+      ></textarea>
+      <div class="row">
+        <button
+          type="button"
+          class="button"
+          [disabled]="assistState() === 'waiting' || assistText().trim() === ''"
+          (click)="requestDraft()"
+        >
+          {{ 'creator.assist.start' | t }}
+        </button>
+        @if (assistState() === 'waiting') {
+          <span class="note" role="status">
+            @if (assistJob()?.status === 'running') {
+              {{ 'creator.assist.running' | t }}
+            } @else {
+              {{ 'creator.assist.queued' | t: { position: assistJob()?.queue_position ?? 1 } }}
+            }
+          </span>
+        }
+      </div>
+      @if (assistState() === 'failed') {
+        <p class="banner error" role="alert">{{ assistError() }}</p>
+      }
+      @if (assistState() === 'ready') {
+        <p class="banner" role="status">{{ 'creator.assist.ready' | t: { fields: proposedLabels() } }}</p>
+      }
+    </section>
+
     <form class="form" novalidate (submit)="save($event)">
       <div class="tabs" role="group" [attr.aria-label]="'creator.tabs.label' | t">
         @for (item of tabs; track item.id) {

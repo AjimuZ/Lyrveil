@@ -206,12 +206,21 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
 - **Draft and leaving.** A new character keeps a local draft in `localStorage` (`lyrveil.character-draft`) until it is
   saved; reopening `/characters/new` restores it and offers **Scarta la bozza**. Leaving with unsaved changes asks for
   confirmation (`leave-guard.ts`). After a first save the screen moves to the character's edit address.
-- **Not delivered, so no control is drawn for it:** the assist panel (`POST /characters/drafts` does not exist), import and
-  export, the avatar actions (P03.3), the counter of how many examples enter the prompt, the first-chunk warning of
+- **Assist panel** (P03.3). **Bozza assistita** above the tabs takes a description of up to 2000 characters and sends
+  `POST /characters/drafts`, with `character_id` on the edit screen. The screen then reads `GET /jobs/{id}` every second
+  and shows **In coda: posizione N** or **Il modello sta scrivendo la bozza…**. A completed draft fills every field, but
+  the form stays unsaved (**Modifiche non salvate**, the leave guard, the local draft): only **Salva personaggio**
+  creates or saves the character, through the normal routes. A note lists, by their labels, the fields the model
+  proposed (`proposed_fields`), instead of a "proposto" mark on each field. On the edit screen the server has already
+  kept the locked traits and fields. A failed draft shows the server's Italian reason, such as "L'età deve essere almeno
+  18.", and leaves the form as it was. The draft replaces what the form held; there is no merge. The job is followed by
+  polling, because the backend does not publish `job.updated` yet.
+- **Not delivered, so no control is drawn for it:** import and export, the avatar actions, the counter of how many examples enter the prompt, the first-chunk warning of
   **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
   the locks' effect on a tag translation (there is no such job yet). The characters list is still a
   placeholder; the new-chat dialog links to the Creator.
-- **Tests:** `card-rules.spec.ts`, `card-form.spec.ts` and `character-creator-screen.spec.ts` (unit), and
+- **Tests:** `card-rules.spec.ts`, `card-form.spec.ts` and `character-creator-screen.spec.ts` (unit, with the assist panel
+  since P03.3), and
   `tests/e2e/specs/character-creator.spec.mjs` (T-CHR-13); see [Testing](testing.md#character-creator). The E2E spec
   was written but not run in this change.
 

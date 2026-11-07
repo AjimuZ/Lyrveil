@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- **Bozza assistita** in the Character Creator: describe a character in Italian and the text model drafts every field of
+  the card, which the form then shows for review. The draft is never saved by itself: the form stays unsaved, a note
+  lists the fields the model proposed, and only **Salva personaggio** creates or changes the character. On the edit
+  screen the draft rewrites the card but keeps the locked traits and appearance fields. The model writes under a
+  grammar generated from the card schema, its answer is validated, and an invalid answer is corrected once; a second
+  failure shows the reason, such as "L'età deve essere almeno 18.". While it waits, the panel shows the queue position.
+  The routes `POST /api/v1/characters/drafts` and `GET /api/v1/jobs/{id}` are new and not in `backend/openapi.json`. The
+  content check on the description is not delivered yet (P03.6).
 - The character profile at `/characters/:id`: identity summary, personality, example exchanges, the character's active
   conversations, a note that the character is simulated, and the version history with **Confronta** (field-by-field
   comparison with the current version) and **Ripristina** (adds a new version, nothing is rewritten). **Duplica**
