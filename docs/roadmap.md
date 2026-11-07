@@ -6,7 +6,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | --- | --- | --- |
 | P00 | Complete design documentation | Done |
 | P01 | Foundations: empty app starts, stops and restarts cleanly | Done |
-| P02 | A real streaming chat with the default text profile | Planned |
+| P02 | A real streaming chat with the default text profile | In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending |
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | Planned |
 | P04 | Memory and consistency | Planned |
 | P05 | Images in messages | Planned |
@@ -88,6 +88,10 @@ Evidence:
 - [ ] P02.7 Run the [VRAM tuning procedure](gpu-orchestration.md#measuring-and-tuning) with the speed rule and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). Record the numbers and update the catalog's VRAM values. Apply the [default rule](models.md#defaults-and-how-they-can-change).
 
 Exit: T-MSG-01 to T-MSG-09, T-MSG-11 to T-MSG-13, T-ORC-03, T-SEC-03, T-SEC-06, T-MOD-01, T-MOD-02 and T-MOD-05 pass. T-GPU-01 to T-GPU-04 and T-GPU-14 pass on the reference machine. A long Italian chat with the default text profile survives a page reload and an application restart.
+
+Evidence:
+
+- [P02 automated exit: the `unit`, `integration`, `e2e` and `lint` levels, with the tests named by the exit](verification/2026-11-07-p02-exit.md). The `docker` level was not run there, and the hardware part (T-GPU-01 to T-GPU-04, T-GPU-14, the long Italian chat across a reload and a restart) is pending with P02.7 and P02.EXIT-HW, so the phase is not done.
 
 ## P03: Characters
 

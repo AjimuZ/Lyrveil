@@ -95,6 +95,7 @@
 - Keep index.html free of a <base> element, since the CSP says base-uri 'none'. Serve assets by absolute URL (deployUrl: "/") and provide APP_BASE_HREF, so a client route of any depth loads on a direct visit.
 - Write e2e helpers that retry a click until its effect shows, using expect(async () => {...}).toPass(). Use this wherever a dialog or list can repaint under the click.
 - Bind message text with interpolation, never innerHTML, and style it with white-space: pre-wrap. T-SEC-03 then holds without sanitizing.
+- Record an exit as a dated docs/verification file: exact commands, versions printed by the commands, result counts per level, a test-to-file table, and an explicit Not run section. Link it under the phase's Evidence list and never edit an item line.
 
 ---
 
@@ -783,4 +784,16 @@ Not verified: the docker level (`test docker`) and the integration level were no
   - The Docker frontend build treats any build warning as a failure, and lint can show one while reporting '0 problem(s)'. Run `test e2e` or read the warnings in the lint output before trusting a green lint. Component stylesheets are warned about above 6 kB and fail above 8 kB.
   - The shell's tool allowlist denies rm, unzip and python. Playwright traces cannot be read, but test-results/*/error-context.md has the page snapshot, and a temporary diagnostic spec that throws the console log is a way to see browser errors.
   - Not run in this task: the docker and integration levels, and the Pester files Orchestrator.Tests.ps1 and Security.Tests.ps1. A conversation-screen component unit test was not written.
+---
+
+## 2026-11-07T04:48:45Z - P02.EXIT
+- I ran the unit, integration, e2e and lint levels through scripts/lyrveil.cmd, and all four passed with no failures or skips, so no code needed fixing. Counts: unit has Pester 38, backend 282, orchestrator 555, Vitest 49 and Node 11; integration has backend 95 and orchestrator 200; e2e has 19 Playwright tests. I wrote docs/verification/2026-11-07-p02-exit.md with the commands, versions, counts, a table matching each exit test to its file, and what was not run. The roadmap's P02 section now has an Evidence list, and the phase table row reads "In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending". I did not touch any item line. Not run: the docker level, the hardware tests (T-GPU-01 to T-GPU-04, T-GPU-14) and the long Italian chat across a reload and a restart.
+- Files changed: docs/roadmap.md, docs/verification/2026-11-07-p02-exit.md
+- **Learnings for future iterations:**
+  - Run the test levels as `scripts/lyrveil.cmd test <level>` with the forward slash; the `cmd.exe //c scripts\lyrveil.cmd` form is denied.
+  - The levels take under about 2 minutes each (e2e about 1 minute with cached images).
+  - The docker level and the Pester files Orchestrator.Tests.ps1 and Security.Tests.ps1 were not run for P02; the exit names no docker test.
+  - tests/e2e/specs/zz-diagnose.spec.mjs passes but still has the old name; the orchestrator should rename it (for example to deep-route.spec.mjs) and fix the two mentions in docs/frontend.md.
+  - docs/testing.md status paragraph was not updated and still says some P02 tests are planned or have not run; the next docs pass could refresh it from the new evidence file.
+  - P02.EXIT-HW still needs a person on the reference machine with the real KoboldCpp and the model.
 ---

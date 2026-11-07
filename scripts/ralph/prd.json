@@ -1008,8 +1008,8 @@
         "The P02 section lists the evidence, and the phase table shows the automated part as passed and the hardware part (P02.7, P02.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 43,
-      "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "passes": true,
+      "notes": "I ran the unit, integration, e2e and lint levels through scripts/lyrveil.cmd, and all four passed with no failures or skips, so no code needed fixing. Counts: unit has Pester 38, backend 282, orchestrator 555, Vitest 49 and Node 11; integration has backend 95 and orchestrator 200; e2e has 19 Playwright tests. I wrote docs/verification/2026-11-07-p02-exit.md with the commands, versions, counts, a table matching each exit test to its file, and what was not run. The roadmap's P02 section now has an Evidence list, and the phase table row reads \"In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending\". I did not touch any item line. Not run: the docker level, the hardware tests (T-GPU-01 to T-GPU-04, T-GPU-14) and the long Italian chat across a reload and a restart.",
       "dependsOn": [
         "P02.1",
         "P02.1a",
