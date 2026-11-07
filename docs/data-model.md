@@ -253,6 +253,15 @@ the key `chat_regenerate:<variant id>`; the older variants stay selectable. An e
 already `complete`. The keys from `generation_jobs` to `conversations`, `characters` and `messages` are still plain
 columns: the batch rebuild of the job table is not part of this revision.
 
+Since P02.5c the reply job writes the variant its payload names, never a new one
+([Streaming persistence](backend.md#streaming-persistence)). A run sets the message `streaming` with empty text, then
+writes the text to the variant and the message every 2 seconds and at the end, with `content_hash` recomputed each
+time. A finished run sets both `complete` (`interrupted` when the runtime reports the generation aborted). A failure
+that will be retried puts the message back to `queued` with empty text and leaves the variant `streaming`; a final
+failure sets both `failed` and keeps the text streamed so far. At startup every message still `streaming` becomes
+`interrupted` with its active variant, and keeps its text. `generation_params_json` and `checks_json` stay NULL until
+the settings store and the reply checks exist (P04).
+
 ## Memory tables
 
 See [Memory engine](memory-engine.md) for behavior.

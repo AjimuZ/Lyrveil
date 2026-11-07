@@ -6,6 +6,7 @@ option of lyrveil.persistence.database, so the service decides what one transact
 
 from sqlalchemy import Connection, RowMapping, text
 
+from lyrveil.domain.characters import CharacterProfile
 from lyrveil.domain.conversations import CharacterRef, Conversation, ConversationStatus
 
 _SELECT = """
@@ -58,6 +59,35 @@ def find_character(connection: Connection, character_id: str) -> CharacterRef | 
         name=_display_name(row["first_name"], row["last_name"]),
         primary_language=row["primary_language"],
         active=row["status"] == "active",
+    )
+
+
+def find_profile(connection: Connection, character_id: str) -> CharacterProfile | None:
+    """Returns the card fields of the reply prompt, or None when no character has that id."""
+    row = (
+        connection.execute(
+            text(
+                "SELECT id, first_name, last_name, age, grammatical_gender, narrative_identity, occupation, setting, "
+                "biography, primary_language FROM characters WHERE id = :id"
+            ),
+            {"id": character_id},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    return CharacterProfile(
+        id=row["id"],
+        first_name=row["first_name"],
+        last_name=row["last_name"],
+        age=row["age"],
+        grammatical_gender=row["grammatical_gender"],
+        narrative_identity=row["narrative_identity"],
+        occupation=row["occupation"],
+        setting=row["setting"],
+        biography=row["biography"],
+        primary_language=row["primary_language"],
     )
 
 

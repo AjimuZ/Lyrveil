@@ -209,6 +209,41 @@ def page(connection: Connection, conversation_id: str, before_seq: int | None, l
     return [_message(row) for row in rows]
 
 
+def prompt_messages(connection: Connection, conversation_id: str, before_seq: int, limit: int) -> list[Message]:
+    """Returns up to `limit` of the newest messages below `before_seq` that a prompt may read, oldest first: not
+    deleted, with text, and `complete` or `interrupted`, so a failed or unfinished reply never enters a prompt."""
+    rows = (
+        connection.execute(
+            text(
+                f"{_MESSAGE_SELECT} WHERE m.conversation_id = :id AND m.deleted_at IS NULL AND m.seq < :before_seq "
+                "AND m.content != '' AND m.status IN ('complete', 'interrupted') ORDER BY m.seq DESC LIMIT :limit"
+            ),
+            {"id": conversation_id, "before_seq": before_seq, "limit": limit},
+        )
+        .mappings()
+        .all()
+    )
+    return [_message(row) for row in reversed(rows)]
+
+
+def streaming_messages(connection: Connection) -> list[Message]:
+    """Returns every message whose status is `streaming`, in id order."""
+    rows = connection.execute(text(f"{_MESSAGE_SELECT} WHERE m.status = 'streaming' ORDER BY m.id")).mappings().all()
+    return [_message(row) for row in rows]
+
+
+def running_reply_jobs(connection: Connection, message_id: str) -> list[str]:
+    """Returns the ids of the running `chat_reply` and `chat_regenerate` jobs of the message, in id order."""
+    rows = connection.execute(
+        text(
+            "SELECT id FROM generation_jobs WHERE message_id = :id AND status = 'running' "
+            "AND kind IN ('chat_reply', 'chat_regenerate') ORDER BY id"
+        ),
+        {"id": message_id},
+    ).all()
+    return [row[0] for row in rows]
+
+
 def get_variant(connection: Connection, variant_id: str) -> Variant | None:
     """Returns the variant, or None when no row has that id."""
     row = connection.execute(text(f"{_VARIANT_SELECT} WHERE id = :id"), {"id": variant_id}).mappings().first()

@@ -16,8 +16,15 @@ No application exists yet. This section records the design documentation.
 - Messages in the backend: send with a `client_message_id` that makes retries return the first result, saved before
   its `chat_reply` job is queued; edit, soft-delete, regenerate the last reply into variants and switch between them,
   and page through history, through `/api/v1/conversations/{id}/messages` and `/api/v1/messages/{id}`. Migration `0004`
-  adds `messages` and `message_variants`. Nothing answers the queued replies yet (streaming comes with P02.5c), and
-  the routes are not in `backend/openapi.json` yet.
+  adds `messages` and `message_variants`. The routes are not in `backend/openapi.json` yet.
+- Streaming replies in the backend: the job worker now runs with the application and answers each queued reply or
+  regeneration through KoboldCpp, one at a time in queue order, with a prompt made of the character's name, age and
+  basic card fields and the recent chat. The text is saved every 2 seconds and at the end; a runtime failure is
+  retried once from a clean reply, and a reply cut by a crash or a shutdown is shown as interrupted with what it had
+  written. The event WebSocket `/ws` now sends the reply's typing, token, completion and failure events, replays what a
+  reconnecting tab missed from the newest 2000 events, or asks it to reload. Not yet usable end to end: the backend
+  image lacks the WebSocket library, the orchestrator service is not served yet, and the chat screens come with P02.6.
+  Replies are not yet normalized or checked (P04.8), and sampling uses the `gemma4` defaults whatever the profile.
 - The model catalog, `config/model-catalog.json`, with the five text and three image
   profiles, each pinned to a revision with its size and SHA-256 as `docs/models.md`
   lists them, and the backend validator that refuses a bad catalog. The tier defaults

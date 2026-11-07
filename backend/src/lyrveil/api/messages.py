@@ -6,11 +6,12 @@ Docker `openapi` target, so `include_in_schema` is off. `remember` and `diagnost
 
 from typing import Literal
 
+import anyio.from_thread
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 
-from lyrveil.domain.messages import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, JobRef, Message, Variant
+from lyrveil.domain.messages import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, JobRef, Message, Variant, message_document
 from lyrveil.services.messages import MessageService
 
 router = APIRouter(tags=["messages"], include_in_schema=False)
@@ -90,20 +91,8 @@ class EditMessage(BaseModel):
 
 
 def _message(message: Message) -> MessageOut:
-    return MessageOut(
-        id=message.id,
-        conversation_id=message.conversation_id,
-        seq=message.seq,
-        author=message.author.value,
-        kind=message.kind,
-        status=message.status.value,
-        read_state=message.read_state,
-        active_variant_id=message.active_variant_id,
-        content=message.content,
-        variant_count=message.variant_count,
-        edited_at=message.edited_at,
-        created_at=message.created_at,
-    )
+    # The same document as the `message` of the message events, so REST and the WebSocket never disagree on shape.
+    return MessageOut.model_validate(message_document(message))
 
 
 def _job(job: JobRef) -> JobOut:
@@ -120,6 +109,14 @@ def _variant(variant: Variant) -> VariantOut:
         status=variant.status.value,
         created_at=variant.created_at,
     )
+
+
+def _wake_worker(request: Request) -> None:
+    """Lets the job worker pick the job just queued at once instead of at its next poll. Needs the route's worker
+    thread, which FastAPI gives every plain `def` route. Does nothing while no worker runs."""
+    scheduler = request.app.state.scheduler
+    if scheduler is not None:
+        anyio.from_thread.run_sync(scheduler.notify)
 
 
 def get_service(request: Request) -> MessageService:
@@ -147,11 +144,14 @@ def list_messages(
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=SendResult, status_code=202)
-def send_message(conversation_id: str, body: SendMessage, service: MessageService = Service) -> SendResult:
+def send_message(
+    conversation_id: str, body: SendMessage, request: Request, service: MessageService = Service
+) -> SendResult:
     """Saves the user's message and queues the character's reply. Sending the same `client_message_id` again returns
     the first result. 404 for a missing or deleted chat, 409 for an archived chat or a full queue, 413 over 8000
     characters and 422 for blank text."""
     sent = service.send(conversation_id, body.content, client_message_id=body.client_message_id, intent=body.intent)
+    _wake_worker(request)
     return SendResult(message=_message(sent.message), reply=_message(sent.reply), job=_job(sent.job))
 
 
@@ -169,9 +169,10 @@ def delete_message(message_id: str, service: MessageService = Service) -> Respon
 
 
 @router.post("/messages/{message_id}/regenerate", response_model=RegenerateResult, status_code=202)
-def regenerate_message(message_id: str, service: MessageService = Service) -> RegenerateResult:
+def regenerate_message(message_id: str, request: Request, service: MessageService = Service) -> RegenerateResult:
     """Adds a variant to the last character message and queues its generation. 409 for any other message."""
     result = service.regenerate(message_id)
+    _wake_worker(request)
     return RegenerateResult(message=_message(result.message), variant_id=result.variant_id, job=_job(result.job))
 
 

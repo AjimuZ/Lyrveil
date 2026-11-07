@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), and the message routes listed under [Messages](#messages). The events of `/ws`, the other error codes and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), the message routes listed under [Messages](#messages), and on `/ws` the `hello` with replay or `resync.required` and the reply events listed under [Event WebSocket](#event-websocket). The other events, the other error codes and the rest are planned, phases P01 to P07.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -280,11 +280,31 @@ Endpoint: `/ws`. One connection per browser tab. The server checks `Origin` and 
 before accepting, and refuses the handshake with `403 FORBIDDEN_ORIGIN` otherwise
 ([Security](security.md#local-only-model)).
 
-Delivered in P01.7a: the checks, the handshake and the `connected` frame. The server reads and ignores client frames
-until P02.5c adds replay and the events. In-process tests cover it. The backend image cannot serve it yet, because
-Uvicorn needs a WebSocket library, `websockets` in [Technology](technology.md), which is not in `pyproject.toml` and
-`uv.lock` yet; until then Uvicorn cannot upgrade the connection. Adding it needs the lock regenerated in the `lockfile`
-stage ([Backend](backend.md#dependencies-and-image)) and its version added to `tests/unit/test_locked_environment.py`.
+Delivered in P01.7a: the checks, the handshake and the `connected` frame. Delivered in P02.5c: the `hello`, replay and
+`resync.required`, and the reply events (`lyrveil/events/hub.py`, `lyrveil/api/events.py`). In-process tests cover it.
+The backend image cannot serve it yet, because Uvicorn needs a WebSocket library, `websockets` in
+[Technology](technology.md), which is not in `pyproject.toml` and `uv.lock` yet; until then Uvicorn cannot upgrade the
+connection. Adding it needs the lock regenerated in the `lockfile` stage
+([Backend](backend.md#dependencies-and-image)) and its version added to `tests/unit/test_locked_environment.py`.
+
+Rules of the delivered server, beyond the protocol below:
+
+- The connection receives events only after its first `hello` is answered, so a live event never arrives before the
+  older ones a replay brings. A later `hello`, `ping` and any other frame are ignored and change nothing.
+- `last_event_id` null (a first connection): no replay; the events published since the connection opened follow.
+- A replay needs the server's own `boot_id` and an `id` the server handed out whose followers are all still among the
+  newest 2000. Otherwise, and for a `hello` whose fields have the wrong type, the server sends one `resync.required`
+  frame, `{"v": 1, "id": N, "type": "resync.required", "ts": "...", "data": {}}`, where `N` is the newest event `id`:
+  every event up to it was published after its change was committed, so a REST reload shows it, and the next `hello`
+  resumes from it. `N` is 0 before the first event.
+- A connection that falls more than 2000 events behind loses its queued events and gets one `resync.required` instead,
+  so a slow client cannot make the backend's memory grow.
+- Published so far, by the reply job only: `typing.started`, `message.delta`, `typing.stopped`, `message.completed`,
+  `message.failed`, and `message.updated` when a failed run will be retried and the reply goes back to `queued` with
+  empty text. The REST routes, the job states, the GPU state and the rest publish nothing yet.
+- `message.delta` `offset` counts UTF-16 code units of the text before the delta, the index unit of JavaScript strings.
+  The deltas are the runtime's tokens: [reply normalization](consistency-engine.md#reply-normalization) and
+  `message.restarted` come with P04.8.
 
 Server frames:
 

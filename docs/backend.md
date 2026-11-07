@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). Delivered in P02.5c: `events/hub.py` with the replay buffer, the events of `/ws`, `ChatInferenceService` as the handler of `chat_reply` and `chat_regenerate`, the job worker in the application's lifespan and the recovery of interrupted replies ([Streaming persistence](#streaming-persistence)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -24,7 +24,7 @@ backend/
     services/            CharacterService, ConversationService, MessageService...
     memory/              MemoryManager, extraction, retrieval, consistency, summaries
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
-    context/             ContextBuilder, token budgets, length bands
+    context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
     images/              ImageGenerationService, VisualConsistencyService, tag vocabulary, sanitizer, workflow loader
     jobs/                JobScheduler, job handlers, retry policy
@@ -33,7 +33,7 @@ backend/
     runtimes/            KoboldCppRuntime, ComfyUiRuntime
     orchestration/       OrchestratorClient
     media/               MediaStore: staging, atomic moves, thumbnails
-    events/              EventBus, WebSocket hub with replay buffer
+    events/              EventHub: event ids, replay buffer, one bounded queue per WebSocket connection
   tests/
 
 orchestrator/
@@ -67,7 +67,7 @@ orchestrator/
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
 | `ContextBuilder` | `context` | Builds the prompt in four parts within the token budget: stable system text, history, dynamic context with the anchor, current message ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `PromptTemplateService` | `prompts` | Loads versioned templates by language, renders them, provides grammars. |
-| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. |
+| `ChatInferenceService` | `services` | Runs a reply: lease, context, stream through the normalizer, [reply checks](consistency-engine.md#reply-checks), at most one corrective regeneration, persistence. Delivered in P02.5c: the minimal context, the stream and the persistence, under the lease the scheduler holds; the normalizer, the checks and the corrective generation join with P04.8. |
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
@@ -123,14 +123,16 @@ class LifecycleClient(Protocol):
 
 Other ports: `MemoryRetriever`
 ([contract](memory-engine.md#retrieval-contract)), `TokenCounter`, `Clock`, `MediaStore`,
-`EventPublisher`, `UnitOfWork`.
+`EventPublisher`, `UnitOfWork`. `EventPublisher` is delivered in `ports/events.py` (P02.5c), with `EventHub` as its
+adapter.
 
 Adding a model means writing a new adapter or changing a model file. No service changes.
 
 ### Text runtime
 
 Delivered in P02.3a: `ports/text_runtime.py` holds `TextRuntime` with its types and errors, and
-`runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Nothing calls the adapter yet: the job handlers of P02.5 will.
+`runtimes/koboldcpp.py` holds `KoboldCppRuntime`. Since P02.5c the job worker opens it for the application's life and
+`ChatInferenceService` streams replies through it.
 Delivered in P02.3b: `prompts/formatter.py` renders the prompt text that the adapter sends
 ([Prompt formatter](#prompt-formatter)).
 
@@ -172,7 +174,7 @@ KoboldCpp endpoint table, or when a request sends a field outside the Generation
 ### Prompt formatter
 
 Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#prompt-format) of each family.
-Nothing calls it yet: `ContextBuilder` will.
+Since P02.5c `ChatInferenceService` renders replies with it; `ContextBuilder` takes over the parts in P04.5.
 
 - `formatter_for(family)` returns the formatter of a catalog `template`: `gemma4`, `mistral_v3_tekken` or `chatml`.
 - `chat(parts, current_message)` and `proactive(parts, instruction)` take a `ChatParts`: the stable text, the
@@ -219,6 +221,43 @@ the database every 2 seconds, and at the end. A corrected check that fires publi
 and the second generation overwrites the same variant. After a crash the reply keeps what was
 written, its status becomes `interrupted` and the interface offers regeneration.
 
+Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `events/hub.py`
+([APIs](api.md#event-websocket)):
+
+| Moment | Database | Events |
+| --- | --- | --- |
+| Run starts | Message `streaming`, text emptied; the payload's variant stays `streaming` | `typing.started` |
+| Each token | Written every 2 s (`FLUSH_INTERVAL_S`), each time in its own short transaction | `message.delta` |
+| Runtime finishes | Variant and message `complete` with the whole text; `interrupted` when the runtime reports `aborted` | `typing.stopped`, `message.completed` |
+| Failure, retry coming | Message back to `queued`, text emptied, so the next run starts clean | `typing.stopped`, `message.updated` |
+| Final failure | Variant and message `failed`, with the text streamed so far | `typing.stopped`, `message.failed` |
+| Shutdown cancels the run | Text flushed, reply left `streaming` | None |
+| Next start | Every `streaming` message and its active variant become `interrupted`; their running job ends `failed` with `JOB_INTERRUPTED` | None |
+
+- The handler decides "retry coming" with the queue's own rule: a retryable failure (a `TextRuntimeError`, a lost lease,
+  or a `JobFailedError` marked retryable) while `attempt` is below the kind's maximum. Any other exception is a final
+  `INTERNAL` failure. A preemption always counts as a retry.
+- A cancellation during a run is a lost lease (`LEASE_LOST`), the only cancellation the scheduler makes, unless the
+  lifespan has called `close()` first, which marks the shutdown.
+- A run whose variant is no longer waiting (finished by a run whose job state a restart lost, replaced, or deleted) is
+  done at once with `{"skipped": true}`, without touching the runtime. A reply whose chat was deleted ends `failed`.
+- The prompt is `context/minimal.py`: block 1 and block 2 of [Prompting](prompting.md#system-blocks) with the card
+  fields P02 stores, then the chat's `complete` and `interrupted` messages with text, at most the newest 100, and the
+  newest user message before the reply as the current one. The oldest turns are dropped, a quarter at a time, until the
+  runtime's own token count (BOS included) plus `max_length` fits the context size the runtime reports. Blocks 3, 4, 5
+  and 9 are empty until P03.1 and P04.
+- `ReplySettings` holds the documented defaults while no settings store exists: the `gemma4` family, the `gemma4` chat
+  sampler preset, `max_length` 400 and the user `Utente`. Both tiers' default text profiles are `gemma4`, so another
+  active profile is not followed yet.
+- Choices the documents did not fix: a crash or a shutdown in the middle of a reply ends its job at the next start
+  instead of queuing it again, so the partial text the user saw is not silently replaced; a reply still `queued` when
+  the backend stops is queued again. With no user message left before the reply (the user deleted it) the run fails
+  with `INTERNAL`.
+
+`tests/integration/test_reply_streaming.py` holds T-MSG-03 (token order, the flush times against a fake clock, the
+stored text), T-MSG-09, T-MSG-12 through the application's `/ws` with its lifespan worker, T-MSG-13 through a restart
+of `main()`, the retry path and T-SEC-06. `tests/unit/test_event_hub.py` covers the replay rules and the bounded queue.
+
 ### Startup sequence
 
 1. Load settings, configure logging.
@@ -231,8 +270,11 @@ written, its status becomes `interrupted` and the interface offers regeneration.
 8. Report ready.
 
 Delivered so far: steps 1 and 2, step 3 without the backup, because the backup service is planned and the
-baseline has no data to protect, and the job half of step 5 ([Job queue](#job-queue)). Step 4, the variant half of
-step 5, and steps 6 and 7 are planned. A failure of the job recovery stops startup like a migration failure. `main()` stops with exit status 69 and the log event
+baseline has no data to protect, step 5 ([Job queue](#job-queue), [Streaming persistence](#streaming-persistence)),
+and step 7 for the WebSocket hub, built with the application, and the job worker, started by its lifespan. Step 4,
+step 6 and the proactive evaluator of step 7 are planned. Until step 6 the worker assumes the `llm` mode: a lease the
+orchestrator refuses (`NOT_READY`) keeps a reply queued. In step 5 the replies are recovered before the other jobs,
+because they end their own jobs. A failure of either recovery stops startup like a migration failure. `main()` stops with exit status 69 and the log event
 `database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with
 `database_unavailable` when the file cannot be opened or migrated, so the server never starts on a database it cannot trust.
 
@@ -280,7 +322,7 @@ every application:
 | `LocalOnlyMiddleware` | Refuses a `Host` outside `Settings.allowed_hosts` and `127.0.0.1:8000`, and an `Origin` outside `Settings.allowed_origins` on writes and WebSocket handshakes, with `403 FORBIDDEN_ORIGIN` in `application/problem+json`. It runs before any route. |
 | `SecurityHeadersMiddleware` | Sets the [documented headers](security.md#http-headers) on every answer and WebSocket handshake answer, refusals included, with the WebSocket origins on `LYRVEIL_HTTP_PORT`. |
 | `internal_error_handler` | Turns an unexpected exception into a generic `500 INTERNAL` with the same headers. Starlette runs it outside the middleware, so it sets them itself. |
-| `api/events.py` | `/ws`: accepts the handshake, sends the `connected` frame with `app.state.boot_id`, ignores client frames. Events arrive in P02.5c ([APIs](api.md#event-websocket)). |
+| `api/events.py` | `/ws`: accepts the handshake, sends the `connected` frame with `app.state.boot_id`, answers the first `hello` with the replay or `resync.required` of `app.state.events`, then sends events; other client frames are ignored ([APIs](api.md#event-websocket)). |
 
 A test client must use the app's address, for example `TestClient(app, base_url="http://localhost:4200")`: the default
 `testserver` Host is refused. `tests/integration/test_local_only.py` is T-SEC-01.
@@ -289,6 +331,9 @@ A test client must use the app's address, for example `TestClient(app, base_url=
 
 On SIGTERM: stop accepting jobs, flush the running reply, release the lease, close
 WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quick.
+
+Delivered in P02.5c: the lifespan stops the job worker and the running reply flushes its text and stays `streaming`,
+for the next start to mark `interrupted`. Its lease is not released: it expires after its TTL.
 
 ## Job handlers
 
@@ -317,9 +362,10 @@ WebSockets and exit. The `stop.cmd` drain runs earlier, so this is normally quic
 ### Job queue
 
 Delivered in P02.4: revision `0002` creates `generation_jobs` ([Data model](data-model.md#generation_jobs)), and
-`jobs/` holds the queue ([ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md)). No handler is registered and
-the worker is not started yet: P02.5 adds the chat handlers and starts it in the lifespan. Mode requests, batching,
-fairness, preemption across modes and cancellation come with P06.3.
+`jobs/` holds the queue ([ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md)). Since P02.5c the application's
+lifespan runs the worker with `ChatInferenceService` for `chat_reply` and `chat_regenerate`, and a send or a
+regeneration wakes it at once (`JobScheduler.notify`); jobs of other kinds wait. Mode requests, batching, fairness,
+preemption across modes and cancellation come with P06.3.
 
 | Module | Responsibility |
 | --- | --- |

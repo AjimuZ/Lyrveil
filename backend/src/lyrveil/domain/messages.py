@@ -84,6 +84,27 @@ class Message:
     created_at: str
 
 
+def message_document(message: Message) -> dict[str, object]:
+    """Returns the public fields of `message`, the `message` of the REST answers and of the `message.*` events.
+
+    Leaves out `client_message_id` and `deleted_at`, which only the backend uses.
+    """
+    return {
+        "id": message.id,
+        "conversation_id": message.conversation_id,
+        "seq": message.seq,
+        "author": message.author.value,
+        "kind": message.kind,
+        "status": message.status.value,
+        "read_state": message.read_state,
+        "active_variant_id": message.active_variant_id,
+        "content": message.content,
+        "variant_count": message.variant_count,
+        "edited_at": message.edited_at,
+        "created_at": message.created_at,
+    }
+
+
 @dataclass(frozen=True)
 class JobRef:
     """The job a send or a regeneration queued. `queue_position` counts the queued and running jobs that run before
