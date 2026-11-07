@@ -147,9 +147,18 @@ class CharacterService:
             for path in paths:
                 media.delete(path)
 
-    def _insert_new(self, card: CharacterCard, *, actor: str, summary: str) -> CharacterSummary:
-        """Stores `card` as a new active character at version 1 and returns it. Raises ContentPolicyBlockedError,
-        writing nothing, when a text of `card` describes a minor."""
+    def create_demo(self, card: CharacterCard) -> CharacterSummary:
+        """Returns a new active character flagged `is_demo`, at version 1 with actor `import`, holding `card`, which the
+        caller has already validated with validate_card. The flag and the card are written in one transaction."""
+        return self._insert_new(card, actor="import", summary="Personaggio dimostrativo", demo=True)
+
+    def demo_names(self) -> set[tuple[str, str | None]]:
+        """Returns the (first name, last name) of every demo character, whatever its status."""
+        return read(self._engine, repository.demo_names)
+
+    def _insert_new(self, card: CharacterCard, *, actor: str, summary: str, demo: bool = False) -> CharacterSummary:
+        """Stores `card` as a new active character at version 1 and returns it, flagged as a demo when `demo`. Raises
+        ContentPolicyBlockedError, writing nothing, when a text of `card` describes a minor."""
         # This service is the only writer of cards, so its two write paths check every card, whatever the caller did.
         check_card(card)
         character_id = new_id()
@@ -157,6 +166,8 @@ class CharacterService:
 
         def work(connection: Any) -> CharacterSummary:
             repository.insert(connection, character_id=character_id, card=card, now=now)
+            if demo:
+                repository.mark_demo(connection, character_id)
             repository.insert_version(
                 connection,
                 character_id=character_id,

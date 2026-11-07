@@ -1299,8 +1299,8 @@
         "They cover the three registers the Italian quality protocol of docs/prompting.md needs."
       ],
       "priority": 55,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Added three original demo characters (Nerea Falchi, Ilario Sant'Elmo, Tessa Moravi) in lyrveil.services.demo_characters, and a POST /characters/demo route that loads them on request. The route is not in the committed OpenAPI document, like the other character routes. `scripts/lyrveil.cmd test lint` passed, and the 5 new tests in tests/integration/test_demo_characters.py passed. I did not run the full unit or integration levels. Loading skips any demo already present and never changes another character, so a user character with the same name stays as it is. Each demo is flagged is_demo in the same transaction as its insert. The first-start question, the screen button, the two synthetic test characters aged 52 and 70 and the tests/fixtures/characters/ files are not delivered. The docs say this.",
       "dependsOn": [
         "P03.6a"
       ],

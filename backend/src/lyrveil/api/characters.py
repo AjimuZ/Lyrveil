@@ -1,7 +1,7 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
 versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
-draft, and the exchange routes: export, import and the JSON Schema of the format. Not in the committed OpenAPI
-document yet, for the reason given in lyrveil.api.conversations.
+draft, the exchange routes (export, import and the JSON Schema of the format) and the load of the demo characters.
+Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
 from typing import Annotated, Any
@@ -21,6 +21,7 @@ from lyrveil.media.store import MediaStore
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
 from lyrveil.services.characters import CharacterService
+from lyrveil.services.demo_characters import DemoCharacterService
 
 router = APIRouter(prefix="/characters", tags=["characters"], include_in_schema=False)
 
@@ -109,6 +110,13 @@ class ImportOut(BaseModel):
     character: CharacterOut
     assets_imported: int
     assets_without_data: int
+
+
+class DemoOut(BaseModel):
+    """The demo characters a load created, and the full names it skipped as already loaded."""
+
+    created: list[CharacterOut]
+    skipped: list[str]
 
 
 class DraftBody(BaseModel):
@@ -244,6 +252,18 @@ async def import_character(
         assets_imported=result.assets_imported,
         assets_without_data=result.assets_without_data,
     )
+
+
+@router.post("/demo", response_model=DemoOut, status_code=201)
+def load_demo_characters(request: Request) -> DemoOut:
+    """Adds the original demo characters that are not loaded yet, as new active characters flagged `is_demo`, and
+    answers `201` with the ones created and the names skipped because a demo of that name exists. It never overwrites
+    or changes an existing character, so calling it twice adds nothing the second time."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    result = DemoCharacterService(engine, request.app.state.media).load()
+    return DemoOut(created=[_out(item) for item in result.created], skipped=result.skipped)
 
 
 @router.get("/format-schema")

@@ -130,6 +130,17 @@ def insert(connection: Connection, *, character_id: str, card: CharacterCard, no
     _write_visual(connection, character_id, card, now)
 
 
+def mark_demo(connection: Connection, character_id: str) -> None:
+    """Flags the character as one of the original demo characters (`is_demo`); nothing else about it changes."""
+    connection.execute(text("UPDATE characters SET is_demo = 1 WHERE id = :id"), {"id": character_id})
+
+
+def demo_names(connection: Connection) -> set[tuple[str, str | None]]:
+    """Returns the (first name, last name) of every demo character, active or archived."""
+    rows = connection.execute(text("SELECT first_name, last_name FROM characters WHERE is_demo = 1")).all()
+    return {(row[0], row[1]) for row in rows}
+
+
 def replace_card(connection: Connection, *, character_id: str, card: CharacterCard, version_no: int, now: str) -> None:
     """Replaces the stored card of an existing character with `card`, sets `current_version_no` and `updated_at`, and
     leaves status, creation time and assets alone. Traits are rewritten whole, so they get new ids."""

@@ -416,5 +416,14 @@ protocols and README screenshots:
 
 The first start asks whether to add them. The default answer is no, so a new installation holds no invented data.
 
+Delivered in P03.6b, backend only: the cards live in `lyrveil.services.demo_characters` (the built-in source, so a
+packaged install can load them), and `POST /characters/demo` adds each one that is not loaded yet as a new active
+character flagged `is_demo`, with actor `import`. A demo counts as loaded when a demo character of the same name
+exists, archived or not, so a second call adds nothing; a user character with the same name is never touched. The
+cards pass the same card rules and content guard as any other, and the integration test exports each loaded demo and
+imports it back. Together they cover the three registers: `informale`/`tu` with brief messages, `formale`/`lei` with long
+ones, and `molto_informale`/`tu` with very short bursts. Not delivered: the first-start question, the screen button, the
+two synthetic test characters aged 52 and 70 and the `tests/fixtures/characters/` files.
+
 `tests/fixtures/characters/quality/` also holds two synthetic test characters, aged 52 and 70, for the
 [image identity protocol](image-generation.md#image-identity-protocol). They are never offered to users.

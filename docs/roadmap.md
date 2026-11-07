@@ -104,7 +104,7 @@ Evidence:
 - [x] P03.3 Assisted creation with grammar, validation and repair.
 - [x] P03.4 Upload, crop, variants and primary avatar.
 - [x] P03.5 Exchange format, import, export and JSON Schema.
-- [ ] P03.6 Content guard for character data. Demo characters.
+- [x] P03.6 Content guard for character data. Demo characters.
 - [ ] P03.7 Multiple conversations per character, scenarios, backup and restore.
 
 Exit: T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar.

@@ -110,6 +110,7 @@ All paths are under `/api/v1`.
 | `GET /characters/{id}/export?include_assets=` | Format in [Character system](character-system.md#exchange-format). |
 | `POST /characters/import` | Multipart upload of `file`. Always creates a new character. |
 | `GET /characters/format-schema` | JSON Schema of the exchange format. |
+| `POST /characters/demo` | Adds the demo characters not loaded yet (flag `is_demo`). Answers `201` with `{"created": [...], "skipped": [...]}`. Never overwrites a character. |
 | `POST /characters/drafts` | Body `{"description": "..."}`. Starts `character_draft`. The job result is an unsaved draft. |
 
 Delivered in P03.5: the three exchange routes. `GET .../export` answers the file as a download named after the first name

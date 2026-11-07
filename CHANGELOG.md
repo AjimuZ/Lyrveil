@@ -10,6 +10,10 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Three original demo characters (Nerea Falchi, Ilario Sant'Elmo and Tessa Moravi), adults with Italian voices in
+  three registers, can be added on request with `POST /api/v1/characters/demo`. Nothing is loaded by default, loading
+  twice adds nothing, and an existing character is never changed. The first-start question and the screen button are
+  not delivered yet.
 - Characters must be adults in their text too: creating, saving, importing, duplicating or restoring a character whose
   text names a minor (such as "bambina", "adolescente", "teenager"), states an age under 18 ("ha 16 anni",
   "sedicenne", "16 years old") or puts childhood next to sexual content is refused with `CONTENT_POLICY_BLOCKED`, and

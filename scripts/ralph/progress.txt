@@ -121,6 +121,7 @@
 - Write long term lists as comma-separated strings in a constant (the formatter cannot reflow them) and unit-test that every entry equals its normalized form, so no entry is dead.
 - Prove a safeguard is not configurable with an AST check of the module's imports and names plus an end-to-end test under non-default settings, hostile environment variables and settings rows.
 - Keep test file basenames unique across tests/unit and tests/integration, or make both folders packages; mypy --strict refuses duplicate module names.
+- Write paths that must flag a row (such as is_demo) pass the flag into the single transaction of _insert_new instead of updating afterwards.
 
 ---
 
@@ -972,4 +973,15 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - Targeted runs work through the unit level with any path under tests/, integration files included: scripts/lyrveil.cmd test unit tests/integration/<file>.py.
   - Bash `git status` was denied by the permission mode in this session; the project check commands were allowed.
   - The draft prompt (prompts/character_draft.py) does not mention the text rules; a model output that describes a minor costs the one repair.
+---
+
+## 2026-11-07T07:14:39Z - P03.6b
+- Added three original demo characters (Nerea Falchi, Ilario Sant'Elmo, Tessa Moravi) in lyrveil.services.demo_characters, and a POST /characters/demo route that loads them on request. The route is not in the committed OpenAPI document, like the other character routes. `scripts/lyrveil.cmd test lint` passed, and the 5 new tests in tests/integration/test_demo_characters.py passed. I did not run the full unit or integration levels. Loading skips any demo already present and never changes another character, so a user character with the same name stays as it is. Each demo is flagged is_demo in the same transaction as its insert. The first-start question, the screen button, the two synthetic test characters aged 52 and 70 and the tests/fixtures/characters/ files are not delivered. The docs say this.
+- Files changed: backend/src/lyrveil/services/demo_characters.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/api/characters.py, backend/tests/integration/test_demo_characters.py, CHANGELOG.md, docs/api.md, docs/character-system.md
+- **Learnings for future iterations:**
+  - Demo cards are Python dicts in services/demo_characters.py and are validated at load time by validate_card, so a vocabulary or content-guard change that breaks one fails test_demo_characters.py.
+  - characters.is_demo already existed in migration 0003; no migration was needed. The character_versions actor CHECK has no 'demo' value, so demos use actor 'import'.
+  - Slot tags must come from backend/src/lyrveil/images/vocabulary/tags.v1.json; I checked the ones used by hand against its category lists.
+  - Not delivered: the first-start prompt, a frontend button, the synthetic 52 and 70 year-old test characters, and files under tests/fixtures/characters/. P05 (image identity protocol) needs the two synthetic characters.
+  - Ruff enforces 120 columns and format; long dict literals need to be split across lines.
 ---
