@@ -958,7 +958,7 @@
       ],
       "priority": 41,
       "passes": false,
-      "notes": "Sessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
+      "notes": "BLOCKED: Acceptance criterion 1 cannot be met yet: the Compose test stack cannot stream a reply, so the browser tests for T-MSG-03, T-MSG-04, T-MSG-07, T-MSG-09 and T-MSG-12 cannot be written against it. Two prerequisites are missing. (1) The backend image has no WebSocket library: `websockets` is not in backend/pyproject.toml or uv.lock, so Uvicorn cannot upgrade `/ws`. Adding it needs the lock regenerated in the Docker `lockfile` stage, plus the version added to tests/unit/test_locked_environment.py. (2) The orchestrator has no `lyrveil_orchestrator.main`, so the backend never gets a lease a\nSessions may run `npm install`, `npm ci`, `npm run`, `npm ls`, `npm view`, `npx @angular/cli@22.2.5` and `npx playwright`; global installs are denied. Keep `package-lock.json` committed.",
       "dependsOn": [
         "P02.6a",
         "P02.5c"
