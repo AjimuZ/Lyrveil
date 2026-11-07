@@ -1369,8 +1369,8 @@
         "The P03 section lists the evidence, and the phase table shows the automated part as passed and the hardware and manual part (P03.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 58,
-      "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "passes": true,
+      "notes": "I ran the unit, integration, e2e, docker and lint levels. All five pass on their last run, and the tests the P03 exit names pass, T-DCK-12 included. `unit`, `e2e` and `docker` each failed on the first run, so I fixed those failures. The evidence is in `docs/verification/2026-11-07-p03-exit.md`, with commands, versions and counts. Counts: unit has Pester 39, backend 433, orchestrator 555, Vitest 16 files (86 tests in the earlier run) and 11 Node tests. Integration has backend 203 and orchestrator 200. e2e has 25 and docker has 153. The roadmap's P03 row now reads \"automated exit passed; hardware and manual part (P03.EXIT-HW) pending\", and the P03 section has an Evidence list. T-GPU-05 and the manual AC run were not run, so the phase is not done. No product behavior changed. The one shipped-code change is the purge dialog on the profile screen: the `alertdialog` role moved from the `<form>` to a wrapping `<div>`, because axe rejected it.",
       "dependsOn": [
         "P03.1a",
         "P03.1b",

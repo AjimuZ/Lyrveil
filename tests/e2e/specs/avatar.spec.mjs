@@ -60,7 +60,7 @@ test('an avatar is uploaded, cropped and made primary, and the conversation list
   await page.getByRole('button', { name: "Carica l'avatar" }).click();
   const variants = page.getByTestId('avatar-variants').getByRole('listitem');
   await expect(variants).toHaveCount(1);
-  await expect(variants.first().getByText('Principale')).toBeVisible();
+  await expect(variants.first().getByText('Principale', { exact: true })).toBeVisible();
 
   // Crop it: a new variant; the original stays and keeps the primary mark.
   await page.getByRole('button', { name: 'Ritaglia la variante 1' }).click();
@@ -74,9 +74,14 @@ test('an avatar is uploaded, cropped and made primary, and the conversation list
 
   // Make the cropped variant primary; the list of chats shows it.
   await page.getByRole('button', { name: /^Rendi principale la variante/ }).click();
-  await expect(page.getByText('Principale')).toHaveCount(1);
-  const after = await (await page.request.get(`/api/v1/characters/${id}/assets?kind=avatar`)).json();
-  expect(after.items.find((item) => item.is_primary).id).toBe(cropped.id);
+  await expect(page.getByText('Principale', { exact: true })).toHaveCount(1);
+  // The mark count is 1 before and after the click, so the stored choice is polled instead of read once.
+  await expect
+    .poll(async () => {
+      const after = await (await page.request.get(`/api/v1/characters/${id}/assets?kind=avatar`)).json();
+      return after.items.find((item) => item.is_primary)?.id;
+    })
+    .toBe(cropped.id);
 
   await page.goto('/chats');
   const row = page.getByRole('listitem').filter({ hasText: name });

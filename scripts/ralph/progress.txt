@@ -128,6 +128,8 @@
 - To tell whether SQLite is idle across processes, keep one read-only sqlite3 connection open and compare PRAGMA data_version between checks: it changes only when another connection commits.
 - To pass Python code with double quotes into a container from Windows PowerShell 5.1, pipe it on stdin (`$code | & docker ... exec -T <service> python - <args>`) instead of passing it as a native argument, which drops the quotes.
 - When two PowerShell modules would import each other, move the shared functions into a third module that both import; load it with -Force in the first one and without -Force everywhere else so one instance is reused.
+- An evidence file lists the last run of each level, the failures of earlier runs with their fix, and what was not run, so nothing unrun is recorded as passed.
+- A docker-level test that depends on image contents builds the image itself instead of trusting a tag that setup left from an earlier checkout.
 
 ---
 
@@ -1036,4 +1038,16 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - Get-ToolContainerArgument, Get-BackupFolder, Get-ToolTarget, Invoke-ToolContainer and Export-LyrveilBackup now live in scripts/lib/ToolContainer.psm1 and are no longer exported by DataFiles.psm1; tests import ToolContainer.psm1 without -Force after DataFiles or Lifecycle. Export-LyrveilBackup returns an int exit status.
   - PSScriptAnalyzer in `test lint` checks only Git-tracked files, so ToolContainer.psm1 was not analyzed before commit; running the analyzer directly is denied in this environment.
   - Still planned from R-BE-07: Impostazioni > Dati with POST and GET /backups, and the backup before migrations (startup step 3).
+---
+
+## 2026-11-07T08:16:22Z - P03.EXIT
+- I ran the unit, integration, e2e, docker and lint levels. All five pass on their last run, and the tests the P03 exit names pass, T-DCK-12 included. `unit`, `e2e` and `docker` each failed on the first run, so I fixed those failures. The evidence is in `docs/verification/2026-11-07-p03-exit.md`, with commands, versions and counts. Counts: unit has Pester 39, backend 433, orchestrator 555, Vitest 16 files (86 tests in the earlier run) and 11 Node tests. Integration has backend 203 and orchestrator 200. e2e has 25 and docker has 153. The roadmap's P03 row now reads "automated exit passed; hardware and manual part (P03.EXIT-HW) pending", and the P03 section has an Evidence list. T-GPU-05 and the manual AC run were not run, so the phase is not done. No product behavior changed. The one shipped-code change is the purge dialog on the profile screen: the `alertdialog` role moved from the `<form>` to a wrapping `<div>`, because axe rejected it.
+- Files changed: docs/roadmap.md, docs/verification/2026-11-07-p03-exit.md, frontend/src/app/features/characters/character-profile-screen.html, frontend/src/app/features/characters/character-profile-screen.spec.ts, tests/e2e/specs/avatar.spec.mjs, tests/e2e/specs/character-creator.spec.mjs, tests/e2e/support/chats.mjs, tests/docker/Data.Tests.ps1
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test <level> 2>&1 | grep -E "..."` is allowed and avoids the truncation of long Docker output; `tail`, `grep -v` with a chained pipe, and a direct Invoke-Pester run were denied.
+  - Setup builds an image only when it is missing, so a stale tag such as lyrveil/backend:data-test can hide a dependency added later (Pillow); Data.Tests.ps1 now builds the backend image first.
+  - Pester's `Should -Match` does not set $Matches in the caller's scope; use the -match operator.
+  - The Creator shows a field's message only after the field is touched, so e2e specs must blur a field before they expect its message; getByLabel with a numbered aria-label also matches the 'Rimuovi ...' buttons unless exact is set.
+  - The e2e chat list shows the newest chat first; openChat opens the first matching row when a character has several chats.
+  - The hardware and manual part is still pending for P03.EXIT-HW: T-GPU-05 on the real model and AC-01 to AC-06, AC-08 to AC-10, AC-16 with an uploaded avatar. The Impostazioni > Dati screen with POST and GET /backups and the backup before migrations are still planned from R-BE-07.
 ---

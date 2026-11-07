@@ -36,9 +36,12 @@ export async function startChatWithNewCharacter(page, firstName) {
   await expect(page.getByRole('listitem').filter({ hasText: firstName })).toBeVisible();
 }
 
-/** Opens the chat of the row titled `title` and returns its id, read from the address. */
+/**
+ * Opens the chat of the row titled `title` and returns its id, read from the address. When a character has several
+ * chats the list shows the most recent first, and that one is opened.
+ */
 export async function openChat(page, title) {
-  await page.getByRole('listitem').filter({ hasText: title }).getByRole('link').click();
+  await page.getByRole('listitem').filter({ hasText: title }).first().getByRole('link').click();
   await expect(page).toHaveURL(/\/chats\/[^/]+$/);
   await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
   return new URL(page.url()).pathname.split('/').pop();

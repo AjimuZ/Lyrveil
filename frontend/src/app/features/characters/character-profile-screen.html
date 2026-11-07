@@ -53,29 +53,31 @@
     </div>
 
     @if (purging() !== null) {
-      <form class="confirm" role="alertdialog" aria-labelledby="purge-title" novalidate (submit)="confirmPurge($event)">
-        <h2 class="section" id="purge-title">{{ 'profile.purge.title' | t: { name: c.full_name } }}</h2>
-        <p>{{ 'profile.purge.warning' | t }}</p>
-        <ul class="bullets">
-          @for (line of purgeLines(); track $index) {
-            <li>{{ line }}</li>
-          }
-        </ul>
-        <label class="label" for="purge-name">{{ 'profile.purge.type' | t: { name: firstName() } }}</label>
-        <input
-          #purgeInput
-          id="purge-name"
-          class="control"
-          type="text"
-          autocomplete="off"
-          [value]="purgeName()"
-          (input)="purgeName.set(valueOf($event))"
-        />
-        <div class="actions">
-          <button type="button" class="button" (click)="cancelPurge()">{{ 'profile.purge.cancel' | t }}</button>
-          <button type="submit" class="button danger" [disabled]="!canPurge()">{{ 'profile.purge.confirm' | t }}</button>
-        </div>
-      </form>
+      <div class="confirm" role="alertdialog" aria-labelledby="purge-title">
+        <form novalidate (submit)="confirmPurge($event)">
+          <h2 class="section" id="purge-title">{{ 'profile.purge.title' | t: { name: c.full_name } }}</h2>
+          <p>{{ 'profile.purge.warning' | t }}</p>
+          <ul class="bullets">
+            @for (line of purgeLines(); track $index) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+          <label class="label" for="purge-name">{{ 'profile.purge.type' | t: { name: firstName() } }}</label>
+          <input
+            #purgeInput
+            id="purge-name"
+            class="control"
+            type="text"
+            autocomplete="off"
+            [value]="purgeName()"
+            (input)="purgeName.set(valueOf($event))"
+          />
+          <div class="actions">
+            <button type="button" class="button" (click)="cancelPurge()">{{ 'profile.purge.cancel' | t }}</button>
+            <button type="submit" class="button danger" [disabled]="!canPurge()">{{ 'profile.purge.confirm' | t }}</button>
+          </div>
+        </form>
+      </div>
     }
 
     <lyr-avatar-tools [characterId]="c.id" />

@@ -104,15 +104,30 @@ BeforeAll {
         # script on standard input so that no double quote crosses a native argument, and returns its last line.
         param([string]$Mode)
         $code = Get-Content -Raw -LiteralPath $script:RoundTripScript
-        $output = @($code | & docker @((Get-TestComposeArgument) + @('exec', '-T', 'lyrveil-backend', 'python', '-', $Mode)))
-        if ($LASTEXITCODE -ne 0) { throw "round_trip.py $Mode failed with exit status ${LASTEXITCODE}: $($output -join ' ')" }
+        # Standard error is kept with the output so that a failure says why; Windows PowerShell 5.1 would throw on it
+        # under 'Stop'.
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $output = @($code | & docker @((Get-TestComposeArgument) + @('exec', '-T', 'lyrveil-backend', 'python', '-', $Mode)) 2>&1 | ForEach-Object { [string]$_ })
+            $status = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previous
+        }
+        if ($status -ne 0) { throw "round_trip.py $Mode failed with exit status ${status}: $($output -join ' ')" }
+        # seed and change print nothing.
+        if ($output.Length -eq 0) { return '' }
         return [string]$output[-1]
     }
 
     function Get-WrittenBackup {
         # Returns the name of the backup that the backup command reports in Text.
+        # The -match operator sets $Matches here; "Should -Match" runs in Pester's scope and leaves it unset.
         param([string]$Text)
-        $Text | Should -Match 'Backup written: backups/(lyrveil-\d{8}T\d{6}Z\.tar), '
+        if ($Text -notmatch 'Backup written: backups/(lyrveil-\d{8}T\d{6}Z\.tar), ') {
+            throw "The backup command reported no backup name: $Text"
+        }
         return $Matches[1]
     }
 
@@ -156,6 +171,19 @@ Describe 'import-model, backup and restore against a test project' {
         $script:StartParameters = $script:Common + @{ PreflightFact = $script:PassingFact; SkipGpuPreflight = $true }
         $script:ImportFolder = Join-Path $TestDrive 'import'
         $null = New-Item -ItemType Directory -Force -Path $script:ImportFolder
+
+        # Setup builds an image only when it is missing, so an image tag from an earlier checkout would survive with
+        # old dependencies. Building here brings it up to date; the layer cache makes an unchanged build fast.
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $build = @(& docker @((Get-TestComposeArgument) + @('--profile', 'tools', 'build', 'lyrveil-backend')) 2>&1 | ForEach-Object { [string]$_ })
+            $buildStatus = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previous
+        }
+        $buildStatus | Should -Be 0 -Because (($build | Select-Object -Last 20) -join "`n")
 
         Clear-DataTestProject
         # Start runs setup: volumes with their label and owner, images, then the backend migrates the new database.

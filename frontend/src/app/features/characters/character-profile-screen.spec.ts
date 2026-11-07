@@ -110,6 +110,9 @@ describe('CharacterProfileScreen', () => {
     backend.expectOne('/api/v1/characters/c1/versions').flush(VERSIONS);
     backend.expectOne('/api/v1/conversations?character_id=c1').flush({ items: [] });
     await settle();
+    // The avatar tools list the avatars once the character is known; this screen's tests do not look at them.
+    backend.expectOne('/api/v1/characters/c1/assets?kind=avatar').flush({ items: [] });
+    await settle();
   });
 
   afterEach(() => {

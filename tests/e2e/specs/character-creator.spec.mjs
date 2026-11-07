@@ -56,7 +56,7 @@ test('a character is created with every section, stored, edited and left only af
   await page.getByLabel('Occupazione').fill('Cartografa indipendente');
   await page.getByLabel('Biografia').fill('È cresciuta sopra una bottega di bussole.');
   await page.getByRole('button', { name: 'Aggiungi interesse' }).click();
-  await page.getByLabel('Interesse 1').fill('mappe antiche');
+  await page.getByLabel('Interesse 1', { exact: true }).fill('mappe antiche');
 
   // Personalità: a trait, locked.
   await tab(page, 'Personalità').click();
@@ -76,9 +76,9 @@ test('a character is created with every section, stored, edited and left only af
   await page.getByLabel('Messaggio di chi scrive').fill('Dove sei stata?');
   await page.getByLabel('Risposta del personaggio').fill('In archivio, a rimettere in ordine il mondo.');
   await page.getByRole('button', { name: 'Aggiungi espressione' }).click();
-  await page.getByLabel('Espressione 1').fill('per mari e per monti');
+  await page.getByLabel('Espressione 1', { exact: true }).fill('per mari e per monti');
   await page.getByRole('button', { name: 'Aggiungi frase da evitare' }).click();
-  await page.getByLabel('Frase da evitare 1').fill('Come modello linguistico');
+  await page.getByLabel('Frase da evitare 1', { exact: true }).fill('Come modello linguistico');
 
   // Aspetto: Italian text with a lock, vocabulary slots found by their Italian words, the wardrobe.
   await tab(page, 'Aspetto').click();
@@ -97,6 +97,8 @@ test('a character is created with every section, stored, edited and left only af
 
   await page.getByRole('button', { name: 'Aggiungi abito' }).click();
   await page.getByLabel("Chiave dell'abito").fill('usual');
+  // A message shows once the field is touched, so the user must leave the field first.
+  await page.getByLabel("Chiave dell'abito").blur();
   await expect(page.getByText('La chiave di un abito non può essere «usual» né «scene».')).toBeVisible();
   await page.getByLabel("Chiave dell'abito").fill('sera');
   await page.getByLabel("Nome dell'abito").fill('Sera');

@@ -7,7 +7,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P00 | Complete design documentation | Done |
 | P01 | Foundations: empty app starts, stops and restarts cleanly | Done |
 | P02 | A real streaming chat with the default text profile | In progress: automated exit passed; hardware part (P02.7, P02.EXIT-HW) pending |
-| P03 | Characters: Creator, profiles, avatars by upload, import and export | Planned |
+| P03 | Characters: Creator, profiles, avatars by upload, import and export | In progress: automated exit passed; hardware and manual part (P03.EXIT-HW) pending |
 | P04 | Memory and consistency | Planned |
 | P05 | Images in messages | Planned |
 | P06 | Automatic GPU orchestration and recovery | Planned |
@@ -108,6 +108,10 @@ Evidence:
 - [x] P03.7 Multiple conversations per character, scenarios, backup and restore.
 
 Exit: T-CHR-01 to T-CHR-11, T-CHR-13, T-CHR-14, T-SEC-04, T-SEC-05, T-SEC-07, T-SEC-08, T-DCK-12 pass. T-GPU-05 passes. AC-01 to AC-06, AC-08 to AC-10 and AC-16 hold in a manual run, with an uploaded avatar.
+
+Evidence:
+
+- [P03 automated exit: the `unit`, `integration`, `e2e`, `docker` and `lint` levels, with the tests named by the exit, T-DCK-12 included](verification/2026-11-07-p03-exit.md). The hardware and manual part (T-GPU-05, and AC-01 to AC-06, AC-08 to AC-10 and AC-16 in a manual run with an uploaded avatar) is pending with P03.EXIT-HW, so the phase is not done.
 
 ## P04: Memory
 
