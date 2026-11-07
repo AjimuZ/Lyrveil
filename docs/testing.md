@@ -333,6 +333,23 @@ passed (`scripts\lyrveil.cmd test unit tests/unit/test_character_draft.py`, 7 pa
 | T-MEM-22 | Retrieval evaluation reaches recall at 8 of at least 80 % | Quality | P04 |
 | T-MEM-23 | Property: random edit and delete sequences keep state equal to replaying history | Unit | P04 |
 
+Delivered in P04.2a: `backend/tests/integration/test_memory_extraction.py` runs the extraction job through the real
+`JobScheduler` under a granted llm lease, with `MemoryExtractionService` and a scripted in-process text runtime, on a
+migrated SQLite file. T-MEM-01: valid output stores three memories with their sources (active variant and content hash
+of each message), index rows, an episode with its sources, the completed run with `raw_output` and the cursor at 10,
+and drops or defers the items it does not apply. T-MEM-02: output that is not JSON, then a repair with an importance of
+9, fails the attempt with `STRUCTURED_OUTPUT_INVALID`, stores no memory, keeps the cursor at 0 and the refused text in
+the `failed` run, waits for the 1-minute backoff, then succeeds on attempt 2 with the same run row. T-MEM-03: running the
+job again after its commit, and running the same window after the cursor was moved back, generate nothing and add no
+row. T-MEM-17, scheduler half: in image mode and with no runtime ready the job is not picked and no lease is asked. The
+same file checks the trigger (nine messages are not due, ten are, one job per chat at a time, a significant phrase needs
+two messages) and that the fifth reply of a chat queues the job. `backend/tests/unit/test_memory_extraction.py` holds the
+policy half of T-MEM-17 (the only stage needs `llm`, background class) and the schema, grammar, worked example, window,
+hash, trigger, pattern, fingerprint and prompt checks. In this change the backend part of `scripts\lyrveil.cmd test unit
+-k "memory_extraction or memory_text or character_draft or job_policy or import_rules"` passed (66 tests; the filter
+selects no orchestrator test, so that part exits 5), and `scripts\lyrveil.cmd test integration` passed (233 backend,
+200 orchestrator).
+
 ### Consistency
 
 | ID | Test | Level | Phase |

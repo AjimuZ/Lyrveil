@@ -1,0 +1,27 @@
+# Significant-event phrases of docs/memory-engine.md (Triggers): a user message that contains one starts an extraction
+# run once at least 2 messages are unprocessed. One phrase per line. Matching ignores case and accents, starts at the
+# beginning of a word and may end inside one, so "mi sono trasferit" covers "trasferito" and "trasferita".
+# Phrases with an apostrophe are left out, because typed apostrophes vary.
+ricordati
+ricordatelo
+ricordatevi
+non dimenticare
+non dimenticarlo
+non scordare
+ho cambiato
+abbiamo cambiato
+mi sono trasferit
+ci siamo trasferit
+ti prometto
+te lo prometto
+ho deciso
+abbiamo deciso
+ora lavoro
+ho trovato lavoro
+ho perso il lavoro
+mi sono lasciat
+ci siamo lasciat
+mi sposo
+ci sposiamo
+sono incinta
+da oggi in poi

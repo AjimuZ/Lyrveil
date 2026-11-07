@@ -11,6 +11,9 @@ P02 scope: the prompt is the minimal context of lyrveil.context.minimal, rendere
 `ReplySettings.template` and trimmed to the runtime's real context with its own token counts. Tokens are
 stored and published as the runtime yields them: ReplyNormalizer, the reply checks and the corrective
 generation, and with them `message.restarted`, come in P04.8. No message text, prompt or token is ever logged.
+
+After a finished reply is stored and announced, the memory extraction trigger runs in its own transaction
+(lyrveil.services.memory_extraction.queue_extraction_if_due), so a failure there never undoes the reply.
 """
 
 import time
@@ -38,6 +41,7 @@ from lyrveil.jobs.handlers import (
 from lyrveil.jobs.queue import JOB_INTERRUPTED, Job, JobQueue
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
+from lyrveil.memory.window import ExtractionSettings
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
 from lyrveil.persistence import scenarios as scenario_repository
@@ -58,6 +62,7 @@ from lyrveil.ports.text_runtime import (
     TextRuntimeError,
 )
 from lyrveil.prompts.formatter import FormattedPrompt, PromptFormatter, Turn, formatter_for
+from lyrveil.services.memory_extraction import queue_extraction_if_due
 
 # docs/backend.md (Streaming persistence): the streamed text reaches the database at least this often.
 FLUSH_INTERVAL_S = 2.0
@@ -147,11 +152,12 @@ class ChatInferenceService:
     """Runs one reply per call, as the JobHandler of `chat_reply` and `chat_regenerate` (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `events` receives each event
-    after the change it announces was committed. `monotonic` and `flush_interval_s` time the flushes; tests
+    after the change it announces was committed. `extraction` sets the trigger threshold, and `queue` is where the
+    trigger queues extraction jobs. `monotonic` and `flush_interval_s` time the flushes; tests
     pass fakes. The state a run leaves, besides the job's own:
 
     - finished: variant and message `complete` with the whole text, or `interrupted` when the runtime
-      reports the generation aborted; then `message.completed`;
+      reports the generation aborted; then `message.completed`, then a `memory_extraction` job when the chat is due;
     - failed with a retry coming (a retryable failure with attempts left, a lost lease, a preemption):
       message back to `queued` with empty text, so the next run starts clean; then `message.updated`;
     - failed for good: variant and message `failed` with the text streamed so far; then `message.failed`;
@@ -165,6 +171,8 @@ class ChatInferenceService:
         events: EventPublisher,
         settings: ReplySettings | None = None,
         *,
+        extraction: ExtractionSettings | None = None,
+        queue: JobQueue | None = None,
         flush_interval_s: float = FLUSH_INTERVAL_S,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -172,6 +180,8 @@ class ChatInferenceService:
         self._runtime = runtime
         self._events = events
         self._settings = settings or ReplySettings()
+        self._extraction = extraction or ExtractionSettings()
+        self._queue = queue or JobQueue()
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
         self._closing = False
@@ -215,7 +225,21 @@ class ChatInferenceService:
             reply_chars=len(generated.text),
             prompt_tokens=generated.prompt_tokens,
         )
+        try:
+            await to_thread.run_sync(self._queue_extraction, reply.conversation_id)
+        except Exception:
+            # The reply is already stored and announced: a failing trigger must not turn it into a failed job. The next
+            # reply checks the trigger again.
+            logger.error("memory_extraction_trigger_failed", job_id=job.id, exc_info=True)
         return JobDone({"message_id": reply.message_id, "variant_id": reply.variant_id})
+
+    def _queue_extraction(self, conversation_id: str) -> None:
+        """The extraction trigger of docs/backend.md (Job handlers), in its own transaction after the reply's commit:
+        queues a `memory_extraction` job when the chat is due for one. Blocks: run it in a thread."""
+        write(
+            self._engine,
+            lambda connection: queue_extraction_if_due(connection, self._queue, conversation_id, self._extraction),
+        )
 
     def _claim(self, job: Job) -> _Reply | None:
         """Marks the job's reply `streaming` with empty text and returns it, or None when it is not waiting."""

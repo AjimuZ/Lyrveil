@@ -656,7 +656,16 @@ summary and context-builder tasks: `memories`, `memory_revisions`, `memory_sourc
   removes their rows (`index_memory`, `index_episode`, `unindex_*`) and reads them (`match_memory_ids`); the caller does
   it in the transaction of the source row. The stems come from `lyrveil.memory.text`.
 - `CharacterService.purge` deletes the new tables too (`lyrveil.persistence.characters.purge`), before messages and
-  conversations. Nothing writes to these tables yet: extraction is P04.2.
+  conversations.
+
+Since P04.2a, memory extraction (`lyrveil.persistence.memory_extraction`) writes `memory_extraction_runs`, conversation
+`memories` with `memory_sources` and `memory_fts`, `episodic_memories` with `episodic_sources`, `episode_links` and
+`episode_fts`, and `conversations.last_extracted_seq`, in one transaction per run
+([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). A source row names the message, its active variant at
+extraction time and that variant's `content_hash`. The cursor only moves forward and leaves `updated_at` alone. A run
+row is written `running` before generation and ends `completed`, `failed` or `superseded`; a later attempt on the same
+window reuses the row with `attempt + 1`. Nothing writes `memory_revisions`, `memory_tombstones`,
+`character_state_history` or `relationship_states` yet, and `raw_output` is not yet removed after 30 days.
 
 Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
 [Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON

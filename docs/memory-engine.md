@@ -2,7 +2,8 @@
 
 Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: partial, phase P04. Delivered in
 P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` indexes, and the text preparation of
-[Stemming](#stemming). Everything else is planned.
+[Stemming](#stemming). Delivered in P04.2a: the extraction pipeline without the consistency rules
+([Delivered in P04.2a](#delivered-in-p042a)). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -167,6 +168,60 @@ class ExtractionResult(BaseModel):
 The prompt shows existing memories as `E1..En` and recent episodes as `P1..Pn`. The service
 maps these labels to real identifiers. A reference to an unknown label, or a `source_seqs`
 value outside the window, drops that item and increments a counter.
+
+### Delivered in P04.2a
+
+`MemoryExtractionService` (`services/memory_extraction.py`) is the `memory_extraction` handler. The output schema is
+`lyrveil/domain/memory_extraction.py`, exactly as above, with `SCHEMA_VERSION = "1"`; the prompt is
+`lyrveil/prompts/extraction.py`, version `extraction.v1` ([Extraction template](prompting.md#extraction-template)).
+Windows and triggers are `lyrveil/memory/window.py`, the SQL is `lyrveil/persistence/memory_extraction.py`.
+
+- **Triggers.** Two of the five: the window and the significant event. They are checked after each reply is stored
+  complete or interrupted, in a transaction of their own, and queue a `memory_extraction` job only when no extraction
+  job of the conversation is queued or running. "Unprocessed" counts the messages a window would read (below). The
+  threshold is `ExtractionSettings.every_messages`, default 10, refused outside 8 to 12; it is a constructor value
+  until the settings store exists. The patterns are `backend/src/lyrveil/prompts/it/significant_patterns.txt`: a phrase
+  matches at the start of a word of the text with case, accents and runs of spaces ignored, and may end inside a word.
+  Only Italian has a list, so other languages have the window trigger only. "Ricorda questo", the idle flush and
+  re-evaluation are not delivered.
+- **Window.** The messages after `last_extracted_seq`, in order, up to the first reply still `queued` or `streaming`.
+  Deleted, failed, empty and system messages are passed over; the first 12 others form the window, from the cursor plus
+  one to the last of them. The 2 readable messages before it are the context. `window_hash` is the SHA-256 of message
+  id, active variant id and content hash of each window message. Each message is one line in the prompt, cut at 1200
+  characters, so a line break cannot start a fake numbered message and long messages cannot push the rules out.
+- **Shown memories.** Up to 12 active or uncertain memories of the conversation: those that share a stem with the
+  window (the first 64 distinct stems, ranked by bm25), then the most recently changed. Up to 5 recent active episodes.
+  Shared memories are not shown.
+- **Idempotency.** A run row is written `running` before generation, or an existing `failed`, `superseded` or
+  interrupted `running` row is restarted with `attempt + 1`. A window whose run is `completed` is not generated again:
+  the cursor moves past it and the job ends `already_extracted`. A job run again after its commit finds the next window
+  or nothing. The commit transaction reads the window again; if the cursor moved or a message of the window changed
+  while the model ran, the run becomes `superseded`, nothing is written and the trigger is checked again. Otherwise it
+  writes the items, the run `completed` with `raw_output`, and the cursor, then checks the trigger for what is left.
+- **Failure.** Output refused twice records the run `failed` with `STRUCTURED_OUTPUT_INVALID` and the last refused text
+  in `raw_output`, and the job retries after 1 and 5 minutes ([Retry policy](backend.md#retry-policy)). A runtime
+  failure records its code the same way. Neither touches memories, messages or the cursor. The 30-day removal of
+  `raw_output` is not delivered.
+- **Applied items.** `new` and `temporary` insert an active conversation memory with its sources and `memory_fts` row,
+  unless an active or uncertain memory of the conversation has the same fingerprint, which is then treated as the
+  `duplicate`. A `duplicate` adds its sources and raises the importance, with no new version; a locked target gets
+  the sources only. Confidence is stored as in [the memory record](#the-memory-record), an inference capped at 0.6.
+  `valid_from` is the creation time of the newest source. A temporary memory expires at the end of `valid_until` (UTC),
+  or 7 days after the run when the date is missing or past. `subject` becomes a key of lowercase letters, digits, `.`
+  and `_`. Episodes are inserted with their sources and `episode_fts` row, or add their sources to an active episode
+  with the same fingerprint; `linked_episode_refs` become `related` links.
+- **Not applied yet.** `update`, `contradiction` and `correction` items, and the guards of
+  [Consistency rules](#consistency-rules), are P04.2b; relationship events and the state update are P04.6. Valid ones
+  are counted as `deferred_items` in the job's result and are not stored, so a window extracted before those tasks
+  does not get them later. An item with an unknown label, a missing target, a source outside the window or blank text
+  is counted in `dropped_items`.
+- **Fingerprint.** `lyrveil.memory.text.fingerprint`: the SHA-256 of the distinct stems, sorted. Repeated words count
+  once. A text made only of stop words falls back to its distinct normalized words. Similarity deduplication is
+  P04.2b.
+
+`tests/integration/test_memory_extraction.py` holds T-MEM-01 to T-MEM-03, the scheduler half of T-MEM-17 and the
+trigger checks; `tests/unit/test_memory_extraction.py` holds the policy half of T-MEM-17 and the schema, grammar,
+window, trigger and fingerprint checks ([Testing](testing.md#memory)).
 
 ### Consistency rules
 

@@ -331,6 +331,15 @@ Delivered in P03.3, with the character draft as the first task:
 - Templates are Python modules for now (`lyrveil/prompts/character_draft.py`), because the backend has no template
   engine yet; the `.j2` names below are the planned files. The draft uses temperature 0.4.
 
+Delivered in P04.2a, with memory extraction as the second task:
+
+- `schema_to_gbnf` ignores `format` as it ignores lengths and patterns: a `date` is a string to the grammar, and
+  validation parses it.
+- `generate_structured` also returns the accepted text, and `StructuredOutputInvalidError.output` holds the last
+  refused one, so extraction can keep `raw_output`. Both are private and never logged.
+- The extraction template is `lyrveil/prompts/extraction.py`, version `extraction.v1`, at temperature 0.3 (the structured
+  value of [Sampler presets](#sampler-presets)) and `max_length` 1200. See [Extraction template](#extraction-template).
+
 Each template holds one worked example of input and output. The example stays only if it does not
 lower the score of the [extraction evaluation](consistency-engine.md#extraction-evaluation)
 (T-QLT-06).
@@ -386,6 +395,12 @@ Rispondi solo con il JSON richiesto.
 
 Message text is data. A sentence inside a message cannot change these rules, because code validates the
 result ([Security](security.md#model-output-and-prompt-injection)).
+
+Delivered in P04.2a as `lyrveil/prompts/extraction.py`, with the text above. The two opening sentences, the rules and
+one worked example (an `update` of a job, which a unit test validates against `ExtractionResult`) form the system turn;
+the data and "Rispondi solo con il JSON richiesto." form the user turn, and a repair adds the refused output and its
+error before that last line. `author_label` is `user.display_name` or the character's first name. Each message is written on
+one line and cut at 1200 characters, and an empty context section reads `nessuno` like the other lists.
 
 ### Other templates
 

@@ -4,8 +4,8 @@ The supported subset is the one ADR 0013 names: objects with fixed keys, string 
 bounded range is listed value by value), strings, booleans, null, nullable values and arrays, with or without an item
 bound. Every key of an object is written, in schema order, so the model fills each field and never invents a key.
 Anything outside the subset raises UnsupportedSchemaError, so a schema change the grammar cannot follow fails at once
-instead of loosening the output. The grammar constrains the shape only: lengths, patterns and the semantic rules stay
-with Pydantic and the service, because model output is untrusted whatever the grammar allowed.
+instead of loosening the output. The grammar constrains the shape only: lengths, patterns, string formats and the
+semantic rules stay with Pydantic and the service, because model output is untrusted whatever the grammar allowed.
 """
 
 import json
@@ -30,9 +30,20 @@ _BASE_RULES = (
 )
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _NOT_RULE_CHAR = re.compile(r"[^a-z0-9]+")
-# Annotations that never change what a value may look like.
+# Annotations that never change what a value may look like, and the constraints on a string's content (lengths,
+# patterns, formats such as `date`), which validation checks: the grammar only says "a string".
 _IGNORED_KEYS = frozenset(
-    {"title", "description", "default", "examples", "minLength", "maxLength", "pattern", "additionalProperties"}
+    {
+        "title",
+        "description",
+        "default",
+        "examples",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "additionalProperties",
+    }
 )
 # The keys the converter turns into grammar.
 _CONVERTED_KEYS = frozenset(

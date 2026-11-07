@@ -30,6 +30,7 @@ from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
 from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
+from lyrveil.memory.window import ExtractionSettings
 from lyrveil.orchestration.client import OrchestratorClient
 from lyrveil.orchestration.health import probe_control_api
 from lyrveil.persistence.database import (
@@ -44,6 +45,7 @@ from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
 from lyrveil.services.daily_backup import DailyBackup
+from lyrveil.services.memory_extraction import MemoryExtractionService
 from lyrveil.settings import Settings, SettingsError, load_settings
 
 API_PREFIX = "/api/v1"
@@ -71,7 +73,8 @@ def _llm_mode() -> RequiredMode:
 @dataclass(frozen=True)
 class Worker:
     """What the job worker takes from outside the application: a factory of the text runtime, opened for the
-    application's life, the lease calls, the GPU mode whose jobs may run, and the reply settings.
+    application's life, the lease calls, the GPU mode whose jobs may run, the reply settings and the memory extraction
+    settings.
 
     Tests pass fakes.
     """
@@ -80,6 +83,7 @@ class Worker:
     leases: LeaseProvider
     current_mode: Callable[[], RequiredMode] = _llm_mode
     replies: ReplySettings = field(default_factory=ReplySettings)
+    memory: ExtractionSettings = field(default_factory=ExtractionSettings)
 
 
 @asynccontextmanager
@@ -102,7 +106,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     """Runs the job worker while the context is open (startup step 7), when the app has a database and a Worker.
 
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
-    CharacterCreatorService, and is kept in
+    CharacterCreatorService, `memory_extraction` with MemoryExtractionService, and is kept in
     `app.state.scheduler` meanwhile. On shutdown the running reply keeps its flushed text and stays `streaming`
     for the next start to mark `interrupted`; its lease is not released and expires by itself.
     """
@@ -112,12 +116,16 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
         yield
         return
     async with worker.text_runtime() as runtime:
-        replies = ChatInferenceService(engine, runtime, app.state.events, worker.replies)
+        replies = ChatInferenceService(engine, runtime, app.state.events, worker.replies, extraction=worker.memory)
         drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
+        memories = MemoryExtractionService(
+            engine, runtime, template=worker.replies.template, user=worker.replies.user, settings=worker.memory
+        )
         handlers: dict[JobKind, JobHandler] = {
             JobKind.CHAT_REPLY: replies,
             JobKind.CHAT_REGENERATE: replies,
             JobKind.CHARACTER_DRAFT: drafts,
+            JobKind.MEMORY_EXTRACTION: memories,
         }
         scheduler = JobScheduler(engine, JobQueue(), handlers, worker.leases, worker.current_mode)
         async with anyio.create_task_group() as group:

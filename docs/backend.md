@@ -1,6 +1,6 @@
 # Backend
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). Delivered in P02.5c: `events/hub.py` with the replay buffer, the events of `/ws`, `ChatInferenceService` as the handler of `chat_reply` and `chat_regenerate`, the job worker in the application's lifespan and the recovery of interrupted replies ([Streaming persistence](#streaming-persistence)). Delivered in P03.3: `prompts/gbnf.py` and `prompts/structured.py` for structured output, and the `character_draft` handler ([Job handlers](#job-handlers)). Delivered in P03.6a: `consistency/content_guard.py`, the content guard for character data ([Security](security.md#character-data)). The rest is planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.3a: the package files, `settings.py`, `logs.py`, the application factory in `main.py`, the Dockerfile with its test stage, and the quality gates. Delivered in P01.3b: the SQLite engine with the WAL and FTS5 check, the Alembic baseline, and the two health routes. Delivered in P01.4a: the orchestrator's `pyproject.toml`, `uv.lock`, a Dockerfile with its `lock`, `lockfile` and `test` stages but no runtime stage yet, and `state_machine.py` with its gates and tests. Delivered in P01.4b: `container_gate.py`, with HTTPX as the orchestrator's first runtime dependency, its tests, and the Docker socket scans of both packages. Delivered in P02.3a: the `TextRuntime` port and `KoboldCppRuntime` ([Text runtime](#text-runtime)). Delivered in P02.3b: `PromptFormatter` for the three template families ([Prompt formatter](#prompt-formatter)). Delivered in P02.4: the `generation_jobs` table, `JobQueue`, `JobScheduler` with leases and heartbeats, and the restart recovery ([Job queue](#job-queue)). Delivered in P02.5c: `events/hub.py` with the replay buffer, the events of `/ws`, `ChatInferenceService` as the handler of `chat_reply` and `chat_regenerate`, the job worker in the application's lifespan and the recovery of interrupted replies ([Streaming persistence](#streaming-persistence)). Delivered in P03.3: `prompts/gbnf.py` and `prompts/structured.py` for structured output, and the `character_draft` handler ([Job handlers](#job-handlers)). Delivered in P03.6a: `consistency/content_guard.py`, the content guard for character data ([Security](security.md#character-data)). Delivered in P04.2a: the `memory_extraction` handler and its trigger after a reply ([Job handlers](#job-handlers)). The rest is planned, phases P01 to P07.
 
 The backend and the orchestrator are two separate Python 3.12 packages. Neither imports
 the other. They share only the [control API](api.md#control-api).
@@ -24,7 +24,8 @@ backend/
     ports/               Protocols: TextRuntime, ImageRuntime, MemoryRetriever, Clock...
     services/            CharacterService, ConversationService, MessageService...
     memory/              MemoryManager, extraction, retrieval, consistency, summaries; text.py and stopwords/*.txt
-                         (normalization, stop words, Snowball stems, safe FTS queries; P04.1), the rest planned
+                         (normalization, stop words, Snowball stems, safe FTS queries; P04.1; fingerprints, P04.2a),
+                         window.py (extraction windows and triggers; P04.2a), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
     context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
@@ -361,6 +362,15 @@ Since P03.6a the safety check is the content guard, run inside the draft's valid
 repair; a repair the guard refuses too fails the job with `CONTENT_POLICY_BLOCKED`, without a retry. The route checks
 the description with the same guard before it queues the job, and the handler checks it again before it generates, for
 a job queued before a list entry existed.
+
+Delivered in P04.2a: `memory_extraction`, run by `MemoryExtractionService` (`services/memory_extraction.py`) and
+registered in the lifespan beside the others. `ChatInferenceService` runs the extraction trigger after a reply is
+stored and announced, in its own transaction, and logs a failure of the trigger without failing the reply. The flow,
+the window, the idempotency key and what is applied are in [Memory engine](memory-engine.md#extraction-pipeline).
+Unlike the draft, `STRUCTURED_OUTPUT_INVALID` is retryable here: the job retries after 1 and 5 minutes. The consistency
+rules step of the table above is P04.2b; until then only `new`, `temporary` and `duplicate` items are written. The
+job's `result_json` holds `status` and, for a completed run, the run id, its window and the counts of what was added,
+confirmed, dropped and deferred.
 
 ### Retry policy
 

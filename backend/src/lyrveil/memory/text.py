@@ -1,5 +1,7 @@
-"""Prepares text for the memory index: normalization, stop-word removal, Snowball stemming and safe queries."""
+"""Prepares text for the memory index: normalization, stop-word removal, Snowball stemming, safe queries and the
+deduplication fingerprint."""
 
+import hashlib
 import re
 import unicodedata
 from functools import cache
@@ -95,16 +97,31 @@ def index_text(text: str, language: str | None) -> str:
     return " ".join(stems(text, language))
 
 
-def match_query(text: str, language: str | None) -> str | None:
+def match_query(text: str, language: str | None, max_terms: int | None = None) -> str | None:
     """Returns an FTS5 MATCH expression for the words of `text`, or None when no word is left to search for.
 
     Each distinct stem becomes a double-quoted string and the strings are joined with OR, so a row that holds any of
     them matches and ranking decides the order. Stems hold only letters and digits, so user text can never add an
     operator, a column filter, a prefix star or a quote: `AND`, `NOT`, `NEAR`, `content_stem:x`, `x*`, `^x` and
     unbalanced quotes or parentheses all become plain words. The same normalization and stemming as `index_text` run
-    first, so the query and the index agree.
+    first, so the query and the index agree. With `max_terms`, only the first that many distinct stems are kept, so a
+    long text such as a whole extraction window still gives a bounded query.
     """
-    unique = dict.fromkeys(stems(text, language))
+    unique = list(dict.fromkeys(stems(text, language)))
+    if max_terms is not None:
+        unique = unique[:max_terms]
     if not unique:
         return None
     return " OR ".join(f'"{stem}"' for stem in unique)
+
+
+def fingerprint(text: str, language: str | None) -> str:
+    """Returns the deduplication fingerprint of a memory's text (docs/memory-engine.md, Deduplication), as lowercase
+    hex: the SHA-256 of its distinct stems, sorted and joined by single spaces.
+
+    Case, accents, punctuation, stop words, word forms, word order and repeated words change nothing, so "Ama il mare."
+    and "il mare, lo ama" agree. A text with no stem left (only stop words) falls back to its distinct normalized
+    words, so it never collides with every other such text.
+    """
+    tokens = sorted(set(stems(text, language))) or sorted(set(_WORD.findall(normalize(text))))
+    return hashlib.sha256(" ".join(tokens).encode("utf-8")).hexdigest()

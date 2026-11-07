@@ -414,7 +414,11 @@ Delivered in P03.3: `GET /jobs/{id}` (`lyrveil/api/jobs.py`). It answers `{"id",
 "max_attempts", "queue_position", "error_code", "error_detail", "result", "created_at", "finished_at"}`, or `404
 NOT_FOUND`. `queue_position` counts as for a send and is 0 once the job ended; `result` is `result_json`, null until the
 job completes. The payload is never returned, because it can hold private text such as a draft's description. The
-Creator polls this route while a draft runs, since `job.updated` is not published yet. The list, cancel and retry
+Creator polls this route while a draft runs, since `job.updated` is not published yet. Since P04.2a the `result` of a
+`memory_extraction` job is `{"status", "run_id"}`, plus `run_attempt`, `from_seq` and `to_seq` for a `completed` or
+`superseded` run; a completed one adds `attempts`, the counts `memories_added`, `memories_confirmed`, `episodes_added`,
+`episodes_confirmed`, `sources_added`, `dropped_items`, `deferred_items`, and `memory_ids`. It never holds memory text
+([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). The list, cancel and retry
 routes are planned. Not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ## Event WebSocket

@@ -33,11 +33,15 @@ class OutputRejectedError(Exception):
 
 
 class StructuredOutputInvalidError(Exception):
-    """Every attempt was refused. `detail` is the reason of the last one, safe to show as OutputRejectedError's."""
+    """Every attempt was refused. `detail` is the reason of the last one, safe to show as OutputRejectedError's.
 
-    def __init__(self, detail: str) -> None:
+    `output` is the last refused text as the model wrote it: untrusted and private, so it may be stored locally for
+    debugging (`memory_extraction_runs.raw_output`) but never shown, logged or put in the exception message."""
+
+    def __init__(self, detail: str, output: str = "") -> None:
         super().__init__(detail)
         self.detail = detail
+        self.output = output
 
 
 @dataclass(frozen=True)
@@ -50,10 +54,12 @@ class Repair:
 
 @dataclass(frozen=True)
 class StructuredResult[T]:
-    """The accepted value and the number of generations it took: 1, or 2 after a repair."""
+    """The accepted value, the number of generations it took (1, or 2 after a repair), and the accepted text as the
+    model wrote it, which is untrusted and private like StructuredOutputInvalidError.output."""
 
     value: T
     attempts: int
+    text: str = ""
 
 
 def _parse(text: str) -> dict[str, Any]:
@@ -101,6 +107,6 @@ async def generate_structured[T](
             logger.info("structured_output_refused", attempt_count=attempt)
             repair = Repair(previous_output=text, error=refused.detail)
             continue
-        return StructuredResult(value=value, attempts=attempt)
+        return StructuredResult(value=value, attempts=attempt, text=text)
     assert repair is not None
-    raise StructuredOutputInvalidError(repair.error)
+    raise StructuredOutputInvalidError(repair.error, repair.previous_output)

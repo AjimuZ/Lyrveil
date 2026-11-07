@@ -10,6 +10,12 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Memory extraction, backend only. Once a chat has 10 messages not yet analyzed, or 2 when the user wrote a phrase
+  such as "ricordati", "ho cambiato" or "ti prometto", the reply that follows queues a background job. The job reads
+  up to 12 of those messages with the loaded text model and stores the facts and events worth remembering, each with
+  the messages it came from. It runs only while the text model is loaded, retries after 1 and 5 minutes when the
+  model's answer is invalid, and never analyzes the same messages twice. Replies do not use these memories yet,
+  nothing shows them, and changed or contradicted facts, relationship changes and the chat state are not stored yet.
 - Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
   job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
   data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from
