@@ -21,7 +21,9 @@ def contract_schema(settings: Settings, engine: Engine) -> BaseSchema:
     """Returns the schema read from the application's own OpenAPI route, with the app on a migrated database."""
     upgrade_to_head(engine)
     app = create_app(settings, engine, control_probe=lambda: True)
-    return schemathesis.openapi.from_asgi(f"{API_PREFIX}/openapi.json", app, base_url=f"http://{HOST}")
+    # Schemathesis 4.33 forwards every unknown keyword of from_asgi to the HTTP request that loads the document, so
+    # base_url is not accepted here; the Host header is what the application checks, and it goes in the headers.
+    return schemathesis.openapi.from_asgi(f"{API_PREFIX}/openapi.json", app, headers={"Host": HOST})
 
 
 def test_every_documented_route_answers_as_its_schema_says(contract_schema: BaseSchema) -> None:

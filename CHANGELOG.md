@@ -15,7 +15,7 @@ No application exists yet. This section records the design documentation.
   frontend, backend and orchestrator, a gitleaks scan of the pushed commits, and a
   parse of every Mermaid diagram. It has not run yet, and it never runs the GPU tests.
 - Schemathesis contract tests of the backend's OpenAPI document, in the backend's
-  integration tests. They have not run yet.
+  integration tests. They ran and passed locally; the CI job has not run them.
 - Product requirements with stable identifiers and acceptance criteria.
 - Architecture for the five Docker services, the data model, the REST, WebSocket
   and control APIs, and the verified contracts of the two runtimes.

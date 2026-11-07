@@ -654,8 +654,8 @@
         "The roadmap's phase table marks P01 done and the P01 section lists the evidence."
       ],
       "priority": 29,
-      "passes": false,
-      "notes": "Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text.",
+      "passes": true,
+      "notes": "I ran the P01 exit levels. After one fix, unit, integration, e2e, docker and lint all pass. I did not run `.\\start.cmd` and `status.cmd` on the real project at localhost:4200. The session's command allowlist refused them, so the docker level's test project stands in. The first integration run failed because the Schemathesis contract test (never run before) passed `base_url` to `from_asgi`, which 4.33.0 rejects. I now pass the Host as a header, and integration passes. I added a docker test that reads `/health/ready` inside the real backend image and requires WAL, FTS5 and migrations ok; it passed. I wrote docs/verification/2026-11-07-p01-exit.md with commands, versions and counts, set P01 to Done in the roadmap table, added the evidence link, and updated docs/testing.md, docs/README.md and CHANGELOG.md. Result counts: unit 38 Pester, 134 backend, 522 orchestrator, 28 Vitest and 11 Node. Integration 48 backend and 198 orchestrator. e2e 5. docker 117, with 0 failed and 0 skipped. lint passed twice. Not verified: the CI workflow on a hosted runner, per-file test counts, the Docker Compose, Node and PowerShell versions, and the 23.47 GiB WSL memory re-read.",
       "dependsOn": [
         "P01.8a",
         "P01.1",

@@ -59,6 +59,8 @@
 - Resolve compose.yaml with `--env-file <empty file in TestDrive>` and with the interpolated variables removed from the process environment, so a test judges the file's defaults and never reads a real .env.
 - Each CI job runs the commands of the matching local level. A job that cannot call scripts\lyrveil.cmd (Windows-only) calls an exported function of the same module instead.
 - Third-party release binaries fetched in CI are checked against the release's checksum file before use.
+- Prove a capability in the real image with an exec case in the Pester lifecycle test that queries the app's own readiness route, not only with in-process tests.
+- Run `scripts/lyrveil.cmd test <level>` piped to grep on the summary lines to get result counts without the full output.
 
 ---
 
@@ -428,4 +430,14 @@ Checks:
   - Schemathesis 4 types: `get_all_operations()` yields Ok/Err results that mypy does not give a shared `.ok()`, and `Case` is generic. The test types both as `Any`. If the first real run shows a different API, fix test_contract.py.
   - Shell access to run code inside the backend test image (`docker run`) was denied in this session, so the installed Schemathesis API could not be inspected.
   - Invoke-ScriptLint in scripts/lib/TestCommand.psm1 is exported so the Windows CI job can run the documentation checks and PSScriptAnalyzer without Linux containers.
+---
+
+## 2026-11-07T01:29:28Z - P01.EXIT
+- I ran the P01 exit levels. After one fix, unit, integration, e2e, docker and lint all pass. I did not run `.\start.cmd` and `status.cmd` on the real project at localhost:4200. The session's command allowlist refused them, so the docker level's test project stands in. The first integration run failed because the Schemathesis contract test (never run before) passed `base_url` to `from_asgi`, which 4.33.0 rejects. I now pass the Host as a header, and integration passes. I added a docker test that reads `/health/ready` inside the real backend image and requires WAL, FTS5 and migrations ok; it passed. I wrote docs/verification/2026-11-07-p01-exit.md with commands, versions and counts, set P01 to Done in the roadmap table, added the evidence link, and updated docs/testing.md, docs/README.md and CHANGELOG.md. Result counts: unit 38 Pester, 134 backend, 522 orchestrator, 28 Vitest and 11 Node. Integration 48 backend and 198 orchestrator. e2e 5. docker 117, with 0 failed and 0 skipped. lint passed twice. Not verified: the CI workflow on a hosted runner, per-file test counts, the Docker Compose, Node and PowerShell versions, and the 23.47 GiB WSL memory re-read.
+- Files changed: backend/tests/integration/test_contract.py, tests/docker/Lifecycle.Tests.ps1, docs/verification/2026-11-07-p01-exit.md, docs/roadmap.md, docs/testing.md, docs/README.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Security.Tests.ps1 passed on its first run, and the docker level is now 117 Pester tests.
+  - Direct docker, node and version commands, and `lyrveil.cmd start/status` on the real project, are refused by the session's command allowlist. Only `scripts/lyrveil.cmd test <level>` and read-only inspection run, so a person must run `.\start.cmd` then `status.cmd` once on the reference machine.
+  - Schemathesis 4.33.0 from_asgi forwards unknown keywords to the HTTP request, so base_url is not accepted. The Host header goes in `headers`. The contract test now passes locally.
+  - The CI workflow ci.yml has still never run on a hosted runner.
 ---

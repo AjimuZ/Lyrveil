@@ -158,6 +158,20 @@ Describe 'Lifecycle commands against a test project (T-DCK-01 to T-DCK-05)' {
         $response.StatusCode | Should -Be 200
     }
 
+    It 'reports WAL, FTS5 and the migrations as ok from inside the real backend image (P01 exit)' {
+        # The image's own Python and SQLite answer. The backend refuses a Host other than its own port, 4200, and the
+        # test project publishes 14210 only on the frontend, so the request goes to the backend with the Host it expects.
+        # A 503 makes urlopen raise, which makes exec exit with a status other than 0 and Invoke-Docker throw.
+        $code = "import urllib.request as u; r = u.Request('http://127.0.0.1:8000/api/v1/health/ready', headers={'Host': 'localhost:4200'}); print(u.urlopen(r, timeout=5).read().decode())"
+        $output = (Invoke-Docker ((Get-TestComposeArgument) + @('exec', '-T', 'lyrveil-backend', 'python', '-c', $code))) -join "`n"
+        $report = $output | ConvertFrom-Json
+        $report.status | Should -Be 'ready' -Because $output
+        $report.checks.database.ok | Should -BeTrue -Because $output
+        $report.checks.database.journal_mode | Should -Be 'wal' -Because $output
+        $report.checks.fts5.ok | Should -BeTrue -Because $output
+        $report.checks.migrations.ok | Should -BeTrue -Because $output
+    }
+
     It 'reports services, health and the URL with status' {
         $run = Invoke-Captured -Name 'Invoke-LyrveilStatus' -Parameters $script:Common
         $run.Status | Should -Be 0 -Because $run.Text

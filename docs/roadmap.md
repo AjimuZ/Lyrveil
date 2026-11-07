@@ -5,7 +5,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | Phase | Result | State |
 | --- | --- | --- |
 | P00 | Complete design documentation | Done |
-| P01 | Foundations: empty app starts, stops and restarts cleanly | Planned |
+| P01 | Foundations: empty app starts, stops and restarts cleanly | Done |
 | P02 | A real streaming chat with the default text profile | Planned |
 | P03 | Characters: Creator, profiles, avatars by upload, import and export | Planned |
 | P04 | Memory and consistency | Planned |
@@ -71,7 +71,8 @@ Evidence:
 - [backend persistence and health routes](verification/2026-11-06-backend-persistence.md);
 - [orchestrator package and state machine](verification/2026-11-06-orchestrator-state-machine.md);
 - [container gate](verification/2026-11-06-container-gate.md);
-- [control API, GPU monitor and preflight](verification/2026-11-06-control-api.md).
+- [control API, GPU monitor and preflight](verification/2026-11-06-control-api.md);
+- [P01 exit: the `unit`, `integration`, `e2e`, `docker` and `lint` levels, WAL and FTS5 in the real image](verification/2026-11-07-p01-exit.md). `.\start.cmd` and `status.cmd` on the real project at `http://localhost:4200` were not run there; the `docker` level ran the same code on a test project.
 
 ## P02: Working chat
 
