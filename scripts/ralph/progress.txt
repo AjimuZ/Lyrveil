@@ -54,6 +54,9 @@
 - When nginx and the backend both set a response header, hide the upstream copy with proxy_hide_header: repeated COOP or CORP values stop parsing and browsers ignore them.
 - Starlette exception handlers for Exception run outside the user middleware stack, so they must set security headers themselves.
 - Log refusals with a constant event name and error_code only, never the refused Host or Origin value.
+- Prove that a container has no way out without needing the Internet: check that /proc/net/route and /proc/net/ipv6_route (ignoring lo) have no default route, and use a container on a bridge network as the positive control.
+- Pass Python one-liners to docker from Windows PowerShell with single quotes only inside the code, so the native argument is not mangled.
+- Resolve compose.yaml with `--env-file <empty file in TestDrive>` and with the interpolated variables removed from the process environment, so a test judges the file's defaults and never reads a real .env.
 
 ---
 
@@ -386,4 +389,31 @@ Docs updated: security.md, api.md, backend.md, configuration.md, testing.md, fro
   - `scripts/lyrveil.cmd test unit <paths under tests/>` runs any backend test file, integration ones included; `test integration` takes no arguments.
   - tests/e2e/specs/security-headers.spec.mjs has not run yet; it expects nginx's CSP with port 4200 even on the test port 14200, each header exactly once, and FORBIDDEN_ORIGIN for a POST with a foreign Origin through nginx.
   - compose.test.yaml now sets LYRVEIL_HTTP_PORT to the test port; any other compose test file whose tests call /api through nginx must do the same, or the backend answers 403.
+---
+
+## 2026-11-07T00:44:49Z - P01.7b
+- Applied the container and network rules of docs/security.md and ADR 0003, and added the Docker tests T-DCK-08 to T-DCK-10.
+
+Changes:
+- The frontend was the only service that did not run as 10001:10001; it ran as the nginx image's user 101. It now sets `USER 10001:10001` in frontend/Dockerfile and `user: "10001:10001"` in compose.yaml, compose.test.yaml and the reference Compose file in docs/operations.md. compose.test.yaml also gives the two fake runtimes an explicit `user: "10001:10001"`.
+- compose.yaml already kept the backend and the orchestrator on internal networks only, and the frontend was already the only service publishing a port, on `127.0.0.1:4200`. I added a comment that states this rule.
+- New file tests/docker/Security.Tests.ps1:
+  - **Production Compose file:** resolves compose.yaml with both profiles and an empty env file, so no real .env is read. It checks that only the frontend publishes a port (127.0.0.1:4200 to 8080), that no service uses `network_mode`, that every service except the frontend and lyrveil-models joins only internal networks, and that every service sets user 10001:10001.
+  - **Running test project:** starts compose.test.yaml as its own project `lyrveil-security-test` on port 14213, with its own volumes, which are removed afterwards. It checks that the backend, both fakes and a one-off orchestrator container have no default route (IPv4 or IPv6) and cannot connect to 1.1.1.1:443. The frontend's default route is the control.
+  - It also checks that the project's networks are internal except the edge, that `docker port` shows only the frontend on 127.0.0.1, and that each container runs as 10001:10001 and each image sets that user.
+  - **Image content:** the frontend, backend and orchestrator images must hold no .env, weights, sqlite files, files under /data, /models or /backups, tests or fakes. The fakes image is the control.
+  - Pure cases cover the forbidden-path matcher.
+- Docs: a new "Containers and networks" section in docs/security.md, plus updates to docs/testing.md, docs/frontend.md, docs/operations.md and CHANGELOG.md.
+
+Checks:
+- `scripts/lyrveil.cmd test lint` passed: docs checks, PSScriptAnalyzer (22 scripts, 0 findings), ruff, mypy, ESLint and the strict build.
+- Not run: the docker level. Security.Tests.ps1 has never executed, the frontend image has not been rebuilt, and nginx running as UID 10001 on a read-only root has not been observed. T-DCK-08 to T-DCK-10 are therefore unverified.
+- The A-11 assumption (`--gpus` with internal networks) needs the real runtimes and stays open until T-GPU-01.
+- Files changed: frontend/Dockerfile, compose.yaml, compose.test.yaml, tests/docker/Security.Tests.ps1, docs/security.md, docs/testing.md, docs/operations.md, docs/frontend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Docker test ports in use: 14200 e2e, 14210 lifecycle, 14211 models, 14212 data, 14213 security. Pick a new one for any new test project.
+  - Security.Tests.ps1 has never run. If it fails, check first: nginx-unprivileged as UID 10001 on a read-only root, the `docker compose run -T --entrypoint` orchestrator probes, and the forbidden-path patterns (\.pt$, \.sqlite3?$) matching a file shipped by a package.
+  - The orchestrator container exits at once until P02, so `up --wait` must leave it out. A one-off `compose run --rm --no-deps -T --entrypoint python lyrveil-orchestrator -c ...` still joins its networks, with its user, for probes.
+  - When P02/P05 add the real lyrveil-llm and lyrveil-image to compose.yaml, the production-config checks in Security.Tests.ps1 already cover them, through `--profile ai`: user 10001:10001 and internal networks only.
+  - compose.lifecycle-test.yaml and compose.data-test.yaml do not set LYRVEIL_HTTP_PORT to their test port. They only work as long as their tests never call /api through nginx (see the P01.7a learnings).
 ---

@@ -142,6 +142,23 @@ These remain, and are accepted for a local application:
 6. **Group 0** gives the orchestrator read access to files with that group in its own read-only image, which holds nothing sensitive.
 7. **A container swapped between the identity check and the action** goes unnoticed, because the action addresses the container by name in a second request. Only someone who already controls Docker can swap it.
 
+## Containers and networks
+
+These rules hold for every service of `compose.yaml` ([ADR 0003](decisions/0003-service-topology-and-networks.md)):
+
+| Rule | Detail |
+| --- | --- |
+| Networks | The backend, the orchestrator and the runtimes join only `internal: true` networks, so they have no default route and no way out. Only the frontend, on `lyrveil-edge`, and the one-shot `lyrveil-models`, on `lyrveil-download`, join a bridge with a route out. |
+| Published port | Only the frontend publishes a port, `127.0.0.1:4200` by default. No service uses the host network. |
+| User | Every service runs as UID and GID 10001, set both in Compose (`user: "10001:10001"`) and in each image (`USER 10001:10001`). The frontend overrides the user 101 of its nginx base image. The orchestrator adds only group 0, for the Docker socket. |
+| Hardening | `cap_drop: ALL`, `no-new-privileges`, a read-only root and a tmpfs `/tmp`. |
+| Image content | `.dockerignore` keeps `.env`, weights, databases, `data/`, `models/` and `backups/` out of every build context, and runtime stages copy no tests and no fakes. |
+
+`tests/docker/Security.Tests.ps1` checks these rules (T-DCK-08 to T-DCK-10): the resolved `compose.yaml`, and a
+running test project with the fake runtimes, whose real KoboldCpp and ComfyUI images come with P02 and P05. It has not
+run yet in this change. The `--gpus` case of assumption A-11 in [Risks](risks.md) needs the real runtimes and stays
+open until T-GPU-01.
+
 ## Runtime isolation
 
 | Control | KoboldCpp | ComfyUI |

@@ -435,6 +435,7 @@ services:
     image: lyrveil/frontend:local
     build: {context: ., dockerfile: frontend/Dockerfile}
     restart: unless-stopped
+    user: "10001:10001"
     read_only: true
     tmpfs: [/tmp]
     ports: ["${LYRVEIL_BIND_ADDRESS:-127.0.0.1}:${LYRVEIL_HTTP_PORT:-4200}:8080"]

@@ -232,7 +232,7 @@ Conversation language is a separate setting and affects only the characters' tex
 Multi-stage `frontend/Dockerfile`:
 
 1. `node:24.22.2-alpine`: `npm ci --ignore-scripts`, then `node tools/build-strict.mjs`, the same strict build as the lint level.
-2. `nginxinc/nginx-unprivileged:1.30.6-alpine`: copies `dist/lyrveil/browser` and `nginx.conf`, as `conf.d/default.conf`, port 8080.
+2. `nginxinc/nginx-unprivileged:1.30.6-alpine`: copies `dist/lyrveil/browser` and `nginx.conf`, as `conf.d/default.conf`, port 8080, user `10001:10001` instead of the base image's user 101.
 
 `nginx.conf` serves `index.html` for client routes, caches hashed files for a year, proxies `/api`, `/media` and `/ws` to `lyrveil-backend:8000`, passes the original `Host` and `Origin`, disables proxy buffering on `/ws`, limits bodies to 80 MB, answers `GET /healthz` for the Compose health check, and sets the security headers, dropping the backend's copies so each arrives once ([Security](security.md#http-headers)). The image has not been built yet: see the [evidence](verification/2026-11-06-frontend-shell.md#not-executed).
 

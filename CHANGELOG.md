@@ -142,6 +142,12 @@ No application exists yet. This section records the design documentation.
 
 ### Changed
 
+- The web interface's container now runs as UID and GID 10001, like every other
+  service, instead of the nginx image's own user. Docker tests check that
+  only `127.0.0.1:4200` is published, that the backend and the runtimes have no
+  route to the Internet, and that the images hold no data, weights, `.env` or
+  test fakes.
+
 - The default text model is Gemma 4 26B-A4B on 32 GB machines and Gemma 4 12B on
   16 GB machines, instead of Rocinante 12B v1.1, which stays selectable.
 - The default image model is Illustrious XL v2.0 instead of v1.0, which stays

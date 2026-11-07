@@ -52,7 +52,7 @@ Every command exits 0 only when the level ran tests and all of them passed. An u
 
 ### The `docker` level
 
-Delivered with P01.8b, P01.6a, P01.6b, P01.6c and P01.6d ([setup evidence](verification/2026-11-06-setup.md),
+Delivered with P01.8b, P01.6a, P01.6b, P01.6c, P01.6d and P01.7b ([setup evidence](verification/2026-11-06-setup.md),
 [lifecycle evidence](verification/2026-11-06-lifecycle.md), [models evidence](verification/2026-11-07-models.md),
 [data files evidence](verification/2026-11-07-data-files.md)). It runs with the pinned Pester only;
 pytest joins it when a Docker test needs Python. The files:
@@ -93,6 +93,16 @@ pytest joins it when a Docker test needs Python. The files:
   refuses a backup whose manifest hash was changed, without asking, stopping or changing anything; without console
   input it exits 5; after a yes it stops, replaces the data, keeps the previous data in `pre-restore-<time>/` and ends
   with the ready line. The round trip of T-DCK-12 is completed in P03.7b and T-DCK-14 in P06.
+- `tests/docker/Security.Tests.ps1` (P01.7b) holds T-DCK-08 to T-DCK-10. It resolves `compose.yaml` with both
+  profiles and an empty env file, and checks that only the frontend publishes a port, `127.0.0.1:4200` to 8080, that no
+  service uses the host network, that every service other than the frontend and `lyrveil-models` joins only internal
+  networks, and that every service sets `user: "10001:10001"`. It then starts `compose.test.yaml` as the project
+  `lyrveil-security-test` on port 14213 and checks that the backend, the two fakes and a one-off orchestrator
+  container have no default route and cannot open a connection to `1.1.1.1:443`, while the frontend has a default
+  route as the control; that the project's networks other than the edge are internal; that only the frontend has a
+  published port, on `127.0.0.1`; that each container runs as `10001:10001` and each image sets that user; and that the
+  frontend, backend and orchestrator images hold no `.env`, weights, database, files in `/data`, `/models` or
+  `/backups`, tests or fakes, with the fakes image as the control. No check needs the Internet. It has not run yet.
 
 The setup tests never touch a real installation. They add `tests/docker/compose.setup-test.yaml` to `compose.yaml`,
 which renames the two external volumes to `lyrveil-setup-test-data` and `lyrveil-setup-test-models`, tags every image
