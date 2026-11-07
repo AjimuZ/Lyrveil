@@ -147,6 +147,7 @@ async def domain_error_handler(_request: Request, error: Exception) -> JSONRespo
         "PAYLOAD_TOO_LARGE": "Contenuto troppo grande",
         "UNSUPPORTED_MEDIA": "Formato non supportato",
         "IMPORT_INVALID": "File del personaggio non valido",
+        "CONTENT_POLICY_BLOCKED": "Contenuto non consentito",
     }
     return problem_response(error.status, error.code, titles.get(error.code, "Richiesta rifiutata"), error.detail)
 

@@ -251,6 +251,20 @@ Delivered in P01.8b. Their tests run in the orchestrator's test stage with the `
 | T-CHR-13 | Full creation flow in the browser | E2E | P03 |
 | T-CHR-14 | Voice and wardrobe fields: `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots against the vocabulary, outfits with reserved keys refused. Round trip through export and import | Unit, integration | P03 |
 
+Delivered in P03.6a: T-CHR-02 at the draft entry point is
+`test_a_description_of_a_minor_is_refused_before_the_model_runs` in `backend/tests/integration/test_character_drafts.py`
+(an age under 18 in digits and in words, a minor term and childhood next to a sexual term in the description answer
+`422 CONTENT_POLICY_BLOCKED` and queue no job; a job queued past the route fails with `CONTENT_POLICY_BLOCKED` before
+any generation). The same file checks the guard on the draft's output: a refused draft is
+repaired once with the guard's reason, and a second refusal fails the job with `CONTENT_POLICY_BLOCKED`. The age of
+the draft's output stays covered by the T-CHR-10 tests of the same file (16, then 15). T-CHR-02 at the API and the
+database is `test_an_age_under_18_is_refused_by_the_api_and_by_the_database` in `test_characters.py`, and at import
+`test_a_minor_is_refused_at_import` in `test_character_exchange.py`. In this change
+`scripts\lyrveil.cmd test unit tests/unit/test_content_guard.py` passed (107 passed) and
+`scripts\lyrveil.cmd test unit tests/integration/test_content_guard.py tests/integration/test_character_drafts.py`
+passed (16 passed); the full `unit` and `integration` levels were not run. Since this change `backend/tests/unit` and
+`backend/tests/integration` are packages (`__init__.py`), so a unit and an integration test file may share a name.
+
 Delivered in P03.5: T-CHR-05, T-CHR-06 and the round trip of T-CHR-14 are
 `backend/tests/integration/test_character_exchange.py` (a round trip with a PNG, a JPEG and a WebP checks the card, the
 primary avatar and the hashes; refusals of a newer format, another format, text that is not JSON, unknown fields in the
@@ -422,7 +436,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-SEC-04 | Path traversal attempts on media and asset routes. Delivered: `test_avatars.py` sends encoded `..`, `\` and absolute paths to `/media/assets/...` and to the asset routes, and a row with a tampered path is neither served nor deleted | Integration | P03 |
 | T-SEC-05 | Decompression bomb and disguised uploads are refused. Delivered: `test_avatars.py`, with PNG headers of 20000 x 20000, 9000 x 9000 and 9000 x 10 pixels, HTML, SVG, GIF, broken PNG and JPEG bytes, and types that disagree with the bytes | Integration | P03 |
 | T-SEC-06 | Marker strings never reach logs | Integration | P02 |
-| T-SEC-07 | Content guard cases, including minors at each entry point | Unit | P03 |
+| T-SEC-07 | Content guard cases, including minors at each entry point. Delivered in P03.6a, and passed in the targeted runs named below the Character Creator table: `backend/tests/unit/test_content_guard.py` (each rule in Italian and English, the childhood phrases, durations and near words that pass, case, accents, invisible characters, spaced letters and digit swaps, every text field of a card, the draft description, every list entry written normalized, and that no setting, environment variable or file can change the minor safeguards), `backend/tests/integration/test_content_guard.py` (create in both body forms, save, proposal, restore and duplicate of a card stored past the guard, import, the age `CHECK` on insert and update, and the same refusals with non-default settings, hostile environment variables and `application_settings` rows) and the draft tests of `test_character_drafts.py` | Unit, integration | P03 |
 | T-SEC-08 | Delete refuses paths outside the media root. Delivered: `backend/tests/unit/test_media_store.py`: `..`, absolute paths, the root, files directly in it, the staging folder and a link that leads outside | Unit | P03 |
 | T-SEC-09 | Lint rule forbids `innerHTML` and `bypassSecurityTrust`. Delivered: `frontend/tools/eslint/unsafe-html.test.mjs` lints fixtures with the real configuration | Unit | P01 |
 

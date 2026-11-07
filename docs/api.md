@@ -116,7 +116,8 @@ Delivered in P03.5: the three exchange routes. `GET .../export` answers the file
 (`include_assets` is `false` by default); `POST /characters/import` takes the multipart field `file` (up to 64 MB, else
 `413 PAYLOAD_TOO_LARGE`) and answers `201` with `{"character": {...summary}, "assets_imported": n, "assets_without_data":
 n}`; `GET .../format-schema` answers the JSON Schema (draft 2020-12). A refused file answers `422 IMPORT_INVALID` with an
-Italian `detail` and writes nothing. The routes are not in `backend/openapi.json` yet, like the other character routes.
+Italian `detail` and writes nothing; since P03.6a a card text that describes a minor answers `422
+CONTENT_POLICY_BLOCKED` instead. The routes are not in `backend/openapi.json` yet, like the other character routes.
 
 Delivered in P02.6a and P03.1a: `GET /characters` (`status` `active` or `archived`, default `active`; `q` keeps the names
 that contain it, ignoring case; newest update first), `POST /characters` and `GET /characters/{id}`.
@@ -131,6 +132,10 @@ that contain it, ignoring case; newest update first), `POST /characters` and `GE
   an unknown field, more entries than a list allows, a slot tag missing from the tag vocabulary, a free tag of more than
   4 words, an outfit with the reserved key `usual` or `scene`, a repeated outfit key, and a `fixed` or `base_offset`
   seed policy without `base_seed`. Tags are sanitized before they are stored.
+- Since P03.6a, `422 CONTENT_POLICY_BLOCKED` when a text of the card describes a minor
+  ([Content safeguards](security.md#character-data)). Its `detail` names the first such field, such as "Il campo
+  «identity.biography» parla di un minore. La scheda descrive solo adulti.", never the text, and nothing is written.
+  `PUT`, duplicate, restore and import answer the same.
 - `GET /characters/{id}` answers the summary fields plus `card`, the whole card as stored, or `404 NOT_FOUND`. A character
   made before the card existed reads with the default sections.
 
@@ -140,14 +145,16 @@ Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
   to the stored one writes nothing and keeps `current_version_no`; any other change replaces the card and appends a
   version, actor `user`, whose `change_summary` names the sections that changed (`Modificati: identità, aspetto`).
   The locks in the body are the new locks, so the user's own save can change a locked trait or field. It answers `404
-  NOT_FOUND` for an unknown character and `422 VALIDATION_ERROR` for what `POST` refuses; nothing is written then.
+  NOT_FOUND` for an unknown character and `422 VALIDATION_ERROR` or `CONTENT_POLICY_BLOCKED` for what `POST` refuses;
+  nothing is written then.
 - `GET /characters/{id}/versions` answers `{"items": [{"version_no", "change_summary", "actor", "created_at"}]}`, newest
   first. `GET .../versions/{n}` adds `card`, the snapshot.
 - `GET .../versions/{a}/diff/{b}` answers `{"from_version_no", "to_version_no", "changes": [{"field", "before",
   "after"}]}`. `field` is a dotted path such as `identity.age` or `visual.identity_en.hair_color`, in card order. A list
   (traits, interests, examples, outfits) is one field and compares whole. Equal versions give an empty list.
 - `POST .../versions/{n}/restore` always appends a version, actor `restore`, summary `Ripristinata la versione n`,
-  holding the card of version `n`, and answers the character. Versions are never changed or removed.
+  holding the card of version `n`, and answers the character. Versions are never changed or removed. Since P03.6a an
+  old card that the content guard refuses today answers `422 CONTENT_POLICY_BLOCKED` and appends nothing.
 - The three routes on a version answer `404 NOT_FOUND` for an unknown character or version.
 - Delivered in P03.2a: `GET /characters/vocabulary` answers `{"items": [{"tag", "category", "aliases_it"}]}`, the whole tag
   vocabulary of the card categories in file order. The Creator builds its chips and its Italian search from it. It is
@@ -161,19 +168,22 @@ Delivered in P03.3: `POST /characters/drafts` ([Assisted creation](character-sys
 
 - The body is `{"description": "...", "character_id": null}`; unknown fields are refused. It answers `202` with
   `{"id", "kind": "character_draft", "status": "queued", "queue_position"}` and writes nothing but the job. `422
-  VALIDATION_ERROR` for a blank description or one over 2000 characters, `404 NOT_FOUND` for an unknown `character_id`,
-  `409 CONFLICT` when the queue is full. The content guard of the draft request is not delivered (P03.6).
+  VALIDATION_ERROR` for a blank description or one over 2000 characters, `422 CONTENT_POLICY_BLOCKED` (since P03.6a)
+  for a description that describes a minor, with no job queued, `404 NOT_FOUND` for an unknown `character_id`, `409
+  CONFLICT` when the queue is full.
 - The job's result, read with `GET /jobs/{id}`, is `{"card", "proposed_fields", "character_id", "attempts"}`. No
   character exists until the user saves `card` with `POST /characters`, or with `PUT /characters/{id}` for a draft over
   a character; that draft already holds the stored locks. A draft refused twice ends `failed` with
-  `STRUCTURED_OUTPUT_INVALID` and an Italian `error_detail` that names the field, such as "L'età deve essere almeno 18.".
+  `STRUCTURED_OUTPUT_INVALID` and an Italian `error_detail` that names the field, such as "L'età deve essere almeno 18.",
+  or with `CONTENT_POLICY_BLOCKED` when the content guard refused the last attempt.
 
 Delivered in P03.2b: duplicate, archive, unarchive and purge.
 
 - `POST /characters/{id}/duplicate` answers `201` with the summary of a new active character that holds a copy of the
   current card, at version 1, actor `duplicate`, summary `Duplicato da <first name>`. Its first name is the original
   followed by ` (copia)`, cut to stay within 80 characters. Conversations, memories and older versions are not copied. An
-  archived character can be duplicated; the copy is active. `404 NOT_FOUND` for an unknown character.
+  archived character can be duplicated; the copy is active. `404 NOT_FOUND` for an unknown character. Since P03.6a,
+  `422 CONTENT_POLICY_BLOCKED` when the stored card holds text that the content guard refuses today.
 - `POST /characters/{id}/archive` and `/unarchive` answer `200` with the summary, whose `status` is then `archived` or
   `active`. Repeating either changes nothing. Nothing is deleted. The conversation list leaves out the conversations of
   an archived character, unless it is asked for that character with `character_id`; a new conversation with an archived

@@ -148,8 +148,9 @@ class CharacterExchangeService:
         Raises PayloadTooLargeError over 64 MB, and ImportInvalidError, with an Italian detail, for text that is not
         JSON, another or a newer format, a card the card rules refuse (an age under 18, an unknown field...), an
         unknown field in the file, an image that is not valid base64, does not match its hash or is not a PNG, JPEG or
-        WebP that decodes, or an avatar flagged primary twice. An image whose bytes carry metadata is stored without
-        it, so its hash then differs from the recorded one.
+        WebP that decodes, or an avatar flagged primary twice. Raises ContentPolicyBlockedError, not ImportInvalidError,
+        when a text of the card describes a minor. An image whose bytes carry metadata is stored without it, so its
+        hash then differs from the recorded one.
         """
         if len(data) > MAX_IMPORT_BYTES:
             raise PayloadTooLargeError(_TOO_LARGE)

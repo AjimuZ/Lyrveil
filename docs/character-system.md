@@ -8,8 +8,10 @@ with `PUT /characters/{id}`, versions, field-level diff, restore, and the locks 
 (`/characters/new`, `/characters/:id/edit`; see [Frontend screen 3](frontend.md#3-character-creator)) and
 `GET /characters/vocabulary`. Delivered in P03.2b: the profile ([Frontend screen 4](frontend.md#4-character-profile)),
 duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-purge)). Delivered in P03.3: assisted
-creation ([Assisted creation](#assisted-creation)), without the content guard. Planned: locks in the translation job,
-assets, the content guard (P03.6), and the exchange format.
+creation ([Assisted creation](#assisted-creation)). Delivered in P03.4a and P03.5, backend only: assets
+([Avatars and images](#avatars-and-images)) and the [exchange format](#exchange-format). Delivered in P03.6a: the
+content guard on every card that is stored and on every draft ([Security](security.md#character-data)). Planned:
+locks in the translation job.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -125,6 +127,9 @@ first name and age are required. The form uses Angular Signal Forms and saves a 
 Rules:
 
 - `age` is required and at least 18. The interface explains that all characters are adults.
+- Text that describes a minor is refused on save with `422 CONTENT_POLICY_BLOCKED`, naming the field
+  ([Content safeguards](security.md#character-data)). The character's own past in a fixed form, such as "Da bambina
+  sognava il mare", passes.
 - **Identità** asks how the character speaks of itself: **Al femminile**, **Al maschile** or **Non indicato**. While
   `subject_tag` is still the default, the choice also proposes the matching tag.
 - Each personality category accepts several descriptive entries.
@@ -147,7 +152,8 @@ Delivered in P03.1b; see [Versioning](consistency-engine.md#versioning) for the 
 the routes.
 
 - Creation writes version 1. A save writes a new version only if the validated card differs from the stored one, so a
-  save with no change creates none. Restore always writes one, with the old content.
+  save with no change creates none. Restore always writes one, with the old content, unless the content guard refuses
+  that content today: then it writes nothing.
 - The diff compares two snapshots field by field (`lyrveil.domain.card_diff`). Lists compare whole.
 - `keep_locked` (`lyrveil.domain.card_locks`) is the rule for anything automatic, a draft over an existing character or
   a proposal. A locked trait stays, first and unchanged; the proposed traits follow, always unlocked, and a repeat of a
@@ -180,8 +186,13 @@ If an image is being generated, the job waits, and the Creator shows the queue s
 Delivered in P03.3, with these limits and choices:
 
 - `POST /characters/drafts` takes `{"description": "...", "character_id": null}` and answers `202` with the job. The
-  description is trimmed, must not be blank and has at most 2000 characters. **The content guard does not run yet**: it
-  arrives with P03.6, so step 1 is only the length check today. The grammar still keeps the age between 18 and 120.
+  description is trimmed, must not be blank and has at most 2000 characters. Since P03.6a the content guard then checks
+  it, and a description of a minor, such as "Crea una sedicenne", answers `422 CONTENT_POLICY_BLOCKED` and queues
+  nothing, so the model never reads it. The handler checks a queued description again before it generates, and fails
+  the job with `CONTENT_POLICY_BLOCKED` when the guard refuses it. The grammar still keeps the age between 18 and 120.
+- The draft's text passes the content guard as part of its validation. A refused draft is repaired once with the
+  guard's reason, like any invalid output; when the repair is refused by the guard too, the job fails with
+  `CONTENT_POLICY_BLOCKED` instead of `STRUCTURED_OUTPUT_INVALID`.
 - `CharacterDraft` (`lyrveil.domain.card_draft`) leaves out `traits.locked`, `visual.identity_en`,
   `visual.usual_outfit_en`, `visual.outfits.tags_en`, `visual.persistent_negative_en`, `visual.locked_fields`,
   `visual.seed_policy` and `visual.base_seed` (`DRAFT_EXCLUDED_FIELDS`). Its grammar is generated from the model at
@@ -384,7 +395,9 @@ Delivered in P03.5 (backend only; the Creator has no import or export button yet
 - The JSON Schema comes from the same Pydantic model. It checks structure, closed lists, bounds and unknown fields. The
   rules that need the tag vocabulary or the sanitizer (slot tags, free tags of at most four words) are applied by the
   import only.
-- Not delivered: the content guard on imported text (P03.6) and the Creator's import and export buttons.
+- Since P03.6a the content guard checks the imported card after the card rules; a text that describes a minor answers
+  `422 CONTENT_POLICY_BLOCKED` rather than `IMPORT_INVALID`, and nothing is imported.
+- Not delivered: the Creator's import and export buttons.
 
 ### Character Card V2
 

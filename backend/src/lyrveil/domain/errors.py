@@ -34,6 +34,15 @@ class ValidationFailedError(DomainError):
     status = 422
 
 
+class ContentPolicyBlockedError(DomainError):
+    """A content safeguard of ADR 0018 refused the data (422 `CONTENT_POLICY_BLOCKED`), so nothing was written or
+    queued. `detail` names the refused field, never the refused text. Deliberately not a ValidationFailedError: a
+    caller that maps validation errors to its own code, as the import does with IMPORT_INVALID, keeps this one."""
+
+    code = "CONTENT_POLICY_BLOCKED"
+    status = 422
+
+
 class ImportInvalidError(DomainError):
     """A character file is not valid or not of a supported version (422 `IMPORT_INVALID`). Nothing is imported."""
 

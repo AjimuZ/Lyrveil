@@ -40,3 +40,4 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0034](0034-character-consistency-protocol-and-verified-profiles.md) | Consistency protocol and verified profiles | Accepted |
 | [0035](0035-structured-visual-identity-and-wardrobe.md) | Structured visual identity, wardrobe and tag vocabulary | Accepted |
 | [0036](0036-structured-image-scenes-and-measured-levers.md) | Structured image scenes, sizes, captions and measured image levers | Accepted |
+| [0037](0037-content-guard-rules-for-character-text.md) | Content guard rules for character text, with the character's own past allowed | Accepted |

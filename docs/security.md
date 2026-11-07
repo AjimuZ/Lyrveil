@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. Delivered in P01.7a: the Host and Origin checks of the [local-only model](#local-only-model) on REST and on the `/ws` handshake, tested by T-SEC-01, and the [HTTP headers](#http-headers) from both nginx and the backend, tested by T-SEC-02. Delivered in P03.4a: the upload row of [Input validation](#input-validation) for character assets (`lyrveil.media.images`, tested by T-SEC-05) and, for those assets, the [File safety](#file-safety) rules on names, lookup by identifier, staging and the checked delete (`lyrveil.media.store`, tested by T-SEC-04 and T-SEC-08); orphan cleanup is not delivered. The content type rule (point 4) and the rest are planned, across all phases. P09 audits it.
+Status: accepted (2026-11-01). Implementation: partial. Delivered in P01.4b: `ContainerGate`, its tests and the socket scans of the orchestrator and the backend, which hold the allowlist, name, identity and forbidden-call controls of the [Docker socket](#docker-socket). Delivered in P01.4c: the control API's bearer token, required on every request but `GET /v1/health` and compared in constant time, tested by T-ORC-10. Delivered in P01.7a: the Host and Origin checks of the [local-only model](#local-only-model) on REST and on the `/ws` handshake, tested by T-SEC-01, and the [HTTP headers](#http-headers) from both nginx and the backend, tested by T-SEC-02. Delivered in P03.4a: the upload row of [Input validation](#input-validation) for character assets (`lyrveil.media.images`, tested by T-SEC-05) and, for those assets, the [File safety](#file-safety) rules on names, lookup by identifier, staging and the checked delete (`lyrveil.media.store`, tested by T-SEC-04 and T-SEC-08); orphan cleanup is not delivered. Delivered in P03.6a: the [content guard](#content-safeguards) for character data, at every entry point of a card and of a draft request (`lyrveil.consistency.content_guard`, tested by T-SEC-07); its image and generated-text rows are planned. The content type rule (point 4) and the rest are planned, across all phases. P09 audits it.
 
 Lyrveil is a local, single-user application. It holds intimate text and images and controls Docker. The main threats are a malicious web page in the same browser, careless exposure on the network, a leak into logs or Git, and
 excessive authority in the service that controls containers.
@@ -221,6 +221,45 @@ The remaining effect is limited to the text of one conversation, which belongs t
 | Generated text | Sentence-level check during streaming for minor terms next to sexual terms. Aborts and replaces the text |
 
 These checks are best-effort filters over models that can produce unwanted content. They reduce risk. They are not a guarantee, and the [licenses](licensing.md#models) still bind the user.
+
+### Character data
+
+Delivered in P03.6a: the first two rows of the table, in `lyrveil.consistency.content_guard`. The image rows come with
+P05 and the generated-text row with the reply checks of P04. The reasons for these rules are in
+[ADR 0037](decisions/0037-content-guard-rules-for-character-text.md).
+
+- **Where.** `CharacterService` checks every card it stores: create, save, proposal, duplicate, restore and import, through
+  `validate_card` and again at its two write paths, so a restored or duplicated card that predates a list entry is
+  refused too. The assisted draft's output is checked as part of its validation, and `POST /characters/drafts` checks
+  the description before it queues the job; the job checks it again before the model runs. Every string of the card
+  is checked, outfit keys and English tags included, except `visual.persistent_negative_en`, where safety terms such
+  as `child` belong. The age rule stays in the schema (`422 VALIDATION_ERROR`, `IMPORT_INVALID` at import) and in the
+  `CHECK` on `characters.age`.
+- **Refusal.** `422 CONTENT_POLICY_BLOCKED`, with an Italian `detail` that names the first offending field in card order,
+  or the description, and never quotes the text. Nothing is written or queued. A draft whose output is refused is
+  repaired once with that reason; a second refusal fails the job with `CONTENT_POLICY_BLOCKED`.
+- **Rules.** Each sentence is read lowercased, without accents or invisible characters, with punctuation read as spaces.
+  A sentence ends at `.`, `!`, `?` or `;` before a space, or at a line break.
+
+| Rule | Refuses | Examples |
+| --- | --- | --- |
+| Minor term | A word or phrase that names a minor or presents someone as one, and a child's costume or act | `minorenne`, `bambina`, `ragazzino`, `adolescente`, `liceale`, `frequenta le medie`, `child`, `kids`, `teenager`, `underage`, `schoolgirl`, `loli`, `shota`, `si veste da bambina`, `dresses up as a little girl` |
+| Minor age | An age from 0 to 17 stated as an age, in digits or words | `ha 16 anni`, `sedicenne`, `16enne`, `una ragazza di 15 anni`, `Giulia, 16 anni`, `età: 16`, `ha quasi 18 anni`, `16 years old`, `15-year-old`, `aged 12`, `16yo`, `she's 16` |
+| Childhood and sex | A reference to childhood in the same sentence as a sexual term | `da bambina`, `a 15 anni` or `infanzia` with `sessuale`, `nuda` or `porn` |
+
+- **Childhood phrases pass.** The character's own past in a fixed form is taken out before the first two rules:
+  `da bambina`, `fin da piccola`, `quando era ragazzina`, `a 16 anni`, `aveva 12 anni`, `all'età di 10 anni`,
+  `as a child`, `when she was a teenager`, `at 16`. The third rule still applies to them. Durations and age differences
+  are not ages: `ha 3 anni di esperienza`, `lavora da 10 anni`, `dieci anni fa`, `ha 5 anni più di lei`.
+- **Evasion.** The term checks also read each sentence with spaced letters joined (`l o l i`) and with common digit
+  swaps undone (`b4mbina`).
+- **Not configurable.** The lists are constants of the module, which reads no setting, environment variable or file, and
+  no setting names them. `backend/tests/unit/test_content_guard.py` checks the module's imports and names, and
+  `backend/tests/integration/test_content_guard.py` checks that non-default deployment settings, environment variables
+  and rows of `application_settings` that look like switches change no refusal.
+- **Known limits.** Any other mention of a minor is refused, so a teacher's pupils written as `i bambini`, children's
+  books or `in her teens` are refused. A birth year is not read as an age, and a phrase outside the lists passes. A new
+  entry comes with a test case in `test_content_guard.py`.
 
 ## Secrets
 

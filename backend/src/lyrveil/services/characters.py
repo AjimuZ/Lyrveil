@@ -2,7 +2,8 @@
 duplicates, archives and purges them.
 
 A saved change appends a version, restoring appends one too, and history is never rewritten. A purge is the only
-operation that deletes a character's rows (docs/data-model.md, Deletion policy).
+operation that deletes a character's rows (docs/data-model.md, Deletion policy). Every card the service stores, a
+restored one included, passes the content guard first (ADR 0018), so no text that describes a minor is written.
 """
 
 from collections.abc import Callable, Mapping
@@ -11,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import Connection, Engine
 
+from lyrveil.consistency.content_guard import check_card
 from lyrveil.domain.card import MAX_NAME_LENGTH, CharacterCard
 from lyrveil.domain.card_diff import FieldChange, diff_cards
 from lyrveil.domain.card_locks import keep_locked
@@ -63,7 +65,8 @@ class CharacterService:
 
         Raises ValidationFailedError, with an Italian detail, for anything validate_card refuses: an age under 18 or
         over 120, an empty or over-long name, a value outside the closed lists, an unknown field, a slot tag the
-        vocabulary lacks, or an outfit with a reserved key. Nothing is written in that case.
+        vocabulary lacks, or an outfit with a reserved key. Raises ContentPolicyBlockedError when a text describes a
+        minor. Nothing is written in either case.
         """
         return self._insert_new(validate_card(raw_card), actor="user", summary="Creazione")
 
@@ -77,7 +80,9 @@ class CharacterService:
         `duplicate`. Conversations, memories and the version history are not copied. The first name gets the suffix
         " (copia)" (the name is cut to stay within its limit), so the two are told apart in every list.
 
-        Raises NotFoundError for an unknown character. An archived source can be duplicated; the copy is active.
+        Raises NotFoundError for an unknown character. An archived source can be duplicated; the copy is active. The
+        copy passes validate_card again, so a stored card that the content guard now refuses (its lists grow) raises
+        ContentPolicyBlockedError instead of being copied.
         """
         source = self.get(character_id)
         suffix = " (copia)"
@@ -143,7 +148,10 @@ class CharacterService:
                 media.delete(path)
 
     def _insert_new(self, card: CharacterCard, *, actor: str, summary: str) -> CharacterSummary:
-        """Stores `card` as a new active character at version 1 and returns it."""
+        """Stores `card` as a new active character at version 1 and returns it. Raises ContentPolicyBlockedError,
+        writing nothing, when a text of `card` describes a minor."""
+        # This service is the only writer of cards, so its two write paths check every card, whatever the caller did.
+        check_card(card)
         character_id = new_id()
         now = to_utc_text(self._clock())
 
@@ -194,8 +202,8 @@ class CharacterService:
         Returns the character. A card equal to the stored one writes nothing and keeps the version number; any other
         appends a version with actor `user` and a summary of the sections that changed.
 
-        Raises NotFoundError for an unknown character and ValidationFailedError for what validate_card refuses; the
-        stored card stays as it was in both cases.
+        Raises NotFoundError for an unknown character, ValidationFailedError for what validate_card refuses and
+        ContentPolicyBlockedError when a text describes a minor; the stored card stays as it was in every case.
         """
         card = validate_card(raw_card)
         return self._save(character_id, lambda _current: card, actor="user")
@@ -205,7 +213,8 @@ class CharacterService:
         visual fields of the stored card survive (`keep_locked`), and the version has actor `proposal`.
 
         Returns the character, unchanged when the proposal changes nothing once the locks are applied. Raises
-        NotFoundError and ValidationFailedError as `update` does.
+        NotFoundError, ValidationFailedError and ContentPolicyBlockedError as `update` does: a proposal goes through
+        the same content guard as the user's own save.
         """
         proposed = validate_card(raw_card)
         return self._save(character_id, lambda current: keep_locked(current, proposed), actor="proposal")
@@ -214,7 +223,8 @@ class CharacterService:
         """Appends a new version, actor `restore`, holding the card of version `version_no`, and makes it current.
         History is not rewritten. The version is appended even when the card equals the current one.
 
-        Raises NotFoundError for an unknown character or version.
+        Raises NotFoundError for an unknown character or version, and ContentPolicyBlockedError, writing nothing, when
+        the old card holds text that the content guard refuses today, since an old version may predate a list entry.
         """
         found = read(self._engine, lambda connection: repository.get_version(connection, character_id, version_no))
         if found is None:
@@ -261,7 +271,8 @@ class CharacterService:
         note: str | None = None,
     ) -> StoredCharacter:
         """Stores `build(current card)` in one transaction. It appends version `current + 1` when the card changes or
-        `force_version` is set, and otherwise writes nothing."""
+        `force_version` is set, and otherwise writes nothing. Raises ContentPolicyBlockedError, writing nothing, when a
+        text of the built card describes a minor."""
         now = to_utc_text(self._clock())
 
         def work(connection: Connection) -> StoredCharacter:
@@ -269,6 +280,7 @@ class CharacterService:
             if current is None:
                 raise NotFoundError(_NO_CHARACTER)
             card = build(current.card)
+            check_card(card)
             changes = diff_cards(current.card, card)
             if not changes and not force_version:
                 return current

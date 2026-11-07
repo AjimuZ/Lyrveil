@@ -10,13 +10,21 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Characters must be adults in their text too: creating, saving, importing, duplicating or restoring a character whose
+  text names a minor (such as "bambina", "adolescente", "teenager"), states an age under 18 ("ha 16 anni",
+  "sedicenne", "16 years old") or puts childhood next to sexual content is refused with `CONTENT_POLICY_BLOCKED`, and
+  the message names the field. The character's own past in a fixed form, such as "Da bambina sognava il mare", is
+  accepted. **Bozza assistita** refuses such a description before the model runs, and a draft whose text describes a
+  minor is corrected once, then fails. The checks are fixed Italian and English word lists that no setting can turn
+  off. They are best-effort: they can refuse an innocent sentence, such as a teacher writing about "i bambini", or miss
+  a phrase.
 - Character export and import, backend only: `GET /api/v1/characters/{id}/export` downloads a character as a
   `.lyrveil-character.json` file with its card and the type and SHA-256 of each image (`include_assets=true` also embeds
   the images), and `POST /api/v1/characters/import` creates a new character from such a file, never overwriting one.
   The file is checked in full before anything is written: a newer format, an unknown field, an age under 18, a wrong
   image hash or an image that is not a real PNG, JPEG or WebP are refused with `IMPORT_INVALID`; files over 64 MB with
   `413`. `GET /api/v1/characters/format-schema` publishes the JSON Schema of the format. There is no button for it in
-  the Creator yet, and the content guard on imported text arrives later.
+  the Creator yet.
 - Avatar tools in the Character Creator (Images tab, for a saved character) and in the profile: choose an image and
   see a preview before it is sent, crop a variant to a square (saved as a new variant, the original stays), choose the
   primary avatar among the variants. A refused upload shows the Italian message of its error code. The conversation list

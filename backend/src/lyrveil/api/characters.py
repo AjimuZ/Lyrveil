@@ -206,7 +206,7 @@ def create_character(body: Annotated[dict[str, Any], Body()], service: Character
     "communication": {...}, "visual": {...}}` or the flat form with the identity fields at the top level; only the first
     name and the age are required. Answers 422 `VALIDATION_ERROR` with an Italian detail for an age under 18 or over
     120, an empty name, a value outside the closed lists, an unknown field, a slot tag the vocabulary lacks or an outfit
-    with a reserved key."""
+    with a reserved key, and 422 `CONTENT_POLICY_BLOCKED`, naming the field, when a text describes a minor."""
     return _out(service.create(_as_card(body)))
 
 
@@ -215,8 +215,9 @@ def start_draft(body: DraftBody, request: Request) -> JobOut:
     """Queues a `character_draft` job that drafts a card from `description` and answers it with `202`. The job's result
     (`GET /jobs/{id}`) holds the card to review; no character is written until the user saves it. With `character_id`
     the draft rewrites that character's card and keeps its locked traits and visual fields. Answers 422
-    `VALIDATION_ERROR` for a blank description or one over 2000 characters, 404 `NOT_FOUND` for an unknown character
-    and 409 `CONFLICT` when the queue is full."""
+    `VALIDATION_ERROR` for a blank description or one over 2000 characters, 422 `CONTENT_POLICY_BLOCKED` when the
+    description describes a minor (no job is queued), 404 `NOT_FOUND` for an unknown character and 409 `CONFLICT` when
+    the queue is full."""
     engine: Engine | None = request.app.state.engine
     if engine is None:
         raise RuntimeError("the character routes need a database")
@@ -233,7 +234,8 @@ async def import_character(
     file, and stores its images. It never overwrites a character. Answers `201`; `assets_without_data` counts listed
     assets that carried no bytes. Answers 413 `PAYLOAD_TOO_LARGE` over 64 MB and 422 `IMPORT_INVALID`, with an Italian
     detail, for a file that is not valid JSON, is of another or a newer format, breaks the card rules (an age under 18
-    among them), holds an unknown field or has an image whose hash or bytes are wrong. Nothing is written then."""
+    among them), holds an unknown field or has an image whose hash or bytes are wrong, and 422
+    `CONTENT_POLICY_BLOCKED` when a text of the card describes a minor. Nothing is written then."""
     # One byte over the limit is enough to refuse, so a larger file is never read whole into memory.
     data = await file.read(MAX_IMPORT_BYTES + 1)
     result = await run_in_threadpool(exchange.import_file, data)
@@ -275,7 +277,8 @@ def save_character(
 ) -> CharacterDetail:
     """Saves the whole card, in the same two forms as the create route. It creates a version when anything changed and
     answers the character; a card equal to the stored one creates none. The locks in the body are the new locks. Answers
-    404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` as the create route does."""
+    404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` or `CONTENT_POLICY_BLOCKED` as the create route
+    does."""
     return _detail(service.update(character_id, _as_card(body)))
 
 
@@ -297,7 +300,7 @@ def export_character(
 def duplicate_character(character_id: str, service: CharacterService = Service) -> CharacterOut:
     """Creates an active character with a copy of the card, named "<first name> (copia)", at version 1 with actor
     `duplicate`. No conversation, memory or older version is copied. Answers 404 `NOT_FOUND` for an unknown
-    character."""
+    character and 422 `CONTENT_POLICY_BLOCKED` when the stored card holds text the content guard refuses today."""
     return _out(service.duplicate(character_id))
 
 
@@ -359,5 +362,6 @@ def diff_versions(character_id: str, from_no: int, to_no: int, service: Characte
 @router.post("/{character_id}/versions/{version_no}/restore", response_model=CharacterDetail)
 def restore_version(character_id: str, version_no: int, service: CharacterService = Service) -> CharacterDetail:
     """Appends a new version holding the card of `version_no` and answers the character. Answers 404 `NOT_FOUND` for an
-    unknown character or version."""
+    unknown character or version, and 422 `CONTENT_POLICY_BLOCKED`, appending nothing, when the old card holds text the
+    content guard refuses today."""
     return _detail(service.restore(character_id, version_no))

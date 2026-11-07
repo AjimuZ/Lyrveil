@@ -1,10 +1,12 @@
-"""Validates a character card: the domain model's shape, then the tag rules that need the vocabulary and sanitizer."""
+"""Validates a character card: the domain model's shape, the tag rules that need the vocabulary and sanitizer, and
+the content guard."""
 
 from collections.abc import Mapping
 from typing import Any
 
 from pydantic import ValidationError
 
+from lyrveil.consistency.content_guard import check_card
 from lyrveil.domain.card import CharacterCard, VisualIdentityEn, VisualProfile
 from lyrveil.domain.errors import ValidationFailedError
 from lyrveil.images.sanitizer import sanitize_tag
@@ -101,10 +103,14 @@ def validate_card(raw: Mapping[str, Any]) -> CharacterCard:
 
     Text is trimmed, slot tags are sanitized and checked against the vocabulary, and free tags are sanitized, limited to
     4 words and de-duplicated. Raises ValidationFailedError with an Italian detail for an unknown field, a value out of
-    its bounds (an age under 18 among them), a slot value the vocabulary lacks or a reserved outfit key.
+    its bounds (an age under 18 among them), a slot value the vocabulary lacks or a reserved outfit key. Then, on the
+    valid card, raises ContentPolicyBlockedError when a text describes a minor (lyrveil.consistency.content_guard).
+    Create, save, proposal, duplicate, import and the draft all validate here; restore checks its old card itself.
     """
     try:
         card = CharacterCard.model_validate(raw)
     except ValidationError as error:
         raise ValidationFailedError(describe_error(error)) from error
-    return card.model_copy(update={"visual": _visual(card.visual, load_vocabulary())})
+    card = card.model_copy(update={"visual": _visual(card.visual, load_vocabulary())})
+    check_card(card)
+    return card

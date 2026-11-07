@@ -1,9 +1,11 @@
-"""T-CHR-10: the assisted draft with `fake_kobold`, over real HTTP, through the job worker and the API.
+"""T-CHR-10, and T-CHR-02 and T-SEC-07 at the draft entry point: the assisted draft with `fake_kobold`, over real HTTP,
+through the job worker and the API.
 
 The draft is queued by `POST /characters/drafts`, run by the real JobScheduler under an llm lease with
 CharacterCreatorService and KoboldCppRuntime against tests/fakes/fake_kobold.py, and read back with `GET /jobs/{id}`.
 Valid output completes the job; refused output is repaired once with the error in the prompt; a second refusal fails
-the job with STRUCTURED_OUTPUT_INVALID. In no case does a character exist before the user saves one.
+the job with STRUCTURED_OUTPUT_INVALID, or with CONTENT_POLICY_BLOCKED when the content guard refused it. A description
+that describes a minor queues nothing. In no case does a character exist before the user saves one.
 """
 
 import json
@@ -12,13 +14,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine, text
 
 from fakes.fake_kobold import GENERATE, FakeKobold
 from fakes.scripted_server import Step
 from lyrveil.jobs.policy import JobKind, JobStatus, RequiredMode
 from lyrveil.jobs.queue import Job, JobQueue
-from lyrveil.jobs.scheduler import JobScheduler
+from lyrveil.jobs.scheduler import JobScheduler, read, write
 from lyrveil.main import create_app
 from lyrveil.orchestration.client import Lease, LeaseMode, LeaseOutcome
 from lyrveil.persistence.migrations import upgrade_to_head
@@ -30,6 +32,10 @@ from lyrveil.settings import Settings
 API = "/api/v1"
 DESCRIPTION = "Crea un personaggio di 26 anni, appassionato di fantasy, ironico e indipendente."
 AGE_DETAIL = "L'età deve essere almeno 18."
+DESCRIPTION_AGE = "La descrizione indica un'età sotto i 18 anni. Lyrveil crea solo personaggi adulti."
+DESCRIPTION_MINOR = "La descrizione parla di un minore. Lyrveil crea solo personaggi adulti."
+DESCRIPTION_CHILDHOOD = "La descrizione accosta l'infanzia a un contenuto sessuale."
+BLOCKED_BIOGRAPHY = "Il campo «identity.biography» parla di un minore. La scheda descrive solo adulti."
 
 
 class Leases:
@@ -214,3 +220,91 @@ def test_a_blank_or_long_description_and_an_unknown_character_queue_nothing(clie
         response = client.post(f"{API}/characters/drafts", json=body)
         assert (response.status_code, response.json()["detail"]) == (status, detail)
     assert client.get(f"{API}/jobs/missing").status_code == 404
+
+
+def job_count(engine: Engine) -> int:
+    def work(connection: Connection) -> int:
+        return int(connection.execute(text("SELECT count(*) FROM generation_jobs")).scalar_one())
+
+    return read(engine, work)
+
+
+def test_a_description_of_a_minor_is_refused_before_the_model_runs(client: TestClient, migrated: Engine) -> None:
+    """T-CHR-02 at the draft request: no job is queued, so the model never reads the description."""
+    for description, detail in (
+        ("Crea un personaggio di 16 anni, timido e curioso.", DESCRIPTION_AGE),
+        ("Crea una sedicenne che ama il mare.", DESCRIPTION_AGE),
+        ("Crea una studentessa delle medie.", DESCRIPTION_MINOR),
+        ("Crea un personaggio che da bambina posava nuda.", DESCRIPTION_CHILDHOOD),
+    ):
+        response = client.post(f"{API}/characters/drafts", json={"description": description})
+        assert (response.status_code, response.json()["code"], response.json()["detail"]) == (
+            422,
+            "CONTENT_POLICY_BLOCKED",
+            detail,
+        )
+    assert job_count(migrated) == 0
+
+
+@pytest.mark.anyio
+async def test_a_queued_description_of_a_minor_fails_before_the_model_reads_it(
+    migrated: Engine, fake: FakeKobold
+) -> None:
+    """A job that reached the queue without the route's check, such as one queued before a list entry existed."""
+
+    def enqueue(connection: Connection) -> Job:
+        return JobQueue().enqueue(connection, JobKind.CHARACTER_DRAFT, {"description": "Crea una sedicenne."})
+
+    queued = write(migrated, enqueue)
+
+    finished = await run_draft(migrated, fake)
+
+    assert finished.id == queued.id
+    assert (finished.status, finished.error_code, finished.error_detail) == (
+        JobStatus.FAILED,
+        "CONTENT_POLICY_BLOCKED",
+        DESCRIPTION_AGE,
+    )
+    assert generations(fake) == [], "the model never reads the description"
+
+
+@pytest.mark.anyio
+async def test_a_draft_that_describes_a_minor_is_repaired_once_then_fails_with_content_policy_blocked(
+    client: TestClient, migrated: Engine, fake: FakeKobold
+) -> None:
+    job = start(client)
+    minor = json.dumps(draft(biography="Una ragazzina timida."), ensure_ascii=False)
+    fake.script("POST /api/v1/generate", answer(minor), answer(minor))
+
+    finished = await run_draft(migrated, fake)
+
+    assert (finished.status, finished.error_code, finished.error_detail) == (
+        JobStatus.FAILED,
+        "CONTENT_POLICY_BLOCKED",
+        BLOCKED_BIOGRAPHY,
+    )
+    requests = generations(fake)
+    assert len(requests) == 2, "the repair is the only second generation; the job is not run again"
+    assert BLOCKED_BIOGRAPHY not in requests[0]["prompt"]
+    assert BLOCKED_BIOGRAPHY in requests[1]["prompt"], "the repair carries the guard's reason"
+    detail = client.get(f"{API}/jobs/{job['id']}").json()
+    assert (detail["status"], detail["error_code"], detail["result"]) == ("failed", "CONTENT_POLICY_BLOCKED", None)
+    assert client.get(f"{API}/characters").json()["items"] == []
+
+
+@pytest.mark.anyio
+async def test_a_draft_the_guard_refused_completes_after_a_clean_repair(
+    client: TestClient, migrated: Engine, fake: FakeKobold
+) -> None:
+    job = start(client)
+    minor = json.dumps(draft(biography="Ha una figlia di 8 anni."), ensure_ascii=False)
+    fake.script("POST /api/v1/generate", answer(minor), answer(json.dumps(draft(), ensure_ascii=False)))
+
+    finished = await run_draft(migrated, fake)
+
+    assert finished.status is JobStatus.COMPLETED
+    reason = "Il campo «identity.biography» indica un'età sotto i 18 anni. La scheda descrive solo adulti."
+    assert reason in generations(fake)[1]["prompt"]
+    result = client.get(f"{API}/jobs/{job['id']}").json()["result"]
+    assert result["attempts"] == 2
+    assert result["card"]["identity"]["biography"] == EXAMPLE_DRAFT["identity"]["biography"]
