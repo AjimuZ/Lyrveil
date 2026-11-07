@@ -1,6 +1,6 @@
 # GPU orchestration: Model Lifecycle Manager
 
-Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Delivered in P06.2: the VRAM check before a load, the hold in `IDLE` with `blocked_reason`, the end of the waiting job after `vram.wait_seconds`, and the expected drop of a release in the event log ([Verifying GPU release](#verifying-gpu-release), T-ORC-04, T-ORC-05). Still planned: the preferred-VRAM warning and the active profile's own requirement (P06.6), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Delivered in P06.2: the VRAM check before a load, the hold in `IDLE` with `blocked_reason`, the end of the waiting job after `vram.wait_seconds`, and the expected drop of a release in the event log ([Verifying GPU release](#verifying-gpu-release), T-ORC-04, T-ORC-05). Delivered in P06.3, in the backend's `JobScheduler`: the [selection rules](#selection) with batches, the image wait limit and the cap on images in a row, [preemption](#preemption) of background work, [cancellation](#cancellation) and the queue note of a reply that waits for an image (T-ORC-12, T-ORC-13, T-IMG-10, [ADR 0039](decisions/0039-scheduling-clocks-batches-and-stops.md)). Still planned: the drain limit of a long foreground reply, the preferred-VRAM warning and the active profile's own requirement (P06.6), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
 
 The text model and the image model never share the GPU, whichever [profiles](models.md) are active. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
 job queue and asks the orchestrator for a mode and a lease
@@ -130,7 +130,8 @@ in. It also checks:
 A second test adds a lost Docker after step 18, which leads to `ERROR` and back, so every state of the table is reached.
 The backend's side of the steps, the stages and the mode requests, is tested in
 `backend/tests/integration/test_image_mode_switch.py` (P05.7). The VRAM check of step 8 came in P06.2 and has its own
-tests ([Verifying GPU release](#verifying-gpu-release)). Not covered yet: the abort of background work in step 5 (P06.3).
+tests ([Verifying GPU release](#verifying-gpu-release)). The abort of background work in step 5 came in P06.3
+([Preemption](#preemption)).
 
 Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it with the default profiles.
 
@@ -211,11 +212,41 @@ Consequences:
 - Replies from different conversations run one at a time, oldest first within a priority.
 - No second instance of a model ever starts.
 
+Delivered in P06.3 ([ADR 0039](decisions/0039-scheduling-clocks-batches-and-stops.md)). `backend/src/lyrveil/jobs/selection.py`
+holds the rules as a pure function, and `JobScheduler` applies them on each pass when it has the orchestrator's mode
+switch. "Text mode" and "image mode" are the desired mode the orchestrator reports. The settings use their defaults:
+60 s, 4 and 20 s are not read from `application_settings` yet. What the pseudocode leaves open:
+
+- **The image wait** counts from the first pass that sees the job in stage `render`, and only while the text runtime
+  is ready and wanted. A switch to text therefore gives foreground text a whole `images.max_wait_seconds` before an
+  image takes the GPU back.
+- **The user is idle** from the last pass that saw foreground text queued, or the end of the last foreground run.
+- **A batch** starts when the scheduler asks for `image`. The cap ends it only when soft or background text work
+  waits: with nothing else queued, the images go on. After a capped batch, text mode does not switch to image for a
+  queued image until text work has run or the image has waited its limit.
+- **The job named** on a mode request is the job the decision serves, or the waiting soft or background job when the
+  GPU goes back to text with nothing to run. Stages that need no GPU, such as `persist`, run in any mode, in queue
+  order with the decision's job.
+- **Restarts** clear these clocks, which live in memory.
+- Without a mode switch (tests only), the best eligible job of the current mode runs, whatever its class.
+
+Tests: `backend/tests/unit/test_scheduling_rules.py` (T-ORC-12, the rules), and
+`backend/tests/integration/test_image_mode_switch.py`, which also holds the integration part of T-ORC-13.
+
 ### Preemption
 
 When a foreground job arrives during background generation, the scheduler calls `POST /api/extra/abort` with the job's `genkey` and requeues the job. No attempt is consumed, and extraction
 is idempotent, so no data is affected. A running foreground reply is never preempted. An image job waits for it. If the reply exceeds the
 drain limit of 120 s, it is aborted and requeued.
+
+Delivered in P06.3. While a GPU stage runs, the scheduler checks the job at each `notify()`, which every route that
+queues a job calls, and every second. A background generation stops for a foreground job queued after it started:
+the scheduler sets `RunContext.stop.reason` to `preempted`, cancels the handler, calls `POST /api/extra/abort` with
+the run's `genkey` under the lease it still holds, queues the job again with its attempt given back, and releases the
+lease. A foreground job that was already queued when the background run began does not stop it, so a job left
+queued on purpose cannot stop the same work twice. Soft work is not preempted. Not delivered: the drain limit of 120 s.
+The scheduler asks for a mode only between jobs, so no image waits on a running reply in the orchestrator yet.
+Tests: `backend/tests/integration/test_job_cancellation.py` (T-ORC-12, the scheduler side).
 
 ### Cancellation
 
@@ -224,6 +255,24 @@ drain limit of 120 s, it is aborted and requeued.
 | Queued | `cancelled` at once. The placeholder is removed |
 | Running text | `POST /api/extra/abort`. Partial text stays and the status becomes `interrupted` |
 | Running image | `POST /interrupt`. The placeholder is removed |
+
+Delivered in P06.3 through `POST /api/v1/jobs/{id}/cancel` ([APIs](api.md#jobs-scheduling-notifications-settings-data)):
+
+- **Queued**, in any stage: the job ends `cancelled` with `JOB_CANCELLED` in the transaction that removes its
+  placeholder. A reply or an image placeholder is soft-deleted and `message.deleted` is published. A regeneration's
+  new variant becomes `failed` and the message shows the variant before it again, with `message.updated`. An image's
+  staged file is deleted.
+- **Running, in a stage that needs the GPU**: the job gets `cancel_requested_at`, and the scheduler stops it as for a
+  preemption, with the reason `cancelled`. A text stage gets `POST /api/extra/abort` with its `genkey`, an image stage
+  `POST /interrupt`. A reply keeps the text shown so far as `interrupted`, with `typing.stopped` and
+  `message.completed`. An image loses its placeholder and any staged file. The job ends `cancelled`.
+- **Running, in a stage without a GPU** (`persist`, `maintenance`): refused with `409 CONFLICT`, because the stage
+  finishes in a moment. An ended job is refused the same way.
+- A run that finishes before the stop takes effect keeps its result. A cancellation that lands as a run ends in a
+  new stage ends the job at the next pass, with its placeholder.
+
+Tests: `backend/tests/integration/test_job_cancellation.py` (T-IMG-10: each stage queued, `prompt` and `render`
+running, `persist` refused, a running reply, and the route).
 
 ## Verifying GPU release
 
@@ -384,7 +433,7 @@ Each process handles SIGTERM. Containers use `init: true`, so children are reape
 | State or case | Italian text | `label_key` |
 | --- | --- | --- |
 | `LLM_READY`, `GENERATING_TEXT` | No text. The conversation shows only the typing indicator | `null` |
-| Text queued during image work | In coda: risponderà appena finisce l'immagine | Not a GPU state (P06.3) |
+| Text queued during image work | In coda: risponderà appena finisce l'immagine. | Not a GPU state: `conv.queuedAfterImage` (P06.3) |
 | `UNLOADING_LLM`, `LOADING_IMAGE` | In attesa della scheda video… | `gpu.state.waiting` |
 | `GENERATING_IMAGE` | Sta disegnando… | `gpu.state.drawing` |
 | `UNLOADING_IMAGE`, `LOADING_LLM` | Sta tornando in chat… | `gpu.state.returning` |
@@ -408,5 +457,7 @@ The backend sends `label_key` in the [`gpu.state` event](api.md#event-websocket)
 - `frontend/src/app/core/i18n/translator.spec.ts` checks the text of each key;
 - `backend/tests/integration/test_reply_streaming.py` checks that the event reaches the socket.
 
-No screen shows these labels yet: the conversation's queue note comes with P06.3, and the **Risorse AI** screen with
-P06.6.
+Since P06.3 the conversation screen shows the queue note of a text reply that waits for image work: a reply queued
+after an image of the same chat that is still being made, or any queued reply while `gpu.state` carries
+`gpu.state.waiting` or `gpu.state.drawing` ([Frontend](frontend.md#2-conversation)). The GPU labels themselves are
+not drawn yet; the **Risorse AI** screen comes with P06.6.

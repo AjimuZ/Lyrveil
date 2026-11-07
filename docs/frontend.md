@@ -168,9 +168,14 @@ provides its own `ConversationStore` and opens the chat named by the route.
   message shows its thumbnail (`/media/images/{id}/thumbnail`, a link to the original in a new tab) above the caption;
   a failed one says **L'immagine non è riuscita. Puoi chiederla di nuovo.** **Rigenera** and the alternatives are not
   offered on an image message, because regenerating an image belongs to the gallery (P05.6). There is no cancel action
-  yet: the job routes of cancellation arrive in P06.3. Tests: `image-request.spec.ts` and the "image requests" block of
-  `conversation-store.spec.ts` (unit, written and not run in P05.5b), and `tests/e2e/specs/image-request.spec.mjs`
-  (written, not run).
+  yet; the route `POST /jobs/{id}/cancel` came in P06.3, and the store drops a placeholder on `message.deleted`. Tests:
+  `image-request.spec.ts` and the "image requests" block of `conversation-store.spec.ts` (unit, written and not run in
+  P05.5b), and `tests/e2e/specs/image-request.spec.mjs` (written, not run).
+- **A reply behind an image (P06.3, T-ORC-13).** A text reply that waits `queued` after an image of the same chat that
+  is still being made, or while the latest `gpu.state` carries `gpu.state.waiting` or `gpu.state.drawing`, says **In
+  coda: risponderà appena finisce l'immagine.** instead of **In coda: la risposta arriverà a breve.**
+  (`ConversationStore.waitingForImage`). Tests: the "image requests" block of `conversation-store.spec.ts` and the
+  T-ORC-13 test of `tests/e2e/specs/image-request.spec.mjs`, both written in P06.3 and not run there.
 - **Avatar generation (P05.5b)** (`avatar-tools.ts`, in the profile and in the Creator's Images tab). **Genera un
   avatar** sends `POST /characters/{id}/assets/generate` with `purpose: avatar`, then reads `GET /jobs/{id}` every second
   (the backend publishes no `job.updated` yet) and shows **In coda: posizione N**, then the stage (**Preparo la scena

@@ -10,6 +10,17 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Fair scheduling between replies and images, and cancellation. Replies still go first, but an image that has waited
+  60 s while the text model was ready takes its turn, and images run in batches of at most 4 while other text work
+  waits. Memory extraction, summaries and other background work wait until the user has been idle for 20 s, and a new
+  reply or image request stops a background generation, which runs again later at no cost to its attempts. A text
+  message sent while an image is being made is saved at once and its bubble says **In coda: risponderà appena finisce
+  l'immagine.** until the text model is back and answers. New route `POST /jobs/{id}/cancel`: a queued job is
+  cancelled at once and its placeholder removed; a running reply stops and keeps the text written so far as
+  interrupted; a running image is interrupted in ComfyUI and its placeholder removed. Saving a finished image is not
+  cancelled. Not delivered yet: a cancel button in the conversation, the drain limit of a long reply, and reading the
+  three new settings from the settings store.
+
 - A model no longer starts on a card that other programs have filled. Before a load, the orchestrator checks the free
   VRAM: 6500 MiB for images, and 6000 MiB for text whichever profile is active, until profiles send their own value.
   With less free, the GPU waits idle, checks again every 5 s, and reports the reason `GPU_INSUFFICIENT_VRAM`, which the
@@ -30,8 +41,8 @@ No application exists yet. This section records the design documentation.
   starts ComfyUI, and returns to the text model once no image is left. The two models never run at the same time: a
   start is refused while the other runtime runs, and the GPU counts as free only after its memory has settled. Memory
   that does not settle leaves the orchestrator in an error state that `POST /v1/recover` leaves. Not delivered yet
-  (P06): the timed retry out of that error state, the image wait limit and the cap on images in a row. The VRAM check
-  before a load came later, see above. Requests made before this change start drawing too, since they are still in the queue.
+  (P06): the timed retry out of that error state. The VRAM check before a load, the image wait limit and the cap on
+  images in a row came later, see above. Requests made before this change start drawing too, since they are still in the queue.
 
 - The gallery (`/gallery`): a grid of thumbnails in pages, filtered by character and purpose, with a lightbox that shows
   the metadata, links to the source chat, regenerates (with or without the seed) and deletes an image. New routes:

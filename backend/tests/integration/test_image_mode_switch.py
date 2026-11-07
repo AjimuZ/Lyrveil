@@ -8,20 +8,24 @@ the fake text runtime and the fake ComfyUI of test_image_job.py.
 
 P06.2 adds the backend side of T-ORC-05: the job that waits for a mode held back for VRAM fails after the wait, and
 the next one waits anew. The orchestrator side is orchestrator/tests/unit/test_vram_guard.py.
+
+P06.3 adds the integration part of T-ORC-13: a text message sent while an image renders is saved, waits queued while
+the image finishes, and is answered once the text runtime is back.
 """
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 
+import anyio
 import pytest
 from sqlalchemy import Engine
 
-from integration.test_image_job import REQUEST, Harness, conversation_of
+from integration.test_image_job import CAPTION, REQUEST, FakeComfy, Harness, conversation_of
 from lyrveil.domain.messages import MessageStatus
 from lyrveil.jobs.handlers import JobDone, JobHandler, JobOutcome, RunContext
 from lyrveil.jobs.policy import JobKind, JobStatus, RequiredMode
 from lyrveil.jobs.queue import Job, JobQueue
-from lyrveil.jobs.scheduler import JobScheduler, write
+from lyrveil.jobs.scheduler import JobScheduler, read, write
 from lyrveil.media.store import MediaStore
 from lyrveil.orchestration.client import (
     BlockedVram,
@@ -33,7 +37,11 @@ from lyrveil.orchestration.client import (
     LeaseRefusedError,
     OrchestratorUnavailableError,
 )
+from lyrveil.persistence import messages as message_repository
 from lyrveil.persistence.migrations import upgrade_to_head
+from lyrveil.ports.image_runtime import ImageEvent, ImageOutput, ImageProgress, ImageRequest, RenderFinished
+from lyrveil.services.chat_inference import ChatInferenceService
+from lyrveil.services.image_generation import ImageGenerationService
 from lyrveil.services.messages import MessageService
 
 READY: Mapping[LeaseMode, str] = {"llm": "LLM_READY", "image": "IMAGE_READY"}
@@ -116,6 +124,23 @@ class Gpu:
     def _reachable(self) -> None:
         if self.down:
             raise OrchestratorUnavailableError("the control API did not answer")
+
+
+class HeldComfy(FakeComfy):
+    """A FakeComfy whose render reports `loading`, sets `rendering`, and then waits until the test sets `release`."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rendering = anyio.Event()
+        self.release = anyio.Event()
+
+    async def render(self, request: ImageRequest) -> AsyncIterator[ImageEvent]:
+        self.workflows.append(request.workflow)
+        yield ImageProgress("loading")
+        self.rendering.set()
+        await self.release.wait()
+        yield ImageProgress("sampling", 14, 28)
+        yield RenderFinished("success", (ImageOutput("lyrveil_00001_.png", "", "output"),))
 
 
 class Done:
@@ -216,8 +241,8 @@ async def test_an_image_job_switches_to_image_mode_and_back(harness: Harness) ->
 
 @pytest.mark.anyio
 async def test_foreground_text_goes_before_an_image_and_background_work_waits_for_it(harness: Harness) -> None:
-    gpu, other = Gpu(), Done()
-    worker = scheduler(harness, gpu, other)
+    gpu, other, clock = Gpu(), Done(), Clock()
+    worker = scheduler(harness, gpu, other, clock)
     sent = harness.images.request(conversation_of(harness.engine), REQUEST)
     await worker.run_once()  # The prompt stage; the job now waits in `render`.
     reply = enqueue(harness.engine, harness.queue, JobKind.CHAT_REPLY)
@@ -234,11 +259,15 @@ async def test_foreground_text_goes_before_an_image_and_background_work_waits_fo
     assert (await ran(worker)).id == sent.job.id
     assert other.ran == [reply.id]
 
-    # With no image left, the background job's need for llm brings the mode back while the image is persisted, and
-    # the background job then runs in llm mode.
+    # With no image left, the mode returns to llm while the image is persisted, naming the background job that waits.
     assert (await ran(worker)).status is JobStatus.COMPLETED
     assert gpu.requests == [("image", sent.job.id), ("llm", background.id)]
     gpu.apply()
+
+    # Background work runs only once the user has been idle 20 s since the last foreground run (P06.3).
+    clock.now += 19.0
+    assert await worker.run_once() is None
+    clock.now += 1.0
     assert (await ran(worker)).id == background.id
     assert gpu.violations == []
 
@@ -317,4 +346,63 @@ async def test_an_image_held_back_for_vram_fails_after_the_wait_and_the_next_one
     gpu.apply()
     rendered = await ran(worker)
     assert (rendered.id, rendered.stage) == (second.job.id, "persist")
+    assert gpu.violations == []
+
+
+@pytest.mark.anyio
+async def test_a_text_message_sent_while_an_image_renders_is_saved_queued_shown_and_answered(
+    harness: Harness,
+) -> None:
+    # T-ORC-13, integration part. The reply is the real ChatInferenceService on the harness's fake text runtime, which
+    # streams the caption for every generation, so the answer's text is CAPTION.
+    gpu, comfy = Gpu(), HeldComfy()
+    images = ImageGenerationService(
+        harness.engine, harness.text, comfy, harness.media, harness.events, seed_source=lambda: 111
+    )
+    replies = ChatInferenceService(harness.engine, harness.text, harness.events)
+    handlers: dict[JobKind, JobHandler] = {JobKind.IMAGE_REQUEST: images, JobKind.CHAT_REPLY: replies}
+    worker = JobScheduler(
+        harness.engine, harness.queue, handlers, gpu, lambda: RequiredMode.LLM, mode_switch=gpu, clock=Clock()
+    )
+    conversation_id = conversation_of(harness.engine)
+    drawn = harness.images.request(conversation_id, REQUEST)
+    await ran(worker)  # The prompt stage.
+    assert await worker.run_once() is None  # Asks for the image mode.
+    gpu.apply()
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(worker.run_once)  # The render, which waits in ComfyUI.
+        with anyio.fail_after(5):
+            await comfy.rendering.wait()
+        assert gpu.state() == "GENERATING_IMAGE"
+
+        # Saved at once, while the image runtime holds the GPU: the user's message, and the reply placeholder queued.
+        messages = MessageService(harness.engine)
+        sent = messages.send(conversation_id, "Come stai oggi?", intent="text")
+        shown = {m.id: (m.author.value, m.status) for m in messages.history(conversation_id).items}
+        assert shown[sent.message.id] == ("user", MessageStatus.COMPLETE)
+        assert shown[sent.reply.id] == ("character", MessageStatus.QUEUED)
+        assert shown[drawn.reply.id] == ("character", MessageStatus.QUEUED)
+        # Shown as queued, and first in line: a reply's priority (10) comes before the running image's (30).
+        assert (sent.job.status, harness.job(sent.job.id).status) == ("queued", JobStatus.QUEUED)
+        position = read(harness.engine, lambda c: message_repository.queue_position(c, sent.job.id))
+        assert position == 1
+        worker.notify()  # The send's route wakes the worker; a reply never preempts the image it waits for.
+        comfy.release.set()
+
+    # The render ended; the reply takes the GPU back while the image is persisted in the same pass.
+    assert harness.job(drawn.job.id).stage == "persist"
+    persisted = await ran(worker)
+    assert (persisted.id, persisted.status) == (drawn.job.id, JobStatus.COMPLETED)
+    assert gpu.requests == [("image", drawn.job.id), ("llm", sent.job.id)]
+    assert harness.job(sent.job.id).status is JobStatus.QUEUED
+    gpu.apply()
+
+    answered = await ran(worker)
+    assert (answered.id, answered.status) == (sent.job.id, JobStatus.COMPLETED)
+    history = {m.id: m for m in MessageService(harness.engine).history(conversation_id).items}
+    assert (history[sent.reply.id].status, history[sent.reply.id].content) == (MessageStatus.COMPLETE, CAPTION)
+    assert history[drawn.reply.id].status is MessageStatus.COMPLETE
+    assert gpu.leases == [("llm", drawn.job.id), ("image", drawn.job.id), ("llm", sent.job.id)]
+    assert gpu.runtime_log == [("stop", "llm"), ("start", "image"), ("stop", "image"), ("start", "llm")]
     assert gpu.violations == []

@@ -37,6 +37,8 @@ describe('Translator', () => {
     expect(translator.t('gpu.blocked.insufficientVram')).toBe(
       'Altri programmi stanno usando la scheda video. Chiudili e riprova',
     );
+    // Not a GPU state: the queue note of a reply that waits for image work (P06.3).
+    expect(translator.t('conv.queuedAfterImage')).toBe("In coda: risponderà appena finisce l'immagine.");
   });
 
   it('has a non-empty text for every catalog entry and every plural form', () => {

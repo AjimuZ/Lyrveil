@@ -91,7 +91,7 @@
                   </div>
                 } @else if (row.waiting) {
                   @if (row.message.status === 'queued') {
-                    <p class="hint">{{ 'conv.queued' | t }}</p>
+                    <p class="hint">{{ (row.afterImage ? 'conv.queuedAfterImage' : 'conv.queued') | t }}</p>
                   } @else {
                     <span class="typing" role="status" [attr.aria-label]="typingLabel()">
                       <span></span><span></span><span></span>

@@ -42,6 +42,8 @@ export interface MessageRow {
   readonly mine: boolean;
   /** The reply is produced but nothing has arrived: show the typing indicator or the queue note. */
   readonly waiting: boolean;
+  /** The reply is queued behind image work: the queue note says it answers once the image is done. */
+  readonly afterImage: boolean;
   readonly canEdit: boolean;
   readonly canDelete: boolean;
   readonly canRegenerate: boolean;
@@ -114,6 +116,7 @@ export class ConversationScreen {
     const streams = this.store.streams();
     const latestReply = this.store.latestReply();
     const imageProgress = this.store.imageProgress();
+    const waitingForImage = this.store.waitingForImage();
     const locale = this.translator.locale();
     const now = new Date();
     const rows: (DayRow | MessageRow)[] = [];
@@ -137,6 +140,7 @@ export class ConversationScreen {
         clock: formatClock(message.created_at, locale),
         mine: message.author === 'user',
         waiting: active && text === '',
+        afterImage: waitingForImage.has(message.id),
         canEdit: message.author !== 'system' && !active,
         canDelete: !active,
         // Regenerating an image is a gallery action (P05.6); the text route does not apply to it.

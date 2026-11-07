@@ -6,7 +6,8 @@ connection with the WRITE option of lyrveil.persistence.database. Methods that c
 JobStateError when the job is not running any more, so a stale worker cannot overwrite a newer state.
 
 States (docs/data-model.md): queued -> running -> completed | failed, or back to queued for a retry, a new stage, a
-preemption or a recovery after a restart.
+preemption or a recovery after a restart. A queued job can be cancelled at once; a running one gets
+`cancel_requested_at`, and the worker that runs it ends it `cancelled`.
 """
 
 import json
@@ -26,6 +27,8 @@ MAX_ACTIVE_JOBS = 200
 MAX_ERROR_DETAIL_CHARS = 500
 # The code a job gets when a restart found it running (docs/api.md, Errors).
 JOB_INTERRUPTED = "JOB_INTERRUPTED"
+# The code of a job the user cancelled (docs/api.md, Errors).
+JOB_CANCELLED = "JOB_CANCELLED"
 ACTIVE_STATUSES = (JobStatus.QUEUED, JobStatus.RUNNING)
 
 _COLUMNS = (
@@ -222,22 +225,52 @@ class JobQueue:
 
         Order: lower priority first, then the oldest, then the id, so the choice is deterministic.
         """
-        if not modes or not kinds:
+        found = self._eligible(connection, modes, kinds, limit=1)
+        return found[0] if found else None
+
+    def eligible(
+        self, connection: Connection, modes: Collection[RequiredMode], kinds: Collection[JobKind]
+    ) -> Sequence[Job]:
+        """Returns every job `next_eligible` chooses among, in the same order. MAX_ACTIVE_JOBS bounds the list."""
+        return self._eligible(connection, modes, kinds, limit=None)
+
+    def next_cancel_pending(self, connection: Connection, kinds: Collection[JobKind]) -> Job | None:
+        """Returns the oldest queued job of `kinds` whose cancellation was requested while it ran, or None. Such a job
+        is left behind by a restart, or by a run that ended in a new stage just as the request came; the worker ends
+        it with `cancel_queued`."""
+        if not kinds:
             return None
+        statement = text(
+            f"SELECT {_COLUMNS} FROM generation_jobs WHERE status = 'queued' AND cancel_requested_at IS NOT NULL "
+            "AND kind IN :kinds ORDER BY cancel_requested_at, id LIMIT 1"
+        ).bindparams(bindparam("kinds", expanding=True))
+        row = connection.execute(statement, {"kinds": sorted(kind.value for kind in kinds)}).one_or_none()
+        return None if row is None else _job(row._mapping)
+
+    def _eligible(
+        self,
+        connection: Connection,
+        modes: Collection[RequiredMode],
+        kinds: Collection[JobKind],
+        *,
+        limit: int | None,
+    ) -> Sequence[Job]:
+        if not modes or not kinds:
+            return []
         statement = text(
             f"SELECT {_COLUMNS} FROM generation_jobs WHERE status = 'queued' AND cancel_requested_at IS NULL "
             "AND required_mode IN :modes AND kind IN :kinds AND (not_before IS NULL OR not_before <= :now) "
-            "ORDER BY priority, created_at, id LIMIT 1"
+            "ORDER BY priority, created_at, id" + ("" if limit is None else f" LIMIT {int(limit)}")
         ).bindparams(bindparam("modes", expanding=True), bindparam("kinds", expanding=True))
-        row = connection.execute(
+        rows = connection.execute(
             statement,
             {
                 "modes": sorted(mode.value for mode in modes),
                 "kinds": sorted(kind.value for kind in kinds),
                 "now": to_utc_text(self.now()),
             },
-        ).one_or_none()
-        return None if row is None else _job(row._mapping)
+        ).all()
+        return [_job(row._mapping) for row in rows]
 
     def start(self, connection: Connection, job_id: str, lease_id: str | None, genkey: str) -> Job | None:
         """Marks a queued job running, counts the attempt and stores its lease and abort key; returns the job.
@@ -314,6 +347,43 @@ class JobQueue:
             job_id,
             "status = 'queued', attempt = max(attempt - 1, 0), lease_id = NULL, not_before = NULL",
             {},
+        )
+
+    def cancel_queued(self, connection: Connection, job_id: str) -> Job | None:
+        """Ends a queued job as `cancelled` with JOB_CANCELLED, and returns it; None, writing nothing, when the job is
+        not queued. `cancel_requested_at` keeps the first request's time."""
+        now = to_utc_text(self.now())
+        updated = connection.execute(
+            text(
+                "UPDATE generation_jobs SET status = 'cancelled', cancel_requested_at = coalesce(cancel_requested_at, "
+                ":now), finished_at = :now, not_before = NULL, lease_id = NULL, error_code = :code, "
+                "error_detail = NULL WHERE id = :id AND status = 'queued'"
+            ),
+            {"id": job_id, "now": now, "code": JOB_CANCELLED},
+        )
+        return self._get(connection, job_id) if updated.rowcount == 1 else None
+
+    def request_cancel(self, connection: Connection, job_id: str) -> Job | None:
+        """Records that the user cancelled a running job, and returns it; None, writing nothing, when the job is not
+        running. A repeated request keeps the first time. The job stays running until its worker stops it and calls
+        `end_cancelled`; until then `start` and `next_eligible` skip it if it is queued again."""
+        updated = connection.execute(
+            text(
+                "UPDATE generation_jobs SET cancel_requested_at = coalesce(cancel_requested_at, :now) "
+                "WHERE id = :id AND status = 'running'"
+            ),
+            {"id": job_id, "now": to_utc_text(self.now())},
+        )
+        return self._get(connection, job_id) if updated.rowcount == 1 else None
+
+    def end_cancelled(self, connection: Connection, job_id: str) -> Job:
+        """Ends a running job as `cancelled` with JOB_CANCELLED. Raises JobStateError when it is not running."""
+        return self._change_running(
+            connection,
+            job_id,
+            "status = 'cancelled', cancel_requested_at = coalesce(cancel_requested_at, :now), finished_at = :now, "
+            "lease_id = NULL, not_before = NULL, error_code = :code, error_detail = NULL",
+            {"code": JOB_CANCELLED},
         )
 
     def recover_interrupted(self, connection: Connection) -> Sequence[Job]:

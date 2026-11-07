@@ -381,6 +381,28 @@ describe('ConversationStore', () => {
       expect(store.messages()[0]?.status).toBe('failed');
     });
 
+    it('says a reply queued behind image work answers once the image is done (T-ORC-13)', async () => {
+      const reply = message('r2', 4, { status: 'queued', content: '' });
+      await openWith([message('u1', 1, { author: 'user' }), placeholder(), message('u2', 3, { author: 'user' }), reply]);
+      expect([...store.waitingForImage()]).toEqual(['r2']);
+
+      // Once the image is done, the reply waits for the text model only.
+      socket.receive(event('message.completed', { message: message('i1', 2, { kind: 'mixed', content: 'Eccola.', image_id: 'img1' }) }));
+      expect(store.waitingForImage().size).toBe(0);
+
+      // Image work of any chat, which `gpu.state` reports, holds the reply too, until the GPU returns to text.
+      const gpu = (state: string, labelKey: string | null) =>
+        socket.receive(event('gpu.state', { state, label_key: labelKey, queue: 2, blocked_reason: null }));
+      gpu('GENERATING_IMAGE', 'gpu.state.drawing');
+      expect([...store.waitingForImage()]).toEqual(['r2']);
+      gpu('UNLOADING_IMAGE', 'gpu.state.returning');
+      expect(store.waitingForImage().size).toBe(0);
+      gpu('LOADING_IMAGE', 'gpu.state.waiting');
+      expect([...store.waitingForImage()]).toEqual(['r2']);
+      gpu('LLM_READY', null);
+      expect(store.waitingForImage().size).toBe(0);
+    });
+
     it('reads the named outfits of the chat character, and none when the card cannot be read', async () => {
       await openWith([]);
       const found = store.outfits();

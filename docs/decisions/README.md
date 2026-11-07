@@ -42,3 +42,4 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0036](0036-structured-image-scenes-and-measured-levers.md) | Structured image scenes, sizes, captions and measured image levers | Accepted |
 | [0037](0037-content-guard-rules-for-character-text.md) | Content guard rules for character text, with the character's own past allowed | Accepted |
 | [0038](0038-vram-hold-in-the-orchestrator-wait-in-the-backend.md) | The orchestrator holds a load back for VRAM, the backend ends the job | Accepted |
+| [0039](0039-scheduling-clocks-batches-and-stops.md) | Scheduling clocks, image batches, preemption and cancellation in the worker | Accepted |

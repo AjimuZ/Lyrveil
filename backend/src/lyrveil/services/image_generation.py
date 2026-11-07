@@ -78,6 +78,7 @@ from lyrveil.ports.memory_retriever import MemoryRetriever
 from lyrveil.ports.text_runtime import TextRuntime, TextRuntimeError
 from lyrveil.services.chat_inference import ReplySettings, load_context_request
 from lyrveil.services.image_prompt import ImagePromptRequest, ImagePromptStage
+from lyrveil.services.job_control import Announcement, remove_placeholder
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 
 STAGE_PROMPT = "prompt"
@@ -223,7 +224,8 @@ class ImageGenerationService:
 
         On a failure the message and its variant become `failed` and `message.failed` is published, unless the
         scheduler will retry the stage; then the failure is raised as job_error gives it. A preempted or cancelled
-        run (a lost lease, a shutdown) changes nothing.
+        run (a lost lease, a shutdown, the user's cancellation) changes nothing here; after the user's cancellation the
+        scheduler calls `cancelled`.
         """
         try:
             if job.stage == STAGE_PROMPT:
@@ -246,6 +248,20 @@ class ImageGenerationService:
         """Ends the image of `job` with `error` before its stage ran (AbandoningHandler): the message and its variant
         become `failed`, any staged file is removed, and `message.failed` carries the error's code."""
         await self._failed(job, error)
+
+    async def cancelled(self, job: Job) -> None:
+        """Removes the image of a job the user cancelled while a stage ran, or that a run left with a cancellation
+        request (CancellingHandler): the staged file, and the placeholder message while it is still `queued`, which
+        `message.deleted` announces. A cancelled stage records nothing itself, so this is the only change."""
+        announcements = await to_thread.run_sync(self._remove, job)
+        for event_type, data in announcements:
+            self._events.publish(event_type, data)
+        logger.info("image_cancelled", job_id=job.id)
+
+    def _remove(self, job: Job) -> list[Announcement]:
+        """Deletes the staged file, then removes the placeholder in one transaction. Blocks: run it in a thread."""
+        self._media.discard_staged(job.id)
+        return write(self._engine, lambda connection: remove_placeholder(connection, job, self._clock()))
 
     async def _prompt(self, job: Job, context: RunContext) -> JobOutcome:
         target = await to_thread.run_sync(self._load_target, job)

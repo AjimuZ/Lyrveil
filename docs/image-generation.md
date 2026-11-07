@@ -122,8 +122,8 @@ The screens for manual and character mode ([Conversation](frontend.md#2-conversa
   spec delivers the progress frames and the job reads itself, and does not show a real image. Since P05.7 the
   end-to-end project's worker does draw with the fake ComfyUI, so the spec drops the real worker's image frames to keep
   each step checkable.
-- **Not delivered.** Cancelling a draw (no cancel route yet), the lightbox and regeneration of an image, the proposal
-  card and the settings screen of the modes.
+- **Not delivered.** A cancel action on the bubble (the route `POST /jobs/{id}/cancel` came in P06.3), the lightbox and
+  regeneration of an image, the proposal card and the settings screen of the modes.
 
 ### Delivered in P05.7
 
@@ -138,7 +138,8 @@ Image jobs run through the orchestrator's normal mode switch ([GPU orchestration
   needs `llm`. With nothing queued for the GPU, the mode is `llm`. Stages that need a mode run only when the GPU is
   ready in that mode and the desired mode is the same. `persist` needs no GPU, so it runs at once, while the mode
   returns to `llm`. A failed state read or mode request lets only GPU-free stages run until the next pass. With `llm`
-  already asked for and nothing queued for the GPU, the scheduler stops reading the state.
+  already asked for and nothing queued for the GPU, the scheduler stops reading the state. Since P06.3 the full
+  [Selection](gpu-orchestration.md#selection) rules replace `mode_deciding_job`, which is removed.
 - **Exclusivity.** The orchestrator applies the change once the current lease ends. It stops the running runtime,
   verifies the release, and only then starts the other. Since P05.7, recovery also waits for the memory to settle
   before `IDLE` when it stopped nothing itself; memory that does not settle ends in `ERROR` with
@@ -149,9 +150,11 @@ Image jobs run through the orchestrator's normal mode switch ([GPU orchestration
   `backend/tests/integration/test_image_mode_switch.py` runs a real `image_request` through the scheduler against a
   scripted orchestrator. It checks the mode requests, foreground text before the image, background work waiting behind
   the image, and an unreachable orchestrator.
-- **Not delivered (P06.3).** The wait limit `images.max_wait_seconds`, `images.max_in_a_row`, preemption of background
-  work, and the `waiting` phase. The timed retry out of `ERROR` is P06.4. The VRAM check before a load came in P06.2
-  ([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)).
+- **Delivered later.** The wait limit `images.max_wait_seconds`, `images.max_in_a_row` and preemption of background
+  work came in P06.3 ([Selection](gpu-orchestration.md#selection)), with the cancellation of an image at each stage
+  ([Cancellation](gpu-orchestration.md#cancellation)). The VRAM check before a load came in P06.2
+  ([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)). Still not delivered: the `waiting` phase of
+  `image.progress`, and the timed retry out of `ERROR` (P06.4).
 
 ## Job stages
 

@@ -203,6 +203,10 @@
 - To end a queued job outside its stage, mark it running without a lease (JobQueue.start with lease_id None), call the handler's AbandoningHandler.abandon if it has one, then store the failure through the scheduler's normal _store path. Never fail a message-linked job in the queue alone.
 - A condition the orchestrator reports without a state transition must still bump seq (an event with source == target), or long-poll followers keyed on seq will not see it.
 - Memory checks that may block a runtime start must first rule out a running Lyrveil runtime container, or memory of a runtime started by hand is mistaken for another program's and recovery never runs.
+- Keep scheduling decisions as pure functions over a snapshot (jobs/selection.py), and keep clocks and I/O in the scheduler, so the rules can be unit tested with plain values.
+- To stop a running handler on purpose, set a reason on the run context before cancelling its scope. The handler's cancellation branch can then tell user cancellation and preemption apart from a lost lease or shutdown.
+- When a route changes state the UI shows, return the events from the service and publish them after the commit with anyio.from_thread.run_sync(hub.publish, ...) from the route thread.
+- In Playwright specs, hold the backend's WebSocket events and release them later in their original order, keeping their ids, instead of injecting frames with fake ids that make the client drop later real frames.
 
 ---
 
@@ -1785,5 +1789,54 @@ The docker level was not run either.
   - The VRAM check adds one NVML read before each load. It inspects containers only when memory is short, so gate call sequences in existing tests did not change.
   - JobScheduler._follow_queue now returns (modes, overdue). run_once can return a job failed by the VRAM wait without running its handler. Handlers that show the job to the user implement AbandoningHandler.abandon(job, error), currently ChatInferenceService and ImageGenerationService.
   - Still open: the active profile's vram_required_mib and the preferred-VRAM warning (P06.6), reading vram.wait_seconds from application_settings, the retry action in the UI, and the timed retry out of ERROR (P06.4). P06.3 cancellation can reuse JobScheduler._abandon and AbandoningHandler for queued jobs.
+  - No prompt-injection attempts were found in the repository files read.
+---
+
+## 2026-11-07T21:30:40Z - P06.3
+- P06.3 is implemented in the backend's JobScheduler, with a cancel route and the queue note on the conversation screen. All backend checks I ran passed. The frontend specs and the E2E test were written but not run.
+
+**Selection.** The rules are now a pure function in `jobs/selection.py`, which the scheduler applies whenever it has the orchestrator's mode switch:
+- Foreground text runs first.
+- An image that has waited 60 s takes the GPU. The wait only counts while the text runtime is ready.
+- Images run in batches. The cap of 4 in a row only ends a batch when other text work is waiting.
+- Soft and background work runs after the user has been idle for 20 s.
+- The settings use their defaults; they are not read from application_settings yet.
+
+Read literally, the documented rules make mode switches that serve no one, so ADR 0039 records how the wait, the idle time and the batch are measured.
+
+**Preemption.** While a GPU stage runs, a watcher checks the job at each `notify()` and every second. A foreground job queued after a background generation started stops it: the handler is cancelled with `RunContext.stop`, the scheduler calls `abort(genkey)` under the lease it still holds, and the job is requeued with its attempt given back.
+
+**Cancellation.** New route `POST /jobs/{id}/cancel`:
+- **Queued job:** cancelled at once, and its placeholder is removed in the same transaction. Replies and images are soft-deleted, which publishes `message.deleted`. A cancelled regeneration shows its previous variant again.
+- **Running GPU stage:** the job gets a cancellation request and the scheduler stops it. A reply keeps the text shown so far as `interrupted`. An image is interrupted in ComfyUI, and its placeholder and staged file are removed.
+- **Running `persist`, or an ended job:** refused with 409.
+
+**Frontend.** A queued reply behind image work shows "In coda: risponderà appena finisce l'immagine.". That means an active image earlier in the same chat, or a `gpu.state` label of drawing or waiting.
+
+**Checks run:**
+- `scripts/lyrveil.cmd test lint` passed: ruff, ruff format, mypy --strict, eslint, the strict frontend build and the docs checks.
+- Targeted backend runs passed: 24 new tests (16 rules unit tests, 8 cancellation/preemption tests), 102 existing scheduler-dependent integration tests, and 68 in a final mixed run.
+- One existing test in `test_image_mode_switch.py` was updated: background work now waits 20 s of idleness on the fake clock.
+
+**Not run:**
+- `conversation-store.spec.ts` and `translator.spec.ts`: the shell refused `npm --prefix frontend run test`, and the unit level does not take frontend paths.
+- The new T-ORC-13 E2E test in `image-request.spec.mjs`.
+- The full unit, integration, e2e and docker levels.
+
+**Not delivered:**
+- The 120 s drain limit for a long foreground reply.
+- A cancel button in the conversation.
+- Reading the new settings from the settings store.
+- Files changed: backend/src/lyrveil/jobs/selection.py, backend/src/lyrveil/jobs/scheduler.py, backend/src/lyrveil/jobs/queue.py, backend/src/lyrveil/jobs/handlers.py, backend/src/lyrveil/services/job_control.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/services/image_generation.py, backend/src/lyrveil/api/jobs.py, backend/src/lyrveil/ports/events.py, backend/src/lyrveil/main.py, backend/tests/unit/test_scheduling_rules.py, backend/tests/integration/test_job_cancellation.py, backend/tests/integration/test_image_mode_switch.py, frontend/src/app/features/conversation/conversation-store.ts, frontend/src/app/features/conversation/conversation-store.spec.ts, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/core/i18n/translator.spec.ts, frontend/src/i18n/it.json, tests/e2e/specs/image-request.spec.mjs, CHANGELOG.md, docs/gpu-orchestration.md, docs/backend.md, docs/api.md, docs/image-generation.md, docs/frontend.md, docs/testing.md, docs/configuration.md, docs/decisions/0039-scheduling-clocks-batches-and-stops.md, docs/decisions/README.md
+- **Learnings for future iterations:**
+  - The full selection rules apply only when JobScheduler has a mode switch (production). Without one (most tests), the best eligible job of the current mode runs, as before. A test with a mode switch that runs background work must now advance the fake clock 20 s after the last foreground run.
+  - mode_deciding_job was removed. JobScheduler._follow_queue(switch) now returns a _Plan(run, overdue), and the decision comes from lyrveil.jobs.selection.decide.
+  - JobScheduler takes text_runtime= and image_runtime= so it can abort or interrupt a stopped run. main() passes them. Without them, preemption and cancellation still stop the handler but send nothing to the runtime.
+  - RunContext now has stop: RunStop (reason CANCELLED or PREEMPTED, None for a lost lease or shutdown). Handlers that react to cancellation should read context.stop.reason. ChatInferenceService._cancelled takes the reason.
+  - CancellingHandler.cancelled(job) is called after a job is stored cancelled. ChatInferenceService and ImageGenerationService implement it with services.job_control.remove_placeholder, which acts only on a message still `queued`.
+  - Preemption only fires for a foreground job whose created_at is after the background run's started_at. Tests need a queue clock that moves (e.g. QueueClock.advance), because timestamps have millisecond resolution.
+  - A queued job with cancel_requested_at set (left by a restart or a race) is ended by the next run_once through JobQueue.next_cancel_pending and cancel_queued.
+  - `npm --prefix frontend run test -- ...` was refused by the shell, and `scripts/lyrveil.cmd test unit` does not take frontend spec paths, so frontend specs could not be run in this session.
+  - Still open: the 120 s drain limit for a long foreground reply, a cancel button on the conversation bubble, and reading images.max_wait_seconds, images.max_in_a_row and jobs.background_idle_seconds from application_settings.
   - No prompt-injection attempts were found in the repository files read.
 ---

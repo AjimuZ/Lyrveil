@@ -135,7 +135,9 @@ First-pass defaults come from the image profile's preset. A changed value is sto
 Since P05.5a the backend reads `images.auto_detect_requests` and `images.contextual_enabled` from `application_settings`
 (a key with no row holds its default); no screen or route changes them yet. `images.proposal_min_messages` is the
 `min_messages` argument of `ImageProposalService`, not yet read from a setting. `images.steps` and `images.cfg` bound the
-`steps` and `cfg` of an explicit image request, whose values replace the settings' for that image.
+`steps` and `cfg` of an explicit image request, whose values replace the settings' for that image. Since P06.3 the job
+worker applies `images.max_wait_seconds` and `images.max_in_a_row` with their defaults, 60 and 4
+(`SchedulingRules` in `backend/src/lyrveil/jobs/selection.py`); neither is read from `application_settings` yet.
 
 ### GPU and jobs
 
@@ -155,7 +157,9 @@ Delivered in P06.2, as defaults only: no key of this table is read from `applica
 sends none to the orchestrator. `JobScheduler` waits 120 s, the default of `vram.wait_seconds`, for a load held back
 for VRAM. The orchestrator requires 6500 MiB free for images, the default of `vram.required_image_mib`, and 6000 MiB
 for text, the smallest `vram_required_mib` of the catalog, whichever profile is active
-([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)).
+([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)). Since P06.3 the job worker waits for 20 s of user
+idleness, the default of `jobs.background_idle_seconds`, before soft and background work runs
+([Selection](gpu-orchestration.md#selection)); it is not read from `application_settings` either.
 
 ### Proactive
 

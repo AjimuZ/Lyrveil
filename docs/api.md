@@ -62,7 +62,7 @@ Job errors, reported through `job.updated`:
 | `CONTENT_POLICY_BLOCKED` | A safeguard refused generated text: a draft after its repair, or a reply sentence (check V4). Not retried. |
 | `RUNTIME_UNAVAILABLE` | Runtime stopped responding. |
 | `LEASE_LOST` | The lease expired or the orchestrator restarted. |
-| `JOB_CANCELLED` | The user cancelled. |
+| `JOB_CANCELLED` | The user cancelled. Since P06.3, set by `POST /jobs/{id}/cancel` on a queued job, or by the worker once it has stopped a running one. |
 | `JOB_INTERRUPTED` | A restart found the job running. It is queued again, or fails when that was its last attempt. |
 | `INTERNAL` | A job handler failed unexpectedly. The job is not retried. Details stay in the logs. |
 
@@ -524,8 +524,22 @@ Creator polls this route while a draft runs, since `job.updated` is not publishe
 `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items` counts only relationship events
 ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Since P04.6 a completed one also has `state_events`, the
 relationship state rows the run wrote, and `deferred_items` counts only a proposed `current_topic`
-([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). The list, cancel and retry
-routes are planned. Not in `backend/openapi.json` until it is next regenerated with Docker.
+([Delivered in P04.6](consistency-engine.md#delivered-in-p046)). Since P06.3 the answer also has `cancel_requested`,
+true once the user cancelled the job.
+
+Delivered in P06.3: `POST /jobs/{id}/cancel` ([Cancellation](gpu-orchestration.md#cancellation)). It answers `200`
+with the same body as `GET /jobs/{id}`:
+
+- a queued job is `cancelled` with `error_code` `JOB_CANCELLED` and `queue_position` 0. Its placeholder is gone in
+  the same transaction: `message.deleted` with `message_id` for a reply or an image, `message.updated` for a
+  regeneration, whose message shows the variant before it again;
+- a running job whose stage needs the GPU stays `running` with `cancel_requested` true. The worker stops it: a reply
+  ends `interrupted` with the text shown so far (`typing.stopped`, `message.completed`), an image loses its placeholder
+  (`message.deleted`). `GET /jobs/{id}` then reads `cancelled`.
+
+It answers `404 NOT_FOUND` for an unknown job, and `409 CONFLICT` for a job that ended or runs a stage without a GPU,
+such as an image's `persist`. The list and retry routes are planned. Not in `backend/openapi.json` until it is next
+regenerated with Docker.
 
 ## Event WebSocket
 
@@ -610,7 +624,7 @@ reconnects after 1, 2, 5 and then every 10 seconds.
 | `message.restarted` | `message_id`, `variant_id`, `check` | A [corrected check](consistency-engine.md#corrected) stopped the reply. The client clears the streamed text, and new deltas start again from offset 0. |
 | `message.completed` | `message` | Reply finished. |
 | `message.failed` | `message_id`, `error_code` | Reply failed. |
-| `message.updated`, `message.deleted` | `message` or `message_id` | Edit, variant change, deletion. |
+| `message.updated`, `message.deleted` | `message` or `message_id` | Edit, variant change, deletion. Since P06.3 the backend publishes `message.deleted` with `message_id` for the placeholder of a cancelled job, and `message.updated` for a cancelled regeneration. |
 | `message.read` | `conversation_id`, `up_to_seq` | Simulated read state. |
 | `conversation.updated` | Chat list row | Any list-visible change. |
 | `image.progress` | `job_id`, `message_id`, `phase`, `value`, `max` | Prompt, waiting, loading, sampling, saving. |

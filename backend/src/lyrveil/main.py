@@ -138,7 +138,8 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
     CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
     `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
-    image runtime, and is kept in `app.state.scheduler` meanwhile. When the Worker has `gpu_states`, the
+    image runtime, and is kept in `app.state.scheduler` meanwhile. The scheduler aborts a stopped run's work through
+    the same runtimes (preemption and cancellation). When the Worker has `gpu_states`, the
     GpuStateFollower runs beside it and reports the depth of the same queue. On shutdown the running reply keeps its
     flushed text and stays `streaming` for the next start to mark `interrupted`; its lease is not released and expires
     by itself.
@@ -161,6 +162,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             extraction=worker.memory,
             summaries=worker.summaries,
             context=worker.context,
+            zone=app.state.settings.zone,
         )
         drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
         memories = MemoryExtractionService(
@@ -200,7 +202,14 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             )
         queue = JobQueue()
         scheduler = JobScheduler(
-            engine, queue, handlers, worker.leases, worker.current_mode, mode_switch=worker.mode_switch
+            engine,
+            queue,
+            handlers,
+            worker.leases,
+            worker.current_mode,
+            mode_switch=worker.mode_switch,
+            text_runtime=runtime,
+            image_runtime=image_runtime,
         )
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)

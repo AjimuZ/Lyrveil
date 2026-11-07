@@ -51,6 +51,9 @@ export function isActive(message: Message): boolean {
   return message.status === 'queued' || message.status === 'streaming';
 }
 
+/** The `label_key`s of `gpu.state` that mean the GPU is busy with an image (docs/gpu-orchestration.md, Labels). */
+const IMAGE_WORK_LABELS: ReadonlySet<string> = new Set(['gpu.state.waiting', 'gpu.state.drawing']);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -107,6 +110,8 @@ export class ConversationStore {
   private readonly pendingState = signal<readonly PendingSend[]>([]);
   private readonly variantsState = signal<{ readonly messageId: string; readonly items: readonly Variant[] } | null>(null);
   private readonly imageProgressState = signal<Readonly<Record<string, ImageProgress>>>({});
+  /** Whether the last `gpu.state` reported image work. It is global, so it survives a change of chat. */
+  private readonly gpuImageWorkState = signal(false);
 
   readonly conversation = this.conversationState.asReadonly();
   /** The loaded messages, ascending by `seq`. Text of a reply still being produced is in `streams`. */
@@ -139,6 +144,24 @@ export class ConversationStore {
   readonly drawing = computed(() => {
     const progress = this.imageProgressState();
     return this.messagesState().some((m) => m.kind === 'image' && isActive(m) && progress[m.id] !== undefined);
+  });
+  /**
+   * The ids of queued text replies that wait for image work (T-ORC-13): a reply queued after an image of this chat
+   * that is still being made, or any queued reply while `gpu.state` reports image work. The server answers them once
+   * the text model is back, so the bubble says so instead of the plain queue note.
+   */
+  readonly waitingForImage = computed<ReadonlySet<string>>(() => {
+    const gpuBusy = this.gpuImageWorkState();
+    const ids = new Set<string>();
+    let imageBefore = false;
+    for (const m of this.messagesState()) {
+      if (m.kind === 'image' && isActive(m)) {
+        imageBefore = true;
+      } else if (m.author === 'character' && m.kind === 'text' && m.status === 'queued' && (imageBefore || gpuBusy)) {
+        ids.add(m.id);
+      }
+    }
+    return ids;
   });
   /** The position among the alternatives of the latest reply, or null when it has none to choose from. */
   readonly alternatives = computed(() => {
@@ -460,6 +483,10 @@ export class ConversationStore {
     on('image.completed', (event) => this.endImage(event.data['message_id']));
     on('typing.started', (event) => this.setTyping(event.data, true));
     on('typing.stopped', (event) => this.setTyping(event.data, false));
+    on('gpu.state', (event) => {
+      const label = event.data['label_key'];
+      this.gpuImageWorkState.set(typeof label === 'string' && IMAGE_WORK_LABELS.has(label));
+    });
     this.subscriptions.push(this.socket.resync$.subscribe(() => void this.refresh()));
   }
 

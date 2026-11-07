@@ -1,5 +1,6 @@
 // Image requests on the conversation screen and avatar generation in the Compose test project (P05.5b).
 //   a manual request with the progress of both passes, the advanced dialog's limits, and a generated avatar.
+//   P06.3: T-ORC-13, a text message sent while an image is being made.
 //
 // Since P05.7 the backend's worker runs an `image_request` in this project too, through the fake orchestrator's mode
 // switch and the fake ComfyUI, so its timing depends on the mode switch. To keep each step checkable, the drawing is
@@ -11,7 +12,7 @@
 // `backend/tests/integration/test_image_mode_switch.py`.
 import { expect, test } from '@playwright/test';
 
-import { openChat, startChatWithNewCharacter, uniqueName } from '../support/chats.mjs';
+import { openChat, sendText, startChatWithNewCharacter, uniqueName } from '../support/chats.mjs';
 
 // Injected events use ids far above the real ones, so the client's replay check (an event counts only if its id is
 // newer than the last delivered) keeps accepting them in order.
@@ -55,6 +56,43 @@ async function routeSocket(page) {
     await expect.poll(() => toPage !== null).toBe(true);
     injectedId += 1;
     toPage.send(JSON.stringify({ v: 1, id: injectedId, type, ts: new Date().toISOString(), data }));
+  };
+}
+
+/**
+ * Stands between the page and /ws and keeps back every event the real backend sends, until the returned function is
+ * called: it then sends them to the page in their order and lets the next ones through. The events keep the
+ * backend's own ids, so the client accepts each of them.
+ */
+async function holdSocket(page) {
+  let toPage = null;
+  let held = [];
+  await page.routeWebSocket(/\/ws$/, (socket) => {
+    toPage = socket;
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      let frame = null;
+      try {
+        frame = typeof message === 'string' ? JSON.parse(message) : null;
+      } catch {
+        frame = null;
+      }
+      // The `connected` frame has no id and opens the connection, so it always passes.
+      if (held !== null && typeof frame?.id === 'number') {
+        held.push(message);
+      } else {
+        socket.send(message);
+      }
+    });
+  });
+  return async () => {
+    await expect.poll(() => toPage !== null).toBe(true);
+    const kept = held ?? [];
+    held = null;
+    for (const message of kept) {
+      toPage.send(message);
+    }
   };
 }
 
@@ -184,6 +222,51 @@ test("the advanced dialog refuses values outside its limits and sends the ones i
   ]);
   // The real backend accepted the values and queued the request.
   await expect(page.getByText("In coda: l'immagine arriverà a breve.")).toBeVisible();
+});
+
+test('a text message sent while an image is made is saved, queued, shown and answered (T-ORC-13)', async ({ page }) => {
+  // The real backend does everything here: the image job with the fake ComfyUI, the mode switch and the reply of the
+  // fake KoboldCpp. The page receives the backend's events only once the queued reply has been checked, so the
+  // image is still being made on the page whatever the real worker's timing.
+  const release = await holdSocket(page);
+  const { id } = await openNewChat(page, 'Bianca');
+
+  await page.getByRole('button', { name: "Chiedi un'immagine" }).click();
+  const dialog = page.getByRole('dialog', { name: "Chiedi un'immagine" });
+  await dialog.getByLabel('Cosa vuoi vedere').fill('una foto di te in giardino');
+  await dialog.getByRole('button', { name: 'Disegna' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("In coda: l'immagine arriverà a breve.")).toBeVisible();
+
+  // Saved and queued: the send's answer holds the stored message and the queued reply with its job.
+  const sendAnswer = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().endsWith(`/conversations/${id}/messages`),
+  );
+  await sendText(page, 'Nel frattempo, come stai?');
+  const sent = await (await sendAnswer).json();
+  expect(sent.message.status).toBe('complete');
+  expect([sent.reply.status, sent.job.kind, sent.job.status]).toEqual(['queued', 'chat_reply', 'queued']);
+  const stored = await (await page.request.get(`/api/v1/conversations/${id}/messages`)).json();
+  expect(stored.items.map((item) => item.id)).toEqual(expect.arrayContaining([sent.message.id, sent.reply.id]));
+
+  // Shown: the reply's bubble says it answers once the image is done.
+  await expect(page.getByText("In coda: risponderà appena finisce l'immagine.")).toBeVisible();
+  await expect(page.locator(`li.message[data-status="queued"]`)).toHaveCount(2);
+
+  // Answered: with the backend's events delivered, the reply arrives with the fake model's text and is stored.
+  await release();
+  const reply = page.locator('li.message:not(.mine)').last();
+  await expect(reply).toContainText('Ciao, sono qui.', { timeout: 60_000 });
+  await expect(page.getByText("In coda: risponderà appena finisce l'immagine.")).toHaveCount(0);
+  await expect
+    .poll(
+      async () => {
+        const latest = await (await page.request.get(`/api/v1/conversations/${id}/messages`)).json();
+        return latest.items.find((item) => item.id === sent.reply.id)?.status;
+      },
+      { timeout: 60_000 },
+    )
+    .toBe('complete');
 });
 
 test('a generated avatar is followed through its job and shown as the primary one (T-CHR-12)', async ({ page }) => {

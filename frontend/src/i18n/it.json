@@ -132,6 +132,7 @@
   "conv.edited": "modificato",
   "conv.typing": "{name} sta scrivendo",
   "conv.queued": "In coda: la risposta arriverà a breve.",
+  "conv.queuedAfterImage": "In coda: risponderà appena finisce l'immagine.",
   "conv.failed": "La risposta non è riuscita. Puoi generarla di nuovo.",
   "conv.interrupted": "La risposta è stata interrotta. Puoi generarla di nuovo.",
   "conv.sending": "Invio in corso…",

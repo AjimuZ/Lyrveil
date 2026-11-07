@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 from lyrveil.jobs.queue import Job
@@ -14,12 +15,29 @@ LEASE_LOST = "LEASE_LOST"
 GPU_INSUFFICIENT_VRAM = "GPU_INSUFFICIENT_VRAM"
 
 
+class StopReason(StrEnum):
+    """Why the scheduler cancelled a run before it ended (docs/gpu-orchestration.md, Preemption and Cancellation)."""
+
+    CANCELLED = "cancelled"  # The user cancelled the job; it ends `cancelled`.
+    PREEMPTED = "preempted"  # Foreground work arrived during background work; the job is queued again.
+
+
+@dataclass
+class RunStop:
+    """Set by the scheduler just before it cancels a run that it stops on purpose; `reason` stays None otherwise, so
+    a handler that sees the cancellation with no reason was cancelled for a lost lease or a shutdown."""
+
+    reason: StopReason | None = None
+
+
 @dataclass(frozen=True)
 class RunContext:
-    """What one run of a job holds: the lease of its mode, None for a `none` stage, and the abort key of the run."""
+    """What one run of a job holds: the lease of its mode, None for a `none` stage, the abort key of the run, and
+    `stop`, which tells a cancelled handler why the scheduler stopped it."""
 
     lease: Lease | None
     genkey: str
+    stop: RunStop = field(default_factory=RunStop)
 
 
 @dataclass(frozen=True)
@@ -64,7 +82,9 @@ class JobHandler(Protocol):
     The handler writes its own results in its own transactions, and must be idempotent per stage: a restart between
     its commit and the scheduler's state change runs the stage again (persistence keyed by the job id, as
     docs/data-model.md does for images). Raises JobFailedError, JobPreemptedError or a TextRuntimeError, which is
-    retried with its code; any other exception ends the job with INTERNAL.
+    retried with its code; any other exception ends the job with INTERNAL. The scheduler stops a run by cancelling it:
+    for a lost lease, a shutdown, a preemption or the user's cancellation, which `context.stop` tells apart. After a
+    preemption or a cancellation, the scheduler aborts the work the runtime still does for the run.
     """
 
     async def __call__(self, job: Job, context: RunContext) -> JobOutcome: ...
@@ -81,3 +101,17 @@ class AbandoningHandler(Protocol):
     """
 
     async def abandon(self, job: Job, error: JobFailedError) -> None: ...
+
+
+@runtime_checkable
+class CancellingHandler(Protocol):
+    """A handler whose job shows a placeholder the user must stop seeing once the job is cancelled.
+
+    The scheduler calls `cancelled` after it stored the job `cancelled` without the handler recording it: a run it
+    stopped for the user, whose runtime work it has already aborted, or a queued job left with a cancellation
+    request. The lease, if any, is still held, but `cancelled` must not touch a runtime. It removes what the job
+    shows, such as its placeholder message, and announces it. An exception it raises is logged and changes nothing
+    else.
+    """
+
+    async def cancelled(self, job: Job) -> None: ...

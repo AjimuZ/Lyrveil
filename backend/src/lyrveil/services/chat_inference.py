@@ -29,7 +29,7 @@ import json
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 
 import anyio
 from anyio import to_thread
@@ -81,6 +81,7 @@ from lyrveil.jobs.handlers import (
     JobOutcome,
     JobPreemptedError,
     RunContext,
+    StopReason,
 )
 from lyrveil.jobs.queue import JOB_INTERRUPTED, Job, JobQueue
 from lyrveil.jobs.scheduler import read, write
@@ -112,6 +113,8 @@ from lyrveil.ports.text_runtime import (
 )
 from lyrveil.prompts.formatter import PromptFormatter, formatter_for
 from lyrveil.services.diagnostics import DiagnosticsService
+from lyrveil.services.invalidation import InvalidationService
+from lyrveil.services.job_control import Announcement, remove_placeholder
 from lyrveil.services.memory_extraction import queue_extraction_if_due, queue_reevaluation
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
@@ -393,7 +396,10 @@ class ChatInferenceService:
     - blocked by V4: `message.restarted`, then variant and message `failed` with BLOCKED_NOTICE and their
       `checks_json`, then `message.updated` and `message.failed` with CONTENT_POLICY_BLOCKED; empty twice (V1): the
       same with empty text, no `message.restarted` and REPLY_EMPTY;
-    - cancelled by the shutdown (`close`): the released text flushed, the reply left `streaming` for the next start.
+    - cancelled by the shutdown (`close`): the released text flushed, the reply left `streaming` for the next start;
+    - cancelled by the user (`context.stop`): variant and message `interrupted` with the text released so far, then
+      `typing.stopped` and `message.completed`; the scheduler then aborts the generation. A job cancelled while it
+      waited to run again loses its placeholder through `cancelled`.
 
     One run makes at most three generations: the first, one corrective generation after a V6, V10 or V11 hit, and one
     more after an empty reply. Each discarded generation that had shown text is announced with `message.restarted` and
@@ -416,6 +422,7 @@ class ChatInferenceService:
         flush_interval_s: float = FLUSH_INTERVAL_S,
         monotonic: Callable[[], float] = time.monotonic,
         clock: Callable[[], datetime] = _utc_now,
+        zone: tzinfo = UTC,
     ) -> None:
         self._engine = engine
         self._runtime = runtime
@@ -428,6 +435,7 @@ class ChatInferenceService:
         self._builder = ContextBuilder(runtime, self._retriever, self._context)
         self._diagnostics = DiagnosticsService(engine, clock)
         self._queue = queue or JobQueue()
+        self._invalidation = InvalidationService(self._queue, zone)
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
         self._clock = clock
@@ -457,7 +465,7 @@ class ChatInferenceService:
             generated = await self._generate(job, reply, context, streamed)
         except anyio.get_cancelled_exc_class():
             with anyio.CancelScope(shield=True):
-                await self._cancelled(job, reply, "".join(streamed))
+                await self._cancelled(job, reply, "".join(streamed), context.stop.reason)
             raise
         except Exception as error:
             with anyio.CancelScope(shield=True):
@@ -535,6 +543,17 @@ class ChatInferenceService:
         reply = await to_thread.run_sync(self._claim, job)
         if reply is not None:
             await self._settle(job, reply, "", error.code, retry=False)
+
+    async def cancelled(self, job: Job) -> None:
+        """Removes the placeholder of a reply job that ended `cancelled` while its reply was still `queued`
+        (CancellingHandler): a run that failed with a retry coming just as the user cancelled, or a job a restart left
+        with a cancellation request. A reply the cancellation interrupted keeps its text (`_cancelled`)."""
+
+        def work(connection: Connection) -> list[Announcement]:
+            return remove_placeholder(connection, job, self._clock(), self._invalidation)
+
+        for event_type, data in await to_thread.run_sync(write, self._engine, work):
+            self._events.publish(event_type, data)
 
     def _claim(self, job: Job) -> _Reply | None:
         """Marks the job's reply `streaming` with empty text and returns it, or None when it is not waiting."""
@@ -757,11 +776,25 @@ class ChatInferenceService:
         status = generated.status
         return self._write(reply, generated.text, status, VariantStatus(status.value), generated.checks)
 
-    async def _cancelled(self, job: Job, reply: _Reply, text: str) -> None:
+    async def _cancelled(self, job: Job, reply: _Reply, text: str, reason: StopReason | None) -> None:
         if self._closing:
             # Shutdown: keep what was streamed and leave the reply `streaming`; the next start marks it interrupted
             # and ends its job, as after a crash.
             await to_thread.run_sync(self._flush, reply, text)
+            return
+        if reason is StopReason.CANCELLED:
+            # docs/gpu-orchestration.md (Cancellation): the text shown so far stays, and the reply is interrupted, as
+            # when the runtime reports an aborted generation. The scheduler aborts the generation itself.
+            message = await to_thread.run_sync(
+                self._write, reply, text, MessageStatus.INTERRUPTED, VariantStatus.INTERRUPTED
+            )
+            self._events.publish(TYPING_STOPPED, _presence(reply))
+            self._events.publish(MESSAGE_COMPLETED, {"message": message_document(message)})
+            logger.info("reply_cancelled", job_id=job.id, conversation_id=reply.conversation_id)
+            return
+        if reason is StopReason.PREEMPTED:
+            # Replies are foreground work and never preempted; should one be, it costs no attempt.
+            await self._settle(job, reply, text, LEASE_LOST, retry=True)
             return
         # The scheduler's only other cancellation is a lost lease, which it retries with LEASE_LOST.
         await self._settle(job, reply, text, LEASE_LOST, retry=job.attempt < job.max_attempts)

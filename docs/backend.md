@@ -386,13 +386,15 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
 | Failure, retry coming | Message back to `queued`, text emptied, so the next run starts clean | `typing.stopped`, `message.updated` |
 | Final failure | Variant and message `failed`, with the text streamed so far | `typing.stopped`, `message.failed` |
 | Shutdown cancels the run | Text flushed, reply left `streaming` | None |
+| The user cancels the run (P06.3) | Variant and message `interrupted` with the text released so far; the scheduler then aborts the generation and ends the job `cancelled` | `typing.stopped`, `message.completed` |
 | Next start | Every `streaming` message and its active variant become `interrupted`; their running job ends `failed` with `JOB_INTERRUPTED` | None |
 
 - The handler decides "retry coming" with the queue's own rule: a retryable failure (a `TextRuntimeError`, a lost lease,
   or a `JobFailedError` marked retryable) while `attempt` is below the kind's maximum. Any other exception is a final
   `INTERNAL` failure. A preemption always counts as a retry.
-- A cancellation during a run is a lost lease (`LEASE_LOST`), the only cancellation the scheduler makes, unless the
-  lifespan has called `close()` first, which marks the shutdown.
+- A cancellation during a run is a lost lease (`LEASE_LOST`), unless the lifespan has called `close()` first, which
+  marks the shutdown, or `RunContext.stop` names the user's cancellation or a preemption (P06.3). A reply job cancelled
+  while its reply was still `queued` loses its placeholder through `cancelled` (`CancellingHandler`).
 - A run whose variant is no longer waiting (finished by a run whose job state a restart lost, replaced, or deleted) is
   done at once with `{"skipped": true}`, without touching the runtime. A reply whose chat was deleted ends `failed`.
 - Since P04.5 the prompt is built by `ContextBuilder` ([Delivered in P04.5](memory-engine.md#delivered-in-p045)) from
@@ -591,16 +593,18 @@ Delivered in P02.4: revision `0002` creates `generation_jobs` ([Data model](data
 `jobs/` holds the queue ([ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md)). Since P02.5c the application's
 lifespan runs the worker with `ChatInferenceService` for `chat_reply` and `chat_regenerate`, and a send or a
 regeneration wakes it at once (`JobScheduler.notify`); jobs of other kinds wait. Since P05.7, with a `ModeSwitch`
-(`mode_switch=`), the worker asks the orchestrator for the mode its queue needs, by the reduced rule of
-`mode_deciding_job` ([Delivered in P05.7](image-generation.md#delivered-in-p057)). The image wait limit, the cap on
-images in a row, batching, fairness, preemption across modes and cancellation come with P06.3.
+(`mode_switch=`), the worker asks the orchestrator for the mode its queue needs ([Delivered in
+P05.7](image-generation.md#delivered-in-p057)). Since P06.3 it decides by the full [Selection](gpu-orchestration.md#selection)
+rules, preempts background work and stops cancelled jobs ([ADR 0039](decisions/0039-scheduling-clocks-batches-and-stops.md)).
 
 | Module | Responsibility |
 | --- | --- |
 | `jobs/policy.py` | `JobKind`, `JobStatus`, `RequiredMode`, `JobClass`, and per kind the priority, class, maximum attempts, backoff and stages of [Job kinds and priorities](gpu-orchestration.md#job-kinds-and-priorities) |
 | `jobs/queue.py` | `JobQueue`: every read and state change of `generation_jobs`, on a connection the caller owns |
-| `jobs/handlers.py` | The handler contract: `RunContext`, the outcomes `JobDone` and `NextStage`, `JobFailedError`, `JobPreemptedError`, and since P06.2 `AbandoningHandler` for a failure before the stage runs |
+| `jobs/handlers.py` | The handler contract: `RunContext` with its `stop` (`StopReason`), the outcomes `JobDone` and `NextStage`, `JobFailedError`, `JobPreemptedError`, since P06.2 `AbandoningHandler` for a failure before the stage runs, and since P06.3 `CancellingHandler` for a cancelled job's placeholder |
+| `jobs/selection.py` | Since P06.3: the pure selection rules (`decide`, `preempts`) and their settings (`SchedulingRules`) |
 | `jobs/scheduler.py` | `JobScheduler`, the single worker, and `recover_interrupted_jobs` for startup step 5 |
+| `services/job_control.py` | Since P06.3: `JobControlService.cancel` for the cancel route, and `remove_placeholder`, which the reply and image handlers share |
 
 Behavior:
 
@@ -628,6 +632,17 @@ Behavior:
   brings the process down cannot loop forever: one that was on its last attempt ends `failed` with `JOB_INTERRUPTED`.
 - **VRAM wait.** Since P06.2, with a mode switch, the job that decides the mode fails with `GPU_INSUFFICIENT_VRAM` once
   the orchestrator has held its load back for 120 s, without its stage running ([Orchestrator package](#orchestrator-package)).
+- **Selection with a mode switch.** Since P06.3 each pass groups the eligible jobs (foreground text, other text,
+  images) and applies `selection.decide`: batches of images, the 60 s image wait, at most 4 images in a row while text
+  work waits, and soft and background work after 20 s of user idleness. The clocks live in memory
+  ([Selection](gpu-orchestration.md#selection)).
+- **Preemption and cancellation.** Since P06.3 a running GPU stage is watched at each `notify()` and every second. A
+  foreground job queued after a background generation started preempts it; a cancellation request stops any job. The
+  handler is cancelled with `RunContext.stop` set, the runtime is aborted under the lease (`TextRuntime.abort(genkey)`
+  or `ImageRuntime.interrupt()`, which `main()` passes to the scheduler), and the job is queued again with its attempt
+  given back, or ends `cancelled` with `JOB_CANCELLED`. A queued job left with a cancellation request, by a restart or
+  a run that ended just then, is ended at the next pass. `JobQueue` gained `eligible`, `cancel_queued`,
+  `request_cancel`, `end_cancelled` and `next_cancel_pending`.
 
 Choices the documents did not fix:
 
@@ -645,7 +660,9 @@ Choices the documents did not fix:
 recovery, the backoff and maximum of a reply and of extraction, priorities, mode eligibility, and the scheduler with a
 fake lease provider: result, refused lease, `none` stage, out of memory, handler bug, new stage, preemption and a lost
 lease. `tests/unit/test_job_policy.py` checks the policy table and the identifier and timestamp helpers of
-`domain/identifiers.py`, which writes UUIDv7 keys and UTC text with milliseconds.
+`domain/identifiers.py`, which writes UUIDv7 keys and UTC text with milliseconds. Since P06.3,
+`tests/unit/test_scheduling_rules.py` checks the selection rules, and `tests/integration/test_job_cancellation.py`
+the preemption, the cancellation of each image stage, of a running reply, and the cancel route.
 
 ## Logging
 
