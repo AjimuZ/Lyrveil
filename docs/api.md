@@ -112,13 +112,24 @@ All paths are under `/api/v1`.
 | `GET /characters/format-schema` | JSON Schema of the exchange format. |
 | `POST /characters/drafts` | Body `{"description": "..."}`. Starts `character_draft`. The job result is an unsaved draft. |
 
-Delivered in P02.6a, for the minimal character form of the chat list: `GET /characters` (`status` `active` or `archived`,
-default `active`; `q` keeps the names that contain it, ignoring case; newest update first) and `POST /characters` with
-`{"first_name", "last_name", "age", "grammatical_gender", "primary_language"}`. `POST` answers `201` with the character
-and `422 VALIDATION_ERROR` with an Italian `detail` for an empty or over-long name, an age under 18 or over 120, a gender
-outside `femminile`, `maschile` and `non_indicato`, or a language other than `it`, `en`, `fr`, `de` and `es`. It writes
-no version row, since no version table exists until the Creator (P03.1a). Every other route of this table is planned. These
-routes are not in `backend/openapi.json` until it is next regenerated with Docker.
+Delivered in P02.6a and P03.1a: `GET /characters` (`status` `active` or `archived`, default `active`; `q` keeps the names
+that contain it, ignoring case; newest update first), `POST /characters` and `GET /characters/{id}`.
+
+- `POST` takes the card of [Character system](character-system.md#card-schema) as
+  `{"identity": {...}, "traits": [...], "communication": {...}, "visual": {...}}`. Only `identity.first_name` and
+  `identity.age` are required. A flat body with the identity fields at the top level, as the minimal chat form sends it
+  (`{"first_name", "last_name", "age", "grammatical_gender", "primary_language"}`), is accepted too, with the other
+  sections beside them. It answers `201` with the summary of the character.
+- `422 VALIDATION_ERROR` carries an Italian `detail` naming the field, never the value, for: an empty or over-long name,
+  an age under 18 or over 120, a value outside a closed list (gender, language, `address_form`, `narration`, `emoji`...),
+  an unknown field, more entries than a list allows, a slot tag missing from the tag vocabulary, a free tag of more than
+  4 words, an outfit with the reserved key `usual` or `scene`, a repeated outfit key, and a `fixed` or `base_offset`
+  seed policy without `base_seed`. Tags are sanitized before they are stored.
+- `GET /characters/{id}` answers the summary fields plus `card`, the whole card as stored, or `404 NOT_FOUND`. A character
+  made before the card existed reads with the default sections.
+- No version row is written: the version table arrives with P03.1b, so `current_version_no` is 1 and nothing records
+  changes yet. Every other route of this table is planned. These routes are not in `backend/openapi.json` until it is next
+  regenerated with Docker.
 
 ### Assets
 

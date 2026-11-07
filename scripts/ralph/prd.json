@@ -1087,8 +1087,8 @@
         "T-CHR-14 passes except its export round trip (P03.5): `grammatical_gender` with its CHECK, `address_form`, `narration`, `emoji`, example exchanges, `avoid`, identity slots checked against the vocabulary, and outfits with reserved keys refused."
       ],
       "priority": 46,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "The backend now stores and returns the whole character card. `POST /api/v1/characters` takes the card: identity, traits, communication with the ADR 0033 voice fields, and the visual profile with the ADR 0035 identity slots, usual outfit and up to 5 outfits. `GET /api/v1/characters/{id}` returns it. The flat body the chat form sends still works, and the new routes are still not in `backend/openapi.json`. An age under 18 is refused by the API with an Italian detail and by a database CHECK. A slot tag outside the new tag vocabulary is refused, and free tags are sanitized and limited to 4 words. An outfit with the key `usual` or `scene` is refused. I wrote the vocabulary file (`images/vocabulary/tags.v1.json`) with 10 categories and Italian aliases for all of them; it has no `clip_tokens` yet (P05.3a adds them). Migration `0006` adds `character_traits` and `character_visual_profiles` and gives every earlier character an empty profile row. The export round trip, saving a changed card, versions and the Creator screens are not done. No `character_versions` table exists, so `current_version_no` stays 1 and nothing records changes. Checks I ran and observed: `test lint` passed (ruff, ruff format, mypy --strict, docs checks, frontend lint and build). Through the unit level I ran `test_tag_vocabulary.py` and `test_import_rules.py` (19 passed), `test_characters.py` and `test_migrations.py` (35 passed), and `test_conversations.py`, `test_health_and_startup.py`, `test_reply_streaming.py` and `test_cli.py` (49 passed). I did not run the full unit, integration, e2e or docker levels, and the roadmap checkbox is untouched.",
       "dependsOn": [
         "P02.EXIT"
       ],

@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The character card in the backend: `POST /api/v1/characters` now takes the whole card (identity, personality traits,
+  communication with *tu* or *Lei*, narration, emoji, example exchanges and phrases to avoid, and the visual profile
+  with its English identity slots, usual outfit and up to 5 named outfits), and `GET /api/v1/characters/{id}` returns
+  it. Ages under 18 are refused by the API and by a database CHECK; slot tags must come from the new tag vocabulary
+  (`backend/src/lyrveil/images/vocabulary/tags.v1.json`) and free tags are sanitized. Migration `0006` adds
+  `character_traits` and `character_visual_profiles`. Saving changes, versions and the Creator screens are not
+  delivered yet, and the new routes are not in `backend/openapi.json`.
 - The orchestrator service now runs: `python -m lyrveil_orchestrator.main` serves the control API on port 8100 over
   the Docker socket and NVML, so its Compose health check can pass. The backend image gains the `websockets` library,
   so `/ws` accepts connections and a reply streams to the browser. In the Compose test project a sent message gets a

@@ -1,7 +1,9 @@
 # Character system
 
 Status: accepted (2026-11-01), revised 2026-11-06 for the voice fields and the structured visual identity. Implementation:
-planned, phase P03.
+phase P03. Delivered in P03.1a: the card model (`lyrveil.domain.card`), its validation against the tag vocabulary
+(`lyrveil.services.card_rules`), storage, and `POST /characters` and `GET /characters/{id}`. Planned: saving, versions,
+locks in the translation job, the Creator screens, assets, assisted creation, and the exchange format.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.

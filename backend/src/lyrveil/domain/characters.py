@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from lyrveil.domain.card import CharacterCard
+
 
 @dataclass(frozen=True)
 class CharacterProfile:
@@ -24,6 +26,19 @@ class CharacterProfile:
     @property
     def full_name(self) -> str:
         return self.first_name if not self.last_name else f"{self.first_name} {self.last_name}"
+
+
+@dataclass(frozen=True)
+class StoredCharacter:
+    """A character with its whole card, as `GET /characters/{id}` returns it. `status` is `active` or `archived`."""
+
+    id: str
+    status: str
+    is_demo: bool
+    current_version_no: int
+    created_at: str
+    updated_at: str
+    card: CharacterCard
 
 
 @dataclass(frozen=True)

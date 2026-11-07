@@ -1,0 +1,91 @@
+"""The tag vocabulary of ADR 0035, loaded from `vocabulary/tags.v1.json` and checked against the sanitizer."""
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import TypeGuard
+
+from lyrveil.images.sanitizer import sanitize_tag
+
+VOCABULARY_PATH = Path(__file__).parent / "vocabulary" / "tags.v1.json"
+# The categories the character card validates (docs/image-generation.md, Tag vocabulary). P05.3a adds the scene ones.
+CARD_CATEGORIES = frozenset(
+    {"hair_color", "hair_length", "eye_color", "skin", "hairstyle", "face", "body", "marks", "accessories", "style"}
+)
+
+
+class VocabularyError(Exception):
+    """The vocabulary file breaks a rule of ADR 0035; it is a packaging fault, never a user error."""
+
+
+@dataclass(frozen=True)
+class TagEntry:
+    """`tag` is the English tag as written in the prompt; `aliases_it` are the Italian words that map to it."""
+
+    tag: str
+    category: str
+    aliases_it: tuple[str, ...]
+
+
+class TagVocabulary:
+    """The entries of the file, indexed by category. Immutable once built."""
+
+    def __init__(self, entries: tuple[TagEntry, ...]) -> None:
+        self._entries = entries
+        grouped: dict[str, list[str]] = {}
+        for entry in entries:
+            grouped.setdefault(entry.category, []).append(entry.tag)
+        self._tags: Mapping[str, frozenset[str]] = {category: frozenset(tags) for category, tags in grouped.items()}
+
+    @property
+    def entries(self) -> tuple[TagEntry, ...]:
+        return self._entries
+
+    def contains(self, category: str, tag: str) -> bool:
+        """Returns whether `tag`, exactly as written, is listed under `category`."""
+        return tag in self._tags.get(category, frozenset())
+
+    def tags(self, category: str) -> frozenset[str]:
+        """Returns the tags of `category`, empty for a category the file does not hold."""
+        return self._tags.get(category, frozenset())
+
+
+def _is_alias_list(value: object) -> TypeGuard[list[str]]:
+    return isinstance(value, list) and bool(value) and all(isinstance(alias, str) and alias for alias in value)
+
+
+def parse_vocabulary(document: object) -> TagVocabulary:
+    """Returns the vocabulary of a parsed file.
+
+    Raises VocabularyError for a missing or wrong field, a category the card does not know, a tag listed twice in the
+    same category, or a tag that the sanitizer would change (so no tag needs an escape in a prompt).
+    """
+    if not isinstance(document, dict) or document.get("version") != 1 or not isinstance(document.get("tags"), list):
+        raise VocabularyError("the vocabulary needs version 1 and a list of tags")
+    entries: list[TagEntry] = []
+    seen: set[tuple[str, str]] = set()
+    for item in document["tags"]:
+        if not isinstance(item, dict):
+            raise VocabularyError("every tag entry must be an object")
+        tag, category, aliases = item.get("tag"), item.get("category"), item.get("aliases_it")
+        if not isinstance(tag, str) or not tag:
+            raise VocabularyError("every entry needs a tag")
+        if category not in CARD_CATEGORIES:
+            raise VocabularyError(f"{tag!r} has an unknown category")
+        if not _is_alias_list(aliases):
+            raise VocabularyError(f"{tag!r} needs a non-empty list of Italian aliases")
+        if sanitize_tag(tag) != tag:
+            raise VocabularyError(f"{tag!r} is not written as the sanitizer keeps it")
+        if (category, tag) in seen:
+            raise VocabularyError(f"{tag!r} is listed twice under {category}")
+        seen.add((category, tag))
+        entries.append(TagEntry(tag=tag, category=category, aliases_it=tuple(aliases)))
+    return TagVocabulary(tuple(entries))
+
+
+@lru_cache(maxsize=1)
+def load_vocabulary() -> TagVocabulary:
+    """Returns the packaged vocabulary, read once. Raises VocabularyError when the file is invalid."""
+    return parse_vocabulary(json.loads(VOCABULARY_PATH.read_text(encoding="utf-8")))

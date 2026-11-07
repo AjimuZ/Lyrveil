@@ -627,6 +627,12 @@ title_stem)`. They are kept by SQL triggers on `messages.content` and `conversat
 because no stemmer exists yet and the columns hold the text as written. Soft-deleted rows stay indexed and queries
 filter them out. `memory_fts`, `episode_fts` and `rebuild-search` are not delivered.
 
+Delivered in P03.1a (revision `0006`): `character_traits` and `character_visual_profiles` as in
+[Character tables](#character-tables), with CHECK constraints on the enumerated columns and `json_valid` on every JSON
+column, and an empty profile row for each character that already existed. `primary_avatar_asset_id` is a plain column until
+`character_assets` exists. `character_versions` and `character_assets` are not delivered. The age bound is
+`CHECK (age >= 18)` on `characters` (revision `0003`); the upper limit of 120 is the card's.
+
 ## Deletion policy
 
 Ordinary deletion never removes rows from durable history. A foreign key is `RESTRICT`

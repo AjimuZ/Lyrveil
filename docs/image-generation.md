@@ -193,6 +193,12 @@ text copied from tag wikis. Each entry has:
 | `aliases_it` | Italian words that map to the tag, used by the fallback scene and the Creator's search |
 | `clip_tokens` | Token count, computed with ComfyUI's CLIP tokenizer when P05 builds the file |
 
+Delivered in P03.1a: the file holds the categories the character card validates (`hair_color`, `hair_length`, `eye_color`,
+`skin`, `hairstyle`, `face`, `body`, `marks`, `accessories`, `style`), each entry with its Italian aliases and without
+`clip_tokens`. P05.3a adds the token counts and the scene categories (`expression`, `pose`, `lighting`). The loader
+`lyrveil.images.tags` refuses an entry that the sanitizer would change, and `lyrveil.images.sanitizer.sanitize_tag` is the
+sanitizer below.
+
 The grammar of `visual_profile_translate` takes its closed values from this file. T-IMG-16 checks that every entry passes the
 sanitizer and that its token count matches the tokenizer.
 
