@@ -189,6 +189,35 @@
   }
 }
 
+.picture {
+  display: block;
+  margin-bottom: var(--ob-space-2);
+  line-height: 0;
+}
+
+// The thumbnail keeps its aspect; the longest side is at most 512 px on disk, so it is shown no larger than that.
+.image {
+  max-width: min(100%, 360px);
+  max-height: 480px;
+  height: auto;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  object-fit: contain;
+}
+
+.drawing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+  min-width: 220px;
+}
+
+.bar {
+  width: 100%;
+  height: var(--ob-space-3);
+  accent-color: var(--ob-primary);
+}
+
 .typing {
   display: inline-flex;
   gap: var(--ob-space-1);

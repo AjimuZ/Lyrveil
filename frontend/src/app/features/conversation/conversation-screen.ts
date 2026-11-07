@@ -18,8 +18,10 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { Translator } from '../../core/i18n/translator';
 import { ConversationStore, isActive } from './conversation-store';
-import { MAX_MESSAGE_CHARS, Message } from './conversation.model';
+import { MAX_MESSAGE_CHARS, Message, imageOriginalUrl, imageThumbnailUrl } from './conversation.model';
 import { dayKey, formatClock, formatDayLabel } from './day-label';
+import { ImageDialog } from './image-dialog';
+import { ImageProgress, PHASE_TEXT, progressFraction } from './image-request';
 
 /** The composer shows its counter from this many characters, so it is quiet until the limit is near. */
 export const COUNTER_FROM = 7000;
@@ -44,6 +46,14 @@ export interface MessageRow {
   readonly canDelete: boolean;
   readonly canRegenerate: boolean;
   readonly isLast: boolean;
+  /** The thumbnail and the original of the message's image, or null when it has none (yet). */
+  readonly image: { readonly thumbnailUrl: string; readonly originalUrl: string } | null;
+  /** The message is an image still being drawn: show its progress instead of the typing indicator. */
+  readonly drawing: boolean;
+  /** The latest progress of the image being drawn, null until the first event. */
+  readonly progress: ImageProgress | null;
+  /** The share of the current pass that is done, 0 to 100, or null when the phase has no count. */
+  readonly percent: number | null;
 }
 
 export interface DayRow {
@@ -56,13 +66,14 @@ export interface DayRow {
  * The conversation screen. It opens the chat named by the route, follows it live through the store, and draws the
  * messages grouped under day separators. Message text is always bound as text, never as markup (T-SEC-03).
  *
- * Bubble actions are edit, regenerate (latest reply), alternatives (latest reply), delete and copy. The context
- * panel, images, search, "Ricorda questo" and virtual scrolling are planned (docs/frontend.md), so the screen draws
- * no control for them.
+ * Bubble actions are edit, regenerate (latest text reply), alternatives (latest text reply), delete and copy. The
+ * composer's image button opens the image form; an image message shows its thumbnail, and while it is drawn the phase
+ * and the step count of the current pass. The context panel, the lightbox, regenerating an image, cancelling a draw,
+ * search, "Ricorda questo" and virtual scrolling are planned (docs/frontend.md), so the screen draws no control for them.
  */
 @Component({
   selector: 'lyr-conversation-screen',
-  imports: [RouterLink, TranslatePipe],
+  imports: [RouterLink, TranslatePipe, ImageDialog],
   providers: [ConversationStore],
   templateUrl: './conversation-screen.html',
   styleUrl: './conversation-screen.scss',
@@ -77,6 +88,7 @@ export class ConversationScreen {
   private readonly injector = inject(Injector);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
+  private readonly imageDialog = viewChild.required(ImageDialog);
   /** Whether new text scrolls into view: true until the user scrolls up. */
   private followBottom = true;
 
@@ -101,6 +113,7 @@ export class ConversationScreen {
     const messages = this.store.messages();
     const streams = this.store.streams();
     const latestReply = this.store.latestReply();
+    const imageProgress = this.store.imageProgress();
     const locale = this.translator.locale();
     const now = new Date();
     const rows: (DayRow | MessageRow)[] = [];
@@ -113,6 +126,9 @@ export class ConversationScreen {
       }
       const active = isActive(message);
       const text = active ? (streams[message.id] ?? message.content) : message.content;
+      const drawing = active && message.kind === 'image';
+      const progress = drawing ? (imageProgress[message.id] ?? null) : null;
+      const fraction = progress === null ? null : progressFraction(progress);
       rows.push({
         kind: 'message',
         key: message.id,
@@ -123,8 +139,16 @@ export class ConversationScreen {
         waiting: active && text === '',
         canEdit: message.author !== 'system' && !active,
         canDelete: !active,
-        canRegenerate: latestReply?.id === message.id && !active,
+        // Regenerating an image is a gallery action (P05.6); the text route does not apply to it.
+        canRegenerate: latestReply?.id === message.id && !active && message.kind !== 'image' && message.kind !== 'mixed',
         isLast: index === messages.length - 1,
+        image:
+          typeof message.image_id === 'string'
+            ? { thumbnailUrl: imageThumbnailUrl(message.image_id), originalUrl: imageOriginalUrl(message.image_id) }
+            : null,
+        drawing,
+        progress,
+        percent: fraction === null ? null : Math.round(fraction * 100),
       });
     });
     return rows;
@@ -257,6 +281,23 @@ export class ConversationScreen {
 
   protected counter(): string {
     return this.translator.t('conv.composer.counter', { count: this.length(), max: MAX_MESSAGE_CHARS });
+  }
+
+  /** Opens the image form; the text already typed in the composer becomes its request. */
+  protected openImageForm(): void {
+    void this.imageDialog().open(this.draft().trim());
+  }
+
+  protected phaseText(progress: ImageProgress): string {
+    return this.translator.t(PHASE_TEXT[progress.phase]);
+  }
+
+  protected stepText(progress: ImageProgress): string {
+    return this.translator.t('conv.image.step', { value: progress.value ?? 0, max: progress.max ?? 0 });
+  }
+
+  protected imageAlt(): string {
+    return this.translator.t('conv.image.alt', { name: this.name() });
   }
 
   protected typingLabel(): string {

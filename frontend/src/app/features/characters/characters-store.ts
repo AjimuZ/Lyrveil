@@ -150,6 +150,22 @@ export class CharactersStore {
     );
   }
 
+  /**
+   * Queues the drawing of an avatar through the shared image job (`POST /characters/{id}/assets/generate`) and returns
+   * the job. When it completes the image joins the avatars; it is the primary one only if the character had none.
+   */
+  async generateAvatar(id: string): Promise<QueuedJob> {
+    const accepted = await firstValueFrom(
+      this.api.post<{ readonly job: QueuedJob }>(`${this.path(id)}/assets/generate`, { purpose: 'avatar' }),
+    );
+    return accepted.job;
+  }
+
+  /** Reads the state of a job by id: its status, the stage it runs, and the Italian reason when it failed. */
+  job(jobId: string): Promise<JobDetail> {
+    return firstValueFrom(this.api.get<JobDetail>(`/jobs/${encodeURIComponent(jobId)}`));
+  }
+
   private path(id: string): string {
     return `/characters/${encodeURIComponent(id)}`;
   }

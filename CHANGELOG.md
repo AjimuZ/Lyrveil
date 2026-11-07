@@ -10,6 +10,17 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Image requests on the conversation screen and avatar generation. The composer has **Chiedi un'immagine**, which opens
+  a form with the request (the text already typed fills it), the aspect (**Automatico** by default), the outfit
+  (**Lascia decidere alla scena**, **Abituale** or one of the character's named outfits), **Alta** or **Rapida**, and,
+  under **Impostazioni avanzate**, a seed (0 to 4294967295), steps (10 to 50) and CFG (1 to 12); a value outside its
+  limit is refused in the form before anything is sent. The character's reply to the request shows the thumbnail when
+  the image is ready; while it is drawn the bubble says which phase runs and counts the steps of the first and the second
+  pass, and the header says **Sta disegnando…**. In the character's profile and in the Creator, **Genera un avatar**
+  queues an avatar, shows the queue place and the stage, and lists the result with a **Generato** mark: the first avatar
+  becomes the primary one, and with one already chosen the new one waits for **Rendi principale**. Nothing draws yet,
+  because the orchestrator does not switch to image mode until P05.7, so a request stays queued. There is no cancel
+  action, no lightbox and no regenerate for images, and the contextual proposal card is not delivered.
 - Image request modes, backend only. A message sent with `intent: image` becomes an image request, and with the
   default `intent: auto` a short message that asks for a picture in Italian, such as "mandami una foto di te sul
   balcone", does too, while "non mandarmi foto" and "ti ho mandato una foto" stay ordinary text; the check is a fixed

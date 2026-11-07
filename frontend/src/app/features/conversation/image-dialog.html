@@ -1,0 +1,114 @@
+<dialog class="dialog" #dialog aria-labelledby="image-title">
+  <h2 class="title" id="image-title">{{ 'conv.image.dialog.title' | t }}</h2>
+
+  @if (error(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  <form class="form" novalidate (submit)="send($event)">
+    <div class="field">
+      <label for="image-request">{{ 'conv.image.dialog.request' | t }}</label>
+      <textarea
+        id="image-request"
+        class="control"
+        rows="3"
+        aria-describedby="image-request-hint"
+        [attr.aria-invalid]="attempted() && problems().request !== undefined"
+        [value]="form().request"
+        (input)="set('request', valueOf($event))"
+      ></textarea>
+      <p class="hint" id="image-request-hint">{{ 'conv.image.dialog.requestHint' | t }}</p>
+      @if (attempted() && problems().request; as reason) {
+        <p class="field-error" role="alert">{{ reason | t }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="image-aspect">{{ 'conv.image.dialog.aspect' | t }}</label>
+      <select id="image-aspect" class="control" (change)="set('aspect', $any(valueOf($event)))">
+        @for (aspect of aspects; track aspect.value) {
+          <option [value]="aspect.value" [selected]="aspect.value === form().aspect">{{ aspect.label | t }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="image-outfit">{{ 'conv.image.dialog.outfit' | t }}</label>
+      <select id="image-outfit" class="control" (change)="set('outfit', valueOf($event))">
+        <option [value]="sceneOutfit" [selected]="form().outfit === sceneOutfit">{{ 'conv.image.outfit.scene' | t }}</option>
+        <option value="usual" [selected]="form().outfit === 'usual'">{{ 'conv.image.outfit.usual' | t }}</option>
+        @for (outfit of outfits(); track outfit.key) {
+          <option [value]="outfit.key" [selected]="form().outfit === outfit.key">{{ outfit.label }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="image-quality">{{ 'conv.image.dialog.quality' | t }}</label>
+      <select id="image-quality" class="control" (change)="set('quality', $any(valueOf($event)))">
+        @for (quality of qualities; track quality.value) {
+          <option [value]="quality.value" [selected]="quality.value === form().quality">{{ quality.label | t }}</option>
+        }
+      </select>
+    </div>
+
+    <details class="advanced">
+      <summary>{{ 'conv.image.dialog.advanced' | t }}</summary>
+      <div class="field">
+        <label for="image-seed">{{ 'conv.image.dialog.seed' | t }}</label>
+        <input
+          id="image-seed"
+          class="control"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          [attr.aria-invalid]="attempted() && problems().seed !== undefined"
+          [value]="form().seed"
+          (input)="set('seed', valueOf($event))"
+        />
+        @if (attempted() && problems().seed; as reason) {
+          <p class="field-error" role="alert">{{ reason | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="image-steps">{{ 'conv.image.dialog.steps' | t }}</label>
+        <input
+          id="image-steps"
+          class="control"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          [attr.aria-invalid]="attempted() && problems().steps !== undefined"
+          [value]="form().steps"
+          (input)="set('steps', valueOf($event))"
+        />
+        @if (attempted() && problems().steps; as reason) {
+          <p class="field-error" role="alert">{{ reason | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="image-cfg">{{ 'conv.image.dialog.cfg' | t }}</label>
+        <input
+          id="image-cfg"
+          class="control"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          [attr.aria-invalid]="attempted() && problems().cfg !== undefined"
+          [value]="form().cfg"
+          (input)="set('cfg', valueOf($event))"
+        />
+        @if (attempted() && problems().cfg; as reason) {
+          <p class="field-error" role="alert">{{ reason | t }}</p>
+        }
+      </div>
+    </details>
+
+    <div class="actions">
+      <button type="button" class="button" (click)="close()">{{ 'conv.image.dialog.cancel' | t }}</button>
+      <button type="submit" class="button primary" [disabled]="busy()">
+        {{ (busy() ? 'conv.image.dialog.sending' : 'conv.image.dialog.send') | t }}
+      </button>
+    </div>
+  </form>
+</dialog>

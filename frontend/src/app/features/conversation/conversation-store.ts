@@ -5,7 +5,9 @@ import { Subscription, firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { DataEventType, EventsSocket, ServerEvent } from '../../core/realtime/events-socket';
+import { Outfit, StoredCharacter } from '../characters/card.model';
 import { Conversation } from '../chats/chats.model';
+import { ImageProgress, ImageRequestBody, toImageProgress } from './image-request';
 import {
   Message,
   MessagePage,
@@ -104,6 +106,7 @@ export class ConversationStore {
   private readonly typingState = signal(false);
   private readonly pendingState = signal<readonly PendingSend[]>([]);
   private readonly variantsState = signal<{ readonly messageId: string; readonly items: readonly Variant[] } | null>(null);
+  private readonly imageProgressState = signal<Readonly<Record<string, ImageProgress>>>({});
 
   readonly conversation = this.conversationState.asReadonly();
   /** The loaded messages, ascending by `seq`. Text of a reply still being produced is in `streams`. */
@@ -130,6 +133,13 @@ export class ConversationStore {
   readonly typing = computed(() => this.typingState() || this.messagesState().some((m) => m.status === 'streaming'));
   /** True while the newest reply waits in the queue. */
   readonly queued = computed(() => this.messagesState().some((m) => m.status === 'queued'));
+  /** The latest progress of each image being drawn, by message id. It is dropped once the message is final. */
+  readonly imageProgress = this.imageProgressState.asReadonly();
+  /** True while an image of this chat reports progress, so the header can say the character is drawing. */
+  readonly drawing = computed(() => {
+    const progress = this.imageProgressState();
+    return this.messagesState().some((m) => m.kind === 'image' && isActive(m) && progress[m.id] !== undefined);
+  });
   /** The position among the alternatives of the latest reply, or null when it has none to choose from. */
   readonly alternatives = computed(() => {
     const variants = this.variantsState();
@@ -308,6 +318,44 @@ export class ConversationStore {
     this.actionErrorState.set(null);
   }
 
+  /**
+   * Asks for an image with `POST /conversations/{id}/images`. The user's request and the image placeholder join the
+   * list from the answer; the progress then arrives as `image.progress` events. Resolves null on success and the
+   * failure otherwise, which the image dialog shows itself, so `actionError` is left alone.
+   */
+  async requestImage(body: ImageRequestBody): Promise<ApiError | null> {
+    const ticket = this.generation;
+    try {
+      const result = await firstValueFrom(this.api.post<SendResult>(`/conversations/${this.conversationId}/images`, body));
+      if (ticket === this.generation) {
+        this.receive(result.message);
+        this.receive(result.reply);
+      }
+      return null;
+    } catch (failure) {
+      return toApiError(failure);
+    }
+  }
+
+  /**
+   * Returns the named outfits of the chat's character, for the image form. A character whose card cannot be read
+   * offers none: the form still has the scene's choice and the usual outfit.
+   */
+  async outfits(): Promise<readonly Outfit[]> {
+    const characterId = this.conversationState()?.character_id;
+    if (characterId === undefined) {
+      return [];
+    }
+    try {
+      const character = await firstValueFrom(
+        this.api.get<StoredCharacter>(`/characters/${encodeURIComponent(characterId)}`),
+      );
+      return character.card.visual.outfits;
+    } catch {
+      return [];
+    }
+  }
+
   private async transmit(entry: PendingSend): Promise<void> {
     const ticket = this.generation;
     try {
@@ -366,6 +414,7 @@ export class ConversationStore {
     this.typingState.set(false);
     this.pendingState.set([]);
     this.variantsState.set(null);
+    this.imageProgressState.set({});
   }
 
   private dispose(): void {
@@ -407,6 +456,8 @@ export class ConversationStore {
     });
     on('message.delta', (event) => this.queueDelta(event.data));
     on('message.restarted', (event) => this.restart(event.data['message_id']));
+    on('image.progress', (event) => this.setImageProgress(event.data));
+    on('image.completed', (event) => this.endImage(event.data['message_id']));
     on('typing.started', (event) => this.setTyping(event.data, true));
     on('typing.stopped', (event) => this.setTyping(event.data, false));
     this.subscriptions.push(this.socket.resync$.subscribe(() => void this.refresh()));
@@ -414,6 +465,31 @@ export class ConversationStore {
 
   private messageId(value: unknown): string | null {
     return isRecord(value) && typeof value['id'] === 'string' ? value['id'] : null;
+  }
+
+  /**
+   * Keeps the latest progress of an image of this chat. An event for a message that is already final, or for no
+   * message (character mode), changes nothing; one for a message not loaded yet is kept, because the answer of the
+   * request can arrive after the first events.
+   */
+  private setImageProgress(data: Readonly<Record<string, unknown>>): void {
+    const id = data['message_id'];
+    const progress = toImageProgress(data);
+    if (typeof id !== 'string' || progress === null) {
+      return;
+    }
+    const known = this.messagesState().find((item) => item.id === id);
+    if (known !== undefined && !isActive(known)) {
+      return;
+    }
+    this.imageProgressState.update((all) => ({ ...all, [id]: progress }));
+  }
+
+  /** Forgets the progress of an image whose message is final. */
+  private endImage(id: unknown): void {
+    if (typeof id === 'string' && this.imageProgressState()[id] !== undefined) {
+      this.imageProgressState.set(Object.fromEntries(Object.entries(this.imageProgressState()).filter(([key]) => key !== id)));
+    }
   }
 
   private setTyping(data: Readonly<Record<string, unknown>>, typing: boolean): void {
@@ -431,6 +507,9 @@ export class ConversationStore {
     if (message.status !== 'streaming') {
       this.endStream(message.id);
     }
+    if (!isActive(message)) {
+      this.endImage(message.id);
+    }
     if (this.variantsState()?.messageId === message.id) {
       this.variantsState.set(null);
     }
@@ -440,6 +519,7 @@ export class ConversationStore {
   private dropMessage(id: string): void {
     this.messagesState.update((list) => list.filter((item) => item.id !== id));
     this.endStream(id);
+    this.endImage(id);
     this.afterChange();
   }
 
@@ -457,6 +537,7 @@ export class ConversationStore {
       ),
     );
     this.endStream(id);
+    this.endImage(id);
     this.typingState.set(false);
     this.afterChange();
   }

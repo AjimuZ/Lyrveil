@@ -304,4 +304,95 @@ describe('ConversationStore', () => {
     expect(store.alternatives()).toBeNull();
     backend.expectOne('/api/v1/messages/r1/variants').flush({ items: [] });
   });
+
+  describe('image requests (T-IMG-07)', () => {
+    const body = { request: 'una foto al porto', aspect: 'auto', outfit: null, quality: 'alta', seed: null, steps: 20, cfg: 6.5 } as const;
+    const isImageRequest = (request: { method: string; url: string }): boolean =>
+      request.method === 'POST' && request.url === '/api/v1/conversations/c1/images';
+    const placeholder = (): Message => message('i1', 2, { kind: 'image', status: 'queued', content: '', active_variant_id: 'v-i1' });
+    const progress = (phase: string, value: number | null = null, max: number | null = null) =>
+      socket.receive(event('image.progress', { job_id: 'j1', message_id: 'i1', phase, value, max }));
+
+    it('posts the form and shows the placeholder with the user request', async () => {
+      await openWith([]);
+      const asked = store.requestImage(body);
+      const request = backend.expectOne(isImageRequest);
+      expect(request.request.body).toEqual(body);
+      request.flush({
+        message: message('u1', 1, { author: 'user', content: body.request }),
+        reply: placeholder(),
+        job: { id: 'j1', kind: 'image_request', status: 'queued', queue_position: 1 },
+      });
+      expect(await asked).toBeNull();
+      expect(store.messages().map((item) => [item.id, item.kind])).toEqual([
+        ['u1', 'text'],
+        ['i1', 'image'],
+      ]);
+    });
+
+    it('returns the failure to the dialog and leaves the action error alone', async () => {
+      await openWith([]);
+      const asked = store.requestImage(body);
+      backend
+        .expectOne(isImageRequest)
+        .flush({ code: 'VALIDATION_ERROR', detail: 'Il vestito non esiste.' }, { status: 422, statusText: 'Unprocessable Entity' });
+      const failure = await asked;
+      expect(failure?.code).toBe('VALIDATION_ERROR');
+      expect(failure?.detail).toBe('Il vestito non esiste.');
+      expect(store.actionError()).toBeNull();
+      expect(store.messages()).toEqual([]);
+    });
+
+    it('follows the progress of both passes and drops it when the message completes', async () => {
+      await openWith([message('u1', 1, { author: 'user' }), placeholder()]);
+      expect(store.drawing()).toBe(false);
+
+      progress('prompt');
+      expect(store.imageProgress()['i1']).toEqual({ phase: 'prompt', value: null, max: null });
+      expect(store.drawing()).toBe(true);
+
+      progress('sampling', 14, 28);
+      expect(store.imageProgress()['i1']).toEqual({ phase: 'sampling', value: 14, max: 28 });
+      progress('refining', 5, 20);
+      expect(store.imageProgress()['i1']).toEqual({ phase: 'refining', value: 5, max: 20 });
+
+      // An event with no message (character mode) or with a phase the screen does not know is ignored.
+      socket.receive(event('image.progress', { job_id: 'j2', message_id: null, phase: 'sampling', value: 1, max: 2 }));
+      socket.receive(event('image.progress', { job_id: 'j1', message_id: 'i1', phase: 'unknown', value: 1, max: 2 }));
+      expect(Object.keys(store.imageProgress())).toEqual(['i1']);
+      expect(store.imageProgress()['i1']?.phase).toBe('refining');
+
+      socket.receive(event('message.completed', { message: message('i1', 2, { kind: 'mixed', content: 'Eccola.', image_id: 'img1' }) }));
+      expect(store.imageProgress()['i1']).toBeUndefined();
+      expect(store.drawing()).toBe(false);
+      expect(store.messages().at(-1)?.image_id).toBe('img1');
+
+      // A late progress event for a finished image does not bring the bar back.
+      progress('saving');
+      expect(store.imageProgress()['i1']).toBeUndefined();
+    });
+
+    it('drops the progress of an image that failed', async () => {
+      await openWith([placeholder()]);
+      progress('loading');
+      expect(store.drawing()).toBe(true);
+      socket.receive(event('message.failed', { message_id: 'i1', error_code: 'RUNTIME_UNAVAILABLE' }));
+      expect(store.imageProgress()['i1']).toBeUndefined();
+      expect(store.messages()[0]?.status).toBe('failed');
+    });
+
+    it('reads the named outfits of the chat character, and none when the card cannot be read', async () => {
+      await openWith([]);
+      const found = store.outfits();
+      backend.expectOne('/api/v1/characters/ch1').flush({
+        id: 'ch1',
+        card: { visual: { outfits: [{ key: 'notte', label: 'Di notte', description: '', tags_en: [] }] } },
+      });
+      expect((await found).map((outfit) => outfit.key)).toEqual(['notte']);
+
+      const failed = store.outfits();
+      backend.expectOne('/api/v1/characters/ch1').flush({ code: 'NOT_FOUND' }, { status: 404, statusText: 'Not Found' });
+      expect(await failed).toEqual([]);
+    });
+  });
 });

@@ -187,6 +187,9 @@
 - Event publishing must happen on the event loop: do the database work in a thread, return what to announce, and publish after the thread returns.
 - Keep fixed word lists for deterministic detectors in prompts/<lang>/*.txt files, not in code, so a language without lists never matches.
 - Document a backend-only change in the changelog and say plainly what is not delivered, so the entry stays honest.
+- Keep form limits and request-body conversion in a pure module (image-request.ts) with a spec, and make the dialog a thin component over it.
+- A dialog that sends through a store should get the failure back as a return value (`Promise<ApiError | null>`) and show it inside the dialog, since the screen's `actionError` banner sits behind the modal.
+- To follow a queued job from a component, poll `GET /jobs/{id}` with a generation ticket and a stored timer handle, and clear both in `onDestroy` and when the input changes, so a stale poll never writes.
 
 ---
 
@@ -1672,4 +1675,17 @@ No injected instructions found in the files I read.
   - The detector only recognizes the listed imperative verbs (see backend/src/lyrveil/prompts/it/image_request_verbs.txt), followed by an image noun within 6 words. Add words to the lists, not code.
   - Missing for contextual mode: the image_proposal job handler (prompt and grammar), the queue_if_due call after a reply, a route to list pending proposals and a job that expires them.
   - `main()` still passes no image runtime, so image_request jobs wait until P05.7.
+---
+
+## 2026-11-07T19:31:56Z - P05.5b
+- Added the image request UI and avatar generation. The composer has an image button that opens a form (request, aspect, outfit, quality, and advanced seed, steps and CFG with the API limits checked in the browser). The image bubble shows phase text, a bar and the step count for both passes, then the thumbnail. The avatar tools have "Genera un avatar", which follows the job and lists the result with a "Generato" mark. The backend had no code change; one integration test was added for T-CHR-12. `scripts/lyrveil.cmd test lint` passes (ruff, mypy, eslint, strict build, docs checks). The backend avatar tests passed (2 passed). I could not run the frontend unit specs or the e2e spec: npm and ng commands were refused, so both are written but unrun. Nothing draws before P05.7, so the e2e spec plays the progress frames and job reads from the browser side.
+- Files changed: CHANGELOG.md, backend/tests/integration/test_image_modes.py, docs/frontend.md, docs/image-generation.md, docs/testing.md, frontend/src/i18n/it.json, frontend/src/app/features/conversation/image-request.ts, frontend/src/app/features/conversation/image-request.spec.ts, frontend/src/app/features/conversation/image-dialog.ts, frontend/src/app/features/conversation/image-dialog.html, frontend/src/app/features/conversation/image-dialog.scss, frontend/src/app/features/conversation/conversation.model.ts, frontend/src/app/features/conversation/conversation-store.ts, frontend/src/app/features/conversation/conversation-store.spec.ts, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, frontend/src/app/features/characters/characters-store.ts, frontend/src/app/features/characters/avatar-tools.ts, frontend/src/app/features/characters/avatar-tools.html, frontend/src/app/features/characters/avatar-tools.scss, tests/e2e/specs/image-request.spec.mjs
+- **Learnings for future iterations:**
+  - `npm --prefix frontend exec ...` and `npm --prefix frontend run test` were both refused in this session, so frontend unit specs can only be run through the orchestrator's full `scripts/lyrveil.cmd test unit`. Run the new specs there first: image-request.spec.ts and the 'image requests' block of conversation-store.spec.ts.
+  - `scripts/lyrveil.cmd test unit <paths>` takes paths relative to the component (`tests/integration/test_image_modes.py`), not the repo root.
+  - `scripts/lyrveil.cmd test lint` failed once with a PowerShell 'object reference' error and passed on an immediate rerun; it was not caused by the code.
+  - The e2e stack cannot draw: `main()` passes no image runtime and the lease mode is fixed to llm, so image jobs wait in the queue until P05.7. The e2e spec therefore injects `image.progress` and `message.completed` frames through `page.routeWebSocket` with ids far above the real ones (the client drops events whose id is not newer than the last delivered one), and mocks `GET /jobs/{id}` and the avatar list for the avatar flow. Once P05.7 lands, replace those injections with real fake-ComfyUI runs.
+  - There is no job cancel route yet (P06.3), so the 'cancel' action in docs/frontend.md Placeholders is not drawn. An image message (`kind` image or mixed) does not offer Rigenera, because the text regenerate route does not apply; image regeneration belongs to P05.6.
+  - The image routes and the generate route are still not in backend/openapi.json; the frontend types are hand-written (conversation.model.ts, image-request.ts, asset.model.ts).
+  - A job's `stage` is the stage it is waiting in or running, not the last finished one, despite docs/image-generation.md saying so under Job stages; the avatar tools rely on the actual behavior (prompt, render, persist).
 ---

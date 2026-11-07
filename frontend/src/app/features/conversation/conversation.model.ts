@@ -21,6 +21,8 @@ export interface Message {
   readonly variant_count: number;
   readonly edited_at: string | null;
   readonly created_at: string;
+  /** The image of the active variant, once drawn; null or absent for a message with none. */
+  readonly image_id?: string | null;
 }
 
 /** `items` ascend by `seq`; `next_before_seq` is the `before_seq` of the next older page, null at the start. */
@@ -34,6 +36,10 @@ export interface SendResult {
   readonly message: Message;
   readonly reply: Message;
 }
+
+/** Where the thumbnail of a generated image is served from; the file is on disk, so it loads with ComfyUI off. */
+export const imageThumbnailUrl = (imageId: string): string => `/media/images/${encodeURIComponent(imageId)}/thumbnail`;
+export const imageOriginalUrl = (imageId: string): string => `/media/images/${encodeURIComponent(imageId)}/original`;
 
 /** The answer of `POST /messages/{id}/regenerate`. */
 export interface RegenerateResult {

@@ -152,9 +152,34 @@ provides its own `ConversationStore` and opens the chat named by the route.
   until the stored text reaches them. The same reload runs while the socket is not open and a reply is still produced,
   and after `resync.required`. `message.completed` replaces the message with its final text. The send, edit, delete,
   regenerate and activate answers are applied from the response, because the REST routes publish no events yet.
+- **Images (P05.5b)** (`image-dialog.*`, `image-request.ts`, `conversation-store.ts`). The composer's **Chiedi
+  un'immagine** opens a modal form with the request (prefilled with the text in the composer), **Formato**
+  (**Automatico** by default, then square, portrait, landscape, tall and wide), **Abito** (**Lascia decidere alla
+  scena**, **Abituale** and the named outfits read from `GET /characters/{id}`), **Qualità** (**Alta** by default, or
+  **Rapida**) and, under **Impostazioni avanzate**, seed, steps and CFG. `validateImageForm` checks the API's limits
+  (request 1 to 1000 characters, seed 0 to 4294967295, steps 10 to 50, CFG 1 to 12; the optional fields may be empty)
+  and a field outside them shows its reason after the first send, which then does not leave the browser. A refusal by the
+  server stays in the dialog. A sent request closes it, and the answer adds the user's message and the image placeholder
+  (`kind: image`, `queued`) to the list. The store keeps the latest `image.progress` of each placeholder: its bubble
+  shows the phase (**Preparo la scena…**, **Carico il modello per le immagini…**, **Disegno l'immagine (prima
+  passata)…**, **Rifinisco i dettagli (seconda passata)…**, **Salvo l'immagine…**), a bar and **14 di 28** while the
+  phase counts steps, and the header says **Sta disegnando…**. `message.completed`, `image.completed`, `message.failed` or
+  a deleted message drop the progress; a progress event for an image that is already final is ignored. A finished image
+  message shows its thumbnail (`/media/images/{id}/thumbnail`, a link to the original in a new tab) above the caption;
+  a failed one says **L'immagine non è riuscita. Puoi chiederla di nuovo.** **Rigenera** and the alternatives are not
+  offered on an image message, because regenerating an image belongs to the gallery (P05.6). There is no cancel action
+  yet: the job routes of cancellation arrive in P06.3. Tests: `image-request.spec.ts` and the "image requests" block of
+  `conversation-store.spec.ts` (unit, written and not run in P05.5b), and `tests/e2e/specs/image-request.spec.mjs`
+  (written, not run).
+- **Avatar generation (P05.5b)** (`avatar-tools.ts`, in the profile and in the Creator's Images tab). **Genera un
+  avatar** sends `POST /characters/{id}/assets/generate` with `purpose: avatar`, then reads `GET /jobs/{id}` every second
+  (the backend publishes no `job.updated` yet) and shows **In coda: posizione N**, then the stage (**Preparo la scena
+  dell'avatar…**, **Disegno l'avatar…**, **Salvo l'avatar…**). When the job completes the list is read again; a generated
+  variant has a **Generato** mark. The server makes the new avatar primary only when the character had none; otherwise
+  **Rendi principale** chooses it. A failed job shows its Italian reason. Leaving the screen stops the polling.
 - **Message text** is bound as text and drawn with `white-space: pre-wrap`; no template uses `innerHTML` (T-SEC-03, T-SEC-09).
-- **Not delivered, so no control is drawn for it:** the context panel, images and the lightbox, the image form,
-  search in a chat, "Ricorda questo", the simulated `read` state, unsent text kept per chat in `localStorage`, and
+- **Not delivered, so no control is drawn for it:** the context panel, the lightbox, regenerating or cancelling an
+  image, the contextual proposal card, search in a chat, "Ricorda questo", the simulated `read` state, unsent text kept per chat in `localStorage`, and
   virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
   navigate to a new chat after **Inizia conversazione**.
 - **Direct visits to a deep route.** `index.html` has no `<base>` element, because the Content-Security-Policy says
@@ -250,7 +275,8 @@ Delivered in P03.2b (`character-profile-screen.*`, route `/characters/:id`):
   variant list and **Rendi principale**. Errors show the catalog text of the code. The conversation list shows the
   primary avatar. Deleting a variant is not offered.
 - **Memoria** opens the [Memory Studio](#5-character-memory-studio) of the character.
-- **Not delivered, so no control is drawn for it:** image generation (P05) and the proposals for the profile.
+- **Not delivered, so no control is drawn for it:** generating images other than the avatar (profile image, scenes,
+  variants, the gallery: P05.6) and the proposals for the profile. Avatar generation is described under screen 2.
 - **Tests:** `character-profile-screen.spec.ts` and `version-diff.spec.ts` (unit), and
   `tests/e2e/specs/character-profile.spec.mjs` (T-CHR-04, T-CHR-08). The end-to-end spec was written but not run in this
   change.

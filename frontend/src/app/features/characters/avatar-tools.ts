@@ -3,14 +3,36 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, injec
 
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
+import { TextKey } from '../../core/i18n/translator';
 import { CharacterAsset, CropRect, squareCrop } from './asset.model';
 import { CharactersStore } from './characters-store';
 
+/** How often the state of a generation job is read while it waits or runs. */
+export const GENERATION_POLL_MS = 1000;
+
+const STAGE_TEXT: Readonly<Record<string, TextKey>> = {
+  prompt: 'avatar.generate.prompt',
+  render: 'avatar.generate.render',
+  persist: 'avatar.generate.persist',
+};
+
+/** What the screen shows of an avatar being drawn: the job's status and stage, and its place in the queue. */
+interface Generation {
+  readonly status: string;
+  readonly stage: string;
+  readonly position: number;
+}
+
 /**
  * Shows the avatars of `characterId` as variants, marks the primary one and offers: choosing a file and seeing it
- * before it is sent, cropping a variant to a square (saved as a new variant, the original stays) and making a variant
- * primary. The server is the source of truth: every action is followed by reading the list again. A refused upload or
- * crop shows the catalog text of its error code, never raw server text. Deleting a variant is not offered here.
+ * before it is sent, generating an avatar, cropping a variant to a square (saved as a new variant, the original
+ * stays) and making a variant primary. The server is the source of truth: every action is followed by reading the
+ * list again. A refused upload or crop shows the catalog text of its error code, never raw server text. Deleting a
+ * variant is not offered here.
+ *
+ * Generating queues the shared image job and follows it by reading `GET /jobs/{id}` every second (the backend
+ * publishes no `job.updated` yet), showing the queue place or the stage that runs. When the job completes the list is
+ * read again: the new avatar is the primary one if the character had none, and otherwise a variant to choose.
  */
 @Component({
   selector: 'lyr-avatar-tools',
@@ -22,12 +44,26 @@ import { CharactersStore } from './characters-store';
 export class AvatarTools {
   private readonly store = inject(CharactersStore);
   private latestLoad = 0;
+  private latestGeneration = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly characterId = input.required<string>();
 
   protected readonly avatars = signal<readonly CharacterAsset[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<ApiError | null>(null);
+
+  /** The avatar being drawn, or null. */
+  protected readonly generation = signal<Generation | null>(null);
+  /** Why the last generation did not end: the server's Italian reason (possibly empty), or null. */
+  protected readonly generationFailure = signal<string | null>(null);
+  protected readonly generationText = computed<{ readonly key: TextKey; readonly position: number }>(() => {
+    const current = this.generation();
+    if (current === null || current.status === 'queued') {
+      return { key: 'avatar.generate.queued', position: current?.position ?? 0 };
+    }
+    return { key: STAGE_TEXT[current.stage] ?? 'avatar.generate.render', position: 0 };
+  });
 
   /** The file chosen and not yet sent, with the object URL of its preview. */
   protected readonly pending = signal<{ readonly file: File; readonly previewUrl: string } | null>(null);
@@ -49,7 +85,72 @@ export class AvatarTools {
       const id = this.characterId();
       untracked(() => void this.load(id));
     });
-    inject(DestroyRef).onDestroy(() => this.discard());
+    inject(DestroyRef).onDestroy(() => {
+      this.discard();
+      this.stopFollowing();
+    });
+  }
+
+  /** Queues the drawing of an avatar and follows its job until it ends. One generation runs at a time. */
+  protected async generate(): Promise<void> {
+    if (this.busy() || this.generation() !== null) {
+      return;
+    }
+    const id = this.characterId();
+    this.error.set(null);
+    this.generationFailure.set(null);
+    this.busy.set(true);
+    try {
+      const job = await this.store.generateAvatar(id);
+      this.generation.set({ status: job.status, stage: 'prompt', position: job.queue_position });
+      void this.follow(job.id, ++this.latestGeneration);
+    } catch (failure) {
+      this.error.set(toApiError(failure));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Reads the job until it ends, then reads the avatars again. A newer generation or a destroyed component stops it. */
+  private async follow(jobId: string, ticket: number): Promise<void> {
+    try {
+      for (;;) {
+        await new Promise<void>((resolve) => {
+          this.pollTimer = setTimeout(resolve, GENERATION_POLL_MS);
+        });
+        if (ticket !== this.latestGeneration) {
+          return;
+        }
+        const job = await this.store.job(jobId);
+        if (ticket !== this.latestGeneration) {
+          return;
+        }
+        if (job.status === 'completed') {
+          await this.reload();
+          break;
+        }
+        if (job.status === 'failed' || job.status === 'cancelled') {
+          this.generationFailure.set(job.error_detail ?? '');
+          break;
+        }
+        this.generation.set({ status: job.status, stage: job.stage, position: job.queue_position });
+      }
+    } catch (failure) {
+      if (ticket === this.latestGeneration) {
+        this.error.set(toApiError(failure));
+      }
+    }
+    if (ticket === this.latestGeneration) {
+      this.generation.set(null);
+    }
+  }
+
+  private stopFollowing(): void {
+    this.latestGeneration += 1;
+    if (this.pollTimer !== null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
   protected choose(event: Event): void {
@@ -146,6 +247,9 @@ export class AvatarTools {
 
   private async load(id: string): Promise<void> {
     const ticket = ++this.latestLoad;
+    this.stopFollowing();
+    this.generation.set(null);
+    this.generationFailure.set(null);
     this.avatars.set([]);
     this.cropping.set(null);
     try {

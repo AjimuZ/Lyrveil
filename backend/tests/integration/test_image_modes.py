@@ -3,6 +3,7 @@ a text reply and an `image_request` job, the explicit request and character mode
 proposals stay off by default and need a valid decision and an acceptance (docs/image-generation.md, Modes).
 """
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import Connection, Engine, text
 
-from integration.test_image_job import REQUEST, Harness, conversation_of, files, scalar
+from integration.test_image_job import REQUEST, FakeComfy, Harness, conversation_of, files, scalar
 from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.image_proposals import ImageProposalResult
 from lyrveil.domain.messages import Author, MessageStatus
@@ -22,6 +23,7 @@ from lyrveil.media.store import MediaStore
 from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import settings as settings_repository
 from lyrveil.persistence.migrations import upgrade_to_head
+from lyrveil.ports.image_runtime import ImageEvent, ImageOutput, ImageProgress, ImageRequest, RenderFinished
 from lyrveil.services.assets import CharacterAssetService
 from lyrveil.services.image_proposals import ImageProposalService
 from lyrveil.services.messages import MessageService
@@ -250,6 +252,47 @@ async def test_persisting_a_character_image_twice_adds_one_asset(harness: Harnes
     assert scalar(harness.engine, "SELECT count(*) FROM character_assets WHERE source = 'generated'") == 1
     assert harness.job(job.id).status.value == "completed"
     assert scalar(harness.engine, "SELECT count(*) FROM generated_images") == 1
+
+
+async def two_pass_render(self: FakeComfy, request: ImageRequest) -> AsyncIterator[ImageEvent]:
+    """A render of the **Alta** preset: the first pass samples, the second refines."""
+    self.workflows.append(request.workflow)
+    yield ImageProgress("loading")
+    yield ImageProgress("sampling", 14, 28)
+    yield ImageProgress("refining", 5, 20)
+    yield RenderFinished("success", (ImageOutput("lyrveil_00001_.png", "", "output"),))
+
+
+@pytest.mark.anyio
+async def test_avatar_generation_runs_the_shared_image_job_and_reports_both_passes(
+    harness: Harness, chat: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-CHR-12: the avatar is drawn by the same three stages as a chat image, publishes the same progress for the
+    first and the second pass, and the new image becomes the primary avatar of a character that has none."""
+    monkeypatch.setattr(FakeComfy, "render", two_pass_render)
+    character_id = character_of(harness.engine, chat)
+    job = harness.images.request_asset(character_id, "avatar")
+
+    done = await harness.run_all()
+
+    assert (done.id, done.kind.value, done.stage, done.status.value) == (
+        job.id,
+        "image_request",
+        "persist",
+        "completed",
+    )
+    progress = [data for kind, data in harness.events.sent if kind == "image.progress"]
+    assert [(data["phase"], data["value"], data["max"]) for data in progress] == [
+        ("prompt", None, None),
+        ("loading", None, None),
+        ("sampling", 14, 28),
+        ("refining", 5, 20),
+        ("saving", None, None),
+    ]
+    assert {data["job_id"] for data in progress} == {job.id}
+    assert {data["message_id"] for data in progress} == {None}
+    avatars = CharacterAssetService(harness.engine, harness.media).list_assets(character_id, "avatar")
+    assert [(asset.source, asset.is_primary) for asset in avatars] == [("generated", True)]
 
 
 # The routes.

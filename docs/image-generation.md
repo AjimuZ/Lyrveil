@@ -58,8 +58,8 @@ the same job and pipeline, with `purpose` set accordingly. The result is linked 
 
 ### Delivered in P05.5a
 
-Backend only. The image button, the proposal card and the settings screen are part of the conversation screen (P05.5b),
-and the gallery of P05.6. Nothing draws until the orchestrator switches modes for images (P05.7), because `main()` still
+Backend only; the image button and the avatar button followed in [P05.5b](#delivered-in-p055b). The proposal card and
+the settings screen are still to come, and the gallery is P05.6. Nothing draws until the orchestrator switches modes for images (P05.7), because `main()` still
 starts the worker without an image runtime: the jobs wait in the queue.
 
 - **Detector** (`lyrveil.images.request_detector`). The lists are `prompts/it/image_request_verbs.txt` and
@@ -101,6 +101,27 @@ starts the worker without an image runtime: the jobs wait in the queue.
   and the call to `queue_if_due` after a reply: until they exist, a proposal can only be stored through
   `ImageProposalService.propose`. There is no route that lists the pending proposals, and no job that expires them:
   `expire_stale` exists, and `accept` and `reject` expire the proposal they find too old.
+
+### Delivered in P05.5b
+
+The screens for manual and character mode ([Conversation](frontend.md#2-conversation) and
+[Character Profile](frontend.md#4-character-profile)). No backend route changed.
+
+- **Image form.** The composer's image button calls `POST /conversations/{id}/images` with the form's values. The limits
+  are checked in the browser and again by the server: request up to 1000 characters, seed 0 to 4294967295, steps 10 to
+  50, CFG 1 to 12. Outfit `null` lets the scene choose.
+- **Progress.** The bubble of the placeholder follows `image.progress` by `message_id`: `prompt`, `loading`, `sampling`
+  (the first pass), `refining` (the second pass, **Alta** only) and `saving`, with `value` of `max` steps while a pass
+  counts. `message.completed` replaces the placeholder with the message that carries `image_id`.
+- **Avatar.** The avatar tools call `POST /characters/{id}/assets/generate` with `purpose: avatar` and follow the job by
+  reading `GET /jobs/{id}`; `image.progress` has `message_id: null` for it and the screen does not use it.
+- **Verified.** `test_avatar_generation_runs_the_shared_image_job_and_reports_both_passes` runs the avatar through the
+  scheduler with the fake text model and the fake ComfyUI, and checks the five progress phases and the primary avatar.
+  The screens are covered by unit specs and by `tests/e2e/specs/image-request.spec.mjs`, both written and not run. In
+  the end-to-end project nothing draws, because the backend has no image runtime before P05.7, so the spec delivers the
+  progress frames and the job reads itself; it does not show a real image.
+- **Not delivered.** Cancelling a draw (no cancel route yet), the lightbox and regeneration of an image, the proposal
+  card and the settings screen of the modes.
 
 ## Job stages
 

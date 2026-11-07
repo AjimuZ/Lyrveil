@@ -30,6 +30,14 @@
   }
 }
 
+.generate {
+  margin: var(--ob-space-3) 0;
+
+  .button {
+    margin-bottom: var(--ob-space-2);
+  }
+}
+
 .label {
   display: block;
   margin: var(--ob-space-2) 0 var(--ob-space-1);

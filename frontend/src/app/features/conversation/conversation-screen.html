@@ -6,6 +6,8 @@
     <p class="status" role="status">
       @if (store.typing()) {
         {{ 'conv.status.typing' | t }}
+      } @else if (store.drawing()) {
+        {{ 'conv.status.drawing' | t }}
       } @else if (store.queued()) {
         {{ 'conv.status.queued' | t }}
       }
@@ -68,7 +70,26 @@
                   <button type="button" class="button" (click)="cancelEdit()">{{ 'conv.edit.cancel' | t }}</button>
                 </div>
               } @else {
-                @if (row.waiting) {
+                @if (row.image; as image) {
+                  <a class="picture" [href]="image.originalUrl" target="_blank" rel="noopener" [attr.aria-label]="'conv.image.open' | t">
+                    <img class="image" [src]="image.thumbnailUrl" [alt]="imageAlt()" />
+                  </a>
+                }
+                @if (row.drawing) {
+                  <div class="drawing" role="status" [attr.aria-label]="'conv.image.progress' | t">
+                    @if (row.progress; as progress) {
+                      <p class="hint" data-testid="image-phase">{{ phaseText(progress) }}</p>
+                      @if (row.percent !== null) {
+                        <progress class="bar" max="100" [value]="row.percent" [attr.aria-label]="phaseText(progress)"></progress>
+                        <p class="hint" data-testid="image-step">{{ stepText(progress) }}</p>
+                      }
+                    } @else if (row.message.status === 'queued') {
+                      <p class="hint">{{ 'conv.image.queued' | t }}</p>
+                    } @else {
+                      <p class="hint">{{ 'conv.image.working' | t }}</p>
+                    }
+                  </div>
+                } @else if (row.waiting) {
                   @if (row.message.status === 'queued') {
                     <p class="hint">{{ 'conv.queued' | t }}</p>
                   } @else {
@@ -76,11 +97,11 @@
                       <span></span><span></span><span></span>
                     </span>
                   }
-                } @else {
+                } @else if (row.text !== '' || row.image === null) {
                   <p class="text">{{ row.text }}</p>
                 }
                 @if (row.message.status === 'failed') {
-                  <p class="hint warn">{{ 'conv.failed' | t }}</p>
+                  <p class="hint warn">{{ (row.message.kind === 'image' ? 'conv.image.failed' : 'conv.failed') | t }}</p>
                 } @else if (row.message.status === 'interrupted') {
                   <p class="hint warn">{{ 'conv.interrupted' | t }}</p>
                 }
@@ -187,7 +208,10 @@
           {{ counter() }}
         }
       </p>
+      <button type="button" class="button" (click)="openImageForm()">{{ 'conv.image.button' | t }}</button>
       <button type="submit" class="button primary" [disabled]="!canSend()">{{ 'conv.composer.send' | t }}</button>
     </div>
   </form>
 }
+
+<lyr-image-dialog />
