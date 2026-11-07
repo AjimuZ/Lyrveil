@@ -3,9 +3,10 @@
 It moves the runtimes toward the desired mode through the ProcessSupervisor, one transition of state_machine.py at a
 time, and applies the lease rules of docs/gpu-orchestration.md (Leases and the global lock). Delivered in P02.2: the
 text-mode path (start from the default mode `llm`, readiness, stop with release verification, drain), the leases,
-and a reduced recovery. Not delivered yet (P06): the VRAM check before a load with `blocked_reason`, the timed retry
-out of ERROR, launch-level fallbacks and the image flow of the 18 steps. A request for mode `image` takes the same
-generic load and stop path, untested until then.
+and a reduced recovery. Delivered in P05.7: the switch to mode `image` and back takes the same load and stop path,
+tested with the exclusivity rules, and recovery verifies the release before IDLE. Not delivered yet (P06): the VRAM
+check before a load with `blocked_reason`, the timed retry out of ERROR, launch-level fallbacks and the rest of the
+image flow of the 18 steps.
 
 Everything runs on one asyncio event loop. The lease and mode methods never await, so each sees and changes the state
 in one piece. `step` awaits container work, and before each await it enters a LOADING or UNLOADING state, in which no
@@ -431,7 +432,9 @@ class ModelLifecycleManager:
         """The reduced recovery table: keep one healthy runtime, stop anything else, and end in a stable state.
 
         Both running stops the image runtime with EXCLUSIVITY_VIOLATION. A missing container or an unreachable Docker
-        ends in ERROR, and so does a state with nothing running after MAX_LOAD_FAILURES failed loads in a row.
+        ends in ERROR, and so does a state with nothing running after MAX_LOAD_FAILURES failed loads in a row. IDLE
+        is entered only once the release is verified: by the stops made here, or else by the memory settling; memory
+        that does not settle ends in ERROR with GPU_RELEASE_UNVERIFIED, which only `recover` leaves until P06.
         """
         try:
             statuses = {runtime: await self._supervisor.inspect(runtime) for runtime in Runtime}
@@ -456,10 +459,20 @@ class ModelLifecycleManager:
             runtime = kept.pop()
             self._next_health_check = self._clock() + self._health_interval_s
             self._move(_READY[runtime], f"{runtime} healthy")
-        elif self._load_failures >= MAX_LOAD_FAILURES:
+            return
+        if self._load_failures >= MAX_LOAD_FAILURES:
             self._move(GpuState.ERROR, "not recoverable", code=self._last_error)
-        else:
-            self._move(GpuState.IDLE, "nothing running")
+            return
+        if not to_stop:
+            # Exclusivity rule 2: IDLE only after a verified release. Each stop above verified its own; with nothing
+            # stopped here, a runtime may have exited on its own or a stop may have timed out while the card still
+            # held its memory, so the memory must settle before IDLE allows the next load.
+            try:
+                await self._supervisor.verify_settled()
+            except SupervisorError as error:
+                self._move(GpuState.ERROR, "not recoverable", code=error.code)
+                return
+        self._move(GpuState.IDLE, "nothing running")
 
     def _move(
         self,

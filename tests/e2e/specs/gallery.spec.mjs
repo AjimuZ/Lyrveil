@@ -1,7 +1,8 @@
 // The gallery (P05.6): a character's images listed in pages as thumbnails, opened in the lightbox and deleted.
 //
-// The Compose test project draws no images (the backend starts no image runtime until P05.7), so the gallery has no
-// real rows to show. The browser plays the image routes with Playwright's routing, over a stateful fake that follows the
+// Since P05.7 the Compose test project can draw images with the fake ComfyUI, but how many exist depends on the specs
+// that ran before and on the mode switch's timing, so the paging could not be checked against exact counts. The browser
+// plays the image routes with Playwright's routing instead, over a stateful fake that follows the
 // contract of `GET /images` (newest first, an opaque cursor), `DELETE /images/{id}` and `/media/images/{id}/...`; the
 // backend half, with real rows, files and the cursor, is `test_the_gallery_pages_filters_serves_thumbnails_and_deletes`
 // in `backend/tests/integration/test_image_modes.py`. No ComfyUI is involved at any point: the media routes serve a

@@ -1,12 +1,14 @@
 // Image requests on the conversation screen and avatar generation in the Compose test project (P05.5b).
 //   a manual request with the progress of both passes, the advanced dialog's limits, and a generated avatar.
 //
-// The backend starts no image runtime until the orchestrator switches modes for images (P05.7), so an `image_request`
-// job waits in the queue and nothing is drawn in this project. The real backend still takes the request (the route,
-// its checks, the placeholder message and the job); the drawing is played by the browser's side of the connection:
-// Playwright's WebSocket routing delivers the `image.progress` and `message.completed` frames a worker would publish,
-// and a route answers the job and asset reads that a finished generation would change. The backend half of the same
-// flow, with the fake text model and the fake ComfyUI, is `backend/tests/integration/test_image_modes.py` (T-CHR-12).
+// Since P05.7 the backend's worker runs an `image_request` in this project too, through the fake orchestrator's mode
+// switch and the fake ComfyUI, so its timing depends on the mode switch. To keep each step checkable, the drawing is
+// played by the browser's side of the connection: the real backend takes the request (the route, its checks, the
+// placeholder message and the job), Playwright's WebSocket routing drops the real worker's image frames and delivers
+// scripted `image.progress` and `message.completed` frames instead, and a route answers the job and asset reads that a
+// finished generation would change. The backend half of the same flow, with the fake text model and the fake ComfyUI,
+// is `backend/tests/integration/test_image_modes.py` (T-CHR-12), and the mode switch itself is
+// `backend/tests/integration/test_image_mode_switch.py`.
 import { expect, test } from '@playwright/test';
 
 import { openChat, startChatWithNewCharacter, uniqueName } from '../support/chats.mjs';
@@ -15,6 +17,27 @@ import { openChat, startChatWithNewCharacter, uniqueName } from '../support/chat
 // newer than the last delivered) keeps accepting them in order.
 let injectedId = 1_000_000_000;
 
+/**
+ * Tells whether a frame from the real backend reports image work: an `image.*` event, a message that ends as an image
+ * or a mixed message, or a failed message (no text reply of these tests fails). The scripted frames replace them.
+ */
+function isRealImageFrame(message) {
+  if (typeof message !== 'string') {
+    return false;
+  }
+  let frame;
+  try {
+    frame = JSON.parse(message);
+  } catch {
+    return false;
+  }
+  const type = String(frame?.type ?? '');
+  if (type.startsWith('image.') || type === 'message.failed') {
+    return true;
+  }
+  return type === 'message.completed' && frame?.data?.message?.kind !== 'text';
+}
+
 /** Stands between the page and /ws, and returns a function that delivers one event frame to the page. */
 async function routeSocket(page) {
   let toPage = null;
@@ -22,7 +45,11 @@ async function routeSocket(page) {
     toPage = socket;
     const server = socket.connectToServer();
     socket.onMessage((message) => server.send(message));
-    server.onMessage((message) => socket.send(message));
+    server.onMessage((message) => {
+      if (!isRealImageFrame(message)) {
+        socket.send(message);
+      }
+    });
   });
   return async (type, data) => {
     await expect.poll(() => toPage !== null).toBe(true);
@@ -176,7 +203,8 @@ test('a generated avatar is followed through its job and shown as the primary on
     }
   });
 
-  // What the job's reads answer once nothing draws: the job runs its stages, then ends, and the avatar list changes.
+  // The job's reads are scripted, so each status shows regardless of how long the real job's mode switch takes: the
+  // job runs its stages, then ends, and the avatar list changes.
   const generated = {
     id: '5d0c2a38-77a1-4a69-8f2e-3f0a6b7d9e11',
     character_id: characterId,

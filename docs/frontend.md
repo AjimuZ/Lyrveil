@@ -357,7 +357,8 @@ Not delivered: the conversation and date filters (the route takes `conversation_
 virtual scrolling (paging plus lazy thumbnails instead), the advanced regenerate dialog with editable prompts, and
 save-as-avatar (an avatar is chosen from the profile's avatar tools).
 - **Tests:** `gallery-store.spec.ts` (unit) and `tests/e2e/specs/gallery.spec.mjs`. The end-to-end spec drives the
-  real screen over a Playwright fake of the image routes, because the Compose test project draws nothing before P05.7; the
+  real screen over a Playwright fake of the image routes, because the number of images the Compose test project draws
+  since P05.7 depends on the earlier specs and the mode switch's timing; the
   real routes, rows and files are covered by `test_the_gallery_pages_filters_serves_thumbnails_and_deletes`. The specs
   were written but not run in this change.
 

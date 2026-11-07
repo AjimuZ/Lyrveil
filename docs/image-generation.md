@@ -59,8 +59,9 @@ the same job and pipeline, with `purpose` set accordingly. The result is linked 
 ### Delivered in P05.5a
 
 Backend only; the image button and the avatar button followed in [P05.5b](#delivered-in-p055b). The proposal card and
-the settings screen are still to come, and the gallery is P05.6. Nothing draws until the orchestrator switches modes for images (P05.7), because `main()` still
-starts the worker without an image runtime: the jobs wait in the queue.
+the settings screen are still to come, and the gallery is P05.6. Until P05.7, `main()` started the worker without an
+image runtime, so the jobs waited in the queue; since P05.7 they run through the orchestrator's mode switch
+([Delivered in P05.7](#delivered-in-p057)).
 
 - **Detector** (`lyrveil.images.request_detector`). The lists are `prompts/it/image_request_verbs.txt` and
   `image_request_nouns.txt`; the nouns also hold the plurals (`foto`, `fotografie`, `immagini`, `disegni`, `ritratti`,
@@ -117,11 +118,39 @@ The screens for manual and character mode ([Conversation](frontend.md#2-conversa
   reading `GET /jobs/{id}`; `image.progress` has `message_id: null` for it and the screen does not use it.
 - **Verified.** `test_avatar_generation_runs_the_shared_image_job_and_reports_both_passes` runs the avatar through the
   scheduler with the fake text model and the fake ComfyUI, and checks the five progress phases and the primary avatar.
-  The screens are covered by unit specs and by `tests/e2e/specs/image-request.spec.mjs`, both written and not run. In
-  the end-to-end project nothing draws, because the backend has no image runtime before P05.7, so the spec delivers the
-  progress frames and the job reads itself; it does not show a real image.
+  The screens are covered by unit specs and by `tests/e2e/specs/image-request.spec.mjs`, both written and not run. The
+  spec delivers the progress frames and the job reads itself, and does not show a real image. Since P05.7 the
+  end-to-end project's worker does draw with the fake ComfyUI, so the spec drops the real worker's image frames to keep
+  each step checkable.
 - **Not delivered.** Cancelling a draw (no cancel route yet), the lightbox and regeneration of an image, the proposal
   card and the settings screen of the modes.
+
+### Delivered in P05.7
+
+Image jobs run through the orchestrator's normal mode switch ([GPU orchestration](gpu-orchestration.md#the-18-steps-of-an-image-request)).
+
+- **Wiring.** `main()` gives the worker `ComfyUiRuntime` and the `OrchestratorClient` as its mode switch
+  (`Worker.mode_switch`), so the `image_request` handler is registered.
+- **Mode requests** (`JobScheduler` with a `ModeSwitch`). Each pass reads `GET /v1/state` and, when the desired mode
+  differs from the one the queue needs, calls `PUT /v1/desired-mode`, with the job id of the job that decides it.
+  `mode_deciding_job` uses a reduced selection rule. A queued foreground job that needs `llm` comes first; an
+  `image_request` in stage `prompt` is one. Then a job in stage `render`, which needs `image`. Then any other job that
+  needs `llm`. With nothing queued for the GPU, the mode is `llm`. Stages that need a mode run only when the GPU is
+  ready in that mode and the desired mode is the same. `persist` needs no GPU, so it runs at once, while the mode
+  returns to `llm`. A failed state read or mode request lets only GPU-free stages run until the next pass. With `llm`
+  already asked for and nothing queued for the GPU, the scheduler stops reading the state.
+- **Exclusivity.** The orchestrator applies the change once the current lease ends. It stops the running runtime,
+  verifies the release, and only then starts the other. Since P05.7, recovery also waits for the memory to settle
+  before `IDLE` when it stopped nothing itself; memory that does not settle ends in `ERROR` with
+  `GPU_RELEASE_UNVERIFIED`.
+- **Verified.** `orchestrator/tests/integration/test_image_lifecycle.py` uses the fake gate and the fake NVML. Over the
+  control API, it switches from `llm` to `image` and back along the state machine. It also shows that the image runtime
+  does not start while the text runtime runs, or while the card's memory has not settled.
+  `backend/tests/integration/test_image_mode_switch.py` runs a real `image_request` through the scheduler against a
+  scripted orchestrator. It checks the mode requests, foreground text before the image, background work waiting behind
+  the image, and an unreachable orchestrator.
+- **Not delivered (P06.3).** The wait limit `images.max_wait_seconds`, `images.max_in_a_row`, preemption of background
+  work, and the `waiting` phase. The VRAM check before a load and the timed retry out of `ERROR` are P06.
 
 ## Job stages
 
@@ -583,7 +612,8 @@ Delivered in P05.4b ([Backend](backend.md#image-job), [Data model](data-model.md
 - Delivered with P05.6: the gallery routes (`GET /images`, `POST /images/{id}/regenerate`, `DELETE /images/{id}`; see
   [the API](api.md#images)) and the gallery screen. The regenerate route takes `keep_seed` only; the advanced dialog
   with editable prompts (`check_user_prompt`) is still to come.
-- Not delivered: the mode switch through the orchestrator (P05.7), the `waiting` phase,
+- Delivered with P05.7: the mode switch through the orchestrator ([Delivered in P05.7](#delivered-in-p057)).
+- Not delivered: the `waiting` phase,
   the settings that choose the profile and the quality, the retry with **Rapida** after a second out of memory (P06),
   and the browser test of T-IMG-07 and T-IMG-08. The explicit request route arrived with P05.5a
   ([Delivered in P05.5a](#delivered-in-p055a)).

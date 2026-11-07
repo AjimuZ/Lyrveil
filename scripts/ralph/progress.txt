@@ -192,6 +192,8 @@
 - To follow a queued job from a component, poll `GET /jobs/{id}` with a generation ticket and a stored timer handle, and clear both in `onDestroy` and when the input changes, so a stale poll never writes.
 - Page lists by an opaque base64 cursor of (created_at, id) ordered descending, and fetch limit+1 rows to know whether another page exists.
 - Keep the grid on thumbnail URLs only, with loading=lazy and content-visibility: auto on cells; open the original only in the lightbox.
+- To test exclusivity, wrap `FakeContainerGate` so that each start checks that the other container is not running and the card's memory is released, and records any violation. Tie it to the `FakeGpuProbe`, setting `runtime_mib` on start and stop, so release drops can be checked against the footprint measured at load.
+- Calls to the control API block, so the scheduler runs them via `anyio.to_thread.run_sync`. Never call them on the event loop.
 
 ---
 
@@ -1702,4 +1704,39 @@ No injected instructions found in the files I read.
   - Deleting an image soft-deletes it and the assets that share its files (generated_images.deleted_at plus character_assets.deleted_at), then removes the files. A message's image_id (persistence/messages.py) and image_of_message now ignore deleted images.
   - The regenerate route takes keep_seed only. Editable prompts (check_user_prompt on both prompts) and save-as-avatar are not routed yet; the lightbox offers neither.
   - The image routes, including the new ones, are still not in backend/openapi.json; gallery.model.ts is hand-written.
+---
+
+## 2026-11-07T19:54:29Z - P05.7
+- Image jobs now go through the orchestrator's normal mode switch, and the two runtimes can't run at the same time.
+
+Backend:
+- `OrchestratorClient` has two new calls: `read_state()`, which returns a `GpuStatus` with `ready_mode`, and `request_mode()` (`PUT /v1/desired-mode`). The new `ModeRefusedError` is raised while the orchestrator is draining.
+- `JobScheduler` takes a new `mode_switch=` parameter. With it, each pass reads the GPU state and asks for the mode the queue needs, using `mode_deciding_job`. The order is: foreground text work first (an `image_request` in its prompt stage counts as text), then a render, then any other text work. With nothing queued for the GPU, the mode is `llm`.
+- GPU stages run only when the GPU is ready in that mode. `persist` needs no GPU, so it runs right away while the mode goes back to `llm`.
+- `main()` now passes `ComfyUiRuntime` and the client as the mode switch, so the `image_request` handler is registered.
+
+Orchestrator:
+- New `ProcessSupervisor.verify_settled()`.
+- Recovery now waits for the GPU memory to settle before entering `IDLE` when it stopped nothing itself (exclusivity rule 2). Before this, a container that exited on its own, or a stop whose release timed out, could lead to the next runtime starting before the memory was free. Memory that doesn't settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`.
+
+Checks run:
+- `test lint` passed: ruff, mypy, eslint, the strict build and the docs checks.
+- The new `orchestrator/tests/integration/test_image_lifecycle.py` passed (3 tests, using `fake_docker` and `fake_nvml`). It covers `llm` → `image` → `llm` over the control API along the state machine, with no start while the other runtime runs or before memory is released. It also shows that a start is refused while the other runtime runs, and that nothing starts until the memory has settled.
+- The new `backend/tests/integration/test_image_mode_switch.py` passed (3 tests).
+- Existing orchestrator tests passed: `test_leases`, `test_supervisor`, `test_main`, `test_text_lifecycle` and `test_control_api` (233 tests).
+- Existing backend tests passed (76 tests, including the updated `test_orchestrator_client.py`): `test_job_queue`, `test_image_job`, `test_health_and_startup` and `test_image_modes`.
+
+Not run: the e2e level. With the worker now drawing in the Compose test stack, `image-request.spec.mjs` drops the real worker's image frames so its scripted flow stays the same. Two risks remain unverified:
+- The REST read that expects the placeholder to still be `queued`.
+- Chat specs may run slower when earlier specs' image jobs switch modes.
+
+The docker level was not run either.
+- Files changed: orchestrator/src/lyrveil_orchestrator/lifecycle.py, orchestrator/src/lyrveil_orchestrator/supervisor.py, orchestrator/tests/integration/test_image_lifecycle.py, backend/src/lyrveil/orchestration/client.py, backend/src/lyrveil/jobs/scheduler.py, backend/src/lyrveil/main.py, backend/tests/unit/test_orchestrator_client.py, backend/tests/integration/test_image_mode_switch.py, tests/e2e/specs/image-request.spec.mjs, tests/e2e/specs/gallery.spec.mjs, CHANGELOG.md, docs/gpu-orchestration.md, docs/image-generation.md, docs/backend.md, docs/frontend.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <path>` runs pytest only in components that have that path, and fails when none does. Run backend and orchestrator test files in separate calls.
+  - Since P05.7 the Compose e2e stack really draws images: fake orchestrator plus fake ComfyUI, about 1 s per stop at the default settle timings. Specs that need determinism should filter real image frames, as `image-request.spec.mjs` now does (`isRealImageFrame`). The e2e level was not run after this change.
+  - With `mode_switch`, `JobScheduler` ignores `current_mode`. Existing tests that pass `lambda: RequiredMode.LLM` keep the old behavior.
+  - The backend log allowlist has no `mode` field, so the requested mode is logged in `state`.
+  - Recovery now calls `ProcessSupervisor.verify_settled()` before `IDLE` when it stopped nothing itself. Lifecycle tests with a frozen supervisor clock must keep the fake memory stable, or the settle loop never times out.
+  - Still for P06.3: `images.max_wait_seconds`, `images.max_in_a_row`, the `waiting` phase and preemption. For P06: the timed retry out of `ERROR` (including `GPU_RELEASE_UNVERIFIED`) and the VRAM checks.
 ---

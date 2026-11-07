@@ -1,9 +1,10 @@
-"""OrchestratorClient: the backend's lease calls to the control API (docs/api.md, Control API).
+"""OrchestratorClient: the backend's lease and mode calls to the control API (docs/api.md, Control API).
 
 A lease is the global GPU lock. The job scheduler acquires one before it uses a runtime, renews it every 10 s while the
-job runs, and releases it with the job's outcome (docs/gpu-orchestration.md, Leases and the global lock). The client
-is blocking, like probe_control_api: call it from a worker thread, never on the event loop. It ignores proxy settings
-from the environment, so the token only ever travels to the orchestrator.
+job runs, and releases it with the job's outcome (docs/gpu-orchestration.md, Leases and the global lock). It reads the
+GPU state and asks for the mode its queue needs with PUT /v1/desired-mode. The client is blocking, like
+probe_control_api: call it from a worker thread, never on the event loop. It ignores proxy settings from the
+environment, so the token only ever travels to the orchestrator.
 
 Errors never carry the token. They may carry the job id, the lease id and status codes, which hold no user data.
 """
@@ -20,7 +21,15 @@ from pydantic import SecretStr
 from lyrveil.orchestration.health import CONTROL_API_URL
 
 LeaseMode = Literal["llm", "image"]
+DesiredMode = Literal["llm", "image", "none"]
 LeaseOutcome = Literal["ok", "oom", "runtime_error"]
+# The GPU states in which each runtime is ready and serves leases of its mode (docs/gpu-orchestration.md).
+_READY_STATES: dict[str, LeaseMode] = {
+    "LLM_READY": "llm",
+    "GENERATING_TEXT": "llm",
+    "IMAGE_READY": "image",
+    "GENERATING_IMAGE": "image",
+}
 # docs/gpu-orchestration.md: a lease lives 30 s unless a heartbeat renews it, and one is due every 10 s.
 DEFAULT_LEASE_TTL_S = 30
 HEARTBEAT_INTERVAL_S = 10
@@ -40,6 +49,21 @@ class Lease:
     expires_in_s: float
 
 
+@dataclass(frozen=True)
+class GpuStatus:
+    """The part of the state document the scheduler acts on. `state` is the GPU state name, `desired_mode` the mode
+    the orchestrator is moving to, and `draining` whether it refuses new modes."""
+
+    state: str
+    desired_mode: DesiredMode
+    draining: bool
+
+    @property
+    def ready_mode(self) -> LeaseMode | None:
+        """Returns the mode whose runtime is ready, or None while the GPU is loading, unloading, idle or recovering."""
+        return _READY_STATES.get(self.state)
+
+
 class OrchestratorError(Exception):
     """Base of every failure of the client."""
 
@@ -55,6 +79,10 @@ class LeaseRefusedError(OrchestratorError):
     def __init__(self, code: str) -> None:
         super().__init__(f"lease refused: {code}")
         self.code = code
+
+
+class ModeRefusedError(OrchestratorError):
+    """PUT /v1/desired-mode answered 409 CONFLICT: the orchestrator is draining and accepts no new mode."""
 
 
 class LeaseLostError(OrchestratorError):
@@ -74,6 +102,32 @@ class OrchestratorClient:
         self._base_url = base_url.rstrip("/")
         self._timeout_s = timeout_s
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def read_state(self) -> GpuStatus:
+        """Returns the current GPU state, without waiting. Raises OrchestratorUnavailableError for anything but a 200
+        whose state, desired mode and drain flag have the documented types."""
+        status, body = self._send("GET", "/v1/state", None)
+        state, desired, draining = body.get("state"), body.get("desired_mode"), body.get("draining")
+        if (
+            status != 200
+            or not isinstance(state, str)
+            or desired not in ("llm", "image", "none")
+            or not isinstance(draining, bool)
+        ):
+            raise OrchestratorUnavailableError(f"the control API answered {status} to state without a state")
+        return GpuStatus(state=state, desired_mode=desired, draining=draining)
+
+    def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None:
+        """Asks the orchestrator to move to `mode` once no lease is active, on behalf of `job_id` when given. Raises
+        ModeRefusedError for a 409 CONFLICT, while draining, and OrchestratorUnavailableError for anything else that is
+        not a 202."""
+        payload: dict[str, Any] = {"mode": mode} if job_id is None else {"mode": mode, "job_id": job_id}
+        status, body = self._send("PUT", "/v1/desired-mode", payload)
+        if status == 202:
+            return
+        if status == 409 and body.get("code") == "CONFLICT":
+            raise ModeRefusedError(f"mode {mode} refused: the orchestrator is draining")
+        raise OrchestratorUnavailableError(f"the control API answered {status} to desired-mode")
 
     def acquire_lease(self, mode: LeaseMode, job_id: str, ttl_s: int = DEFAULT_LEASE_TTL_S) -> Lease:
         """Returns the granted lease. Raises LeaseRefusedError for a 409 NOT_READY or LEASE_HELD, and

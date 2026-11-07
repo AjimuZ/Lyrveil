@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Images are drawn. The job worker now asks the orchestrator for image mode when an image waits and no reply or other
+  foreground text work is queued. The orchestrator stops the text model, verifies that the GPU memory was released,
+  starts ComfyUI, and returns to the text model once no image is left. The two models never run at the same time: a
+  start is refused while the other runtime runs, and the GPU counts as free only after its memory has settled. Memory
+  that does not settle leaves the orchestrator in an error state that `POST /v1/recover` leaves. Not delivered yet
+  (P06): the VRAM check before a load, the timed retry out of that error state, the image wait limit and the cap on
+  images in a row. Requests made before this change start drawing too, since they are still in the queue.
+
 - The gallery (`/gallery`): a grid of thumbnails in pages, filtered by character and purpose, with a lightbox that shows
   the metadata, links to the source chat, regenerates (with or without the seed) and deletes an image. New routes:
   `GET /images`, `POST /images/{id}/regenerate` and `DELETE /images/{id}`.
@@ -22,8 +30,8 @@ No application exists yet. This section records the design documentation.
   the image is ready; while it is drawn the bubble says which phase runs and counts the steps of the first and the second
   pass, and the header says **Sta disegnando…**. In the character's profile and in the Creator, **Genera un avatar**
   queues an avatar, shows the queue place and the stage, and lists the result with a **Generato** mark: the first avatar
-  becomes the primary one, and with one already chosen the new one waits for **Rendi principale**. Nothing draws yet,
-  because the orchestrator does not switch to image mode until P05.7, so a request stays queued. There is no cancel
+  becomes the primary one, and with one already chosen the new one waits for **Rendi principale**. Requests are drawn
+  through the mode switch described above. There is no cancel
   action, no lightbox and no regenerate for images, and the contextual proposal card is not delivered.
 - Image request modes, backend only. A message sent with `intent: image` becomes an image request, and with the
   default `intent: auto` a short message that asks for a picture in Italian, such as "mandami una foto di te sul
@@ -34,9 +42,8 @@ No application exists yet. This section records the design documentation.
   which joins its pictures when finished. Contextual mode, where the character may propose an image, is off by default
   (`images.contextual_enabled`); a proposal is stored only with a valid decision and becomes an image only after
   `POST /api/v1/image-proposals/{id}/accept`, and `.../reject` closes it. Migration `0014` adds the proposals table.
-  The routes are not in `backend/openapi.json`. Nothing draws yet: the worker has no image runtime until the
-  orchestrator switches to image mode, so requests wait in the queue; the model step that writes proposals, the image
-  button, the proposal card and the settings screen are not delivered either.
+  The routes are not in `backend/openapi.json`. The model step that writes proposals, the proposal card and the
+  settings screen are not delivered.
 - The image runtime image, `lyrveil/image:local`, built from ComfyUI `v0.43.0` at its pinned commit, with PyTorch
   `2.14.1` for CUDA 13.0 and every other package installed only from `docker/image/requirements.lock`, each with its
   SHA-256. It is the `lyrveil-image` service of the `ai` profile in `compose.yaml`: user `10001:10001`, a read-only

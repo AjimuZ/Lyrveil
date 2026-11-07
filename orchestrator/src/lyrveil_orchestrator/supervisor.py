@@ -122,8 +122,9 @@ class LoadFailedError(SupervisorError):
 class ReleaseFailedError(SupervisorError):
     """The container did not end, or the GPU memory could not be seen to settle, within the limits."""
 
-    def __init__(self, runtime: Runtime, detail: str) -> None:
-        super().__init__("GPU_RELEASE_UNVERIFIED", f"release of {runtime} not verified: {detail}")
+    def __init__(self, runtime: Runtime | None, detail: str) -> None:
+        subject = "the GPU" if runtime is None else str(runtime)
+        super().__init__("GPU_RELEASE_UNVERIFIED", f"release of {subject} not verified: {detail}")
 
 
 def _gate_failure(error: ContainerGateError) -> SupervisorError:
@@ -226,6 +227,14 @@ class ProcessSupervisor:
             footprint_mib=self._footprints.get(runtime),
         )
 
+    async def verify_settled(self) -> VramReading:
+        """Returns the settled memory reading once the card's used memory stops moving (docs/gpu-orchestration.md,
+        Verifying GPU release, step 2), for a card on which no runtime was stopped by this call: a runtime that exited
+        on its own may still be giving its memory back. The caller has seen both containers ended. Raises
+        ReleaseFailedError with GPU_RELEASE_UNVERIFIED when NVML fails or the memory keeps moving past the release
+        timeout."""
+        return await self._settled_memory(None)
+
     async def _wait_ready(self, runtime: Runtime) -> None:
         """Polls the container until it is healthy. Raises LoadFailedError as `start` describes."""
         name = CONTAINERS[runtime]
@@ -245,7 +254,7 @@ class ProcessSupervisor:
                 raise LoadFailedError(runtime, "timed out")
             await self._sleep(self._timings.readiness_poll_s)
 
-    async def _settled_memory(self, runtime: Runtime) -> VramReading:
+    async def _settled_memory(self, runtime: Runtime | None) -> VramReading:
         """Samples used memory until it settles and returns the last sample. Raises ReleaseFailedError when NVML
         fails or the memory keeps moving past the release timeout."""
         timings = self._timings

@@ -1,11 +1,12 @@
 """JobScheduler: the single worker that picks an eligible job, holds its lease, runs its handler and stores the outcome.
 
-Selection here is the base rule only: a job runs when its stage needs no GPU or needs the mode the GPU is in, and a
-handler for its kind is registered; anything else waits in the queue. Mode requests, batching, fairness and
-preemption across modes come with P06.3 (docs/gpu-orchestration.md, Selection).
+The base rule: a job runs when its stage needs no GPU or needs the mode the GPU is in, and a handler for its kind is
+registered; anything else waits in the queue. With a ModeSwitch (P05.7), the scheduler also asks the orchestrator for
+the mode its queue needs, by the reduced rule of `mode_deciding_job`. The image wait limit, `images.max_in_a_row`,
+batching, fairness and preemption across modes come with P06.3 (docs/gpu-orchestration.md, Selection).
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -25,16 +26,19 @@ from lyrveil.jobs.handlers import (
     NextStage,
     RunContext,
 )
-from lyrveil.jobs.policy import JobKind, RequiredMode
+from lyrveil.jobs.policy import JobClass, JobKind, RequiredMode, policy_for
 from lyrveil.jobs.queue import Job, JobQueue
 from lyrveil.logs import get_logger
 from lyrveil.orchestration.client import (
     HEARTBEAT_INTERVAL_S,
+    DesiredMode,
+    GpuStatus,
     Lease,
     LeaseLostError,
     LeaseMode,
     LeaseOutcome,
     LeaseRefusedError,
+    ModeRefusedError,
     OrchestratorUnavailableError,
 )
 from lyrveil.persistence.database import WRITE
@@ -57,6 +61,33 @@ class LeaseProvider(Protocol):
     def acquire_lease(self, mode: LeaseMode, job_id: str) -> Lease: ...
     def renew_lease(self, lease: Lease) -> Lease: ...
     def release_lease(self, lease: Lease, outcome: LeaseOutcome = "ok") -> bool: ...
+
+
+class ModeSwitch(Protocol):
+    """The mode calls of OrchestratorClient. They block, so the scheduler runs them in a worker thread."""
+
+    def read_state(self) -> GpuStatus: ...
+    def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None: ...
+
+
+_MODES: dict[LeaseMode, RequiredMode] = {"llm": RequiredMode.LLM, "image": RequiredMode.IMAGE}
+
+
+def mode_deciding_job(connection: Connection, queue: JobQueue, kinds: Collection[JobKind]) -> Job | None:
+    """Returns the queued job whose stage decides the GPU mode, among the eligible jobs of `kinds`, or None when no
+    eligible job needs the GPU, which means the mode `llm` (docs/gpu-orchestration.md: with an empty queue, the desired
+    mode is always `llm`).
+
+    The reduced selection rule: a foreground job that needs `llm` comes first, then a job that needs `image`, then any
+    other job that needs `llm`. So soft and background work never takes the GPU away from a waiting image, and an image
+    never waits behind anything but foreground text work. An `image_request` in stage `prompt` is foreground text work.
+    """
+    foreground = [kind for kind in kinds if policy_for(kind).job_class is JobClass.FOREGROUND]
+    for modes, among in (({RequiredMode.LLM}, foreground), ({RequiredMode.IMAGE}, kinds), ({RequiredMode.LLM}, kinds)):
+        job = queue.next_eligible(connection, modes, among)
+        if job is not None:
+            return job
+    return None
 
 
 @dataclass
@@ -115,6 +146,12 @@ class JobScheduler:
     `handlers` gives the handler of each kind the backend can run; jobs of other kinds wait. `current_mode` returns the
     GPU mode whose runtime is ready, RequiredMode.NONE when none is. A stage that needs a mode runs under a lease of
     that mode, renewed every `heartbeat_interval_s`; losing it cancels the handler and retries the job with LEASE_LOST.
+
+    With `mode_switch`, `current_mode` is not used: each pass reads the GPU state from the orchestrator and, when the
+    desired mode differs from the one the queue needs (`mode_deciding_job`), asks for it with PUT /v1/desired-mode.
+    While the GPU is not ready in that mode, only stages that need no GPU run. The orchestrator applies the change
+    once the current lease ends, and verifies the release before it starts the other runtime, so the two never run
+    together. When nothing queued needs the GPU, the state is read only until `llm` has been asked for once.
     """
 
     def __init__(
@@ -125,6 +162,7 @@ class JobScheduler:
         leases: LeaseProvider,
         current_mode: Callable[[], RequiredMode],
         *,
+        mode_switch: ModeSwitch | None = None,
         heartbeat_interval_s: float = HEARTBEAT_INTERVAL_S,
         idle_poll_s: float = IDLE_POLL_S,
     ) -> None:
@@ -133,6 +171,9 @@ class JobScheduler:
         self._handlers = dict(handlers)
         self._leases = leases
         self._current_mode = current_mode
+        self._mode_switch = mode_switch
+        # The mode last seen as desired, or asked for, on the orchestrator; None until the first read.
+        self._desired: DesiredMode | None = None
         self._heartbeat_interval_s = heartbeat_interval_s
         self._idle_poll_s = idle_poll_s
         self._wake = anyio.Event()
@@ -158,12 +199,15 @@ class JobScheduler:
     async def run_once(self) -> Job | None:
         """Runs the best eligible job once and returns it in its new state.
 
-        Returns None, and changes nothing, when no job is eligible, or when the orchestrator refuses the lease or does
-        not answer: the job stays queued and is tried again later.
+        Returns None, and changes nothing in the queue, when no job is eligible, or when the orchestrator refuses the
+        lease or does not answer: the job stays queued and is tried again later. With a mode switch, a pass that only
+        asks for a mode change also returns None.
         """
-        mode = self._current_mode()
-        modes = {RequiredMode.NONE, mode}
         kinds = tuple(self._handlers)
+        if self._mode_switch is None:
+            modes = {RequiredMode.NONE, self._current_mode()}
+        else:
+            modes = await self._follow_queue(self._mode_switch, kinds)
         candidate = await to_thread.run_sync(
             read, self._engine, lambda connection: self._queue.next_eligible(connection, modes, kinds)
         )
@@ -195,6 +239,35 @@ class JobScheduler:
             await self._release(lease, _lease_outcome(finished.error_code))
         logger.info("job_run_ended", **_log_fields(finished))
         return finished
+
+    async def _follow_queue(self, switch: ModeSwitch, kinds: Collection[JobKind]) -> set[RequiredMode]:
+        """Asks for the mode the queue needs when the orchestrator is not already moving to it, and returns the modes
+        whose stages may run now: that mode once its runtime is ready, and always RequiredMode.NONE.
+
+        A state read or a mode request that fails is logged and leaves only RequiredMode.NONE, so the GPU jobs wait
+        for the next pass.
+        """
+        deciding = await to_thread.run_sync(
+            read, self._engine, lambda connection: mode_deciding_job(connection, self._queue, kinds)
+        )
+        needed: LeaseMode = "image" if deciding is not None and deciding.required_mode is RequiredMode.IMAGE else "llm"
+        if deciding is None and self._desired == "llm":
+            return {RequiredMode.NONE}
+        try:
+            status = await to_thread.run_sync(switch.read_state)
+            self._desired = status.desired_mode
+            if status.desired_mode != needed and not status.draining:
+                job_id = None if deciding is None else deciding.id
+                await to_thread.run_sync(switch.request_mode, needed, job_id)
+                self._desired = needed
+                # `state` carries the requested mode, since the log allowlist has no mode field.
+                logger.info("gpu_mode_requested", state=needed, **({} if job_id is None else {"job_id": job_id}))
+        except (ModeRefusedError, OrchestratorUnavailableError):
+            logger.info("gpu_mode_unavailable")
+            return {RequiredMode.NONE}
+        if status.ready_mode == needed and status.desired_mode == needed:
+            return {RequiredMode.NONE, _MODES[needed]}
+        return {RequiredMode.NONE}
 
     async def _execute(self, job: Job, context: RunContext) -> _Run:
         run = _Run()

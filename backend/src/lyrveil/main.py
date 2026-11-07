@@ -41,7 +41,7 @@ from lyrveil.events.hub import EventHub
 from lyrveil.jobs.handlers import JobHandler
 from lyrveil.jobs.policy import JobKind, RequiredMode
 from lyrveil.jobs.queue import JobQueue
-from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, recover_interrupted_jobs
+from lyrveil.jobs.scheduler import JobScheduler, LeaseProvider, ModeSwitch, recover_interrupted_jobs
 from lyrveil.logs import configure_logging, get_logger
 from lyrveil.media.store import DEFAULT_MEDIA_ROOT, MediaStore
 from lyrveil.memory.summaries import SummarySettings
@@ -57,6 +57,7 @@ from lyrveil.persistence.database import (
 from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.ports.image_runtime import ImageRuntime
 from lyrveil.ports.text_runtime import TextRuntime
+from lyrveil.runtimes.comfyui import ComfyUiRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
@@ -83,8 +84,8 @@ DATA_ROOT = Path("/data")
 
 
 def _llm_mode() -> RequiredMode:
-    # P02 serves text only, and the backend does not follow the GPU state yet (startup step 6 is planned): it
-    # assumes the llm mode, and a refused lease (NOT_READY) keeps a reply queued until the runtime is ready.
+    # Without a mode switch the worker does not follow the GPU state: it assumes the llm mode, and a refused lease
+    # (NOT_READY) keeps a reply queued until the runtime is ready.
     return RequiredMode.LLM
 
 
@@ -92,15 +93,19 @@ def _llm_mode() -> RequiredMode:
 class Worker:
     """What the job worker takes from outside the application: a factory of the text runtime, opened for the
     application's life, the lease calls, the GPU mode whose jobs may run, the reply settings, the memory extraction,
-    summary and prompt budget settings, and optionally a factory of the image runtime with the image settings.
+    summary and prompt budget settings, and optionally a factory of the image runtime with the image settings and the
+    mode calls of the orchestrator.
 
-    Without `image_runtime` the worker has no `image_request` handler and such jobs wait in the queue: `main` leaves
-    it out until the orchestrator switches modes for images (P05.7). Tests pass fakes.
+    Without `image_runtime` the worker has no `image_request` handler and such jobs wait in the queue. With
+    `mode_switch`, the scheduler reads the GPU mode from the orchestrator and asks for the mode its queue needs,
+    instead of calling `current_mode` (JobScheduler). `main` passes ComfyUiRuntime and the OrchestratorClient for
+    both; tests pass fakes.
     """
 
     text_runtime: Callable[[], AbstractAsyncContextManager[TextRuntime]]
     leases: LeaseProvider
     current_mode: Callable[[], RequiredMode] = _llm_mode
+    mode_switch: ModeSwitch | None = None
     image_runtime: Callable[[], AbstractAsyncContextManager[ImageRuntime]] | None = None
     images: ImageSettings = field(default_factory=ImageSettings)
     replies: ReplySettings = field(default_factory=ReplySettings)
@@ -190,7 +195,9 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
                 worker.replies,
                 context=worker.context,
             )
-        scheduler = JobScheduler(engine, JobQueue(), handlers, worker.leases, worker.current_mode)
+        scheduler = JobScheduler(
+            engine, JobQueue(), handlers, worker.leases, worker.current_mode, mode_switch=worker.mode_switch
+        )
         async with anyio.create_task_group() as group:
             group.start_soon(scheduler.run_forever)
             app.state.scheduler = scheduler
@@ -277,7 +284,8 @@ def main() -> int:
     becomes ready on a database it cannot trust. Otherwise empties the media staging folder and serves on port 8000
     with a single worker, which the in-process WebSocket hub and job worker require, until the server stops, and
     returns 0. The job worker streams
-    replies from KoboldCpp under leases of the control API, and DailyBackup writes one backup of /data a day while
+    replies from KoboldCpp and draws images with ComfyUI under leases of the control API, asking it for the GPU mode
+    its queue needs, and DailyBackup writes one backup of /data a day while
     the backend is idle. The access log is off, because request paths and queries can carry user text.
     """
     try:
@@ -310,7 +318,13 @@ def main() -> int:
         media_store.clear_staging()
     except OSError:
         logger.warning("media_staging_cleanup_failed", exc_info=True)
-    worker = Worker(text_runtime=KoboldCppRuntime, leases=OrchestratorClient(settings.control_token))
+    orchestrator = OrchestratorClient(settings.control_token)
+    worker = Worker(
+        text_runtime=KoboldCppRuntime,
+        leases=orchestrator,
+        mode_switch=orchestrator,
+        image_runtime=ComfyUiRuntime,
+    )
     daily_backup = DailyBackup(DATA_ROOT, settings.zone)
     uvicorn.run(
         create_app(settings, engine, worker=worker, media_store=media_store, daily_backup=daily_backup),

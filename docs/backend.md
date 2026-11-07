@@ -304,7 +304,8 @@ it. A failure with no attempt left sets the message and the variant `failed` and
 `services/images.py` holds `ImageService`: `request` saves the user's request, the image placeholder and the job in one
 transaction (a full queue rolls all of it back), `regenerate` adds a `generated` variant and queues the job at the
 `render` stage with the stored prompt (`JobQueue.enqueue(..., stage=)`), `get` and `media_file` read the metadata and
-the files. No setting store or orchestrator mode switch starts a request yet (P05.7).
+the files. No setting store chooses the profile or the quality yet. Since P05.7 the worker runs the jobs, and its
+scheduler asks the orchestrator for the image mode ([Delivered in P05.7](image-generation.md#delivered-in-p057)).
 
 Delivered in P05.5a ([Modes](image-generation.md#delivered-in-p055a)):
 
@@ -455,8 +456,10 @@ lifespan runs the daily backup (P03.7b, `services/daily_backup.py`, [Backup and
 restore](operations.md#backup-and-restore)), which first removes what a backup cut by a stop left in `backups/`. Step 4
 is delivered for the staging folder only (P03.4a, `MediaStore.clear_staging`, run after step 5; a failure is logged as
 `media_staging_cleanup_failed` and does not stop startup); orphan media cleanup, step 6 and the proactive evaluator of
-step 7 are planned. Until step 6 the worker assumes the `llm` mode: a lease the
-orchestrator refuses (`NOT_READY`) keeps a reply queued. In step 5 the replies are recovered before the other jobs,
+step 7 are planned. Step 6 is not delivered as a long poll or an event replay. Since P05.7 the job worker reads
+`GET /v1/state` on each pass, except when nothing queued needs the GPU and it has already seen or asked for `llm`, and
+it asks for the mode its queue needs. A lease the orchestrator refuses
+(`NOT_READY`) keeps a job queued. In step 5 the replies are recovered before the other jobs,
 because they end their own jobs. A failure of either recovery stops startup like a migration failure. `main()` stops with exit status 69 and the log event
 `database_capability_missing` (error code `DB_CAPABILITY_MISSING`) when WAL or FTS5 is missing, and with
 `database_unavailable` when the file cannot be opened or migrated, so the server never starts on a database it cannot trust.
@@ -587,8 +590,10 @@ passed queues its re-evaluation from `ChatInferenceService`, in the transaction 
 Delivered in P02.4: revision `0002` creates `generation_jobs` ([Data model](data-model.md#generation_jobs)), and
 `jobs/` holds the queue ([ADR 0010](decisions/0010-job-queue-and-scheduling-policy.md)). Since P02.5c the application's
 lifespan runs the worker with `ChatInferenceService` for `chat_reply` and `chat_regenerate`, and a send or a
-regeneration wakes it at once (`JobScheduler.notify`); jobs of other kinds wait. Mode requests, batching, fairness,
-preemption across modes and cancellation come with P06.3.
+regeneration wakes it at once (`JobScheduler.notify`); jobs of other kinds wait. Since P05.7, with a `ModeSwitch`
+(`mode_switch=`), the worker asks the orchestrator for the mode its queue needs, by the reduced rule of
+`mode_deciding_job` ([Delivered in P05.7](image-generation.md#delivered-in-p057)). The image wait limit, the cap on
+images in a row, batching, fairness, preemption across modes and cancellation come with P06.3.
 
 | Module | Responsibility |
 | --- | --- |
@@ -798,7 +803,9 @@ event buffer. It applies one transition of `state_machine.py` per step, and the 
 On the backend side, `lyrveil/orchestration/client.py` holds `OrchestratorClient`, which
 uses the standard library and no proxy. `acquire_lease` raises `LeaseRefusedError` with
 `NOT_READY` or `LEASE_HELD`. `renew_lease` raises `LeaseLostError` on `410`.
-`release_lease` returns `False` on `410`, when nothing is left to release. Any other
+`release_lease` returns `False` on `410`, when nothing is left to release. Since P05.7
+`read_state` returns a `GpuStatus` (state, desired mode, drain flag, and the `ready_mode` derived from the state), and
+`request_mode` calls `PUT /v1/desired-mode`, raising `ModeRefusedError` on `409 CONFLICT` while draining. Any other
 failure raises `OrchestratorUnavailableError`. The client blocks, so callers run it in a
 worker thread. `JobScheduler` is its caller, and heartbeats every 10 s ([Job queue](#job-queue)).
 `tests/unit/test_orchestrator_client.py` tests it against a local HTTP server.

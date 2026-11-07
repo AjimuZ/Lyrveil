@@ -1,4 +1,5 @@
-"""Tests OrchestratorClient's lease calls against a local HTTP server that answers like the control API."""
+"""Tests OrchestratorClient's lease, state and mode calls against a local HTTP server that answers like the control
+API."""
 
 import json
 from collections.abc import Iterator
@@ -13,6 +14,7 @@ from lyrveil.orchestration.client import (
     Lease,
     LeaseLostError,
     LeaseRefusedError,
+    ModeRefusedError,
     OrchestratorClient,
     OrchestratorUnavailableError,
 )
@@ -46,6 +48,12 @@ class ControlApi(BaseHTTPRequestHandler):
         self._answer()
 
     def do_DELETE(self) -> None:
+        self._answer()
+
+    def do_GET(self) -> None:
+        self._answer()
+
+    def do_PUT(self) -> None:
         self._answer()
 
     def log_message(self, format: str, *args: object) -> None:
@@ -116,6 +124,51 @@ def test_an_undocumented_answer_is_unavailable_and_never_shows_the_token(
     with pytest.raises(OrchestratorUnavailableError) as failed:
         client.acquire_lease("llm", "job-1")
     assert TOKEN not in str(failed.value)
+
+
+def test_the_state_is_read_and_a_mode_is_requested(client: OrchestratorClient) -> None:
+    ControlApi.answers = [
+        (200, {"state": "IMAGE_READY", "desired_mode": "image", "draining": False, "seq": 9, "lease": None}),
+        (200, {"state": "UNLOADING_LLM", "desired_mode": "image", "draining": False}),
+        (202, {"desired_mode": "llm", "state": "GENERATING_IMAGE"}),
+        (202, {"desired_mode": "image", "state": "LLM_READY"}),
+    ]
+    status = client.read_state()
+    assert (status.state, status.desired_mode, status.draining, status.ready_mode) == (
+        "IMAGE_READY",
+        "image",
+        False,
+        "image",
+    )
+    assert client.read_state().ready_mode is None
+    client.request_mode("llm")
+    client.request_mode("image", "job-1")
+    assert [request[:2] for request in ControlApi.requests] == [
+        ("GET", "/v1/state"),
+        ("GET", "/v1/state"),
+        ("PUT", "/v1/desired-mode"),
+        ("PUT", "/v1/desired-mode"),
+    ]
+    assert [request[3] for request in ControlApi.requests[2:]] == [
+        {"mode": "llm"},
+        {"mode": "image", "job_id": "job-1"},
+    ]
+
+
+def test_a_mode_refused_while_draining_and_a_malformed_state_are_reported(client: OrchestratorClient) -> None:
+    ControlApi.answers = [
+        (409, {"status": 409, "code": "CONFLICT"}),
+        (500, {"code": "INTERNAL"}),
+        (200, {"state": "LLM_READY", "desired_mode": "text", "draining": False}),
+        (200, {"state": "LLM_READY", "desired_mode": "llm"}),
+    ]
+    with pytest.raises(ModeRefusedError):
+        client.request_mode("image", "job-1")
+    with pytest.raises(OrchestratorUnavailableError):
+        client.request_mode("image")
+    for _ in range(2):
+        with pytest.raises(OrchestratorUnavailableError):
+            client.read_state()
 
 
 def test_an_unreachable_orchestrator_is_unavailable(server: HTTPServer) -> None:
