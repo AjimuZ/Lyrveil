@@ -25,7 +25,8 @@ backend/
     services/            CharacterService, ConversationService, MessageService...
     memory/              MemoryManager, extraction, retrieval, consistency, summaries; text.py and stopwords/*.txt
                          (normalization, stop words, Snowball stems, safe FTS queries; P04.1; fingerprints, P04.2a),
-                         window.py (extraction windows and triggers; P04.2a), the rest planned
+                         window.py (extraction windows and triggers; P04.2a), consistency.py (the pure consistency
+                         rules; P04.2b), the rest planned
     consistency/         CharacterStateManager, ReplyNormalizer, reply checks, content guard
     context/             ContextBuilder, token budgets, length bands; minimal.py, the P02 reply context
     prompts/             PromptTemplateService, templates and pattern lists by language, structured schemas
@@ -65,7 +66,7 @@ orchestrator/
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |
 | `MemoryRetrievalService` | `memory` | `FtsMemoryRetriever`, scoring, budget packing. |
-| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. |
+| `MemoryConsistencyService` | `memory` | Dedup, conflict classification, tombstones, invalidation after message changes. Delivered in P04.2b as `services/memory_consistency.py`, over the pure rules of `memory/consistency.py`: dedup, conflicts, the guards and expiry; tombstones are P04.2c and invalidation P04.7. |
 | `SummaryService` | `memory` | Progressive checkpoints and rollups. |
 | `CharacterStateManager` | `consistency` | Per-conversation state, bounded updates, replay from history. |
 | `ReplyNormalizer` | `consistency` | Rules N1 to N5 on the streamed text, the same for every profile ([Reply normalization](consistency-engine.md#reply-normalization)). |
@@ -367,10 +368,14 @@ Delivered in P04.2a: `memory_extraction`, run by `MemoryExtractionService` (`ser
 registered in the lifespan beside the others. `ChatInferenceService` runs the extraction trigger after a reply is
 stored and announced, in its own transaction, and logs a failure of the trigger without failing the reply. The flow,
 the window, the idempotency key and what is applied are in [Memory engine](memory-engine.md#extraction-pipeline).
-Unlike the draft, `STRUCTURED_OUTPUT_INVALID` is retryable here: the job retries after 1 and 5 minutes. The consistency
-rules step of the table above is P04.2b; until then only `new`, `temporary` and `duplicate` items are written. The
-job's `result_json` holds `status` and, for a completed run, the run id, its window and the counts of what was added,
-confirmed, dropped and deferred.
+Unlike the draft, `STRUCTURED_OUTPUT_INVALID` is retryable here: the job retries after 1 and 5 minutes. The job's
+`result_json` holds `status` and, for a completed run, the run id, its window and the counts of what was added,
+confirmed, superseded, made uncertain, dropped and deferred.
+
+Delivered in P04.2b: the consistency rules step. `MemoryConsistencyService` (`services/memory_consistency.py`) applies
+each memory item in the run's commit transaction, with the pure rules of `memory/consistency.py`, and expires temporary
+memories when a run starts. The lifespan passes the event hub to `MemoryExtractionService`, which publishes
+`memory.conflict` after the commit. See [Delivered in P04.2b](memory-engine.md#delivered-in-p042b).
 
 ### Retry policy
 

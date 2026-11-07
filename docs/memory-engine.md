@@ -3,7 +3,8 @@
 Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: partial, phase P04. Delivered in
 P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` indexes, and the text preparation of
 [Stemming](#stemming). Delivered in P04.2a: the extraction pipeline without the consistency rules
-([Delivered in P04.2a](#delivered-in-p042a)). Everything else is planned.
+([Delivered in P04.2a](#delivered-in-p042a)). Delivered in P04.2b: the consistency rules without tombstones
+([Delivered in P04.2b](#delivered-in-p042b)). Everything else is planned.
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -211,12 +212,12 @@ Windows and triggers are `lyrveil/memory/window.py`, the SQL is `lyrveil/persist
   and `_`. Episodes are inserted with their sources and `episode_fts` row, or add their sources to an active episode
   with the same fingerprint; `linked_episode_refs` become `related` links.
 - **Not applied yet.** `update`, `contradiction` and `correction` items, and the guards of
-  [Consistency rules](#consistency-rules), are P04.2b; relationship events and the state update are P04.6. Valid ones
-  are counted as `deferred_items` in the job's result and are not stored, so a window extracted before those tasks
-  does not get them later. An item with an unknown label, a missing target, a source outside the window or blank text
-  is counted in `dropped_items`.
+  [Consistency rules](#consistency-rules), were P04.2b ([Delivered in P04.2b](#delivered-in-p042b)); relationship
+  events and the state update are P04.6. Valid ones were counted as `deferred_items` in the job's result and not
+  stored, so a window extracted before those tasks does not get them later. An item with an unknown label, a missing
+  target, a source outside the window or blank text is counted in `dropped_items`.
 - **Fingerprint.** `lyrveil.memory.text.fingerprint`: the SHA-256 of the distinct stems, sorted. Repeated words count
-  once. A text made only of stop words falls back to its distinct normalized words. Similarity deduplication is
+  once. A text made only of stop words falls back to its distinct normalized words. Similarity deduplication came with
   P04.2b.
 
 `tests/integration/test_memory_extraction.py` holds T-MEM-01 to T-MEM-03, the scheduler half of T-MEM-17 and the
@@ -284,6 +285,66 @@ A later message that states the same fact is new information, so the memory can 
 | June | Prompt | Shows only `[sicuro] Lavora da Verdi & Co.` |
 | June | "Dove lavoravo prima?" | Past intent. Also shows `[passato] Lavorava allo Studio Rossi fino a giugno.` |
 | July | "Non so se resto da Verdi o torno da Rossi." | Reported doubt. Both stay as they are, plus a `temporary` memory that the user is undecided. |
+
+### Delivered in P04.2b
+
+`MemoryConsistencyService` (`services/memory_consistency.py`) applies the rules above to each memory item in the
+commit transaction of its run. The decision is the pure `decide` of `lyrveil/memory/consistency.py`; the service reads
+its inputs and writes the result. The order for one item is: the provenance check, the effective relation,
+deduplication, what the relation and guard 3 ask of each existing memory, then the lock and the inference limit.
+
+- **Provenance check (guard 1).** A `stated` item of kind `user_fact` or `user_preference`, or with a `user.` subject,
+  and no source message by the user becomes `inferred`, so its confidence is capped at 0.6. A `stated`
+  `character_fact` with a source message by the character becomes `fictional`.
+- **Effective relation.** `new` and `temporary` ignore `target_ref`. An `identity_candidate`, and a temporary item aimed
+  at a lasting memory, are stored as new and never change the target. A `duplicate` whose single-valued subject has
+  another value is new. A `correction` without a source message by the user is a contradiction. An `update` whose
+  subject differs from the target's (both given) is new, and one whose newest source is not newer than the target's
+  newest source is a contradiction.
+- **Deduplication.** A memory in use (active or uncertain) of the conversation with the same fingerprint, of any kind,
+  is the duplicate. Otherwise a memory of the same kind and subject (two empty subjects count as the same) whose
+  distinct stems have a Jaccard similarity of at least 0.8, and whose value does not differ, is the duplicate. The
+  candidates are the 16 best FTS matches of the item's first 32 stems. An update or correction never counts its own
+  target, because negations such as `non` are stop words and leave the fingerprint unchanged; when that target stays in
+  use after the guards, the item confirms it instead, since the unique fingerprint index allows only one of them. A
+  duplicate adds its sources and raises the importance, with no new version; a locked one gets the sources only.
+- **Changes.** `update` and `correction`: the target becomes `superseded`, with `valid_to` set to the new memory's
+  `valid_from` and `superseded_by_id`, and keeps its sources; the new memory is `active`. A correction that supersedes
+  is stored `user_confirmed` with confidence 1.0. `contradiction`: the target becomes `uncertain`, and the new memory is
+  stored `uncertain` in the same `conflict_group_id` (an existing group of a member, or a new one).
+- **Deterministic conflict (guard 3).** A lasting item with a value and a single-valued subject is compared with the
+  other active lasting memories of that subject that have a value. One with a different value (compared by
+  fingerprint, so `Verdi & Co` and `verdi e co.` agree) is superseded when a user source message holds a change cue of
+  `backend/src/lyrveil/prompts/it/change_cues.txt`, matched like the significant patterns; otherwise it becomes
+  uncertain with the item. Temporary memories and identity candidates are outside this guard, so "questa settimana è a
+  Roma" sits next to "vive a Milano".
+- **Inference limit (guard 2).** An `inferred` item, unless it is a correction, never supersedes or demotes a `stated`
+  or `user_confirmed` memory: that memory keeps its status and joins the conflict group, and the inference is stored
+  `uncertain`.
+- **Lock (guard 4).** A locked memory is never changed, not even put in a group: the item is stored `uncertain` with
+  `needs_review`.
+- **Identity (guard 5).** `identity_candidate` memories are stored with their sources but never shown in a prompt,
+  never targeted, and never change another memory or the character's card. Code relies on the model's label: a card
+  change the model stores under another kind is not detected yet. "Applica al profilo" is the Memory Studio's, P04.9.
+- **Revisions.** Every change to an existing memory first appends its whole row to `memory_revisions` under its current
+  version, then moves it to the next `version`. `actor` is `extraction` and `run_id` the run; `reason` is `update`,
+  `correction`, `contradiction`, `subject_change`, `subject_conflict` or `inference_conflict`. A duplicate writes no
+  revision.
+- **Expiry.** When a run starts, the conversation's temporary memories in use whose `expires_at` has passed become
+  `expired`, each with a revision by `consistency` with reason `expired`. Lasting memories are never touched.
+- **Prompt.** The extraction prompt is `extraction.v2` ([Extraction template](prompting.md#extraction-template)): it
+  never shows an identity candidate, and shows an uncertain memory as `E2: [incerto] ...`.
+- **Event and result.** After a committed run, `memory.conflict` with `memory_id` and `conversation_id` is published for
+  each new memory stored `uncertain` when the highest importance among it and the memories it conflicts with is at
+  least 3. The job's result adds `memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items`
+  now counts only relationship events.
+- **Not delivered.** Tombstones (P04.2c); `POST /memories/{id}/resolve` and the Memory Studio (P04.9); the labels of the
+  reply prompt, which needs retrieval and the context builder (P04.3, P04.5); invalidation (P04.7). Only Italian has
+  change cues, so in another language a changed single-valued value always becomes a contradiction.
+
+`tests/unit/test_memory_consistency.py` holds T-MEM-04, T-MEM-14 and the other rules of `decide`;
+`tests/integration/test_memory_extraction.py` holds T-MEM-10 to T-MEM-13 and the extraction half of T-CON-05
+([Testing](testing.md#memory)).
 
 ## Retrieval
 

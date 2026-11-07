@@ -4,19 +4,18 @@ episodes with their sources, and the trigger that queues it (docs/memory-engine.
 A run takes the window after the conversation's cursor, looks up the run of that window under the current prompt and
 schema version, and stops there when it is already completed. Otherwise it generates `ExtractionResult` under the
 grammar of its schema with the loaded text model, validates it and repairs it once (lyrveil.prompts.structured). Then
-one transaction writes the memories, their sources and index rows, the episodes, the run and the new cursor. Invalid
-output, a runtime failure or an interruption changes no memory, no message and no cursor; the job retries with the
-backoff of its kind.
+one transaction applies the consistency rules to each memory item (MemoryConsistencyService) and writes the memories,
+their sources, revisions and index rows, the episodes, the run and the new cursor. Invalid output, a runtime failure
+or an interruption changes no memory, no message and no cursor; the job retries with the backoff of its kind.
 
-P04.2a scope: items that need the consistency rules of P04.2b (`update`, `contradiction`, `correction`) and the
-relationship events and state of the Character State Manager (P04.6) are validated and counted, not applied. An item
-with an unknown E/P label or a source outside the window is dropped and counted. No message, prompt, memory or model
-output is ever logged; `raw_output` stays in the run row.
+The relationship events and state of the Character State Manager (P04.6) are validated and counted, not applied. An
+item with an unknown E/P label or a source outside the window is dropped and counted. No message, prompt, memory or
+model output is ever logged; `raw_output` stays in the run row.
 """
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from anyio import to_thread
@@ -33,9 +32,9 @@ from lyrveil.domain.memory_extraction import (
     ExtractedEpisode,
     ExtractedMemory,
     ExtractionResult,
-    stored_confidence,
 )
 from lyrveil.domain.messages import Author
+from lyrveil.events.hub import EventHub
 from lyrveil.jobs.handlers import INTERNAL, JobDone, JobFailedError, JobOutcome, RunContext
 from lyrveil.jobs.policy import JobKind
 from lyrveil.jobs.queue import Job, JobQueue, QueueFullError
@@ -53,7 +52,7 @@ from lyrveil.memory.window import (
 )
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import memory_extraction as repository
-from lyrveil.persistence.memory_index import index_episode, index_memory
+from lyrveil.persistence.memory_index import index_episode
 from lyrveil.ports.text_runtime import TextRuntime, TextRuntimeError
 from lyrveil.prompts import extraction
 from lyrveil.prompts.extraction import ExtractionPrompt, Labeled, PromptMessage
@@ -65,6 +64,7 @@ from lyrveil.prompts.structured import (
     StructuredResult,
     generate_structured,
 )
+from lyrveil.services.memory_consistency import MemoryConsistencyService, RunScope
 
 # Generated once from the schema, so the grammar always follows the model.
 EXTRACTION_GRAMMAR = schema_to_gbnf(ExtractionResult)
@@ -76,12 +76,6 @@ MAX_RECENT_EPISODES = 5
 MAX_QUERY_TERMS = 64
 # Messages read after the cursor to find a window or decide a trigger: the 12 of a window and room for passed-over ones.
 SCAN_LIMIT = 200
-# docs/memory-engine.md (Consistency rules): a temporary memory without `valid_until` lasts 7 days.
-TEMPORARY_DEFAULT = timedelta(days=7)
-# The relations P04.2b applies with MemoryConsistencyService; until then they are counted and not written.
-DEFERRED_RELATIONS = frozenset({"update", "contradiction", "correction"})
-MAX_SUBJECT_KEY_CHARS = 64
-MAX_VALUE_CHARS = 280
 MAX_PARTICIPANTS = 12
 MAX_PARTICIPANT_CHARS = 80
 EPISODE_LINK = "related"
@@ -116,26 +110,6 @@ def validate_result(raw: dict[str, Any]) -> ExtractionResult:
         return ExtractionResult.model_validate(raw)
     except ValidationError as error:
         raise OutputRejectedError(_describe(error)) from None
-
-
-def subject_key(subject: str | None) -> str | None:
-    """Returns the subject as a key such as `user.employer`: lowercase, spaces as `_`, only letters, digits, `.` and
-    `_`, at most MAX_SUBJECT_KEY_CHARS; None when nothing is left."""
-    if subject is None:
-        return None
-    lowered = "_".join(subject.strip().lower().split())
-    key = "".join(char for char in lowered if char.isalnum() or char in "._")[:MAX_SUBJECT_KEY_CHARS].strip("._")
-    return key or None
-
-
-def expiry(valid_until: date | None, now: datetime) -> datetime:
-    """Returns when a temporary memory expires: the end of `valid_until` (UTC), or TEMPORARY_DEFAULT from `now` when
-    the date is missing or already past."""
-    if valid_until is not None:
-        end = datetime.combine(valid_until + timedelta(days=1), time.min, tzinfo=UTC)
-        if end > now:
-            return end
-    return now + TEMPORARY_DEFAULT
 
 
 def queue_extraction_if_due(
@@ -201,16 +175,20 @@ class _Prepared:
 
 @dataclass
 class _Counts:
-    """What a run did with the model's items; stored in the job's result and logged."""
+    """What a run did with the model's items; stored in the job's result and logged. `conflict_ids` are the new
+    uncertain memories that fire `memory.conflict`."""
 
     memories_added: int = 0
     memories_confirmed: int = 0
+    memories_superseded: int = 0
+    memories_uncertain: int = 0
     episodes_added: int = 0
     episodes_confirmed: int = 0
     sources_added: int = 0
     dropped_items: int = 0
     deferred_items: int = 0
     memory_ids: list[str] = field(default_factory=list)
+    conflict_ids: list[str] = field(default_factory=list)
 
 
 class MemoryExtractionService:
@@ -218,8 +196,8 @@ class MemoryExtractionService:
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `template` is the prompt family of
     the loaded text model and `user` names the user in the prompt. `settings` gives the trigger threshold that a
-    finished run checks again for the messages after its window. `clock` returns the aware current time; tests pass a
-    fake one.
+    finished run checks again for the messages after its window. `events`, when given, receives `memory.conflict` for
+    each conflict a committed run stored. `clock` returns the aware current time; tests pass a fake one.
     """
 
     def __init__(
@@ -231,6 +209,7 @@ class MemoryExtractionService:
         user: UserProfile | None = None,
         settings: ExtractionSettings | None = None,
         queue: JobQueue | None = None,
+        events: EventHub | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._engine = engine
@@ -239,6 +218,8 @@ class MemoryExtractionService:
         self._user = user or UserProfile()
         self._settings = settings or ExtractionSettings()
         self._queue = queue or JobQueue(clock=clock)
+        self._events = events
+        self._consistency = MemoryConsistencyService()
         self._clock = clock
 
     async def __call__(self, job: Job, context: RunContext) -> JobOutcome:
@@ -247,7 +228,8 @@ class MemoryExtractionService:
         `status` is `completed` (with `run_id`, `run_attempt`, `from_seq`, `to_seq`, `attempts` and the counts of
         _Counts), `already_extracted` (the window's run was completed before: no generation, the cursor moves past
         it), `nothing_to_extract`, `conversation_deleted`, or `superseded` (the window's messages changed while the
-        model ran: nothing is written and the trigger is checked again). Raises JobFailedError
+        model ran: nothing is written and the trigger is checked again). After a completed run, publishes
+        `memory.conflict` with `memory_id` and `conversation_id` for each id of `conflict_ids`. Raises JobFailedError
         STRUCTURED_OUTPUT_INVALID, retryable, when the output and its repair are both refused; a TextRuntimeError goes
         through for the scheduler to retry. Either way the run is recorded `failed` and nothing else changes. Raises
         INTERNAL for a job without a conversation.
@@ -292,21 +274,31 @@ class MemoryExtractionService:
             conversation_id=prepared.conversation_id,
             state=str(outcome["status"]),
             memory_count=int(outcome.get("memories_added", 0)),
+            superseded_count=int(outcome.get("memories_superseded", 0)),
+            conflict_count=len(outcome.get("conflict_ids", [])),
             dropped_count=int(outcome.get("dropped_items", 0)),
             deferred_count=int(outcome.get("deferred_items", 0)),
             attempt_count=result.attempts,
         )
+        if self._events is not None:
+            for memory_id in outcome.get("conflict_ids", []):
+                self._events.publish(
+                    "memory.conflict", {"memory_id": memory_id, "conversation_id": prepared.conversation_id}
+                )
         return JobDone(outcome)
 
     def _prepare(self, job: Job, conversation_id: str) -> _Prepared | _Skipped:
-        """Selects the window and starts its run in one transaction, or tells why no generation is needed. A window
-        whose run was completed moves the cursor past it here, and the trigger is checked for what follows."""
-        now = to_utc_text(self._clock())
+        """Selects the window and starts its run in one transaction, or tells why no generation is needed. Temporary
+        memories past their expiry become `expired` first, so the prompt never shows them. A window whose run was
+        completed moves the cursor past it here, and the trigger is checked for what follows."""
+        moment = self._clock()
+        now = to_utc_text(moment)
 
         def work(connection: Connection) -> _Prepared | _Skipped:
             conversation = conversation_repository.get(connection, conversation_id)
             if conversation is None or conversation.status is ConversationStatus.DELETED:
                 return _Skipped("conversation_deleted")
+            self._consistency.expire(connection, conversation_id, moment)
             cursor = repository.cursor(connection, conversation_id)
             after = repository.messages_after(connection, conversation_id, cursor, limit=SCAN_LIMIT)
             window = select_window(after, cursor)
@@ -344,7 +336,10 @@ class MemoryExtractionService:
                 user_name=self._user.display_name,
                 character_name=character.full_name,
                 language=language,
-                existing=[Labeled(ref, memory.content) for ref, memory in memory_refs.items()],
+                existing=[
+                    Labeled(ref, memory.content, uncertain=memory.status == "uncertain")
+                    for ref, memory in memory_refs.items()
+                ],
                 episodes=[Labeled(ref, episode.title) for ref, episode in episode_refs.items()],
                 context=_prompt_messages(context, names),
                 window=_prompt_messages(window.messages, names),
@@ -402,7 +397,7 @@ class MemoryExtractionService:
                 )
                 queue_extraction_if_due(connection, self._queue, conversation_id, self._settings, exclude_job_id=job.id)
                 return {"status": "superseded", **base}
-            counts = _apply(connection, prepared, result.value, moment)
+            counts = self._apply(connection, prepared, result.value, moment)
             repository.finish_run(
                 connection, prepared.run_id, "completed", raw_output=result.text, error_code=None, now=now
             )
@@ -414,15 +409,75 @@ class MemoryExtractionService:
                 "attempts": result.attempts,
                 "memories_added": counts.memories_added,
                 "memories_confirmed": counts.memories_confirmed,
+                "memories_superseded": counts.memories_superseded,
+                "memories_uncertain": counts.memories_uncertain,
                 "episodes_added": counts.episodes_added,
                 "episodes_confirmed": counts.episodes_confirmed,
                 "sources_added": counts.sources_added,
                 "dropped_items": counts.dropped_items,
                 "deferred_items": counts.deferred_items,
                 "memory_ids": counts.memory_ids,
+                "conflict_ids": counts.conflict_ids,
             }
 
         return write(self._engine, work)
+
+    def _apply(self, connection: Connection, prepared: _Prepared, result: ExtractionResult, now: datetime) -> _Counts:
+        """Applies the items of `result` that the pipeline stores and counts the rest. Requires the caller's write
+        transaction."""
+        by_seq = {message.seq: message for message in prepared.window.messages}
+        scope = RunScope(
+            run_id=prepared.run_id,
+            character_id=prepared.character_id,
+            conversation_id=prepared.conversation_id,
+            language=prepared.language,
+            now=now,
+        )
+        counts = _Counts()
+        for item in result.memories:
+            self._apply_memory(connection, prepared, scope, item, by_seq, counts)
+        for episode in result.episodes:
+            _apply_episode(connection, prepared, episode, by_seq, now, counts)
+        for event in result.relationship_events:
+            # The Character State Manager (P04.6) applies relationship events; a valid one is only counted until then.
+            if _sources(event.source_seqs, by_seq) is None:
+                counts.dropped_items += 1
+            else:
+                counts.deferred_items += 1
+        return counts
+
+    def _apply_memory(
+        self,
+        connection: Connection,
+        prepared: _Prepared,
+        scope: RunScope,
+        item: ExtractedMemory,
+        by_seq: Mapping[int, WindowMessage],
+        counts: _Counts,
+    ) -> None:
+        """Drops an item with a source outside the window, an unknown label, a missing target or blank text, and
+        hands the others to MemoryConsistencyService, which decides what is stored."""
+        sources = _sources(item.source_seqs, by_seq)
+        target = None if item.target_ref is None else prepared.memory_refs.get(item.target_ref)
+        unknown_target = item.target_ref is not None and target is None
+        missing_target = item.relation in TARGETED_RELATIONS and target is None
+        if sources is None or unknown_target or missing_target or not item.content.strip():
+            counts.dropped_items += 1
+            return
+        applied = self._consistency.apply(connection, scope, item, None if target is None else target.id, sources)
+        if applied is None:
+            counts.dropped_items += 1
+            return
+        counts.sources_added += applied.sources_added
+        counts.memories_superseded += applied.superseded
+        counts.memories_uncertain += applied.uncertain
+        if not applied.added:
+            counts.memories_confirmed += 1
+            return
+        counts.memories_added += 1
+        counts.memory_ids.append(applied.memory_id)
+        if applied.conflict:
+            counts.conflict_ids.append(applied.memory_id)
 
 
 def _prompt_messages(messages: Sequence[WindowMessage], names: Mapping[Author, str]) -> list[PromptMessage]:
@@ -451,98 +506,6 @@ def _sources(seqs: Sequence[int], by_seq: Mapping[int, WindowMessage]) -> list[W
     if any(seq not in by_seq for seq in unique):
         return None
     return [by_seq[seq] for seq in unique]
-
-
-def _apply(connection: Connection, prepared: _Prepared, result: ExtractionResult, now: datetime) -> _Counts:
-    """Writes what P04.2a applies of `result` and counts the rest. Requires the caller's write transaction."""
-    by_seq = {message.seq: message for message in prepared.window.messages}
-    counts = _Counts()
-    for item in result.memories:
-        _apply_memory(connection, prepared, item, by_seq, now, counts)
-    for episode in result.episodes:
-        _apply_episode(connection, prepared, episode, by_seq, now, counts)
-    for event in result.relationship_events:
-        # The Character State Manager (P04.6) applies relationship events; a valid one is only counted until then.
-        if _sources(event.source_seqs, by_seq) is None:
-            counts.dropped_items += 1
-        else:
-            counts.deferred_items += 1
-    return counts
-
-
-def _confirm(
-    connection: Connection,
-    memory: repository.ShownMemory,
-    importance: int,
-    sources: Sequence[WindowMessage],
-    now: str,
-    counts: _Counts,
-) -> None:
-    """A duplicate (docs/memory-engine.md, Consistency rules): the known memory gains the sources and the higher
-    importance, with no new version. A locked memory gains the sources only, because automation never changes it."""
-    counts.sources_added += repository.add_memory_sources(connection, memory.id, sources)
-    if not memory.locked:
-        repository.raise_memory_importance(connection, memory.id, importance, now)
-    counts.memories_confirmed += 1
-
-
-def _apply_memory(
-    connection: Connection,
-    prepared: _Prepared,
-    item: ExtractedMemory,
-    by_seq: Mapping[int, WindowMessage],
-    now: datetime,
-    counts: _Counts,
-) -> None:
-    sources = _sources(item.source_seqs, by_seq)
-    target = None if item.target_ref is None else prepared.memory_refs.get(item.target_ref)
-    content = item.content.strip()
-    unknown_target = item.target_ref is not None and target is None
-    missing_target = item.relation in TARGETED_RELATIONS and target is None
-    if sources is None or unknown_target or missing_target or not content:
-        counts.dropped_items += 1
-        return
-    if item.relation in DEFERRED_RELATIONS:
-        counts.deferred_items += 1
-        return
-    stamp = to_utc_text(now)
-    if item.relation == "duplicate":
-        assert target is not None
-        _confirm(connection, target, item.importance, sources, stamp, counts)
-        return
-    # `new` or `temporary`: a text the conversation already holds, worded alike, is a duplicate of that memory.
-    content_print = fingerprint(content, prepared.language)
-    same = repository.find_memory_by_fingerprint(
-        connection, prepared.character_id, prepared.conversation_id, content_print
-    )
-    if same is not None:
-        _confirm(connection, same, item.importance, sources, stamp, counts)
-        return
-    temporary = item.relation == "temporary" or item.durability == "temporary"
-    value = item.value.strip()[:MAX_VALUE_CHARS] if item.value is not None else ""
-    key = subject_key(item.subject)
-    memory = repository.NewMemory(
-        id=new_id(),
-        character_id=prepared.character_id,
-        conversation_id=prepared.conversation_id,
-        kind=item.kind,
-        content=content,
-        subject_key=key,
-        value_text=value or None,
-        provenance=item.provenance,
-        durability="temporary" if temporary else "lasting",
-        importance=item.importance,
-        confidence=stored_confidence(item.confidence, item.provenance),
-        valid_from=max(source.created_at for source in sources),
-        expires_at=to_utc_text(expiry(item.valid_until, now)) if temporary else None,
-        fingerprint=content_print,
-        language=prepared.language,
-    )
-    repository.insert_memory(connection, memory, stamp)
-    counts.sources_added += repository.add_memory_sources(connection, memory.id, sources)
-    index_memory(connection, memory.id, content, key, prepared.language)
-    counts.memories_added += 1
-    counts.memory_ids.append(memory.id)
 
 
 def _apply_episode(

@@ -350,6 +350,25 @@ hash, trigger, pattern, fingerprint and prompt checks. In this change the backen
 selects no orchestrator test, so that part exits 5), and `scripts\lyrveil.cmd test integration` passed (233 backend,
 200 orchestrator).
 
+Delivered in P04.2b: `backend/tests/unit/test_memory_consistency.py` holds T-MEM-04 (the same fingerprint confirms the
+memory in use; a near duplicate of the same kind and subject, at a Jaccard of at least 0.8 and below 1, is confirmed, while another kind,
+subject or value is not) and T-MEM-14 (an inferred update leaves a stated or confirmed memory as it is and is stored
+uncertain in its group; a stated user fact without a user source becomes inferred and capped at 0.6; what the
+character says about itself becomes fictional), with guard 3, the update and correction checks, locks, temporary
+items and identity candidates. `backend/tests/integration/test_memory_extraction.py` runs consecutive windows of one
+chat through `MemoryExtractionService` for T-MEM-10 (the target becomes `superseded` at version 2 with `valid_to` and
+`superseded_by_id`, one revision with the earlier row, the run id and reason `update`, its sources kept, and the next
+extraction prompt shows only the new fact), T-MEM-11 (both `uncertain` in one group, one revision, one
+`memory.conflict` event, and both shown `[incerto]` in the next prompt), T-MEM-12 (a temporary item aimed at a lasting
+city is stored next to it, expires 7 days later with a `consistency` revision, and the lasting one stays active and
+shown), T-MEM-13 (a user correction supersedes and is stored `user_confirmed` at 1.0) and the extraction half of
+T-CON-05 (identity candidates are stored, never shown, never change their target, the `characters` row or
+`character_versions`). Applying a candidate to the profile is the Memory Studio's (P04.9), so the second half of
+T-CON-05 is not covered yet, and the reply-prompt half of T-MEM-10 and T-MEM-11 waits for retrieval (P04.3, P04.5). In
+this change `scripts/lyrveil.cmd test unit tests/unit/test_memory_consistency.py tests/unit/test_memory_extraction.py
+tests/unit/test_memory_text.py tests/integration/test_memory_extraction.py tests/integration/test_memory_index.py`
+passed (70 tests) and `scripts/lyrveil.cmd test lint` passed; the full levels were not run.
+
 ### Consistency
 
 | ID | Test | Level | Phase |

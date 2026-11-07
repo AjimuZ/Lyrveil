@@ -1,0 +1,212 @@
+"""MemoryConsistencyService: applies the consistency rules (lyrveil.memory.consistency) to the memory items of an
+extraction run, and expires temporary memories (docs/memory-engine.md, Consistency rules).
+
+Every method works in the caller's write transaction and never commits, so a run's changes are written with its run
+row and cursor or not at all. A change to an existing memory always appends its earlier row to `memory_revisions`
+first and keeps its sources; only a duplicate changes a memory without a new version.
+"""
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy import Connection
+
+from lyrveil.domain.identifiers import new_id, to_utc_text
+from lyrveil.domain.memory_extraction import ExtractedMemory, stored_confidence
+from lyrveil.domain.messages import Author
+from lyrveil.memory import consistency
+from lyrveil.memory.consistency import Decision, KnownMemory, Proposal
+from lyrveil.memory.text import fingerprint, match_query
+from lyrveil.memory.window import WindowMessage, is_significant, phrase_patterns
+from lyrveil.persistence import memory_extraction as repository
+from lyrveil.persistence.memory_index import index_memory
+
+_IN_USE = frozenset({"active", "uncertain"})
+# The near duplicates read per item, best FTS match first, and the stems of its text that look them up.
+MAX_SIMILAR_CANDIDATES = 16
+MAX_SIMILAR_TERMS = 32
+# docs/memory-engine.md (Consistency rules): a conflict of this importance or more fires `memory.conflict`.
+CONFLICT_EVENT_IMPORTANCE = 3
+
+
+@dataclass(frozen=True)
+class RunScope:
+    """The run whose items are applied: its conversation, character and language, and the time of its commit."""
+
+    run_id: str
+    character_id: str
+    conversation_id: str
+    language: str
+    now: datetime
+
+
+@dataclass(frozen=True)
+class Applied:
+    """What one item did. `memory_id` is the memory inserted (`added`) or confirmed. `superseded` and `uncertain`
+    count the existing memories it superseded or made uncertain. `conflict` is true when the new memory is stored
+    `uncertain` with a conflict importance of at least CONFLICT_EVENT_IMPORTANCE, which needs the user's review."""
+
+    memory_id: str
+    added: bool
+    sources_added: int
+    superseded: int = 0
+    uncertain: int = 0
+    conflict: bool = False
+
+
+class MemoryConsistencyService:
+    """The deterministic half of extraction: the model proposes items and this service decides what is stored."""
+
+    def apply(
+        self,
+        connection: Connection,
+        scope: RunScope,
+        item: ExtractedMemory,
+        target_id: str | None,
+        sources: Sequence[WindowMessage],
+    ) -> Applied | None:
+        """Applies one valid item and returns what it did, or None when its target is no longer in use (an earlier
+        item of the same run superseded or expired it), which writes nothing.
+
+        Requires: `sources` are the item's window messages, at least one, in seq order; `target_id` is the memory its
+        `target_ref` names, or None; `item.content` is not blank.
+        """
+        target = None
+        if target_id is not None:
+            target = repository.known_memory(connection, target_id)
+            if target is None or target.status not in _IN_USE:
+                return None
+        proposal = _proposal(item, sources, scope.language)
+        same = repository.known_by_fingerprint(
+            connection, scope.character_id, scope.conversation_id, proposal.fingerprint
+        )
+        match = match_query(proposal.content, scope.language, max_terms=MAX_SIMILAR_TERMS)
+        similar = (
+            []
+            if match is None
+            else repository.similar_candidates(
+                connection, scope.conversation_id, proposal.kind, proposal.subject_key, match, MAX_SIMILAR_CANDIDATES
+            )
+        )
+        rivals = (
+            repository.subject_rivals(connection, scope.conversation_id, proposal.subject_key)
+            if proposal.subject_key in consistency.SINGLE_VALUED_SUBJECTS
+            else []
+        )
+        decision = consistency.decide(proposal, target, same, similar, rivals)
+        if decision.confirm is not None:
+            return _confirm(connection, decision.confirm, proposal.importance, sources, to_utc_text(scope.now))
+        return _insert(connection, scope, item, proposal, decision, sources)
+
+    def expire(self, connection: Connection, conversation_id: str, now: datetime) -> list[str]:
+        """Marks `expired` the temporary memories of the conversation past their `expires_at`, each with a revision,
+        and returns their ids. Lasting memories are never touched, so the fact a temporary one sat next to stays."""
+        return repository.expire_memories(connection, conversation_id, consistency.EXPIRED, to_utc_text(now))
+
+
+def _proposal(item: ExtractedMemory, sources: Sequence[WindowMessage], language: str) -> Proposal:
+    content = item.content.strip()
+    key = consistency.subject_key(item.subject)
+    by_user = any(source.author is Author.USER for source in sources)
+    by_character = any(source.author is Author.CHARACTER for source in sources)
+    provenance = consistency.checked_provenance(
+        item.provenance, item.kind, key, by_user=by_user, by_character=by_character
+    )
+    cues = phrase_patterns(language, consistency.CHANGE_CUE_FILE)
+    temporary = item.relation == "temporary" or item.durability == "temporary"
+    return Proposal(
+        relation=item.relation,
+        kind=item.kind,
+        content=content,
+        subject_key=key,
+        value_text=consistency.value_text(item.value),
+        provenance=provenance,
+        durability="temporary" if temporary else "lasting",
+        importance=item.importance,
+        confidence=stored_confidence(item.confidence, provenance),
+        fingerprint=fingerprint(content, language),
+        language=language,
+        has_user_source=by_user,
+        source_max_seq=max(source.seq for source in sources),
+        change_cue=any(source.author is Author.USER and is_significant(source.content, cues) for source in sources),
+    )
+
+
+def _confirm(
+    connection: Connection, memory: KnownMemory, importance: int, sources: Sequence[WindowMessage], now: str
+) -> Applied:
+    """A duplicate: the known memory gains the sources and the higher importance, with no new version. A locked memory
+    gains the sources only, because automation never changes it."""
+    added = repository.add_memory_sources(connection, memory.id, sources)
+    if not memory.locked:
+        repository.raise_memory_importance(connection, memory.id, importance, now)
+    return Applied(memory_id=memory.id, added=False, sources_added=added)
+
+
+def _insert(
+    connection: Connection,
+    scope: RunScope,
+    item: ExtractedMemory,
+    proposal: Proposal,
+    decision: Decision,
+    sources: Sequence[WindowMessage],
+) -> Applied:
+    """Writes a decision that inserts: first the changes to existing memories, each with its revision, then the new
+    memory with its sources and index row, then the links of what it superseded. Superseding first frees the
+    fingerprint of a replaced target, and linking last satisfies the foreign key."""
+    now = to_utc_text(scope.now)
+    valid_from = max(source.created_at for source in sources)
+    group_id = (decision.conflict_group_id or new_id()) if decision.in_conflict else None
+    for change in decision.supersede:
+        repository.supersede_memory(
+            connection, change.memory.id, valid_to=valid_from, reason=change.reason, run_id=scope.run_id, now=now
+        )
+    for changes, uncertain in ((decision.demote, True), (decision.group, False)):
+        for change in changes:
+            assert group_id is not None, "a decision with members is in conflict"
+            repository.join_conflict(
+                connection,
+                change.memory.id,
+                group_id,
+                uncertain=uncertain,
+                reason=change.reason,
+                run_id=scope.run_id,
+                now=now,
+            )
+    memory = repository.NewMemory(
+        id=new_id(),
+        character_id=scope.character_id,
+        conversation_id=scope.conversation_id,
+        kind=proposal.kind,
+        content=proposal.content,
+        subject_key=proposal.subject_key,
+        value_text=proposal.value_text,
+        provenance=decision.provenance,
+        durability=proposal.durability,
+        importance=proposal.importance,
+        confidence=decision.confidence,
+        valid_from=valid_from,
+        expires_at=(
+            to_utc_text(consistency.expiry(item.valid_until, scope.now)) if proposal.durability == "temporary" else None
+        ),
+        fingerprint=proposal.fingerprint,
+        language=scope.language,
+        status=decision.status,
+        needs_review=decision.needs_review,
+        conflict_group_id=group_id,
+    )
+    repository.insert_memory(connection, memory, now)
+    repository.link_superseded(connection, [change.memory.id for change in decision.supersede], memory.id)
+    added = repository.add_memory_sources(connection, memory.id, sources)
+    index_memory(connection, memory.id, memory.content, memory.subject_key, scope.language)
+    members = (*decision.demote, *decision.group)
+    importance = max([proposal.importance, *(change.memory.importance for change in members)])
+    return Applied(
+        memory_id=memory.id,
+        added=True,
+        sources_added=added,
+        superseded=len(decision.supersede),
+        uncertain=len(decision.demote),
+        conflict=decision.status == "uncertain" and importance >= CONFLICT_EVENT_IMPORTANCE,
+    )

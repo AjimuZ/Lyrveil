@@ -1,9 +1,9 @@
 """SQL of memory extraction: the messages of a window, the cursor, the runs, the memories and episodes a run shows and
-writes, and the conversation's extraction jobs.
+writes, the changes the consistency rules make with their revisions, and the conversation's extraction jobs.
 
 Every function works on a connection the caller owns and never commits. Writers open that connection with the WRITE
 option of lyrveil.persistence.database, so the service decides what one transaction holds: a run's memories, sources,
-index rows, episodes, its own row and the cursor are written together or not at all.
+index rows, revisions, episodes, its own row and the cursor are written together or not at all.
 """
 
 import json
@@ -12,15 +12,27 @@ from dataclasses import dataclass
 
 from sqlalchemy import Connection, RowMapping, text
 
+from lyrveil.domain.identifiers import new_id
 from lyrveil.domain.messages import Author, MessageStatus
+from lyrveil.memory.consistency import KnownMemory
 from lyrveil.memory.window import Window, WindowMessage
 
 _WINDOW_SELECT = """
 SELECT m.id, m.seq, m.author, m.status, m.deleted_at, m.created_at, v.id AS variant_id, v.content, v.content_hash
 FROM messages AS m LEFT JOIN message_variants AS v ON v.id = m.active_variant_id
 """
-# The memories a run may refer to: those of the conversation that prompts use.
+# The memories in use: those of the conversation that prompts use and the fingerprint index keeps unique.
 _SHOWN_STATUSES = "('active', 'uncertain')"
+# The memories a run shows: in use, and never an `identity_candidate`, which no prompt shows
+# (docs/consistency-engine.md, Rules and enforcement).
+_SHOWN = f"m.status IN {_SHOWN_STATUSES} AND m.kind <> 'identity_candidate'"
+_KNOWN_COLUMNS = """
+m.id, m.kind, m.content, m.subject_key, m.value_text, m.provenance, m.durability, m.status, m.importance,
+m.locked, m.conflict_group_id, m.fingerprint,
+(SELECT max(msg.seq) FROM memory_sources AS s JOIN messages AS msg ON msg.id = s.message_id WHERE s.memory_id = m.id)
+AS source_max_seq
+"""
+_KNOWN_SELECT = f"SELECT {_KNOWN_COLUMNS} FROM memories AS m"
 
 
 @dataclass(frozen=True)
@@ -37,12 +49,11 @@ class Run:
 
 @dataclass(frozen=True)
 class ShownMemory:
-    """An existing memory a run shows to the model (as `E1`...) or finds by fingerprint."""
+    """An existing memory a run shows to the model (as `E1`...). `status` is `active` or `uncertain`."""
 
     id: str
     content: str
-    importance: int
-    locked: bool
+    status: str
 
 
 @dataclass(frozen=True)
@@ -55,7 +66,8 @@ class ShownEpisode:
 
 @dataclass(frozen=True)
 class NewMemory:
-    """The columns of a conversation memory that extraction inserts. Status is `active` and version 1."""
+    """The columns of a conversation memory that extraction inserts, at version 1. `status` is `active` or
+    `uncertain`."""
 
     id: str
     character_id: str
@@ -72,6 +84,9 @@ class NewMemory:
     expires_at: str | None
     fingerprint: str
     language: str
+    status: str = "active"
+    needs_review: bool = False
+    conflict_group_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,18 +253,18 @@ def finish_run(
 
 
 def _shown_memory(row: RowMapping) -> ShownMemory:
-    return ShownMemory(id=row["id"], content=row["content"], importance=row["importance"], locked=bool(row["locked"]))
+    return ShownMemory(id=row["id"], content=row["content"], status=row["status"])
 
 
 def related_memories(connection: Connection, conversation_id: str, match: str, limit: int) -> list[ShownMemory]:
-    """Returns up to `limit` active or uncertain memories of the conversation whose index row matches `match` (from
-    lyrveil.memory.text.match_query), best match first."""
+    """Returns up to `limit` memories of the conversation a run shows (active or uncertain, no `identity_candidate`)
+    whose index row matches `match` (from lyrveil.memory.text.match_query), best match first."""
     rows = (
         connection.execute(
             text(
-                "SELECT m.id, m.content, m.importance, m.locked FROM memory_fts JOIN memories AS m "
+                "SELECT m.id, m.content, m.status FROM memory_fts JOIN memories AS m "
                 "ON m.id = memory_fts.memory_id WHERE memory_fts MATCH :match AND m.conversation_id = :id "
-                f"AND m.status IN {_SHOWN_STATUSES} ORDER BY bm25(memory_fts, 0.0, 2.0, 1.0), m.id LIMIT :limit"
+                f"AND {_SHOWN} ORDER BY bm25(memory_fts, 0.0, 2.0, 1.0), m.id LIMIT :limit"
             ),
             {"match": match, "id": conversation_id, "limit": limit},
         )
@@ -260,12 +275,12 @@ def related_memories(connection: Connection, conversation_id: str, match: str, l
 
 
 def recent_memories(connection: Connection, conversation_id: str, limit: int) -> list[ShownMemory]:
-    """Returns up to `limit` active or uncertain memories of the conversation, the most recently changed first."""
+    """Returns up to `limit` memories of the conversation a run shows, the most recently changed first."""
     rows = (
         connection.execute(
             text(
-                "SELECT id, content, importance, locked FROM memories WHERE conversation_id = :id "
-                f"AND status IN {_SHOWN_STATUSES} ORDER BY updated_at DESC, id DESC LIMIT :limit"
+                f"SELECT m.id, m.content, m.status FROM memories AS m WHERE m.conversation_id = :id AND {_SHOWN} "
+                "ORDER BY m.updated_at DESC, m.id DESC LIMIT :limit"
             ),
             {"id": conversation_id, "limit": limit},
         )
@@ -275,34 +290,100 @@ def recent_memories(connection: Connection, conversation_id: str, limit: int) ->
     return [_shown_memory(row) for row in rows]
 
 
-def find_memory_by_fingerprint(
+def _known_memory(row: RowMapping) -> KnownMemory:
+    return KnownMemory(
+        id=row["id"],
+        kind=row["kind"],
+        content=row["content"],
+        subject_key=row["subject_key"],
+        value_text=row["value_text"],
+        provenance=row["provenance"],
+        durability=row["durability"],
+        status=row["status"],
+        importance=row["importance"],
+        locked=bool(row["locked"]),
+        conflict_group_id=row["conflict_group_id"],
+        fingerprint=row["fingerprint"],
+        source_max_seq=row["source_max_seq"],
+    )
+
+
+def known_memory(connection: Connection, memory_id: str) -> KnownMemory | None:
+    """Returns the memory as the consistency rules see it, in any status, or None when it does not exist."""
+    row = connection.execute(text(f"{_KNOWN_SELECT} WHERE m.id = :id"), {"id": memory_id}).mappings().first()
+    return None if row is None else _known_memory(row)
+
+
+def known_by_fingerprint(
     connection: Connection, character_id: str, conversation_id: str, fingerprint: str
-) -> ShownMemory | None:
-    """Returns the active or uncertain memory of the conversation with this fingerprint, the one the unique index
-    allows, or None."""
+) -> KnownMemory | None:
+    """Returns the memory of the conversation in use (active or uncertain) with this fingerprint, the one the unique
+    index allows, of any kind, or None."""
     row = (
         connection.execute(
             text(
-                "SELECT id, content, importance, locked FROM memories WHERE character_id = :character_id "
-                f"AND conversation_id = :id AND fingerprint = :fingerprint AND status IN {_SHOWN_STATUSES}"
+                f"{_KNOWN_SELECT} WHERE m.character_id = :character_id AND m.conversation_id = :id "
+                f"AND m.fingerprint = :fingerprint AND m.status IN {_SHOWN_STATUSES}"
             ),
             {"character_id": character_id, "id": conversation_id, "fingerprint": fingerprint},
         )
         .mappings()
         .first()
     )
-    return None if row is None else _shown_memory(row)
+    return None if row is None else _known_memory(row)
+
+
+def similar_candidates(
+    connection: Connection, conversation_id: str, kind: str, subject: str | None, match: str, limit: int
+) -> list[KnownMemory]:
+    """Returns up to `limit` memories of the conversation in use, of this kind and subject (both None counts as the
+    same), whose index row matches `match`, best match first: the only memories that can be near duplicates, since
+    those share most stems."""
+    rows = (
+        connection.execute(
+            text(
+                f"SELECT {_KNOWN_COLUMNS} FROM memory_fts JOIN memories AS m ON m.id = memory_fts.memory_id "
+                "WHERE memory_fts MATCH :match AND m.conversation_id = :id AND m.kind = :kind "
+                f"AND m.subject_key IS :subject AND m.status IN {_SHOWN_STATUSES} "
+                "ORDER BY bm25(memory_fts, 0.0, 2.0, 1.0), m.id LIMIT :limit"
+            ),
+            {"match": match, "id": conversation_id, "kind": kind, "subject": subject, "limit": limit},
+        )
+        .mappings()
+        .all()
+    )
+    return [_known_memory(row) for row in rows]
+
+
+def subject_rivals(connection: Connection, conversation_id: str, subject: str) -> list[KnownMemory]:
+    """Returns the active lasting memories of the conversation with this subject and a value, other than identity
+    candidates: those guard 3 compares a new value with."""
+    rows = (
+        connection.execute(
+            text(
+                f"{_KNOWN_SELECT} WHERE m.conversation_id = :id AND m.subject_key = :subject AND m.status = 'active' "
+                "AND m.durability = 'lasting' AND m.value_text IS NOT NULL AND m.kind <> 'identity_candidate' "
+                "ORDER BY m.created_at, m.id"
+            ),
+            {"id": conversation_id, "subject": subject},
+        )
+        .mappings()
+        .all()
+    )
+    return [_known_memory(row) for row in rows]
 
 
 def insert_memory(connection: Connection, memory: NewMemory, now: str) -> None:
-    """Adds an active conversation memory at version 1. Its sources and index row are the caller's to add."""
+    """Adds a conversation memory at version 1 with the status of `memory`. Its sources and index row are the
+    caller's to add."""
     connection.execute(
         text(
             "INSERT INTO memories (id, character_id, scope, conversation_id, kind, content, subject_key, value_text, "
-            "provenance, durability, status, importance, confidence, valid_from, expires_at, fingerprint, language, "
-            "created_at, updated_at) VALUES (:id, :character_id, 'conversation', :conversation_id, :kind, :content, "
-            ":subject_key, :value_text, :provenance, :durability, 'active', :importance, :confidence, :valid_from, "
-            ":expires_at, :fingerprint, :language, :now, :now)"
+            "provenance, durability, status, importance, confidence, needs_review, valid_from, expires_at, "
+            "conflict_group_id, fingerprint, language, created_at, updated_at) VALUES (:id, :character_id, "
+            "'conversation', :conversation_id, :kind, :content, :subject_key, :value_text, :provenance, :durability, "
+            ":status, :importance, :confidence, :needs_review, :valid_from, :expires_at, :conflict_group_id, "
+            ":fingerprint, :language, :now, :now)"
         ),
         {
             "id": memory.id,
@@ -314,10 +395,13 @@ def insert_memory(connection: Connection, memory: NewMemory, now: str) -> None:
             "value_text": memory.value_text,
             "provenance": memory.provenance,
             "durability": memory.durability,
+            "status": memory.status,
             "importance": memory.importance,
             "confidence": memory.confidence,
+            "needs_review": int(memory.needs_review),
             "valid_from": memory.valid_from,
             "expires_at": memory.expires_at,
+            "conflict_group_id": memory.conflict_group_id,
             "fingerprint": memory.fingerprint,
             "language": memory.language,
             "now": now,
@@ -334,6 +418,93 @@ def raise_memory_importance(connection: Connection, memory_id: str, importance: 
         ),
         {"id": memory_id, "importance": importance, "now": now},
     )
+
+
+def _revise(connection: Connection, memory_id: str, *, actor: str, reason: str, run_id: str | None, now: str) -> None:
+    """Appends the memory's row as it is now to `memory_revisions`, under its current version, and moves the memory
+    to the next version. The caller changes the row right after, in the same transaction."""
+    row = connection.execute(text("SELECT * FROM memories WHERE id = :id"), {"id": memory_id}).mappings().one()
+    connection.execute(
+        text(
+            "INSERT INTO memory_revisions (id, memory_id, version, snapshot_json, actor, reason, run_id, created_at) "
+            "VALUES (:id, :memory_id, :version, :snapshot, :actor, :reason, :run_id, :now)"
+        ),
+        {
+            "id": new_id(),
+            "memory_id": memory_id,
+            "version": row["version"],
+            "snapshot": json.dumps(dict(row), ensure_ascii=False),
+            "actor": actor,
+            "reason": reason,
+            "run_id": run_id,
+            "now": now,
+        },
+    )
+    connection.execute(
+        text("UPDATE memories SET version = version + 1, updated_at = :now WHERE id = :id"),
+        {"id": memory_id, "now": now},
+    )
+
+
+def supersede_memory(
+    connection: Connection, memory_id: str, *, valid_to: str, reason: str, run_id: str | None, now: str
+) -> None:
+    """Records a revision and marks the memory `superseded`, valid until `valid_to`. Its sources stay. Call
+    link_superseded once the memory that replaces it exists."""
+    _revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
+    connection.execute(
+        text("UPDATE memories SET status = 'superseded', valid_to = :valid_to WHERE id = :id"),
+        {"id": memory_id, "valid_to": valid_to},
+    )
+
+
+def link_superseded(connection: Connection, memory_ids: Sequence[str], replacement_id: str) -> None:
+    """Points each superseded memory at the memory that replaced it; part of the change supersede_memory recorded."""
+    for memory_id in memory_ids:
+        connection.execute(
+            text("UPDATE memories SET superseded_by_id = :replacement WHERE id = :id"),
+            {"id": memory_id, "replacement": replacement_id},
+        )
+
+
+def join_conflict(
+    connection: Connection,
+    memory_id: str,
+    group_id: str,
+    *,
+    uncertain: bool,
+    reason: str,
+    run_id: str | None,
+    now: str,
+) -> None:
+    """Records a revision and puts the memory in the conflict group, `uncertain` when asked, otherwise with its status
+    kept."""
+    _revise(connection, memory_id, actor="extraction", reason=reason, run_id=run_id, now=now)
+    connection.execute(
+        text(
+            "UPDATE memories SET conflict_group_id = :group_id, "
+            "status = CASE WHEN :uncertain THEN 'uncertain' ELSE status END WHERE id = :id"
+        ),
+        {"id": memory_id, "group_id": group_id, "uncertain": int(uncertain)},
+    )
+
+
+def expire_memories(connection: Connection, conversation_id: str, reason: str, now: str) -> list[str]:
+    """Marks `expired`, each with a revision by `consistency`, the temporary memories of the conversation in use whose
+    `expires_at` is at or before `now`, and returns their ids."""
+    expired = list(
+        connection.execute(
+            text(
+                "SELECT id FROM memories WHERE conversation_id = :id AND durability = 'temporary' "
+                f"AND status IN {_SHOWN_STATUSES} AND expires_at <= :now ORDER BY id"
+            ),
+            {"id": conversation_id, "now": now},
+        ).scalars()
+    )
+    for memory_id in expired:
+        _revise(connection, memory_id, actor="consistency", reason=reason, run_id=None, now=now)
+        connection.execute(text("UPDATE memories SET status = 'expired' WHERE id = :id"), {"id": memory_id})
+    return expired
 
 
 def add_memory_sources(connection: Connection, memory_id: str, sources: Sequence[WindowMessage]) -> int:

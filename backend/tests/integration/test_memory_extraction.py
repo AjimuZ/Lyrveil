@@ -1,9 +1,13 @@
-"""T-MEM-01, T-MEM-02, T-MEM-03 and the scheduler half of T-MEM-17: memory extraction on a real database.
+"""T-MEM-01, T-MEM-02, T-MEM-03, T-MEM-10 to T-MEM-13, T-CON-05 and the scheduler half of T-MEM-17: memory extraction
+on a real database.
 
-The extraction job runs through the real JobScheduler under a granted llm lease with MemoryExtractionService and a
-scripted in-process text runtime. Checks that valid output stores its items with their sources, index rows, run and
-cursor; that invalid output stores nothing, keeps the cursor and is retried after the backoff; that the same window
-twice gives one result; that the job waits in image mode; and that the trigger queues one job when a chat is due.
+The extraction job runs through the real JobScheduler under a granted llm lease, or by calling the handler directly,
+with MemoryExtractionService and a scripted in-process text runtime. Checks that valid output stores its items with
+their sources, index rows, run and cursor; that invalid output stores nothing, keeps the cursor and is retried after
+the backoff; that the same window twice gives one result; that the job waits in image mode; that the trigger queues one
+job when a chat is due; and that the consistency rules hold over consecutive windows: an update supersedes with
+history, a contradiction stays uncertain and labeled, a temporary memory expires beside the lasting one, a user
+correction wins, and an identity candidate changes nothing.
 """
 
 import json
@@ -384,7 +388,7 @@ async def test_valid_output_stores_its_items_with_their_sources(migrated: Engine
         10,
         None,
     )
-    assert (run["prompt_version"], run["schema_version"], run["raw_output"]) == ("extraction.v1", "1", VALID)
+    assert (run["prompt_version"], run["schema_version"], run["raw_output"]) == ("extraction.v2", "1", VALID)
     assert cursor(migrated, conversation_id) == 10
     assert count(migrated, "generation_jobs") == 1, "nothing is left after the window, so no other job is queued"
 
@@ -532,3 +536,254 @@ async def test_a_reply_that_completes_the_tenth_message_queues_the_extraction(mi
         assert len(extraction_jobs()) == (1 if number == 5 else 0), number
 
     assert [row["conversation_id"] for row in extraction_jobs()] == [conversation_id]
+
+
+EMPTY = output([])
+
+
+class Chat:
+    """A seeded chat whose extraction windows run one after the other through the handler, each with its scripted
+    output. `message_ids` grow with every message added."""
+
+    def __init__(self, engine: Engine, clock: Clock) -> None:
+        self.engine = engine
+        self.conversation_id, self.message_ids = seeded_chat(engine)
+        queue = JobQueue(clock=clock)
+        self.job = enqueue(engine, queue, self.conversation_id)
+        self.runtime = ScriptedRuntime()
+        self.events = EventHub("boot")
+        self.service = MemoryExtractionService(engine, self.runtime, queue=queue, events=self.events, clock=clock)
+
+    async def extract(self, answer: str, *turns: tuple[Author, str]) -> dict[str, Any]:
+        """Adds `turns` as new messages, runs the next window with `answer` and returns the completed job's result."""
+        for author, line in turns:
+            self.message_ids.append(add_message(self.engine, self.conversation_id, author, line))
+        self.runtime.script(answer)
+        done = await self.service(self.job, RunContext(lease=None, genkey="genkey"))
+        assert isinstance(done, JobDone)
+        assert done.result is not None
+        assert done.result["status"] == "completed"
+        return dict(done.result)
+
+    def shown(self) -> list[str]:
+        """Returns the existing-memory lines of the last prompt, the data after the worked example."""
+        section = self.runtime.requests[-1].prompt.rsplit("Ricordi esistenti:\n", 1)[1]
+        return section.split("\nEpisodi recenti:", 1)[0].splitlines()
+
+    def memories(self) -> dict[str, RowMapping]:
+        """Returns every memory row of the chat by content."""
+        found = rows(self.engine, "SELECT * FROM memories WHERE conversation_id = :id", id=self.conversation_id)
+        return {row["content"]: row for row in found}
+
+
+@pytest.mark.anyio
+async def test_an_update_supersedes_keeps_history_and_the_prompt_uses_the_new_fact(
+    migrated: Engine, clock: Clock
+) -> None:
+    """T-MEM-10."""
+    chat = Chat(migrated, clock)
+    await chat.extract(output([memory()]))
+    old = chat.memories()["Lavora allo Studio Rossi."]
+    update = memory(
+        relation="update", target_ref="E1", content="Lavora da Verdi & Co.", value="Verdi & Co", source_seqs=[11]
+    )
+
+    changed = await chat.extract(
+        output([update]),
+        (Author.USER, "Ho cambiato lavoro, ora sono da Verdi & Co."),
+        (Author.CHARACTER, "Congratulazioni!"),
+    )
+
+    assert chat.shown() == ["E1: Lavora allo Studio Rossi."]
+    assert (changed["memories_added"], changed["memories_superseded"], changed["dropped_items"]) == (1, 1, 0)
+    stored = chat.memories()
+    rossi, verdi = stored["Lavora allo Studio Rossi."], stored["Lavora da Verdi & Co."]
+    assert (rossi["status"], rossi["version"], rossi["superseded_by_id"]) == ("superseded", 2, verdi["id"])
+    assert rossi["valid_to"] == verdi["valid_from"] == to_utc_text(START)
+    assert (verdi["status"], verdi["provenance"], verdi["subject_key"], verdi["version"]) == (
+        "active",
+        "stated",
+        "user.employer",
+        1,
+    )
+    [revision] = rows(migrated, "SELECT * FROM memory_revisions")
+    assert (revision["memory_id"], revision["version"], revision["actor"], revision["reason"]) == (
+        old["id"],
+        1,
+        "extraction",
+        "update",
+    )
+    assert revision["run_id"] == changed["run_id"]
+    snapshot = json.loads(revision["snapshot_json"])
+    assert (snapshot["status"], snapshot["content"], snapshot["version"]) == ("active", "Lavora allo Studio Rossi.", 1)
+    sources = rows(migrated, "SELECT memory_id, message_id FROM memory_sources")
+    assert {(row["memory_id"], row["message_id"]) for row in sources} == {
+        (old["id"], chat.message_ids[0]),
+        (verdi["id"], chat.message_ids[10]),
+    }, "the superseded memory keeps its sources"
+
+    await chat.extract(EMPTY, (Author.USER, "Domani inizio presto."), (Author.CHARACTER, "In bocca al lupo!"))
+
+    assert chat.shown() == ["E1: Lavora da Verdi & Co."], "the next prompt holds the new fact only"
+
+
+@pytest.mark.anyio
+async def test_an_unresolved_contradiction_stays_uncertain_and_both_are_labeled(migrated: Engine, clock: Clock) -> None:
+    """T-MEM-11: both memories become uncertain in one conflict group, `memory.conflict` fires for an importance of
+    at least 3, and the next prompt labels both `[incerto]`."""
+    chat = Chat(migrated, clock)
+    await chat.extract(output([memory()]))
+    contradiction = memory(
+        relation="contradiction",
+        target_ref="E1",
+        content="Lavora allo Studio Bianchi.",
+        value="Studio Bianchi",
+        source_seqs=[11],
+    )
+
+    doubt = await chat.extract(
+        output([contradiction]),
+        (Author.USER, "Mi ha preso lo Studio Bianchi, credo. O era Rossi?"),
+        (Author.CHARACTER, "Non ti seguo più."),
+    )
+
+    stored = chat.memories()
+    rossi, bianchi = stored["Lavora allo Studio Rossi."], stored["Lavora allo Studio Bianchi."]
+    assert rossi["status"] == bianchi["status"] == "uncertain"
+    assert rossi["conflict_group_id"] is not None
+    assert rossi["conflict_group_id"] == bianchi["conflict_group_id"]
+    assert (rossi["version"], doubt["memories_uncertain"], doubt["conflict_ids"]) == (2, 1, [bianchi["id"]])
+    [revision] = rows(migrated, "SELECT reason FROM memory_revisions")
+    assert revision["reason"] == "contradiction"
+    events = chat.events.missed(0, "boot")
+    assert events is not None
+    assert [(event.type, dict(event.data)) for event in events] == [
+        ("memory.conflict", {"memory_id": bianchi["id"], "conversation_id": chat.conversation_id})
+    ]
+
+    await chat.extract(EMPTY, (Author.USER, "Ne riparliamo domani."), (Author.CHARACTER, "Va bene."))
+
+    assert {line.split(": ", 1)[1] for line in chat.shown()} == {
+        "[incerto] Lavora allo Studio Rossi.",
+        "[incerto] Lavora allo Studio Bianchi.",
+    }
+
+
+@pytest.mark.anyio
+async def test_a_temporary_memory_expires_and_does_not_replace_a_lasting_one(migrated: Engine, clock: Clock) -> None:
+    """T-MEM-12."""
+    chat = Chat(migrated, clock)
+    await chat.extract(output([memory(content="Vive a Milano.", subject="user.city", value="Milano")]))
+    this_week = memory(
+        relation="update",
+        target_ref="E1",
+        content="Questa settimana è a Roma.",
+        subject="user.city",
+        value="Roma",
+        durability="temporary",
+        importance=2,
+        source_seqs=[11],
+    )
+
+    week = await chat.extract(
+        output([this_week]),
+        (Author.USER, "Questa settimana sono a Roma per lavoro."),
+        (Author.CHARACTER, "Goditela!"),
+    )
+
+    stored = chat.memories()
+    milano, roma = stored["Vive a Milano."], stored["Questa settimana è a Roma."]
+    assert (milano["status"], milano["version"]) == ("active", 1)
+    assert (roma["status"], roma["durability"], roma["expires_at"]) == (
+        "active",
+        "temporary",
+        to_utc_text(START + timedelta(days=7)),
+    )
+    assert (week["memories_added"], week["memories_superseded"], week["memories_uncertain"]) == (1, 0, 0)
+
+    clock.now = START + timedelta(days=7)
+    await chat.extract(EMPTY, (Author.USER, "Sono tornata a casa."), (Author.CHARACTER, "Bentornata!"))
+
+    stored = chat.memories()
+    assert (stored["Vive a Milano."]["status"], stored["Questa settimana è a Roma."]["status"]) == ("active", "expired")
+    [revision] = rows(migrated, "SELECT memory_id, actor, reason FROM memory_revisions")
+    assert (revision["memory_id"], revision["actor"], revision["reason"]) == (roma["id"], "consistency", "expired")
+    assert chat.shown() == ["E1: Vive a Milano."]
+
+
+@pytest.mark.anyio
+async def test_an_explicit_user_correction_wins_and_is_confirmed(migrated: Engine, clock: Clock) -> None:
+    """T-MEM-13."""
+    chat = Chat(migrated, clock)
+    await chat.extract(output([memory(content="Ha un gatto.", subject="user.pets", value="un gatto", source_seqs=[3])]))
+    correction = memory(
+        relation="correction",
+        target_ref="E1",
+        content="Ha due gatti.",
+        subject="user.pets",
+        value="due gatti",
+        confidence="medium",
+        source_seqs=[11],
+    )
+
+    fixed = await chat.extract(
+        output([correction]),
+        (Author.USER, "No, non ho detto questo: ho due gatti."),
+        (Author.CHARACTER, "Scusa, me lo segno."),
+    )
+
+    stored = chat.memories()
+    one, two = stored["Ha un gatto."], stored["Ha due gatti."]
+    assert (one["status"], one["superseded_by_id"]) == ("superseded", two["id"])
+    assert (two["status"], two["provenance"], two["confidence"]) == ("active", "user_confirmed", 1.0)
+    assert fixed["memories_superseded"] == 1
+    [revision] = rows(migrated, "SELECT reason FROM memory_revisions")
+    assert revision["reason"] == "correction"
+
+
+@pytest.mark.anyio
+async def test_an_identity_candidate_is_not_applied_until_the_user_applies_it(migrated: Engine, clock: Clock) -> None:
+    """T-CON-05, extraction half: a candidate is stored as `identity_candidate`, never changes the character's card or
+    the memory it targets, and never enters a prompt. Applying it ("Applica al profilo") is the Memory Studio's."""
+    chat = Chat(migrated, clock)
+    card = [dict(row) for row in rows(migrated, "SELECT * FROM characters")]
+    age = memory(
+        kind="identity_candidate",
+        content="Dario dice di avere 40 anni.",
+        subject="character.age",
+        value="40",
+        provenance="fictional",
+        source_seqs=[2],
+    )
+    await chat.extract(output([memory(), age]))
+    job = memory(
+        relation="update",
+        target_ref="E1",
+        kind="identity_candidate",
+        content="Dario lavora come cartografo.",
+        subject="character.job",
+        value="cartografo",
+        source_seqs=[12],
+    )
+
+    proposed = await chat.extract(
+        output([job]),
+        (Author.USER, "E tu che lavoro fai?"),
+        (Author.CHARACTER, "Faccio il cartografo, sai?"),
+    )
+
+    assert chat.shown() == ["E1: Lavora allo Studio Rossi."], "a candidate never enters a prompt"
+    assert (proposed["memories_added"], proposed["memories_superseded"]) == (1, 0)
+    stored = chat.memories()
+    assert (stored["Lavora allo Studio Rossi."]["status"], stored["Lavora allo Studio Rossi."]["version"]) == (
+        "active",
+        1,
+    )
+    candidates = {content: row["kind"] for content, row in stored.items() if content.startswith("Dario")}
+    assert candidates == {
+        "Dario dice di avere 40 anni.": "identity_candidate",
+        "Dario lavora come cartografo.": "identity_candidate",
+    }
+    assert count(migrated, "memory_revisions") == 0
+    assert [dict(row) for row in rows(migrated, "SELECT * FROM characters")] == card
+    assert count(migrated, "character_versions") == 0

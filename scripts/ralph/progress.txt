@@ -136,6 +136,9 @@
 - A job that stores model output writes its run row in a short transaction before generation. The commit transaction then reads the inputs again (cursor, input hash) and marks the run superseded instead of writing when they changed, so slow generation never commits against stale data.
 - Model output that cites inputs by label (E1, P1, message seq) is resolved against maps built when the prompt was made; an unknown label drops only that item and increments a counter, and never refuses the whole output.
 - Integration tests of model-backed jobs can use a scripted in-process TextRuntime (generate returns queued texts and records each TextRequest) with the real JobScheduler and a fake clock shared with JobQueue to step through backoffs.
+- Keep model-output policy as a pure decision function (inputs: resolved item plus the existing rows it may touch; output: a frozen Decision) and let a thin service read the inputs and write the decision in the caller's transaction; unit-test the rules without a database.
+- Every automated change to a memory row goes through a revise-then-update helper that snapshots the whole row into memory_revisions under its current version and bumps version, in the same transaction.
+- Phrase lists per language live in prompts/<code>/<name>.txt and load with lyrveil.memory.window.phrase_patterns(language, file_name); match with is_significant.
 
 ---
 
@@ -1084,4 +1087,29 @@ Not run: the two new frontend specs in `character-creator-screen.spec.ts`. They 
   - `scripts/lyrveil.cmd test unit -k <filter>` reports FAILED when the filter selects no orchestrator test (pytest exit 5); read the backend part's result.
   - The P04.1 note asking for a purge test with real memory rows was already satisfied: tests/integration/test_memory_index.py seeds real rows and purges them.
   - mypy cannot infer `lambda mode=mode: mode`; use a small factory function returning a lambda instead.
+---
+
+## 2026-11-07T09:25:15Z - P04.2b
+- Implemented the memory consistency rules of docs/memory-engine.md for extraction. A pure `decide` (backend/src/lyrveil/memory/consistency.py) decides what each extracted item does. MemoryConsistencyService (services/memory_consistency.py) reads its inputs and writes the result in the run's commit transaction, replacing the P04.2a deferred branch and the fingerprint shortcut.
+
+Rules: deduplication by fingerprint and by stem-set Jaccard >= 0.8 (same kind, subject and value). update/correction supersede the target with valid_to, superseded_by_id, kept sources and a memory_revisions row; a correction with a user source is stored user_confirmed at 1.0. A contradiction makes both memories uncertain in one conflict_group_id and publishes memory.conflict at importance >= 3.
+
+Guards: provenance check (an unsourced user fact becomes inferred; a character's self-statement becomes fictional); inference limit; deterministic single-valued subject conflict, using a new Italian change-cue list; locks (uncertain plus needs_review); temporary items never change lasting ones; identity_candidate changes nothing and is never shown. Temporary memories expire when a run starts, with a revision by `consistency`.
+
+The extraction prompt is now extraction.v2: it labels uncertain memories `[incerto]` and excludes identity candidates. The job result adds memories_superseded, memories_uncertain and conflict_ids. main.py passes the event hub to the extraction service.
+
+Checks run: `scripts/lyrveil.cmd test unit tests/unit/test_memory_consistency.py tests/unit/test_memory_extraction.py tests/unit/test_memory_text.py tests/integration/test_memory_extraction.py tests/integration/test_memory_index.py` passed (70 tests). `scripts/lyrveil.cmd test unit tests/unit/test_app.py tests/unit/test_prompt_formatter.py` passed (26). `scripts/lyrveil.cmd test lint` passed. The full unit, integration, e2e and docker levels were not run.
+
+Not covered: the 'Applica al profilo' half of T-CON-05 (P04.9); the reply-prompt half of T-MEM-10 and T-MEM-11, which needs retrieval and the context builder (P04.3, P04.5); tombstones (P04.2c).
+- Files changed: backend/src/lyrveil/memory/consistency.py, backend/src/lyrveil/services/memory_consistency.py, backend/src/lyrveil/prompts/it/change_cues.txt, backend/src/lyrveil/memory/window.py, backend/src/lyrveil/persistence/memory_extraction.py, backend/src/lyrveil/prompts/extraction.py, backend/src/lyrveil/services/memory_extraction.py, backend/src/lyrveil/main.py, backend/tests/unit/test_memory_consistency.py, backend/tests/unit/test_memory_extraction.py, backend/tests/integration/test_memory_extraction.py, CHANGELOG.md, docs/memory-engine.md, docs/data-model.md, docs/backend.md, docs/api.md, docs/prompting.md, docs/testing.md, docs/consistency-engine.md
+- **Learnings for future iterations:**
+  - P04.2c (tombstones) plugs into MemoryConsistencyService.apply in services/memory_consistency.py: check the tombstone before `consistency.decide` (or pass it in) and skip the insert when blocked. `memory_revisions` writing already exists (persistence/memory_extraction._revise), so a T-MEM-08 user edit can reuse it with actor='user'.
+  - subject_key, value_text, expiry and TEMPORARY_DEFAULT moved from services/memory_extraction.py to lyrveil/memory/consistency.py; import them from there.
+  - ShownMemory now holds (id, content, status) only; known_memory/known_by_fingerprint return the richer KnownMemory with source_max_seq. Shown memories exclude identity_candidate.
+  - Extraction prompt is extraction.v2 (uncertain memories shown as `E2: [incerto] ...`). Bump TEMPLATE_VERSION for any further prompt text change.
+  - Negations ('non') are stop words, so fingerprints ignore them: an update/correction never treats its own target as a duplicate; if the target stays in use, decide() confirms it to respect uq_memories_fingerprint.
+  - A superseding insert must mark the old row superseded before inserting the new one (unique fingerprint index), and set superseded_by_id after (FK).
+  - MemoryExtractionService takes `events: EventHub | None`; it publishes memory.conflict on the loop thread after the commit returns, never inside the worker thread.
+  - Integration helper `Chat` in tests/integration/test_memory_extraction.py runs consecutive windows of one chat with scripted outputs; `Chat.shown()` returns the existing-memory lines of the last prompt (after the worked example, which also contains 'Studio Rossi').
+  - `scripts/lyrveil.cmd test unit <paths>` accepts integration test paths too, which is a fast way to run one integration file.
 ---

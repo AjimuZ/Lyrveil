@@ -1,6 +1,6 @@
 """The prompt of the memory extraction task (docs/prompting.md, Extraction template).
 
-It follows `extraction.v1.j2` of the document, as Python because the backend has no template engine yet: a role
+It follows `extraction.v2.j2` of the document, as Python because the backend has no template engine yet: a role
 sentence, the rules, one worked example, then the data (existing memories as E1..En, recent episodes as P1..Pn, the
 context messages and the window) and "Rispondi solo con il JSON richiesto". Message text is data: each message is one
 line, frame markers are neutralized by the formatter, and code validates whatever the model writes.
@@ -16,7 +16,9 @@ from lyrveil.context.minimal import LANGUAGE_NAMES
 from lyrveil.prompts.formatter import formatter_for
 from lyrveil.prompts.structured import Repair
 
-TEMPLATE_VERSION = "extraction.v1"
+# v2 labels memories in conflict `[incerto]` and tells the model what the label means.
+TEMPLATE_VERSION = "extraction.v2"
+UNCERTAIN_LABEL = "[incerto]"
 # docs/prompting.md (Structured tasks): the `max_length` of memory extraction.
 MAX_LENGTH = 1200
 # docs/prompting.md (Sampler presets): the structured temperature.
@@ -37,10 +39,12 @@ class PromptMessage:
 
 @dataclass(frozen=True)
 class Labeled:
-    """An existing memory or recent episode with the label the model refers to it by (`E1`, `P1`)."""
+    """An existing memory or recent episode with the label the model refers to it by (`E1`, `P1`). `uncertain` marks a
+    memory of an unresolved conflict, shown after UNCERTAIN_LABEL."""
 
     ref: str
     text: str
+    uncertain: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,7 @@ Regole:
 - "temporary" solo per cose che smetteranno di valere: indica "valid_until" se puoi.
 - Confronta con i ricordi esistenti (E1, E2...). "duplicate": è già noto. "update": il fatto è cambiato.
   "contradiction": non si capisce quale sia vero. "correction": {user} corregge esplicitamente un errore.
+- {UNCERTAIN_LABEL} segna ricordi in conflitto: usa "update" o "correction" solo se i messaggi chiariscono quale vale.
 - Se qualcosa sembra cambiare la scheda del personaggio, usa il tipo "identity_candidate": è solo una proposta.
 - "subject" è una chiave breve come user.employer, user.city, user.likes. Omettila se non è adatta.
 - Cita sempre i numeri dei messaggi che lo provano in "source_seqs".
@@ -128,7 +133,8 @@ def _one_line(text: str) -> str:
 
 
 def _labeled(items: Sequence[Labeled]) -> str:
-    return "\n".join(f"{item.ref}: {_one_line(item.text)}" for item in items) or NOTHING
+    lines = (f"{item.ref}: {UNCERTAIN_LABEL + ' ' if item.uncertain else ''}{_one_line(item.text)}" for item in items)
+    return "\n".join(lines) or NOTHING
 
 
 def _messages(messages: Sequence[PromptMessage]) -> str:

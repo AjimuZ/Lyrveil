@@ -119,7 +119,12 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
         replies = ChatInferenceService(engine, runtime, app.state.events, worker.replies, extraction=worker.memory)
         drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
         memories = MemoryExtractionService(
-            engine, runtime, template=worker.replies.template, user=worker.replies.user, settings=worker.memory
+            engine,
+            runtime,
+            template=worker.replies.template,
+            user=worker.replies.user,
+            settings=worker.memory,
+            events=app.state.events,
         )
         handlers: dict[JobKind, JobHandler] = {
             JobKind.CHAT_REPLY: replies,

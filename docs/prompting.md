@@ -337,7 +337,7 @@ Delivered in P04.2a, with memory extraction as the second task:
   validation parses it.
 - `generate_structured` also returns the accepted text, and `StructuredOutputInvalidError.output` holds the last
   refused one, so extraction can keep `raw_output`. Both are private and never logged.
-- The extraction template is `lyrveil/prompts/extraction.py`, version `extraction.v1`, at temperature 0.3 (the structured
+- The extraction template is `lyrveil/prompts/extraction.py`, version `extraction.v1` (`extraction.v2` since P04.2b), at temperature 0.3 (the structured
   value of [Sampler presets](#sampler-presets)) and `max_length` 1200. See [Extraction template](#extraction-template).
 
 Each template holds one worked example of input and output. The example stays only if it does not
@@ -346,7 +346,7 @@ lower the score of the [extraction evaluation](consistency-engine.md#extraction-
 
 | Task | Template | Model | `max_length` |
 | --- | --- | --- | --- |
-| Memory extraction | `extraction.v1.j2` | `ExtractionResult` | 1200 |
+| Memory extraction | `extraction.v2.j2` | `ExtractionResult` | 1200 |
 | Summary checkpoint | `summary.v1.j2` | `SummaryResult` | 700 |
 | Character draft | `character_draft.v1.j2` | `CharacterDraft` | 1500 |
 | Visual identity | `visual_profile.v1.j2` | `VisualIdentityResult` | 600 |
@@ -369,6 +369,7 @@ Regole:
 - "temporary" solo per cose che smetteranno di valere: indica "valid_until" se puoi.
 - Confronta con i ricordi esistenti (E1, E2...). "duplicate": è già noto. "update": il fatto è cambiato.
   "contradiction": non si capisce quale sia vero. "correction": {{ user.display_name }} corregge esplicitamente un errore.
+- [incerto] segna ricordi in conflitto: usa "update" o "correction" solo se i messaggi chiariscono quale vale.
 - Se qualcosa sembra cambiare la scheda del personaggio, usa il tipo "identity_candidate": è solo una proposta.
 - "subject" è una chiave breve come user.employer, user.city, user.likes. Omettila se non è adatta.
 - Cita sempre i numeri dei messaggi che lo provano in "source_seqs".
@@ -377,7 +378,7 @@ Regole:
 - Per il rapporto registra solo cambiamenti con un motivo chiaro.
 
 Ricordi esistenti:
-{% for memory in existing %}{{ memory.ref }}: {{ memory.content }}
+{% for memory in existing %}{{ memory.ref }}: {% if memory.status == "uncertain" %}[incerto] {% endif %}{{ memory.content }}
 {% else %}nessuno
 {% endfor %}
 Episodi recenti:
@@ -401,6 +402,9 @@ one worked example (an `update` of a job, which a unit test validates against `E
 the data and "Rispondi solo con il JSON richiesto." form the user turn, and a repair adds the refused output and its
 error before that last line. `author_label` is `user.display_name` or the character's first name. Each message is written on
 one line and cut at 1200 characters, and an empty context section reads `nessuno` like the other lists.
+
+P04.2b made it `extraction.v2`: an `uncertain` memory, part of an unresolved conflict, is shown after `[incerto]`, and the
+rule line about that label is new. `identity_candidate` memories are never shown.
 
 ### Other templates
 

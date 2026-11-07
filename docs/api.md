@@ -418,7 +418,9 @@ Creator polls this route while a draft runs, since `job.updated` is not publishe
 `memory_extraction` job is `{"status", "run_id"}`, plus `run_attempt`, `from_seq` and `to_seq` for a `completed` or
 `superseded` run; a completed one adds `attempts`, the counts `memories_added`, `memories_confirmed`, `episodes_added`,
 `episodes_confirmed`, `sources_added`, `dropped_items`, `deferred_items`, and `memory_ids`. It never holds memory text
-([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). The list, cancel and retry
+([Delivered in P04.2a](memory-engine.md#delivered-in-p042a)). Since P04.2b a completed one also has
+`memories_superseded`, `memories_uncertain` and `conflict_ids`, and `deferred_items` counts only relationship events
+([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). The list, cancel and retry
 routes are planned. Not in `backend/openapi.json` until it is next regenerated with Docker.
 
 ## Event WebSocket
@@ -505,7 +507,7 @@ reconnects after 1, 2, 5 and then every 10 seconds.
 | `image.completed` | `image`, `message_id` | File stored and linked. |
 | `image.proposed` | `proposal` | Contextual proposal ready. |
 | `memory.updated` | `memory_id`, `action` | Memory changed. |
-| `memory.conflict` | `memory_id`, `conversation_id` | Needs review. |
+| `memory.conflict` | `memory_id`, `conversation_id` | Needs review. Since P04.2b, published after an extraction run that stored an uncertain memory of importance at least 3, with the new memory's id. |
 | `notification.created` | `notification` | In-app notification. |
 | `resync.required` | None | Reload through REST. |
 

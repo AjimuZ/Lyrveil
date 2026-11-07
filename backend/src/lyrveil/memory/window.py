@@ -126,15 +126,15 @@ def select_window(
 
 
 @cache
-def significant_patterns(language: str | None) -> tuple[re.Pattern[str], ...]:
-    """Returns the significant-event patterns of a language, compiled; empty when the language has no list.
+def phrase_patterns(language: str | None, file_name: str) -> tuple[re.Pattern[str], ...]:
+    """Returns the phrases of the list `prompts/<code>/<file_name>` of a language, compiled; empty when the language
+    has no such list.
 
-    The list is `prompts/<code>/significant_patterns.txt`: one phrase per line, blank lines and `#` comments ignored. A
-    phrase matches at the start of a word of the normalized text and may end inside one, so `mi sono trasferit`
-    matches "mi sono trasferita".
+    One phrase per line, blank lines and `#` comments ignored. A phrase matches at the start of a word of the
+    normalized text and may end inside one, so `mi sono trasferit` matches "mi sono trasferita".
     """
     code = language_code(language)
-    path = PATTERN_DIR / (code or "") / PATTERN_FILE
+    path = PATTERN_DIR / (code or "") / file_name
     if code is None or not path.is_file():
         return ()
     lines = (line.split("#", 1)[0].strip() for line in path.read_text(encoding="utf-8").splitlines())
@@ -142,8 +142,15 @@ def significant_patterns(language: str | None) -> tuple[re.Pattern[str], ...]:
     return tuple(re.compile(r"(?<![^\W_])" + re.escape(phrase)) for phrase in phrases if phrase)
 
 
+def significant_patterns(language: str | None) -> tuple[re.Pattern[str], ...]:
+    """Returns the significant-event patterns of a language (`prompts/<code>/significant_patterns.txt`), compiled;
+    empty when the language has no list."""
+    return phrase_patterns(language, PATTERN_FILE)
+
+
 def is_significant(text: str, patterns: Sequence[re.Pattern[str]]) -> bool:
-    """Tells whether `text`, normalized like the patterns (case, accents, runs of spaces), contains one of them."""
+    """Tells whether `text`, normalized like the patterns (case, accents, runs of spaces), contains one of them. Any
+    list of phrase_patterns works, not only the significant events."""
     prepared = _SPACES.sub(" ", normalize(text))
     return any(pattern.search(prepared) for pattern in patterns)
 

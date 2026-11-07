@@ -1,6 +1,10 @@
 # Character Consistency Engine
 
-Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text profiles. Implementation: planned, phase P04.
+Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text profiles. Implementation: planned, phase
+P04. Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
+stored as a memory that no prompt shows and that changes nothing else
+([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Code does not yet detect a card change the model did not
+label; "Applica al profilo" is P04.9.
 
 The engine stops a character from changing identity, personality or knowledge without a
 reason. Model output is treated as a proposal. Deterministic code decides what is stored and

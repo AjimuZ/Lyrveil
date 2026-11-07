@@ -15,7 +15,17 @@ No application exists yet. This section records the design documentation.
   up to 12 of those messages with the loaded text model and stores the facts and events worth remembering, each with
   the messages it came from. It runs only while the text model is loaded, retries after 1 and 5 minutes when the
   model's answer is invalid, and never analyzes the same messages twice. Replies do not use these memories yet,
-  nothing shows them, and changed or contradicted facts, relationship changes and the chat state are not stored yet.
+  nothing shows them, and relationship changes and the chat state are not stored yet.
+- Memory consistency rules, backend only. Code, not the model, now decides what extraction stores. A fact that
+  changed ("ho cambiato lavoro, ora sono da Verdi") replaces the old one, which is kept as history with its source
+  messages. Two facts that disagree with no clear change are both kept as uncertain, and a conflict that matters raises
+  a `memory.conflict` event. An explicit correction by the user wins and is stored as confirmed. Something true only
+  for now ("questa settimana sono a Roma") expires after its date, or after 7 days, without replacing the lasting
+  fact. A guess never overrides what the user said, and a fact about the user that only the character said is stored
+  as a guess. A repeated or near-identical fact adds its sources to the one already stored. Locked memories never
+  change, and proposals to change the character's profile are kept aside and never applied. Every change to a memory
+  keeps the earlier version. Blocking a deleted memory from coming back, resolving conflicts and the Memory Studio are
+  not delivered yet.
 - Daily backups. The backend writes one backup of all application data a day, at its first idle moment (no running
   job and no write for a minute), in the same format as `scripts\lyrveil.cmd backup`, and keeps the newest 7 in the
   data volume; the backup command prunes the same way. `start.cmd` and `stop.cmd` now copy every backup missing from

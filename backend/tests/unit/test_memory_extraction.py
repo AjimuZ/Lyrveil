@@ -11,6 +11,7 @@ import pytest
 from lyrveil.domain.memory_extraction import ExtractionResult, stored_confidence
 from lyrveil.domain.messages import Author, MessageStatus
 from lyrveil.jobs.policy import JobClass, JobKind, RequiredMode, policy_for
+from lyrveil.memory.consistency import expiry, subject_key
 from lyrveil.memory.text import fingerprint
 from lyrveil.memory.window import (
     ExtractionSettings,
@@ -29,7 +30,7 @@ from lyrveil.prompts.extraction import (
     render_prompt,
 )
 from lyrveil.prompts.structured import OutputRejectedError, Repair
-from lyrveil.services.memory_extraction import EXTRACTION_GRAMMAR, expiry, subject_key, validate_result
+from lyrveil.services.memory_extraction import EXTRACTION_GRAMMAR, validate_result
 
 ITALIAN = significant_patterns("it")
 

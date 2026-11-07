@@ -1,0 +1,31 @@
+# Explicit change cues of docs/memory-engine.md (Consistency rules, guard 3): when a user source message of an extracted
+# fact contains one, a different value of a single-valued subject (user.city, user.employer...) replaces the old one
+# as an update; without one the two values become a contradiction. One phrase per line. Matching ignores case and
+# accents, starts at the beginning of a word and may end inside one. Phrases with an apostrophe are left out, because
+# typed apostrophes vary.
+ho cambiato
+abbiamo cambiato
+ora lavoro
+ora sono da
+ora vivo
+ora abito
+adesso lavoro
+adesso sono da
+adesso vivo
+adesso abito
+da oggi
+da lunedi
+non lavoro piu
+non vivo piu
+non abito piu
+mi sono trasferit
+ci siamo trasferit
+ho trovato lavoro
+ho lasciato
+mi sono lasciat
+ci siamo lasciat
+mi sono sposat
+ci siamo sposat
+ho compiuto
+mi sono licenziat
+mi hanno licenziat
