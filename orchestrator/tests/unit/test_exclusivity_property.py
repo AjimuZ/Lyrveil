@@ -10,8 +10,9 @@ runtime is the only one running. Every transition goes through state_machine.tra
 fails the example.
 
 Besides the backend's calls, the events include what happens outside Lyrveil: a runtime crashes or turns unhealthy,
-the next start fails, Docker or NVML stop answering, the card's memory keeps moving, time passes, and a runtime is
-started by hand while the GPU rests in a state that holds no runtime and nothing runs, as `docker start` would. A start
+the next start fails, Docker or NVML stop answering, the card's memory keeps moving, another program takes enough of it
+to hold a load back in IDLE (P06.2) or gives it back, time passes, and a runtime is started by hand while the GPU rests
+in a state that holds no runtime and nothing runs, as `docker start` would. A start
 by hand during a container call is left out: between the supervisor's inspect of the other container and its own start
 (rule 3), such a start would break the rule from outside Lyrveil, and recovery is what handles it.
 """
@@ -69,15 +70,18 @@ TIMINGS = SupervisorTimings(
 
 @dataclass
 class Card(FakeGpuProbe):
-    """A FakeGpuProbe whose external use swings by 1000 MiB on every read while `unsettled` is set."""
+    """A FakeGpuProbe whose external use is the desktop's plus `taken_mib`, held by another program, and swings by
+    1000 MiB on every read while `unsettled` is set."""
 
     unsettled: bool = False
+    taken_mib: int = 0
 
     def read_memory(self) -> VramReading:
+        base = EXTERNAL_MIB + self.taken_mib
         if self.unsettled:
-            self.external_mib = EXTERNAL_MIB + 1000 if self.external_mib == EXTERNAL_MIB else EXTERNAL_MIB
+            self.external_mib = base + 1000 if self.external_mib == base else base
         else:
-            self.external_mib = EXTERNAL_MIB
+            self.external_mib = base
         return super().read_memory()
 
 
@@ -227,6 +231,13 @@ class MemoryMoving:
     moving: bool
 
 
+@dataclass(frozen=True)
+class OtherProgram:
+    """Another program holds `mib` of the card: enough to hold a load back in IDLE, or 0 when it gives it back."""
+
+    mib: int
+
+
 Concurrent = (
     RequestMode
     | Acquire
@@ -242,6 +253,7 @@ Concurrent = (
     | DockerFails
     | NvmlFails
     | MemoryMoving
+    | OtherProgram
 )
 
 
@@ -279,6 +291,7 @@ CONCURRENT: st.SearchStrategy[Concurrent] = st.one_of(
     st.builds(DockerFails, _names, st.sampled_from(["inspect", "start", "stop", "top"])),
     st.builds(NvmlFails, st.integers(min_value=1, max_value=4)),
     st.builds(MemoryMoving, st.booleans()),
+    st.builds(OtherProgram, st.sampled_from([0, 6000])),
 )
 EVENTS: st.SearchStrategy[Event] = st.one_of(
     CONCURRENT,
@@ -405,6 +418,8 @@ class World:
                 self.card.fail_next(times=times)
             case MemoryMoving(moving):
                 self.card.unsettled = moving
+            case OtherProgram(mib):
+                self.card.taken_mib = mib
 
 
 async def play(events: list[Event]) -> World:
@@ -466,7 +481,9 @@ def test_a_switch_and_back_with_a_lease_in_each_mode_and_a_drain() -> None:
 def test_a_runtime_started_by_hand_is_never_joined_by_the_other() -> None:
     # Rule 3 alone protects this path: the image runtime is started outside Lyrveil while the GPU rests in IDLE, and
     # the text runtime that the mode then asks for must not start next to it. Recovery adopts the image runtime and
-    # stops it for the desired mode; the refused start counts as a failed load, so the text load waits 5 s.
+    # stops it for the desired mode; the refused start counts as a failed load, so the text load waits 5 s. The image
+    # runtime leaves too little free memory for the text runtime, but the VRAM check (P06.2) sees a runtime container
+    # running and does not hold the load back, so this memory is never mistaken for another program's.
     world = asyncio.run(play([RequestMode(Mode.NONE), StartedByHand(IMAGE), RequestMode(Mode.LLM), Advance(5.0)]))
     events = world.manager.events(None, 0)
     # After the boot's three transitions and the stop for mode none.

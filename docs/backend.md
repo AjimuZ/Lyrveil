@@ -599,7 +599,7 @@ images in a row, batching, fairness, preemption across modes and cancellation co
 | --- | --- |
 | `jobs/policy.py` | `JobKind`, `JobStatus`, `RequiredMode`, `JobClass`, and per kind the priority, class, maximum attempts, backoff and stages of [Job kinds and priorities](gpu-orchestration.md#job-kinds-and-priorities) |
 | `jobs/queue.py` | `JobQueue`: every read and state change of `generation_jobs`, on a connection the caller owns |
-| `jobs/handlers.py` | The handler contract: `RunContext`, the outcomes `JobDone` and `NextStage`, and `JobFailedError`, `JobPreemptedError` |
+| `jobs/handlers.py` | The handler contract: `RunContext`, the outcomes `JobDone` and `NextStage`, `JobFailedError`, `JobPreemptedError`, and since P06.2 `AbandoningHandler` for a failure before the stage runs |
 | `jobs/scheduler.py` | `JobScheduler`, the single worker, and `recover_interrupted_jobs` for startup step 5 |
 
 Behavior:
@@ -626,6 +626,8 @@ Behavior:
 - **Restart.** At startup, before any worker, every `running` job is queued again at once in the stage it was running,
   with `JOB_INTERRUPTED` as its reason and its lease cleared. The interrupted run counts as an attempt, so a job that
   brings the process down cannot loop forever: one that was on its last attempt ends `failed` with `JOB_INTERRUPTED`.
+- **VRAM wait.** Since P06.2, with a mode switch, the job that decides the mode fails with `GPU_INSUFFICIENT_VRAM` once
+  the orchestrator has held its load back for 120 s, without its stage running ([Orchestrator package](#orchestrator-package)).
 
 Choices the documents did not fix:
 
@@ -822,3 +824,16 @@ which runs beside the scheduler when `Worker.gpu_states` is set, as `main` does.
 and the blocked reason. The first read, and the first after a failure, does not wait, since the orchestrator may have
 restarted with a lower `seq`; a failure waits 5 s. `tests/unit/test_gpu_state.py` tests the label of every state and
 the follower; `tests/integration/test_reply_streaming.py` checks that the event reaches the socket.
+
+Since P06.2 the orchestrator holds a load back in `IDLE` when other programs leave too little free VRAM
+([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)), and `GpuStatus.blocked_vram` carries the mode,
+`free_mib` and `required_mib` of its last check. `JobScheduler` gives the job that decides the mode `vram_wait_s`, 120 s
+by default (`vram.wait_seconds`, not read from `application_settings` yet), from the first pass that sees the hold for
+that job. Then the job fails with `GPU_INSUFFICIENT_VRAM`, not retried, with an Italian `error_detail` that names the
+two numbers, and the next job gets a wait of its own. The stage never runs: the job is marked running without a lease,
+and a handler that shows its job to the user implements `AbandoningHandler.abandon`, which records the failure without
+touching a runtime. `ChatInferenceService` sets the reply and its variant `failed` with no text, and
+`ImageGenerationService` sets the image message `failed`. Both publish `message.failed`. The other kinds fail in the
+queue only. ADR [0038](decisions/0038-vram-hold-in-the-orchestrator-wait-in-the-backend.md) records the split.
+`tests/integration/test_image_mode_switch.py` and `tests/integration/test_reply_streaming.py` test it (T-ORC-05,
+backend side). The orchestrator's `tests/unit/test_vram_guard.py` holds T-ORC-04 and the orchestrator side of T-ORC-05.

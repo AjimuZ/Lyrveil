@@ -242,6 +242,11 @@ class ImageGenerationService:
                 raise
             raise converted from error
 
+    async def abandon(self, job: Job, error: JobFailedError) -> None:
+        """Ends the image of `job` with `error` before its stage ran (AbandoningHandler): the message and its variant
+        become `failed`, any staged file is removed, and `message.failed` carries the error's code."""
+        await self._failed(job, error)
+
     async def _prompt(self, job: Job, context: RunContext) -> JobOutcome:
         target = await to_thread.run_sync(self._load_target, job)
         if target is None:

@@ -1,6 +1,6 @@
 # GPU orchestration: Model Lifecycle Manager
 
-Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Still planned: the VRAM checks before a load with `blocked_reason` (P06.2), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
+Status: accepted (2026-11-01), revised 2026-11-05 for selectable model profiles. Implementation: partial. Delivered in P01.4a: the transition table in `orchestrator/src/lyrveil_orchestrator/state_machine.py`, tested by T-ORC-01. Delivered in P01.4b: `container_gate.py`, the allowlisted Docker calls that `ProcessSupervisor` will use, tested by T-ORC-07. Delivered in P01.4c: `gpu_monitor.py`, with `GPUResourceMonitor` reading NVML through the `GpuProbe` port. Delivered in P02.2, for text mode: `supervisor.py`, the `ProcessSupervisor`, with exclusivity rule 3, readiness and [release verification](#verifying-gpu-release); `lifecycle.py`, the `ModelLifecycleManager`, with the desired mode, the [leases](#leases-and-the-global-lock) (tested by T-ORC-03), drain, the event log and a reduced [recovery](#recovery). In P02.2, recovery keeps one healthy runtime, stops any other, and stops the image runtime when both run. A missing container or an unreachable Docker ends in `ERROR`, which only `POST /v1/recover` leaves. Load retries after 5 s and 20 s, and the third failure in a row ends in `ERROR`. Delivered in P05.7: the switch from `llm` to `image` and back for an image job, along the same states. The backend's `JobScheduler` asks for the mode with `PUT /v1/desired-mode`, and recovery verifies the release before `IDLE` (exclusivity rule 2): memory that does not settle ends in `ERROR` with `GPU_RELEASE_UNVERIFIED`. `orchestrator/tests/integration/test_image_lifecycle.py` tests the switch and rules 2 and 3 with `fake_docker` and `fake_nvml`. Delivered in P06.1: the [18 steps](#the-18-steps-of-an-image-request) played through the control API one step at a time (T-IMG-04), with the job that asked for a mode named on the events of its switch; the [property test](#exclusivity-rules) over random event sequences (T-ORC-02); and the backend's `gpu.state` event with the key of each state's [interface label](#interface-labels). Delivered in P06.2: the VRAM check before a load, the hold in `IDLE` with `blocked_reason`, the end of the waiting job after `vram.wait_seconds`, and the expected drop of a release in the event log ([Verifying GPU release](#verifying-gpu-release), T-ORC-04, T-ORC-05). Still planned: the preferred-VRAM warning and the active profile's own requirement (P06.6), the timed retry out of `ERROR`, launch-level fallbacks and failure classification from the logs (P06.4).
 
 The text model and the image model never share the GPU, whichever [profiles](models.md) are active. The orchestrator owns the GPU state and the two runtime containers. The backend owns the durable
 job queue and asks the orchestrator for a mode and a lease
@@ -129,8 +129,8 @@ in. It also checks:
 
 A second test adds a lost Docker after step 18, which leads to `ERROR` and back, so every state of the table is reached.
 The backend's side of the steps, the stages and the mode requests, is tested in
-`backend/tests/integration/test_image_mode_switch.py` (P05.7). Not covered by P06.1: the VRAM check of step 8 (P06.2)
-and the abort of background work in step 5 (P06.3).
+`backend/tests/integration/test_image_mode_switch.py` (P05.7). The VRAM check of step 8 came in P06.2 and has its own
+tests ([Verifying GPU release](#verifying-gpu-release)). Not covered yet: the abort of background work in step 5 (P06.3).
 
 Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it with the default profiles.
 
@@ -249,6 +249,32 @@ When free VRAM is below the requirement, the state stays `IDLE` with `blocked_re
 that names the numbers, and the next job can try. **External processes are never terminated.** The interface suggests closing other programs that use the card.
 
 The defaults are planning values. After measuring, P02 and P05 set each requirement to the measured peak plus 5 %, and record the result in the catalog.
+
+Delivered in P06.2 ([ADR 0038](decisions/0038-vram-hold-in-the-orchestrator-wait-in-the-backend.md)):
+
+- **Expected drop.** The release event's `details` add `drop_shortfall_mib`: the footprint minus the drop, 0 when the
+  drop reached the footprint, `null` when either is unknown. A shortfall above 64 MiB is logged at `INFO`. The release
+  is verified all the same.
+- **The check.** Before each load from `IDLE`, `ProcessSupervisor.insufficient_vram` reads NVML. Only free memory
+  below the requirement, with neither runtime container running, holds the load. A running runtime container may hold
+  Lyrveil's own memory, such as a runtime started by hand, so the start goes ahead and meets rule 3. An NVML or
+  Docker failure does not hold the load either, because the start then fails on its own.
+- **Requirements.** 6000 MiB for text, the smallest `vram_required_mib` of the catalog, and 6500 MiB for images
+  (`VramRequirements` in `lifecycle.py`). The backend does not send the active profile's own value yet, and the
+  preferred-VRAM warning is not delivered (both P06.6).
+- **The hold.** The state document's `blocked_reason` and `blocked_vram` (`mode`, `free_mib`, `required_mib`) report
+  it. Its start is an event with `from` and `to` both `IDLE`, code `GPU_INSUFFICIENT_VRAM`, the job of the mode request
+  and the two numbers. A hold that ends without a load, because no runtime is wanted any more, is an event too, with
+  no code. A load after a hold ends it with its own transition. The orchestrator checks every 5 s for as long as the
+  desired mode needs a runtime. A change of the desired mode checks the new runtime's requirement at once.
+- **The wait.** The backend's `JobScheduler` gives the job that needs the mode `vram.wait_seconds` from the first
+  pass that sees the hold for it. Then the job fails with `GPU_INSUFFICIENT_VRAM`, not retried, and an Italian detail
+  that names both numbers. A reply or an image message becomes `failed` with `message.failed`. The next job gets a wait
+  of its own ([Backend](backend.md#orchestrator-package)). The setting is not read from `application_settings` yet, so the wait is
+  120 s.
+- **Tests.** `orchestrator/tests/unit/test_vram_guard.py` holds T-ORC-04 and the orchestrator side of T-ORC-05. The
+  backend side is in `backend/tests/integration/test_image_mode_switch.py` and `test_reply_streaming.py`. The property
+  test (T-ORC-02) now includes another program that takes memory and gives it back.
 
 ## Load failures and launch levels
 

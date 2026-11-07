@@ -160,7 +160,7 @@ Evidence:
 **Depends on:** P05. **Areas:** Model Lifecycle Manager, job scheduling, resources screen.
 
 - [x] P06.1 Complete the 18-step flow with all states.
-- [ ] P06.2 Release verification, VRAM guards and blocked states.
+- [x] P06.2 Release verification, VRAM guards and blocked states.
 - [ ] P06.3 Scheduling rules, batching, fairness, preemption and cancellation.
 - [ ] P06.4 Launch levels, out-of-memory handling and recovery table.
 - [ ] P06.5 Safe shutdown, drain and event persistence.

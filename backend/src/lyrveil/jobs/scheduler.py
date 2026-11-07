@@ -2,10 +2,13 @@
 
 The base rule: a job runs when its stage needs no GPU or needs the mode the GPU is in, and a handler for its kind is
 registered; anything else waits in the queue. With a ModeSwitch (P05.7), the scheduler also asks the orchestrator for
-the mode its queue needs, by the reduced rule of `mode_deciding_job`. The image wait limit, `images.max_in_a_row`,
-batching, fairness and preemption across modes come with P06.3 (docs/gpu-orchestration.md, Selection).
+the mode its queue needs, by the reduced rule of `mode_deciding_job`. Since P06.2 it ends the job that waits for that
+mode once the orchestrator has held the load back for VRAM during `vram_wait_s`. The image wait limit,
+`images.max_in_a_row`, batching, fairness and preemption across modes come with P06.3 (docs/gpu-orchestration.md,
+Selection).
 """
 
+import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -16,8 +19,10 @@ from sqlalchemy import Connection, Engine
 
 from lyrveil.domain.identifiers import new_id
 from lyrveil.jobs.handlers import (
+    GPU_INSUFFICIENT_VRAM,
     INTERNAL,
     LEASE_LOST,
+    AbandoningHandler,
     JobDone,
     JobFailedError,
     JobHandler,
@@ -31,6 +36,7 @@ from lyrveil.jobs.queue import Job, JobQueue
 from lyrveil.logs import get_logger
 from lyrveil.orchestration.client import (
     HEARTBEAT_INTERVAL_S,
+    BlockedVram,
     DesiredMode,
     GpuStatus,
     Lease,
@@ -47,6 +53,9 @@ from lyrveil.ports.text_runtime import TextRuntimeError
 # How long the idle worker waits for notify() before it looks at the queue again: a backoff that ends, a GPU mode
 # that changes or a lease that was refused all become eligible without a notification.
 IDLE_POLL_S = 1.0
+# docs/configuration.md, `vram.wait_seconds`: how long the job that needs a mode waits while the orchestrator holds its
+# load back for VRAM. The default only: the setting is not read from application_settings yet.
+VRAM_WAIT_S = 120.0
 # Lease outcomes the orchestrator acts on (docs/gpu-orchestration.md, Load failures): "oom" moves to the next launch
 # level, "runtime_error" makes it check the runtime.
 _OOM_CODES = frozenset({"LLM_OOM", "IMAGE_OOM"})
@@ -95,6 +104,25 @@ class _Run:
     outcome: JobOutcome | None = None
     error: Exception | None = None
     lease_lost: bool = False
+
+
+@dataclass(frozen=True)
+class _Overdue:
+    """A job whose mode the GPU could not take within the VRAM wait, and the failure that ends it."""
+
+    job: Job
+    error: JobFailedError
+
+
+def _vram_detail(blocked: BlockedVram | None) -> str:
+    """Returns the Italian reason shown with GPU_INSUFFICIENT_VRAM, with the numbers of the orchestrator's last check
+    when it sent them. It names memory sizes only, never private text."""
+    if blocked is None:
+        return "Altri programmi stanno usando la scheda video. Chiudili e riprova."
+    return (
+        f"Servono {blocked.required_mib} MiB liberi sulla scheda video, ma ne restano {blocked.free_mib}: "
+        "altri programmi la stanno usando. Chiudili e riprova."
+    )
 
 
 def _lease_outcome(code: str | None) -> LeaseOutcome:
@@ -152,6 +180,10 @@ class JobScheduler:
     While the GPU is not ready in that mode, only stages that need no GPU run. The orchestrator applies the change
     once the current lease ends, and verifies the release before it starts the other runtime, so the two never run
     together. When nothing queued needs the GPU, the state is read only until `llm` has been asked for once.
+
+    While the orchestrator holds the load of that mode back with GPU_INSUFFICIENT_VRAM, the job that needs the mode
+    waits `vram_wait_s` on the monotonic `clock`, from the first pass that sees the hold for it. Then it fails with
+    that code, not retried, and a detail naming the free and the required memory; the next job waits anew.
     """
 
     def __init__(
@@ -165,6 +197,8 @@ class JobScheduler:
         mode_switch: ModeSwitch | None = None,
         heartbeat_interval_s: float = HEARTBEAT_INTERVAL_S,
         idle_poll_s: float = IDLE_POLL_S,
+        vram_wait_s: float = VRAM_WAIT_S,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._engine = engine
         self._queue = queue
@@ -176,6 +210,10 @@ class JobScheduler:
         self._desired: DesiredMode | None = None
         self._heartbeat_interval_s = heartbeat_interval_s
         self._idle_poll_s = idle_poll_s
+        self._vram_wait_s = vram_wait_s
+        self._clock = clock
+        # The job that waits while the orchestrator holds its mode's load back for VRAM, and when the wait began.
+        self._vram_wait: tuple[str, float] | None = None
         self._wake = anyio.Event()
 
     def notify(self) -> None:
@@ -201,13 +239,16 @@ class JobScheduler:
 
         Returns None, and changes nothing in the queue, when no job is eligible, or when the orchestrator refuses the
         lease or does not answer: the job stays queued and is tried again later. With a mode switch, a pass that only
-        asks for a mode change also returns None.
+        asks for a mode change also returns None, and a pass that finds the VRAM wait over ends the waiting job
+        instead of running one, and returns it failed.
         """
         kinds = tuple(self._handlers)
         if self._mode_switch is None:
             modes = {RequiredMode.NONE, self._current_mode()}
         else:
-            modes = await self._follow_queue(self._mode_switch, kinds)
+            modes, overdue = await self._follow_queue(self._mode_switch, kinds)
+            if overdue is not None:
+                return await self._abandon(overdue.job, overdue.error)
         candidate = await to_thread.run_sync(
             read, self._engine, lambda connection: self._queue.next_eligible(connection, modes, kinds)
         )
@@ -240,19 +281,23 @@ class JobScheduler:
         logger.info("job_run_ended", **_log_fields(finished))
         return finished
 
-    async def _follow_queue(self, switch: ModeSwitch, kinds: Collection[JobKind]) -> set[RequiredMode]:
+    async def _follow_queue(
+        self, switch: ModeSwitch, kinds: Collection[JobKind]
+    ) -> tuple[set[RequiredMode], _Overdue | None]:
         """Asks for the mode the queue needs when the orchestrator is not already moving to it, and returns the modes
-        whose stages may run now: that mode once its runtime is ready, and always RequiredMode.NONE.
+        whose stages may run now: that mode once its runtime is ready, and always RequiredMode.NONE. The second value
+        is the job to end when its VRAM wait is over (`_vram_overdue`), else None.
 
         A state read or a mode request that fails is logged and leaves only RequiredMode.NONE, so the GPU jobs wait
-        for the next pass.
+        for the next pass; it neither starts nor ends a VRAM wait.
         """
         deciding = await to_thread.run_sync(
             read, self._engine, lambda connection: mode_deciding_job(connection, self._queue, kinds)
         )
         needed: LeaseMode = "image" if deciding is not None and deciding.required_mode is RequiredMode.IMAGE else "llm"
         if deciding is None and self._desired == "llm":
-            return {RequiredMode.NONE}
+            self._vram_wait = None
+            return {RequiredMode.NONE}, None
         try:
             status = await to_thread.run_sync(switch.read_state)
             self._desired = status.desired_mode
@@ -264,10 +309,57 @@ class JobScheduler:
                 logger.info("gpu_mode_requested", state=needed, **({} if job_id is None else {"job_id": job_id}))
         except (ModeRefusedError, OrchestratorUnavailableError):
             logger.info("gpu_mode_unavailable")
-            return {RequiredMode.NONE}
+            return {RequiredMode.NONE}, None
         if status.ready_mode == needed and status.desired_mode == needed:
-            return {RequiredMode.NONE, _MODES[needed]}
-        return {RequiredMode.NONE}
+            self._vram_wait = None
+            return {RequiredMode.NONE, _MODES[needed]}, None
+        return {RequiredMode.NONE}, self._vram_overdue(deciding, needed, status)
+
+    def _vram_overdue(self, deciding: Job | None, needed: LeaseMode, status: GpuStatus) -> _Overdue | None:
+        """Times the wait of `deciding` while the orchestrator holds the load of `needed` back for VRAM
+        (docs/gpu-orchestration.md, Verifying GPU release), and returns it with its failure once the wait has lasted
+        `vram_wait_s`. The wait begins at the first pass that sees the hold for this job, and a pass without the hold
+        ends it, so each job gets a whole wait of its own."""
+        blocked = status.blocked_vram
+        if (
+            deciding is None
+            or status.blocked_reason != GPU_INSUFFICIENT_VRAM
+            or status.desired_mode != needed
+            or (blocked is not None and blocked.mode != needed)
+        ):
+            self._vram_wait = None
+            return None
+        now = self._clock()
+        if self._vram_wait is None or self._vram_wait[0] != deciding.id:
+            self._vram_wait = (deciding.id, now)
+            logger.info("job_waiting_for_vram", job_id=deciding.id)
+            return None
+        if now - self._vram_wait[1] < self._vram_wait_s:
+            return None
+        self._vram_wait = None
+        return _Overdue(deciding, JobFailedError(GPU_INSUFFICIENT_VRAM, _vram_detail(blocked), retryable=False))
+
+    async def _abandon(self, job: Job, error: JobFailedError) -> Job | None:
+        """Ends the queued `job` with `error` without running its stage, and returns it failed, or None when it is no
+        longer queued. It is marked running without a lease, so no runtime is touched; an AbandoningHandler then
+        records the failure on what the job shows the user, and the failure is stored as for any run."""
+        genkey = new_id()
+        started = await to_thread.run_sync(
+            write, self._engine, lambda connection: self._queue.start(connection, job.id, None, genkey)
+        )
+        if started is None:
+            return None
+        handler = self._handlers[started.kind]
+        if isinstance(handler, AbandoningHandler):
+            try:
+                await handler.abandon(started, error)
+            except Exception:
+                logger.error("job_abandon_failed", job_id=started.id, exc_info=True)
+        finished = await to_thread.run_sync(
+            write, self._engine, lambda connection: self._store(connection, started, _Run(error=error))
+        )
+        logger.info("job_run_ended", **_log_fields(finished))
+        return finished
 
     async def _execute(self, job: Job, context: RunContext) -> _Run:
         run = _Run()

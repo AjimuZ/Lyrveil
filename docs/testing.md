@@ -643,8 +643,8 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-ORC-01 | Every legal transition works and every other is refused | Unit | P01 |
 | T-ORC-02 | Property: no event sequence runs both runtimes. In `orchestrator/tests/unit/test_exclusivity_property.py` (P06.1): Hypothesis drives the backend's calls and outside faults, also while a container call is in flight, through the real manager and supervisor over the fakes ([Exclusivity rules](gpu-orchestration.md#exclusivity-rules)) | Unit | P06 |
 | T-ORC-03 | Lease rules: one at a time, mode match, expiry, heartbeat | Unit | P02 |
-| T-ORC-04 | Release verification with external memory use. No external process is touched | Unit | P06 |
-| T-ORC-05 | Low VRAM blocks with a reason and ends the job after the wait | Unit | P06 |
+| T-ORC-04 | Release verification with external memory use. No external process is touched. In `orchestrator/tests/unit/test_vram_guard.py` (P06.2): another program takes memory as the runtime stops, the release is verified with `drop_shortfall_mib` in its event, and the gate only ever names the two runtime containers | Unit | P06 |
+| T-ORC-05 | Low VRAM blocks with a reason and ends the job after the wait. Orchestrator side in `orchestrator/tests/unit/test_vram_guard.py` (P06.2): the hold in `IDLE` with `blocked_reason` and `blocked_vram`, the check every 5 s, the load once memory is free, and the end of the hold when no runtime is wanted. Backend side in `backend/tests/integration/test_image_mode_switch.py` and `test_reply_streaming.py`: the job fails with `GPU_INSUFFICIENT_VRAM` after 120 s, its message becomes `failed`, and the next job waits anew | Unit | P06 |
 | T-ORC-06 | Each row of the recovery table | Unit | P06 |
 | T-ORC-07 | Gate refuses other names and foreign labels. No forbidden call exists | Unit | P01 |
 | T-ORC-08 | Fallback profiles | Integration | P06 |

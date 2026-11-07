@@ -528,6 +528,14 @@ class ChatInferenceService:
 
         write(self._engine, work)
 
+    async def abandon(self, job: Job, error: JobFailedError) -> None:
+        """Ends the reply of `job` with `error` before any generation (AbandoningHandler): its message and variant
+        become `failed` with no text, and `message.failed` carries the error's code. A reply that no longer waits is
+        left as it is."""
+        reply = await to_thread.run_sync(self._claim, job)
+        if reply is not None:
+            await self._settle(job, reply, "", error.code, retry=False)
+
     def _claim(self, job: Job) -> _Reply | None:
         """Marks the job's reply `streaming` with empty text and returns it, or None when it is not waiting."""
         named = job.payload.get("variant_id")

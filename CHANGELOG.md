@@ -10,6 +10,15 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- A model no longer starts on a card that other programs have filled. Before a load, the orchestrator checks the free
+  VRAM: 6500 MiB for images, and 6000 MiB for text whichever profile is active, until profiles send their own value.
+  With less free, the GPU waits idle, checks again every 5 s, and reports the reason `GPU_INSUFFICIENT_VRAM`, which the
+  `gpu.state` event shows as **Altri programmi stanno usando la scheda video. Chiudili e riprova**. Other programs are
+  never stopped. After 120 s the reply or image that waits fails: its message becomes failed, and the job's error
+  detail says how much memory is free and how much is needed. The next request gets its own wait. A release also records how far the memory drop fell short of the
+  model's footprint, when another program took memory meanwhile. Not delivered yet: the retry action, the preferred-VRAM
+  warning and reading `vram.wait_seconds` from the settings.
+
 - The GPU state on the event WebSocket, backend only. The backend follows the orchestrator and publishes `gpu.state`
   with the state, the key of its Italian label (such as **In attesa della scheda video…** while the text model makes
   room for an image, or **Sta tornando in chat…** on the way back), the number of queued and running jobs, and the
@@ -21,8 +30,8 @@ No application exists yet. This section records the design documentation.
   starts ComfyUI, and returns to the text model once no image is left. The two models never run at the same time: a
   start is refused while the other runtime runs, and the GPU counts as free only after its memory has settled. Memory
   that does not settle leaves the orchestrator in an error state that `POST /v1/recover` leaves. Not delivered yet
-  (P06): the VRAM check before a load, the timed retry out of that error state, the image wait limit and the cap on
-  images in a row. Requests made before this change start drawing too, since they are still in the queue.
+  (P06): the timed retry out of that error state, the image wait limit and the cap on images in a row. The VRAM check
+  before a load came later, see above. Requests made before this change start drawing too, since they are still in the queue.
 
 - The gallery (`/gallery`): a grid of thumbnails in pages, filtered by character and purpose, with a lightbox that shows
   the metadata, links to the source chat, regenerates (with or without the seed) and deletes an image. New routes:

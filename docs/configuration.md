@@ -151,6 +151,12 @@ belong to its profile in the [catalog](models.md#catalog-file).
 
 The backend sends the settings the orchestrator needs when it connects.
 
+Delivered in P06.2, as defaults only: no key of this table is read from `application_settings` yet, and the backend
+sends none to the orchestrator. `JobScheduler` waits 120 s, the default of `vram.wait_seconds`, for a load held back
+for VRAM. The orchestrator requires 6500 MiB free for images, the default of `vram.required_image_mib`, and 6000 MiB
+for text, the smallest `vram_required_mib` of the catalog, whichever profile is active
+([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)).
+
 ### Proactive
 
 Listed in [Scheduler](scheduler.md#per-conversation-settings).

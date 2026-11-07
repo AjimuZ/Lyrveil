@@ -150,7 +150,8 @@ Image jobs run through the orchestrator's normal mode switch ([GPU orchestration
   scripted orchestrator. It checks the mode requests, foreground text before the image, background work waiting behind
   the image, and an unreachable orchestrator.
 - **Not delivered (P06.3).** The wait limit `images.max_wait_seconds`, `images.max_in_a_row`, preemption of background
-  work, and the `waiting` phase. The VRAM check before a load and the timed retry out of `ERROR` are P06.
+  work, and the `waiting` phase. The timed retry out of `ERROR` is P06.4. The VRAM check before a load came in P06.2
+  ([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)).
 
 ## Job stages
 
@@ -646,7 +647,7 @@ safety negative is always appended and the guard always runs.
 | `IMAGE_OOM` | Lease ends with `oom`. Runtime restarts. One retry with the tiled file of the same preset. If **Alta** fails again, one last try with **Rapida**. The message says which preset produced the image |
 | Stalled, no progress for 120 s | `POST /interrupt`, retry once |
 | Total time over 300 s | Same |
-| `GPU_INSUFFICIENT_VRAM` | The job fails after the wait. The message shows a clear reason and a retry action |
+| `GPU_INSUFFICIENT_VRAM` | The job fails after the wait. The message shows a clear reason and a retry action. Since P06.2 the job fails after 120 s of the orchestrator's hold, with a detail that names the free and the required MiB, and the message becomes `failed`. The retry action is not delivered yet |
 | User cancels | `POST /interrupt` if rendering. The placeholder is removed and the mode returns to text |
 | Crash during `persist` | The job restarts from the staged file |
 

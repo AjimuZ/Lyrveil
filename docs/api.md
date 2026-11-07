@@ -52,7 +52,7 @@ Job errors, reported through `job.updated`:
 
 | Code | Meaning |
 | --- | --- |
-| `GPU_INSUFFICIENT_VRAM` | Other programs hold too much VRAM. |
+| `GPU_INSUFFICIENT_VRAM` | Other programs hold too much VRAM. Since P06.2, the job that needs the held-back mode fails after `vram.wait_seconds`, not retried, and `error_detail` names the free and the required MiB. |
 | `LLM_LOAD_FAILED`, `IMAGE_LOAD_FAILED` | A runtime did not reach readiness. |
 | `MODEL_FILE_MISSING` | The active profile's file is absent or has the wrong size. Checked before any mode change. |
 | `LLM_OOM`, `IMAGE_OOM` | CUDA out of memory. |
@@ -632,7 +632,8 @@ Since P06.1 the backend publishes `gpu.state`. `GpuStateFollower` (`lyrveil/orch
 - `label_key` is the key in `frontend/src/i18n/it.json` of its [interface label](gpu-orchestration.md#interface-labels),
   or `null` when no GPU text is shown.
 - `queue` is the number of queued and running jobs.
-- `blocked_reason` is the orchestrator's, `null` until P06.2 delivers the VRAM check.
+- `blocked_reason` is the orchestrator's: `GPU_INSUFFICIENT_VRAM` while it holds a load back for VRAM (P06.2), with
+  `label_key` `gpu.blocked.insufficientVram`, and `null` otherwise.
 
 Transitions closer together than one answer are folded into the latest one, so the momentary `IDLE` between a stop
 and the next start is usually not published. No screen shows the label yet.
@@ -656,8 +657,10 @@ Every other route of the table came in P02.2, served by `ModelLifecycleManager`
 (`lifecycle.py`), whose run loop the application's lifespan starts. The text path is
 covered: start from mode `llm`, readiness, leases, drain and release verification. The
 switch to mode `image` and back came in P05.7, and P06.1 tests the 18 steps of an image request through these routes
-(T-IMG-04). The VRAM check before a load, so `blocked_reason` too, comes in P06.2.
-`blocked_reason` is always `null` until then. Since P02.6c `lyrveil_orchestrator.main`, the
+(T-IMG-04). The VRAM check before a load came in P06.2: while other programs leave too little free VRAM, the state
+stays `IDLE` with `blocked_reason` `GPU_INSUFFICIENT_VRAM` and `blocked_vram` `{"mode", "free_mib", "required_mib"}`,
+from the last check, and both are `null` otherwise
+([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)). Since P02.6c `lyrveil_orchestrator.main`, the
 command of the `runtime` image, serves the application with Uvicorn on port 8100, over the
 Docker socket and NVML. In `compose.test.yaml` the test-only image `lyrveil/orchestrator-fakes:test`
 serves the same application over `FakeContainerGate` and `FakeGpuProbe` ([Testing](testing.md)).
@@ -680,7 +683,10 @@ Rules of the delivered routes:
   poll `GET /v1/state` until `IDLE`. The state document adds `draining`.
 - `GET /v1/events` answers `{"boot_id", "events"}`. Each event has `seq`, `at`, `from`,
   `to`, `reason`, `job_id`, `code` and `details`. `details` holds only VRAM values in MiB
-  and exit codes. For another `boot_id`, every buffered event is returned.
+  and exit codes. For another `boot_id`, every buffered event is returned. Since P06.2 the start of a hold for VRAM,
+  and its end without a load, are events too, with `from` and `to` both `IDLE`, so `seq` moves with `blocked_reason`.
+  The start has code `GPU_INSUFFICIENT_VRAM` and `details` `free_mib` and `required_mib`. A release adds
+  `drop_shortfall_mib` to its `details`.
 - Since P06.1 the `job_id` of `PUT /v1/desired-mode` is kept: the events of the switch it causes, from the stop of
   the current runtime to the ready state of the new one, carry it. A lease's events carry the lease's job, and a drain
   or a recovery carries none.
@@ -735,6 +741,7 @@ State document:
   "draining": false,
   "lease": null,
   "blocked_reason": null,
+  "blocked_vram": null,
   "vram": {"total_mib": 12282, "used_mib": 10400, "free_mib": 1882},
   "runtimes": {
     "llm": {"container": "running", "health": "healthy", "exit_code": null},

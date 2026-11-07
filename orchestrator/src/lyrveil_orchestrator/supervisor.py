@@ -3,12 +3,15 @@
 It follows docs/gpu-orchestration.md (Exclusivity rules, Verifying GPU release) and acts only through ContainerGate
 and GPUResourceMonitor. It holds no GPU state: the lifecycle manager decides when to call it and moves the state
 machine around each call. Every failure is a SupervisorError whose `code` is an operational or job code of
-docs/api.md, so the manager can report it as `last_error` without reading the message.
+docs/api.md, so the manager can report it as `last_error` without reading the message. Since P06.2 it also answers
+whether the card has the free VRAM a start needs. Memory held by other programs is only ever read: the gate can act on
+the two runtime containers alone, and the probe has no call that changes anything.
 
-Not delivered yet (P06): the VRAM check before a load and the classification of load failures from the logs.
+Not delivered yet (P06.4): the classification of load failures from the logs.
 """
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -25,6 +28,8 @@ from lyrveil_orchestrator.container_gate import (
 )
 from lyrveil_orchestrator.gpu_monitor import GpuProbeError, GPUResourceMonitor, VramReading
 from lyrveil_orchestrator.state_machine import Runtime
+
+logger = logging.getLogger(__name__)
 
 # The container of each runtime, and the one that must not run while it starts.
 CONTAINERS: Mapping[Runtime, ContainerName] = MappingProxyType(
@@ -93,6 +98,25 @@ class ReleaseReport:
     settled: VramReading
     drop_mib: int | None
     footprint_mib: int | None
+
+    @property
+    def drop_shortfall_mib(self) -> int | None:
+        """Returns how much less the memory dropped than the footprint (step 3, the expected drop): memory another
+        program took meanwhile, since the container has ended. 0 when the drop reached the footprint, None when
+        either value is unknown."""
+        if self.drop_mib is None or self.footprint_mib is None:
+            return None
+        return max(0, self.footprint_mib - self.drop_mib)
+
+
+@dataclass(frozen=True)
+class InsufficientVram:
+    """A start held back because the card has `free_mib` free and `runtime` needs `required_mib`, with neither runtime
+    container running, so other programs hold the memory."""
+
+    runtime: Runtime
+    free_mib: int
+    required_mib: int
 
 
 class SupervisorError(Exception):
@@ -218,7 +242,7 @@ class ProcessSupervisor:
         except ContainerGateError as error:
             raise _gate_failure(error) from error
         settled = await self._settled_memory(runtime)
-        return ReleaseReport(
+        report = ReleaseReport(
             runtime=runtime,
             exit_code=exit_code,
             used_before_stop_mib=None if before is None else before.used_mib,
@@ -226,6 +250,32 @@ class ProcessSupervisor:
             drop_mib=None if before is None else before.used_mib - settled.used_mib,
             footprint_mib=self._footprints.get(runtime),
         )
+        shortfall = report.drop_shortfall_mib
+        if shortfall is not None and shortfall > self._timings.settle_tolerance_mib:
+            # Informational only (step 3): the container has ended, so the memory it did not give back is held
+            # elsewhere, and nothing is done about it.
+            logger.info("release of %s dropped %d MiB less than its footprint", runtime, shortfall)
+        return report
+
+    async def insufficient_vram(self, runtime: Runtime, required_mib: int) -> InsufficientVram | None:
+        """Returns what holds the start of `runtime` back when the card has less than `required_mib` free and neither
+        runtime container runs (docs/gpu-orchestration.md, Verifying GPU release, before any load), or None.
+
+        Starts nothing and stops nothing. The memory reading comes first, so a card with enough room costs no Docker
+        call. With a runtime container running, the memory may be Lyrveil's own, such as a runtime started by hand:
+        None lets the start go ahead and meet Exclusivity rule 3 or the readiness check. None as well when NVML or
+        Docker cannot be read, since the start reads them again and fails on its own.
+        """
+        reading = await self.read_memory()
+        if reading is None or reading.free_mib >= required_mib:
+            return None
+        try:
+            for each in Runtime:
+                if (await self._gate.inspect(CONTAINERS[each])).running:
+                    return None
+        except ContainerGateError:
+            return None
+        return InsufficientVram(runtime=runtime, free_mib=reading.free_mib, required_mib=required_mib)
 
     async def verify_settled(self) -> VramReading:
         """Returns the settled memory reading once the card's used memory stops moving (docs/gpu-orchestration.md,

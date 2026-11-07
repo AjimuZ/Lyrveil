@@ -2,6 +2,7 @@
 that the reply normalizer stands between the runtime and both the client and the database (P04.8a), and T-CON-10:
 the corrective generation after a V6, V10 or V11 hit, the adaptive notes, and the V1 and V4 endings (P04.8b). Since
 P06.1, also that the job worker publishes each GPU state the orchestrator reports as `gpu.state` on the same socket.
+Since P06.2, also that a reply whose text load the orchestrator holds back for VRAM fails after the wait (T-ORC-05).
 
 The text runtime is a fake that keeps the TextRuntime contract; the job worker, the event hub, the WebSocket
 route and the database are the real ones. The WebSocket is spoken in raw ASGI messages on the test's own event
@@ -34,7 +35,7 @@ from lyrveil.jobs.queue import Job, JobQueue
 from lyrveil.jobs.scheduler import JobScheduler, read, write
 from lyrveil.logs import configure_logging
 from lyrveil.main import Worker, create_app
-from lyrveil.orchestration.client import GpuStatus, Lease, LeaseMode, LeaseOutcome
+from lyrveil.orchestration.client import BlockedVram, DesiredMode, GpuStatus, Lease, LeaseMode, LeaseOutcome
 from lyrveil.persistence.database import create_database_engine
 from lyrveil.persistence.migrations import upgrade_to_head
 from lyrveil.ports.text_runtime import (
@@ -621,6 +622,52 @@ async def test_adaptive_notes_start_last_three_replies_and_stay_at_most_two(migr
         (NOTE_V13,),
         (),
     ]
+
+
+class HeldGpu:
+    """A ModeSwitch whose text load the orchestrator holds back for VRAM: IDLE, mode llm, GPU_INSUFFICIENT_VRAM."""
+
+    def read_state(self) -> GpuStatus:
+        return GpuStatus(
+            state="IDLE",
+            desired_mode="llm",
+            draining=False,
+            blocked_reason="GPU_INSUFFICIENT_VRAM",
+            blocked_vram=BlockedVram(mode="llm", free_mib=4100, required_mib=6000),
+        )
+
+    def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None:
+        raise AssertionError("the desired mode is already llm")
+
+
+@pytest.mark.anyio
+async def test_a_reply_held_back_for_vram_fails_after_the_wait_without_touching_the_runtime(migrated: Engine) -> None:
+    """T-ORC-05, backend side, for text: the reply ends failed with the code, and the runtime is never asked."""
+    reply = MessageService(migrated).send(new_chat(migrated), "Ciao").reply
+    runtime, hub, ticks = FakeRuntime(), EventHub("boot"), Ticks()
+    service = ChatInferenceService(migrated, runtime, hub)
+    handlers = {JobKind.CHAT_REPLY: service}
+
+    def unused() -> RequiredMode:
+        raise AssertionError("with a mode switch the scheduler must read the mode from the orchestrator")
+
+    scheduler = JobScheduler(
+        migrated, JobQueue(), handlers, Leases(), unused, mode_switch=HeldGpu(), vram_wait_s=120.0, clock=ticks
+    )
+    assert await scheduler.run_once() is None
+    ticks.now += 119.0
+    assert await scheduler.run_once() is None
+    assert stored(migrated, reply.id)[0] == "queued"
+
+    ticks.now += 1.0
+    failed = await scheduler.run_once()
+    assert failed is not None
+    assert (failed.status, failed.error_code) == (JobStatus.FAILED, "GPU_INSUFFICIENT_VRAM")
+    assert failed.error_detail is not None
+    assert "6000 MiB" in failed.error_detail
+    assert stored(migrated, reply.id) == ("failed", "", "failed", "")
+    assert events(hub)[-1] == ("message.failed", {"message_id": reply.id, "error_code": "GPU_INSUFFICIENT_VRAM"})
+    assert runtime.requests == []
 
 
 @pytest.mark.anyio

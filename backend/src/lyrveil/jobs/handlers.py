@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from lyrveil.jobs.queue import Job
 from lyrveil.orchestration.client import Lease
@@ -10,6 +10,8 @@ from lyrveil.orchestration.client import Lease
 # docs/api.md (Errors): the job error a handler bug ends with. Details stay in the logs.
 INTERNAL = "INTERNAL"
 LEASE_LOST = "LEASE_LOST"
+# The orchestrator held the load back because other programs hold the VRAM, for longer than the job may wait.
+GPU_INSUFFICIENT_VRAM = "GPU_INSUFFICIENT_VRAM"
 
 
 @dataclass(frozen=True)
@@ -66,3 +68,16 @@ class JobHandler(Protocol):
     """
 
     async def __call__(self, job: Job, context: RunContext) -> JobOutcome: ...
+
+
+@runtime_checkable
+class AbandoningHandler(Protocol):
+    """A handler that shows its job to the user, and so must record a failure that comes before its stage runs.
+
+    The scheduler calls `abandon` when it ends a job that never got the GPU, such as GPU_INSUFFICIENT_VRAM after the
+    VRAM wait: the job is running, no lease is held, and `error` is not retryable. `abandon` must not touch a runtime.
+    It records the failure on what the job shows, such as its message, and announces it; the scheduler then stores the
+    job's failure. An exception it raises is logged and does not keep the job from failing.
+    """
+
+    async def abandon(self, job: Job, error: JobFailedError) -> None: ...

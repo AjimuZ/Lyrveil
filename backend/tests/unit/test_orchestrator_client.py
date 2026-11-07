@@ -11,6 +11,7 @@ import pytest
 from pydantic import SecretStr
 
 from lyrveil.orchestration.client import (
+    BlockedVram,
     Lease,
     LeaseLostError,
     LeaseRefusedError,
@@ -185,6 +186,24 @@ def test_the_state_is_long_polled_with_its_sequence_and_blocked_reason(client: O
         "/v1/state?since=0&wait=0",
         "/v1/state?since=12&wait=25",
     ]
+
+
+def test_the_numbers_of_a_vram_hold_are_read_and_a_malformed_hold_is_ignored(client: OrchestratorClient) -> None:
+    held = {
+        "state": "IDLE",
+        "desired_mode": "image",
+        "draining": False,
+        "blocked_reason": "GPU_INSUFFICIENT_VRAM",
+        "blocked_vram": {"mode": "image", "free_mib": 5282, "required_mib": 6500},
+    }
+    ControlApi.answers = [
+        (200, held),
+        (200, {**held, "blocked_vram": {"mode": "image", "free_mib": "5282", "required_mib": 6500}}),
+        (200, {**held, "blocked_vram": {"mode": "none", "free_mib": 5282, "required_mib": 6500}}),
+    ]
+    assert client.read_state().blocked_vram == BlockedVram(mode="image", free_mib=5282, required_mib=6500)
+    assert client.read_state().blocked_vram is None
+    assert client.read_state().blocked_vram is None
 
 
 def test_a_mode_refused_while_draining_and_a_malformed_state_are_reported(client: OrchestratorClient) -> None:

@@ -53,12 +53,23 @@ class Lease:
 
 
 @dataclass(frozen=True)
+class BlockedVram:
+    """The orchestrator's last VRAM check of a held-back load: the runtime of `mode` needs `required_mib` free and
+    the card had `free_mib`, the rest being held by other programs."""
+
+    mode: LeaseMode
+    free_mib: int
+    required_mib: int
+
+
+@dataclass(frozen=True)
 class GpuStatus:
     """The part of the state document the backend acts on. `state` is the GPU state name, `desired_mode` the mode
     the orchestrator is moving to, and `draining` whether it refuses new modes.
 
-    `seq` counts the orchestrator's transitions since the process named `boot_id` started, and `blocked_reason` is the
-    code that holds a load back, such as GPU_INSUFFICIENT_VRAM. Each is None when the answer did not carry it.
+    `seq` counts the orchestrator's events since the process named `boot_id` started: its transitions, and the start
+    and end of a load held back for VRAM. `blocked_reason` is the code that holds a load back, such as
+    GPU_INSUFFICIENT_VRAM, and `blocked_vram` the numbers of that hold. Each is None when the answer did not carry it.
     """
 
     state: str
@@ -67,6 +78,7 @@ class GpuStatus:
     seq: int | None = None
     boot_id: str | None = None
     blocked_reason: str | None = None
+    blocked_vram: BlockedVram | None = None
 
     @property
     def ready_mode(self) -> LeaseMode | None:
@@ -132,8 +144,9 @@ class OrchestratorClient:
         return status
 
     def _state(self, path: str, timeout_s: float) -> GpuStatus:
-        """Reads the state document at `path`. `seq`, `boot_id` and `blocked_reason` are None when absent or of
-        another type; the other fields must have their documented types, or OrchestratorUnavailableError is raised."""
+        """Reads the state document at `path`. `seq`, `boot_id`, `blocked_reason` and `blocked_vram` are None when
+        absent or of another type; the other fields must have their documented types, or OrchestratorUnavailableError
+        is raised."""
         status, body = self._send("GET", path, None, timeout_s)
         state, desired, draining = body.get("state"), body.get("desired_mode"), body.get("draining")
         if (
@@ -151,6 +164,7 @@ class OrchestratorClient:
             seq=seq if isinstance(seq, int) and not isinstance(seq, bool) and seq >= 0 else None,
             boot_id=boot_id if isinstance(boot_id, str) else None,
             blocked_reason=blocked if isinstance(blocked, str) else None,
+            blocked_vram=_blocked_vram(body.get("blocked_vram")),
         )
 
     def request_mode(self, mode: DesiredMode, job_id: str | None = None) -> None:
@@ -241,6 +255,20 @@ class OrchestratorClient:
         ):
             raise OrchestratorUnavailableError(f"the control API sent a malformed lease to {operation}")
         return Lease(id=lease_id, mode=mode, job_id=job_id, ttl_s=ttl_s, expires_in_s=float(expires_in_s))
+
+
+def _mib(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _blocked_vram(value: object) -> BlockedVram | None:
+    """Reads `blocked_vram` of the state document, or returns None when it is absent or not of the documented form."""
+    if not isinstance(value, dict):
+        return None
+    mode, free, required = value.get("mode"), _mib(value.get("free_mib")), _mib(value.get("required_mib"))
+    if mode not in ("llm", "image") or free is None or required is None:
+        return None
+    return BlockedVram(mode=mode, free_mib=free, required_mib=required)
 
 
 def _json_object(raw: bytes) -> dict[str, Any]:

@@ -6,8 +6,10 @@ text-mode path (start from the default mode `llm`, readiness, stop with release 
 and a reduced recovery. Delivered in P05.7: the switch to mode `image` and back takes the same load and stop path,
 tested with the exclusivity rules, and recovery verifies the release before IDLE. Delivered in P06.1: the GPU side of
 the 18 steps of an image request, with the job that asked for a mode named on the events of the switch it causes,
-tested step by step (T-IMG-04) and by a property over random event sequences (T-ORC-02). Not delivered yet (P06.2 to
-P06.4): the VRAM check before a load with `blocked_reason`, the timed retry out of ERROR and launch-level fallbacks.
+tested step by step (T-IMG-04) and by a property over random event sequences (T-ORC-02). Delivered in P06.2: the VRAM
+check before a load, which holds the GPU in IDLE with `blocked_reason` GPU_INSUFFICIENT_VRAM while other programs hold
+the memory, and checks again every few seconds (T-ORC-05). Not delivered yet (P06.4): the timed retry out of ERROR and
+launch-level fallbacks.
 
 Everything runs on one asyncio event loop. The lease and mode methods never await, so each sees and changes the state
 in one piece. `step` awaits container work, and before each await it enters a LOADING or UNLOADING state, in which no
@@ -30,7 +32,13 @@ from typing import Any
 
 from lyrveil_orchestrator.container_gate import ContainerStatus, HealthStatus
 from lyrveil_orchestrator.state_machine import INITIAL_STATE, GpuState, Runtime, transition
-from lyrveil_orchestrator.supervisor import LoadReport, ProcessSupervisor, ReleaseReport, SupervisorError
+from lyrveil_orchestrator.supervisor import (
+    InsufficientVram,
+    LoadReport,
+    ProcessSupervisor,
+    ReleaseReport,
+    SupervisorError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,27 @@ LOAD_RETRY_DELAYS_S = (5.0, 20.0)
 # How often a ready runtime's health is read, and the longest wait of the run loop between steps.
 HEALTH_INTERVAL_S = 5.0
 TICK_S = 1.0
+# docs/api.md, job errors: the reason a load is held back in IDLE.
+GPU_INSUFFICIENT_VRAM = "GPU_INSUFFICIENT_VRAM"
+
+
+@dataclass(frozen=True)
+class VramRequirements:
+    """The free VRAM each runtime needs before its start, in MiB, and how often a held-back load checks again
+    (docs/gpu-orchestration.md, Verifying GPU release).
+
+    The text default is the smallest `vram_required_mib` of the catalog, 6000, so the check never holds back a load
+    that one of the profiles could make; the backend does not send the active profile's own value yet (P06.6). The
+    image default is `vram.required_image_mib`.
+    """
+
+    llm_mib: int = 6000
+    image_mib: int = 6500
+    recheck_s: float = 5.0
+
+    def required_mib(self, runtime: Runtime) -> int:
+        """Returns the free VRAM `runtime` needs before its start."""
+        return self.llm_mib if runtime is Runtime.LLM else self.image_mib
 
 
 class Mode(StrEnum):
@@ -88,7 +117,11 @@ class Lease:
 @dataclass(frozen=True)
 class LifecycleEvent:
     """One transition, as GET /v1/events returns it. `code` is the failure that caused it, if any; `details` holds
-    VRAM values in MiB and exit codes, never user data."""
+    VRAM values in MiB and exit codes, never user data.
+
+    A load held back for VRAM, and the end of that hold without a load, are recorded too, with `source` equal to
+    `target` (IDLE), so `seq` moves and a long poll sees the change of `blocked_reason`.
+    """
 
     seq: int
     at: str
@@ -136,7 +169,8 @@ class LifecycleConflictError(Exception):
 class ModelLifecycleManager:
     """Drives the GPU state machine with `supervisor`. The state starts as RECOVERING and the desired mode as `llm`.
 
-    `run` performs the work; tests call `step` directly. `clock` is monotonic and drives lease expiry and retries.
+    `run` performs the work; tests call `step` directly. `clock` is monotonic and drives lease expiry, retries and the
+    VRAM checks. `vram` gives the free memory each runtime needs before its start.
     """
 
     def __init__(
@@ -145,12 +179,18 @@ class ModelLifecycleManager:
         clock: Callable[[], float] = time.monotonic,
         health_interval_s: float = HEALTH_INTERVAL_S,
         tick_s: float = TICK_S,
+        vram: VramRequirements | None = None,
     ) -> None:
         self.boot_id = str(uuid.uuid4())
         self._supervisor = supervisor
         self._clock = clock
         self._health_interval_s = health_interval_s
         self._tick_s = tick_s
+        self._vram = vram or VramRequirements()
+        # The last check that held the load back, while the GPU waits in IDLE for other programs to free memory;
+        # None otherwise. Only IDLE holds one: every other state clears it.
+        self._blocked: InsufficientVram | None = None
+        self._vram_check_at = 0.0
         self._state = INITIAL_STATE
         self._desired = Mode.LLM
         # The job on whose behalf the desired mode was last requested, None for the default mode or a request without
@@ -186,6 +226,11 @@ class ModelLifecycleManager:
     @property
     def last_error(self) -> str | None:
         return self._last_error
+
+    @property
+    def blocked(self) -> InsufficientVram | None:
+        """The check that holds the load back in IDLE, or None when no load waits for VRAM."""
+        return self._blocked
 
     @property
     def seq(self) -> int:
@@ -285,7 +330,11 @@ class ModelLifecycleManager:
 
     async def snapshot(self) -> dict[str, Any]:
         """Returns the state document of docs/api.md, with fresh VRAM and container readings. A reading that fails is
-        null; it never raises for a Docker or NVML failure."""
+        null; it never raises for a Docker or NVML failure.
+
+        While a load is held back, `blocked_reason` is GPU_INSUFFICIENT_VRAM and `blocked_vram` gives the mode and
+        the numbers of the last check; both are null otherwise.
+        """
         self._expire_overdue()
         vram = await self._supervisor.read_memory()
         runtimes: dict[str, dict[str, Any] | None] = {}
@@ -294,6 +343,7 @@ class ModelLifecycleManager:
                 runtimes[runtime.value] = _runtime_document(await self._supervisor.inspect(runtime))
             except SupervisorError:
                 runtimes[runtime.value] = None
+        blocked = self._blocked
         return {
             "boot_id": self.boot_id,
             "seq": self._seq,
@@ -301,7 +351,10 @@ class ModelLifecycleManager:
             "desired_mode": self._desired.value,
             "draining": self._draining,
             "lease": None if self._lease is None else self.lease_document(self._lease),
-            "blocked_reason": None,
+            "blocked_reason": None if blocked is None else GPU_INSUFFICIENT_VRAM,
+            "blocked_vram": None
+            if blocked is None
+            else {"mode": blocked.runtime.value, "free_mib": blocked.free_mib, "required_mib": blocked.required_mib},
             "vram": None if vram is None else asdict(vram),
             "runtimes": runtimes,
             "last_error": self._last_error,
@@ -343,8 +396,8 @@ class ModelLifecycleManager:
                 await asyncio.wait_for(self._wake.wait(), self._next_wait())
 
     async def step(self) -> bool:
-        """Takes at most one action toward the desired mode. Returns True when the state changed, False when there
-        was nothing to do yet, so a caller can repeat it until it returns False."""
+        """Takes at most one action toward the desired mode. Returns True when the state changed or an event was
+        recorded, False when there was nothing to do yet, so a caller can repeat it until it returns False."""
         if self._expire_overdue():
             return True
         state = self._state
@@ -352,11 +405,7 @@ class ModelLifecycleManager:
             await self._reconcile()
             return True
         if state is GpuState.IDLE:
-            target = self._target_runtime()
-            if target is None or self._clock() < self._retry_at:
-                return False
-            await self._load(target)
-            return True
+            return await self._step_idle()
         for runtime in Runtime:
             if state is _READY[runtime] and self._target_runtime() is not runtime:
                 await self._unload(runtime, "drain" if self._draining else "mode changed")
@@ -365,6 +414,48 @@ class ModelLifecycleManager:
                 return await self._watch_health(runtime)
         # ERROR waits for recover. LOADING and UNLOADING states begin and end inside one step.
         return False
+
+    async def _step_idle(self) -> bool:
+        """Loads the runtime of the desired mode once the retry delay has passed and the card has the free VRAM it
+        needs. Otherwise holds the load back in IDLE and checks again after `recheck_s`. Other programs' memory is
+        only read, never reclaimed.
+
+        Records an event when a hold begins, for the mode it waits for, and when it ends because no runtime is wanted
+        any more; a load that follows a hold ends it with its own transition.
+        """
+        target = self._target_runtime()
+        if target is None:
+            return self._end_hold("no runtime wanted")
+        now = self._clock()
+        held = self._blocked
+        if now < self._retry_at or (held is not None and held.runtime is target and now < self._vram_check_at):
+            return False
+        shortfall = await self._supervisor.insufficient_vram(target, self._vram.required_mib(target))
+        if self._target_runtime() is not target:
+            # The desired mode changed while the card was read: the next step decides again.
+            return True
+        if shortfall is None:
+            await self._load(target)
+            return True
+        self._blocked = shortfall
+        self._vram_check_at = self._clock() + self._vram.recheck_s
+        if held is not None and held.runtime is target:
+            return False
+        self._note(
+            "not enough free VRAM",
+            job_id=self._mode_job,
+            code=GPU_INSUFFICIENT_VRAM,
+            details={"free_mib": shortfall.free_mib, "required_mib": shortfall.required_mib},
+        )
+        return True
+
+    def _end_hold(self, reason: str) -> bool:
+        """Ends a hold for VRAM without a load and records it. Returns True when there was one."""
+        if self._blocked is None:
+            return False
+        self._blocked = None
+        self._note(reason)
+        return True
 
     def _target_runtime(self) -> Runtime | None:
         return None if self._draining else _MODE_RUNTIME[self._desired]
@@ -494,14 +585,39 @@ class ModelLifecycleManager:
         """Applies one transition of the table, records and logs its event and wakes long polls.
 
         Raises IllegalTransition, changing nothing, for a move the table does not hold. A ready state clears
-        `last_error`; a failure code replaces it.
+        `last_error`; a failure code replaces it. Leaving IDLE ends any hold for VRAM.
         """
         source = self._state
         self._state = transition(source, target)
+        if target is not GpuState.IDLE:
+            self._blocked = None
         if code is not None:
             self._last_error = code
         elif target in _READY.values():
             self._last_error = None
+        self._record(source, target, reason, job_id, code, details)
+
+    def _note(
+        self,
+        reason: str,
+        job_id: str | None = None,
+        code: str | None = None,
+        details: Mapping[str, int | None] | None = None,
+    ) -> None:
+        """Records an event in the current state, without a transition: a hold for VRAM begins or ends. `last_error`
+        is left alone, since `blocked_reason` reports the hold."""
+        self._record(self._state, self._state, reason, job_id, code, details)
+
+    def _record(
+        self,
+        source: GpuState,
+        target: GpuState,
+        reason: str,
+        job_id: str | None,
+        code: str | None,
+        details: Mapping[str, int | None] | None,
+    ) -> None:
+        """Appends and logs the next event and wakes long polls."""
         self._seq += 1
         event = LifecycleEvent(
             seq=self._seq,
@@ -546,4 +662,5 @@ def _release_details(report: ReleaseReport) -> dict[str, int | None]:
         "used_after_mib": report.settled.used_mib,
         "drop_mib": report.drop_mib,
         "footprint_mib": report.footprint_mib,
+        "drop_shortfall_mib": report.drop_shortfall_mib,
     }
