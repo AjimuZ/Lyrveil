@@ -299,7 +299,15 @@ user's side, while this block speaks to the character, so block 4 turns them to 
 A line whose value already ends a sentence gets no second period. The relationship, emotional state, topic and
 boundaries lines are always kept; the open threads, each without its final period and joined with `; `, are the
 details that the budget removes last. The scenario line is left out, because the scenario copy is already in the stable
-text, and so are the time lines until the time context (P07.4). The topic and boundaries are always empty for now.
+text. The topic and boundaries are always empty for now.
+
+Delivered in P07.4: the two time lines come from `lyrveil/context/time_context.py` (`time_lines`) and close block 4,
+after the details, never reduced. They are in the block even for a chat with no `relationship_states` row. The date
+reads `Adesso è domenica di sera, 1 novembre.`; the last interaction is the newest readable message before the reply
+(or, for a proactive message, the newest of the chat), worded as `poco fa`, `qualche ora fa`, `oggi`, `ieri`, `tre
+giorni fa` (to thirteen days), `due settimane fa`, `un mese fa`, `tre mesi fa` or `più di un anno fa`, and left out for a
+chat with no earlier message. Part of the dynamic context, so the stable text and the history are unchanged (T-MOD-05).
+Image captions do not carry the time lines.
 
 ### Blocks 5 and 6
 

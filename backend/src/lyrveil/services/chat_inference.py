@@ -62,8 +62,10 @@ from lyrveil.context.builder import (
     split_messages,
 )
 from lyrveil.context.minimal import UserProfile
+from lyrveil.context.time_context import time_lines
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.errors import ContentPolicyBlockedError
+from lyrveil.domain.identifiers import from_utc_text
 from lyrveil.domain.messages import (
     PENDING,
     Author,
@@ -302,6 +304,7 @@ def load_context_request(
     previous_memory_ids: frozenset[str] = frozenset(),
     instruction: str | None = None,
     hint: str = "",
+    zone: tzinfo | None = None,
 ) -> ContextRequest | None:
     """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
     readable messages before it, the scenario copy the chat started with, the chat's active checkpoints, its state
@@ -314,6 +317,9 @@ def load_context_request(
 
     With an `instruction` the request is a proactive message's: it has no current message, every readable message
     before `before_seq` is history, and `hint` joins the memory query. It then never returns None.
+
+    With a `zone` (LYRVEIL_TZ) the request carries the time lines of block 4 (docs/scheduler.md, Time context): the
+    local date and part of the day of `now`, and the time since the newest history message. Without one it has none.
     """
     conversation = conversation_repository.get(connection, conversation_id)
     assert conversation is not None
@@ -335,6 +341,7 @@ def load_context_request(
     recent = repository.reply_checks(connection, conversation_id, before_seq, NOTE_REPLIES + 1)
     started = active_notes([recorded_checks(checks) for checks in recent])
     notes = tuple(note_text(check, stored.card, user, language) for check in started)
+    time = () if zone is None else time_lines(now, from_utc_text(history[-1].created_at) if history else None, zone)
     return ContextRequest(
         character_id=conversation.character_id,
         conversation_id=conversation_id,
@@ -355,6 +362,7 @@ def load_context_request(
         previous_memory_ids=previous_memory_ids,
         instruction=instruction or "",
         hint=hint,
+        time=time,
     )
 
 
@@ -448,6 +456,7 @@ class ChatInferenceService:
         self._diagnostics = DiagnosticsService(engine, clock)
         self._queue = queue or JobQueue()
         self._invalidation = InvalidationService(self._queue, zone)
+        self._zone = zone
         self._flush_interval_s = flush_interval_s
         self._monotonic = monotonic
         self._clock = clock
@@ -766,6 +775,7 @@ class ChatInferenceService:
                 user=self._settings.user,
                 now=self._clock(),
                 previous_memory_ids=previous,
+                zone=self._zone,
             ),
         )
 

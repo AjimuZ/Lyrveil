@@ -126,6 +126,9 @@ class ContextRequest:
     A proactive message has no `current`: it is None, `instruction` closes the frame in place of block 8 (formatter
     `proactive`, with no message marker) and `hint`, the reason of the message, joins the retrieval query. The history
     then holds every readable message of the chat.
+
+    `time` holds the time lines of block 4 (lyrveil.context.time_context.time_lines), never reduced; empty leaves
+    them out.
     """
 
     character_id: str
@@ -146,6 +149,7 @@ class ContextRequest:
     extra_line: str = ""
     instruction: str = ""
     hint: str = ""
+    time: Sequence[str] = ()
 
     @property
     def messages(self) -> tuple[Message, ...]:
@@ -369,7 +373,7 @@ class _Run:
 
     def _state(self, draft: _Draft) -> str:
         state = self._request.state
-        return state_block(state.lines, state.details if draft.state_details else ())
+        return state_block(state.lines, state.details if draft.state_details else (), self._request.time)
 
     def _parts(self, draft: _Draft) -> ChatParts:
         request = self._request

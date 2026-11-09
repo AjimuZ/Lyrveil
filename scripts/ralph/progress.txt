@@ -2057,3 +2057,12 @@ Not done:
   - Revision 0017 is the new head. `test_migrations.py` holds the HEAD constant and the downgrade chain, so a future migration must add a step there.
   - Backend integration tests alone take about 2 minutes, and `scripts/lyrveil.cmd test integration` has no filter.
 ---
+
+## 2026-11-09T20:30:06Z - P07.4
+- Block 4 now ends with Italian time lines: the local date and part of the day, and the time since the newest history message. Both replies and proactive messages get them. The earlier lint failure came from an unsorted import, a line over 120 characters and one line `ruff format` would reflow, all in `chat_inference.py`. I fixed those and `scripts/lyrveil.cmd test lint` now passes. I did not run the unit tests this attempt. T-SCH-07 and T-MOD-05 are unverified here: the T-SCH-07 test is `backend/tests/unit/test_time_context.py`, and I did not check T-MOD-05.
+- Files changed: backend/src/lyrveil/context/time_context.py, backend/src/lyrveil/context/blocks.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/main.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/services/proactive_messages.py, backend/tests/unit/test_time_context.py, docs/prompting.md, docs/scheduler.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Time lines come from context/time_context.time_lines(now, last_message_at, zone); a request with zone=None has no time lines.
+  - Planned events and open conversations rows are not in the prompt yet.
+  - Run ruff format and import sort checks via the lint level; a long docstring line over 120 chars fails E501.
+---

@@ -172,6 +172,9 @@ The backend computes it per request, in `LYRVEIL_TZ` (default `Europe/Rome`).
 | Planned events | From `scheduled_events` and open threads with dates |
 | Open conversations | Threads in `relationship_states` |
 
+Delivered in P07.4: the date, part of day and elapsed-time lines of [block 4](prompting.md#block-4-state-and-time), for
+replies and proactive messages (T-SCH-07). The planned events and open conversations rows are not in the prompt yet.
+
 Prompts use coarse values, which keeps the prompt prefix stable. Part of day: `di notte` 00 to 05, `di mattina` 06 to 11, `a mezzogiorno` 12 to 13, `di pomeriggio` 14 to 17, `di sera` 18 to 23.
 
 ## Missed events

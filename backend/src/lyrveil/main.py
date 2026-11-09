@@ -211,7 +211,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             settings=worker.summaries,
         )
         proactive_messages = ProactiveMessageService(
-            engine, runtime, app.state.events, worker.replies, context=worker.context
+            engine, runtime, app.state.events, worker.replies, context=worker.context, zone=app.state.settings.zone
         )
         handlers: dict[JobKind, JobHandler] = {
             JobKind.CHAT_REPLY: replies,

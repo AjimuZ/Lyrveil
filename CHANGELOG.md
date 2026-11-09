@@ -10,6 +10,9 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Time context in prompts (P07.4). Block 4 of a reply or proactive message now ends with the local date and part of the
+  day in Italian (`Adesso è domenica di sera, 1 novembre.`) and, when the chat has an earlier message, how long ago it
+  was (`Vi siete sentiti l'ultima volta tre giorni fa.`). Values are coarse and follow `LYRVEIL_TZ`.
 - The missed-event policies of proactive messages, in the backend only (P07.3). When the backend starts, a scheduled
   event that is more than 10 minutes overdue counts as missed, and its policy decides: `skip` marks it `missed`,
   `deliver_once` keeps only the newest one of the chat for the next allowed moment and marks the others `missed`,

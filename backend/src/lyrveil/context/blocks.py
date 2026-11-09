@@ -266,9 +266,10 @@ def state_lines(state: RelationshipState, user: UserProfile) -> tuple[tuple[str,
     return tuple(line for line in lines if line), details
 
 
-def state_block(lines: Sequence[str], details: Sequence[str]) -> str:
-    """Returns block 4 from its rendered lines: `lines` first, then `details`, which the budget removes last."""
-    return "\n".join(line for line in (*lines, *details) if line)
+def state_block(lines: Sequence[str], details: Sequence[str], time: Sequence[str] = ()) -> str:
+    """Returns block 4 from its rendered lines: `lines` first, then `details`, which the budget removes last, then the
+    `time` lines, which are never removed."""
+    return "\n".join(line for line in (*lines, *details, *time) if line)
 
 
 def memory_block(items: Sequence[RetrievedMemory]) -> str:

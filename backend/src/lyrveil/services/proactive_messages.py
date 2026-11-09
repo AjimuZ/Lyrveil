@@ -21,7 +21,7 @@ resumes after a restart finds its event still `running`. No message, memory, rea
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 import anyio
@@ -195,7 +195,8 @@ class ProactiveMessageService:
     `runtime` must be used only under the run's lease, which the scheduler holds. `events` receives each event after
     the change it announces was committed. `settings` give the template family, the user and the samplers of a reply,
     `context` the prompt budgets and `retriever` finds the memories (by default an FtsMemoryRetriever on `engine`).
-    `clock` returns the aware current time; tests pass a fake one. The handler also ends the event of a job that failed
+    `clock` returns the aware current time; tests pass a fake one. `zone` is `LYRVEIL_TZ`, for the time context of
+    block 4. The handler also ends the event of a job that failed
     for good (`abandon`) or was cancelled (`cancelled`).
     """
 
@@ -209,7 +210,9 @@ class ProactiveMessageService:
         context: ContextSettings | None = None,
         retriever: FtsMemoryRetriever | None = None,
         clock: Callable[[], datetime] = _utc_now,
+        zone: tzinfo = UTC,
     ) -> None:
+        self._zone = zone
         self._engine = engine
         self._runtime = runtime
         self._events = events
@@ -317,6 +320,7 @@ class ProactiveMessageService:
                 now=self._clock(),
                 instruction="",
                 hint=event.note or "",
+                zone=self._zone,
             )
             assert wanted is not None, "a proactive request always loads"
             return _Ready(event, wanted, CheckRules.for_chat(wanted.card, wanted.user, wanted.language))
