@@ -10,6 +10,9 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Demo screenshot script (P08.5). `npm run screenshots` in `tests/e2e` regenerates the README screenshots from the demo
+  characters and synthetic data, and refuses to save a screen that shows a home path, an e-mail address or a token.
+  The images themselves are not generated yet. See [Demo screenshots](docs/screenshots.md).
 - Long histories and large galleries (P08.4). A conversation of thousands of messages now keeps only the messages near
   the screen in the page (from 200 rows on), so it opens, scrolls and loads older pages without slowing down; a shorter
   chat is unchanged. Formatting the dates of a long chat is cached, so a streaming reply no longer reformats them. The

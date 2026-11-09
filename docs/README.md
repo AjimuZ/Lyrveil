@@ -45,6 +45,7 @@
 | [Operations](operations.md) | Install, scripts, Compose, images, backup and troubleshooting |
 | [Configuration](configuration.md) | Environment, launch files and settings |
 | [Testing](testing.md) | Levels, commands and full test catalog |
+| [Demo screenshots](screenshots.md) | How the README screenshots are regenerated from demo data |
 | [Security and privacy](security.md) | Threat model, controls and residual risks |
 | [Licensing](licensing.md) | Lyrveil, runtimes, models, dependencies and fonts |
 | [Publishing](publishing.md) | Repository rules, first push and pre-release audit |

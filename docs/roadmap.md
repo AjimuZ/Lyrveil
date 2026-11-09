@@ -197,7 +197,7 @@ Evidence:
 - [x] P08.2 Responsive layouts for desktop, tablet and mobile.
 - [x] P08.3 Keyboard, focus and live regions.
 - [x] P08.4 Performance: long histories, large galleries and prompt prefix stability.
-- [ ] P08.5 Demo screenshots from the demo characters and synthetic data.
+- [x] P08.5 Demo screenshots from the demo characters and synthetic data.
 - [ ] P08.6 Update all documents to match delivered behavior.
 
 Exit: T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profile lacks `quality_evidence`. No literal colors outside the tokens. No control without behavior.

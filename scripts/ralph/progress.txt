@@ -244,6 +244,7 @@
 - Make a long list virtual only past a row-count threshold (here 200). Short lists stay fully in the DOM, so existing specs, find and assistive technology keep working.
 - When a window of rows depends on measured heights, use an estimate for rows never drawn. Anchor the window to the bottom through the follow signal rather than the last scroll event, and restore the reader's place after a prepend by distance from the bottom, measured in the list's own units.
 - Cache `Intl.DateTimeFormat` instances and per-item formatted labels (a `WeakMap` keyed by the item object) when a list of thousands is recomputed on every streamed update.
+- Screenshot and fixture generators check page text against a deny list of paths, e-mails and tokens before writing a file.
 
 ---
 
@@ -2317,4 +2318,19 @@ Both are recorded in the docs.
   - `conversation-screen.scss` is at 7.61 kB of the 8 kB error budget, with a warning from 6 kB. Any further styles for that screen must go in a separate component stylesheet.
   - `tests/e2e/support/images.mjs` now holds the image fake (`fakeImages(page, { total, pageSize })`). `accessibility.spec.mjs` still has its own copy, so move it there too if it is touched.
   - Performance specs script-click `Carica altre` instead of using a real click. A real click scrolls the page, which would make the lazy thumbnails load as the list grows.
+---
+
+## 2026-11-09T22:26:29Z - P08.5
+- I added a Playwright script that regenerates the README screenshots from the demo characters and synthetic data. I did not run it, so no PNG files exist yet. `scripts/lyrveil.cmd test lint` passed. The script needs the Compose test project running, and I did not start it.
+
+`tests/e2e/screenshots/capture.mjs` loads the demo characters through `POST /api/v1/characters/demo`. It then captures `chats`, `character-profile`, `scenarios`, `models` and `gallery` into `docs/images/screenshots/` at 1440x900. The gallery uses the existing image fake. Before saving each shot, the script checks the page text and fails on a home path, an e-mail address or a token-like string. Run it with `npm run screenshots` in `tests/e2e`.
+
+I added `docs/screenshots.md`, linked from the docs index, which says the images are not generated yet. The second acceptance criterion (screenshots referenced from the docs) is therefore only partly met. The doc is referenced, but there are no images to show. P09.4 adds them to the README after a first run and a visual review.
+
+I did not add a test for the script; it only runs against a live stack.
+- Files changed: tests/e2e/screenshots/capture.mjs, tests/e2e/package.json, docs/screenshots.md, docs/README.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The screenshot script has never run. Check that the characters list returns `is_demo` and `first_name` for 'Nerea' and that the heading selectors match; both are untested.
+  - Output goes to docs/images/screenshots/. The images are still to be generated and referenced from the README in P09.4.
+  - The conversation screen is not captured because the text comes from the fake runtimes and has not been reviewed.
 ---
