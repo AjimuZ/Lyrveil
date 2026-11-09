@@ -202,6 +202,70 @@ def start(connection: Connection, event_id: str, job_id: str, now: str) -> None:
     )
 
 
+@dataclass(frozen=True)
+class RunningEvent:
+    """An event as the message stages read it: its conversation, kind, note and status."""
+
+    id: str
+    conversation_id: str
+    kind: EventKind
+    note: str | None
+    status: str
+
+
+def get_event(connection: Connection, event_id: str) -> RunningEvent | None:
+    """Returns the event with that id in any status, or None."""
+    row = (
+        connection.execute(
+            text("SELECT id, conversation_id, kind, note, status FROM scheduled_events WHERE id = :id"),
+            {"id": event_id},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    return RunningEvent(row["id"], row["conversation_id"], EventKind(row["kind"]), row["note"], row["status"])
+
+
+def finish(
+    connection: Connection,
+    event_id: str,
+    status: str,
+    now: str,
+    *,
+    reason: str | None = None,
+    message_id: str | None = None,
+) -> bool:
+    """Ends a `running` event as `delivered`, `skipped`, `failed` or `cancelled`, with the reason and, when delivered,
+    its message. Returns False, changing nothing, when the event is not `running`.
+
+    A `delivered` event keeps its `updated_at`: that is the moment the message began to count against the limits, and
+    the limits must not move because the generation took a while.
+    """
+    result = connection.execute(
+        text(
+            "UPDATE scheduled_events SET status = :status, outcome_reason = :reason, message_id = :message_id, "
+            "updated_at = CASE WHEN :status = 'delivered' THEN updated_at ELSE :now END "
+            "WHERE id = :id AND status = 'running'"
+        ),
+        {"id": event_id, "status": status, "reason": reason, "message_id": message_id, "now": now},
+    )
+    return bool(result.rowcount)
+
+
+def recent_proactive_texts(connection: Connection, conversation_id: str, limit: int) -> list[str]:
+    """Returns the text of the conversation's last `limit` proactive messages that are not deleted, newest first."""
+    rows = connection.execute(
+        text(
+            "SELECT content FROM messages WHERE conversation_id = :id AND scheduled_event_id IS NOT NULL "
+            "AND deleted_at IS NULL AND content != '' ORDER BY seq DESC LIMIT :limit"
+        ),
+        {"id": conversation_id, "limit": limit},
+    )
+    return [row[0] for row in rows]
+
+
 def last_user_message_at(connection: Connection, conversation_id: str) -> datetime | None:
     """Returns the creation time of the user's newest live message in the conversation, or None when there is none."""
     stored = connection.execute(

@@ -78,13 +78,14 @@ def insert_message(
     read_state: str | None,
     content: str,
     now: str,
+    scheduled_event_id: str | None = None,
 ) -> None:
-    """Adds a text message with no active variant yet."""
+    """Adds a text message with no active variant yet. `scheduled_event_id` marks a proactive message."""
     connection.execute(
         text(
             "INSERT INTO messages (id, conversation_id, seq, client_message_id, author, kind, status, read_state, "
-            "content, created_at) VALUES (:id, :conversation_id, :seq, :client_message_id, :author, 'text', :status, "
-            ":read_state, :content, :now)"
+            "content, scheduled_event_id, created_at) VALUES (:id, :conversation_id, :seq, :client_message_id, "
+            ":author, 'text', :status, :read_state, :content, :scheduled_event_id, :now)"
         ),
         {
             "id": message_id,
@@ -95,6 +96,7 @@ def insert_message(
             "status": status.value,
             "read_state": read_state,
             "content": content,
+            "scheduled_event_id": scheduled_event_id,
             "now": now,
         },
     )

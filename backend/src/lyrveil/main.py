@@ -76,6 +76,7 @@ from lyrveil.services.image_generation import ImageGenerationService, ImageSetti
 from lyrveil.services.memory_extraction import MemoryExtractionService
 from lyrveil.services.model_maintenance import ModelMaintenance
 from lyrveil.services.model_profiles import ModelProfiles, machine_tier
+from lyrveil.services.proactive_messages import ProactiveMessageService
 from lyrveil.services.summaries import SummaryService
 from lyrveil.settings import Settings, SettingsError, load_settings
 
@@ -161,7 +162,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     """Runs the job worker while the context is open (startup step 7), when the app has a database and a Worker.
 
-    The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `character_draft` with
+    The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `proactive_message` with
+    ProactiveMessageService, `character_draft` with
     CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
     `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
     image runtime, and is kept in `app.state.scheduler` meanwhile. The scheduler aborts a stopped run's work through
@@ -208,9 +210,13 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             user=worker.replies.user,
             settings=worker.summaries,
         )
+        proactive_messages = ProactiveMessageService(
+            engine, runtime, app.state.events, worker.replies, context=worker.context
+        )
         handlers: dict[JobKind, JobHandler] = {
             JobKind.CHAT_REPLY: replies,
             JobKind.CHAT_REGENERATE: replies,
+            JobKind.PROACTIVE_MESSAGE: proactive_messages,
             JobKind.CHARACTER_DRAFT: drafts,
             JobKind.MEMORY_EXTRACTION: memories,
             JobKind.MEMORY_REEVALUATION: memories,

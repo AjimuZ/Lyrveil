@@ -220,6 +220,9 @@
 - When a count in a docker-level test depends on files the app writes at startup, name those files in a comment next to the expected count.
 - Pure rules take the time and the counted activity as arguments, so quiet hours and caps are unit-tested with fixed datetimes. The SQL lives in a store module that never commits.
 - A package that must not cause a GPU mode change is guarded by an AST test over its imports, plus a check that the job it queues needs only the text mode.
+- To reuse the reply pipeline for non-reply text, build a ContextRequest with no current message and an instruction; then stream through TurnCutoff, ReplyNormalizer, SentenceSplitter and `check_reply`, as `ProactiveMessageService._stream` and `ImagePromptStage.write_caption` do.
+- A handler whose job moves an event or placeholder must also end it when the job fails for good: re-raise while the scheduler will retry (retryable and `attempt < max_attempts`, or preemption), otherwise end the event first. Also implement `abandon` and `cancelled`.
+- Roll back a multi-row write on a late conflict by raising a private exception inside the `write()` closure, then catch it outside and decide what to end.
 
 ---
 
@@ -1993,4 +1996,31 @@ The hardware part is not claimed: T-GPU-07 to T-GPU-12, AC-15, AC-18, AC-19, the
   - No handler is registered for the `proactive_message` job kind yet. P07.2 adds it and adds the foreign key from `messages.scheduled_event_id` to `scheduled_events`.
   - The `proactive.enabled` and `proactive.max_per_day_global` settings are read from `application_settings` but `PATCH /settings` does not accept them. P07.6 or a later UI item must add that, with the per-conversation `proactive_json` API.
   - P07.3 (missed events at startup) still has to apply `missed_policy`. Today only the initiative slots are skipped when the backend was off.
+---
+
+## 2026-11-09T20:11:45Z - P07.2
+- I added the `proactive_message` handler (`ProactiveMessageService`) with the decide and generate stages and the repetition check, and wired it into the job worker. Nothing in the app can switch proactive messages on yet, so users won't see it. Lint passes and the full integration level passes (backend 395, orchestrator 209), including 9 new integration tests. The 19 tests in the new unit file pass. I did not run the full unit level, e2e or docker; the integration level was run in full because it takes no filter.
+
+- **Decide stage:** the model returns a structured decision under a grammar, with one repair. `send: false` ends the event `skipped` and creates no message (T-SCH-04). A `scheduled_message` skips this stage.
+- **Generate stage:** the prompt is built with no current message, closed by the instruction from `docs/scheduler.md`. The length band is `brevi`, or the character's band when shorter. The text goes through the same cut, normalizer and reply checks as a reply, including one corrective generation after a V6, V10 or V11 hit and one after an empty text.
+- **Repetition check (T-SCH-05):** a text at least 0.8 similar to one of the last 20 proactive messages of the chat is discarded and generated once more. A second hit skips the event.
+- **Other skips:** a V4 hit or a second empty text also skips the event.
+- **Delivery:** the message, its variant and the event's `delivered` status are written in one transaction, with `scheduled_event_id` set. The client gets one `message.completed`.
+- **Failures:**
+  - A failure that won't be retried ends the event `failed`.
+  - A cancelled job ends it `cancelled`.
+  - If proactive messages are switched off, or the chat is gone, between queuing and running, the event is skipped or cancelled and nothing is generated.
+
+Two things differ from the plan, both documented. I left `messages.scheduled_event_id` as a plain column, because SQLite can only add a key by rebuilding `messages`. Both stages also run in the job's first stage instead of moving it to `generate`, so a retry after a failure while writing decides again.
+
+Not done: the notification and toast (P07.5) and diagnostics recording for proactive messages. The decide prompt has no time context (P07.4), and `hook_ref` is read but not stored.
+- Files changed: backend/src/lyrveil/services/proactive_messages.py, backend/src/lyrveil/domain/proactive.py, backend/src/lyrveil/prompts/proactive.py, backend/src/lyrveil/scheduling/repetition.py, backend/src/lyrveil/scheduling/store.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/context/blocks.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/services/image_prompt.py, backend/src/lyrveil/persistence/messages.py, backend/src/lyrveil/main.py, backend/migrations/versions/0016_scheduled_events.py, backend/tests/unit/test_proactive_messages.py, backend/tests/integration/test_proactive_messages.py, docs/scheduler.md, docs/data-model.md, docs/backend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `ContextRequest.current` is now `Message | None`. For a proactive message set `instruction` (closes the frame via `formatter.proactive`) and `hint` (joins the memory query). Use the `messages`, `current_text` and `next_seq_floor` properties instead of `.current.content`.
+  - `load_context_request(..., instruction="")` returns the proactive request, with all readable messages as history. Pass `before_seq` as a very large number.
+  - A `running` event ends only through `store.finish`. A `delivered` event keeps its `updated_at`, so the limits count from the moment the job was queued. `skipped`, `failed` and `cancelled` events stop counting.
+  - `scripts/lyrveil.cmd test integration` takes no filter. Backend integration alone takes about 2 minutes. Unit takes `-k expr -q`, and the orchestrator then exits 5 for 'no tests selected', which is not a failure.
+  - P07.3 should end or requeue events left `running` after a crash. The job recovery requeues the job, so the handler resumes the event, but an event whose job row was pruned would stay `running` and block its chat (`has_running_event`).
+  - P07.5 should publish the `notification.created` event after the `message.completed` that the handler sends from `_serve` (the notification table comes with P07.5).
+  - `messages.scheduled_event_id` is a plain column with no key. If a key is wanted later, it needs a rebuild of `messages` and its search triggers.
 ---

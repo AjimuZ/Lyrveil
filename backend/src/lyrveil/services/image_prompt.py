@@ -119,7 +119,7 @@ def _recent(chat: ContextRequest | None) -> list[RecentMessage]:
     if chat is None:
         return []
     recent: list[RecentMessage] = []
-    for message in (*chat.history, chat.current):
+    for message in chat.messages:
         author: Literal["user", "character"] = "user" if message.author is Author.USER else "character"
         recent.append(RecentMessage(author, message.content))
     return recent
@@ -220,7 +220,7 @@ class ImagePromptStage:
         if not text:
             return self._failed(EMPTY, {"normalizer": dict(normalized.fired), "checks": cut})
         previous = [message.content for message in chat.history if message.author is Author.CHARACTER]
-        found = check_reply(text, rules, previous=previous[-PREVIOUS_REPLIES:], user_message=chat.current.content)
+        found = check_reply(text, rules, previous=previous[-PREVIOUS_REPLIES:], user_message=chat.current_text)
         checks = dict(sorted({**found, **cut}.items(), key=lambda item: int(item[0][1:])))
         return Caption(text=text, failure=None, checks={"normalizer": dict(normalized.fired), "checks": checks})
 

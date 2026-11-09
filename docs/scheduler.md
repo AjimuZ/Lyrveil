@@ -2,11 +2,33 @@
 
 Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation: in progress, phase P07.
 Delivered with P07.1: the `scheduled_events` table, the evaluation every 60 seconds, the limits, and the creation of the
-`inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Not delivered yet:
-the `decide` and `generate` stages and the repetition check (P07.2, so a queued `proactive_message` job has no handler
-yet), the missed-event policies at startup (P07.3), the time context (P07.4), notifications (P07.5), `scheduled_message`
-events made by the user, and the API and screens that switch the feature on. Until then the two switches can only be
-changed in the database, and both are off.
+`inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Delivered with
+P07.2: the `proactive_message` job handler (`ProactiveMessageService`) with the `decide` and `generate` stages and the
+repetition check. Not delivered yet: the missed-event policies at startup (P07.3), the time context (P07.4),
+notifications (P07.5), `scheduled_message` events made by the user (the handler already serves them), and the API and
+screens that switch the feature on. Until then the two switches can only be changed in the database, and both are off.
+
+How P07.2 settles points the text leaves open:
+
+- Both stages run in the job's first stage (`decide`), since both need `llm`: the handler ends the job there instead of
+  moving it to `generate`, so a retry after a failure while writing decides again.
+- The message is written whole, with no streaming and no typing indicator: the client gets one `message.completed`. The
+  generations before it are invisible, so a discarded one needs no `message.restarted`.
+- The `decide` prompt shows the relationship state lines, up to 6 memories found with the event's note and the newest
+  messages, the open threads of the state and, for a `follow_up`, the thread as the note. `hook_ref` is read and checked
+  but not stored. The time context joins it in P07.4.
+- Before it starts, the run checks that both switches are still on and that the chat is active; otherwise the event ends
+  `skipped` (`switched_off`) or `cancelled` (`conversation_unavailable`) and nothing is generated.
+- A `skipped` event keeps its reason in `outcome_reason`: the model's own for `send: false`, otherwise `repetition`,
+  `empty` or `blocked` (a V4 hit). Two empty texts and a V4 hit end the event the same way, since there is no reply
+  bubble to hold a failure notice. A failure the job will not retry ends the event `failed` with the job's error code;
+  a cancelled job ends it `cancelled`.
+- The repetition check compares the lowercase, accent-free words of the text with each of the last 20 proactive
+  messages of the same chat that are not deleted (difflib's ratio, threshold 0.8). It runs after the normalizer, so
+  what it compares is what would be delivered.
+- A `delivered` event keeps the `updated_at` it got when it began to run, so the limits count the message from the
+  moment its job was queued, not from the end of the generation.
+- `messages.scheduled_event_id` stays a plain column, without a key: SQLite adds one only by rebuilding `messages`.
 
 How P07.1 settles points the text leaves open:
 

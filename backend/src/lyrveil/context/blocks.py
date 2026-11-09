@@ -114,6 +114,12 @@ def reply_length(band: MessageLength, llm_max_length: int) -> int:
     return min(LENGTH_BANDS[band].max_length, llm_max_length)
 
 
+def proactive_band(band: MessageLength) -> MessageLength:
+    """Returns the length band of a proactive message (docs/scheduler.md): `brevi`, or the character's `band` when it
+    is shorter. Both the reply reserve and the anchor's length text then follow the same band."""
+    return band if LENGTH_BANDS[band].max_length < LENGTH_BANDS["brevi"].max_length else "brevi"
+
+
 def words(value: str) -> str:
     """The `words` filter of docs/prompting.md: an enum value with `_` read as a space."""
     return value.replace("_", " ")

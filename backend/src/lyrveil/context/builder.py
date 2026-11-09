@@ -122,6 +122,10 @@ class ContextRequest:
     be aware. `notes` are the corrective notes of the anchor (at most two are used); `previous_memory_ids` the memory
     selection of the previous reply, which keeps block 5 stable. `extra_line`, when not empty, is one more line of the
     dynamic context after the anchor, never reduced: the image caption's request (image_caption_line).
+
+    A proactive message has no `current`: it is None, `instruction` closes the frame in place of block 8 (formatter
+    `proactive`, with no message marker) and `hint`, the reason of the message, joins the retrieval query. The history
+    then holds every readable message of the chat.
     """
 
     character_id: str
@@ -131,7 +135,7 @@ class ContextRequest:
     language: str
     shares_memory: bool
     history: Sequence[Message]
-    current: Message
+    current: Message | None
     summaries: Sequence[SummaryText]
     now: datetime
     scenario: Mapping[str, object] | None = None
@@ -140,6 +144,25 @@ class ContextRequest:
     notes: Sequence[str] = ()
     previous_memory_ids: frozenset[str] = frozenset()
     extra_line: str = ""
+    instruction: str = ""
+    hint: str = ""
+
+    @property
+    def messages(self) -> tuple[Message, ...]:
+        """The history and the current message, oldest first."""
+        return (*self.history, *([] if self.current is None else [self.current]))
+
+    @property
+    def current_text(self) -> str:
+        """The text of the current message, or "" for a proactive message."""
+        return "" if self.current is None else self.current.content
+
+    @property
+    def next_seq_floor(self) -> int:
+        """The number a message written now would at least have: the current message's, or one past the history."""
+        if self.current is not None:
+            return self.current.seq
+        return self.history[-1].seq + 1 if self.history else 1
 
 
 @dataclass(frozen=True)
@@ -298,7 +321,7 @@ class _Run:
             if spare > 0 and 0 < summary_budget < SUMMARY_MAX_TOKENS:
                 summary_budget = min(SUMMARY_MAX_TOKENS, summary_budget + spare)
         # Every checkpoint ends at or before `boundary`, so any later start of the history chooses the same ones.
-        recent_from = draft.history[0].seq if draft.history else request.current.seq
+        recent_from = draft.history[0].seq if draft.history else request.next_seq_floor
         selection = choose_summaries(checkpoints, recent_from, summary_budget)
         draft.summaries = [by_id[c.id] for c in selection.checkpoints]
 
@@ -316,7 +339,7 @@ class _Run:
             await self._reduce(draft, total - available, applied, REDUCTION_ORDER)
             prompt, total = await self._count(draft)
 
-        recent_from = draft.history[0].seq if draft.history else request.current.seq
+        recent_from = draft.history[0].seq if draft.history else request.next_seq_floor
         return Assembly(
             prompt=prompt,
             max_length=max_length,
@@ -369,7 +392,11 @@ class _Run:
 
     async def _count(self, draft: _Draft) -> tuple[FormattedPrompt, int]:
         """Renders the draft and returns it with the runtime's count of the whole prompt."""
-        prompt = self._formatter.chat(self._parts(draft), draft.current)
+        parts = self._parts(draft)
+        if self._request.current is None:
+            prompt = self._formatter.proactive(parts, draft.current)
+        else:
+            prompt = self._formatter.chat(parts, draft.current)
         return prompt, await self._counter.count(prompt.text, self._tokenizer, special=True)
 
     async def _turn_overhead(self) -> int:
@@ -423,7 +450,10 @@ class _Run:
 
     async def _current_text(self) -> tuple[str, bool]:
         """Returns the current message for the prompt and whether it was cut: a text over CURRENT_MAX_TOKENS keeps its
-        start, cut a little under the proportional length and counted again until the count fits."""
+        start, cut a little under the proportional length and counted again until the count fits. A proactive message
+        has no current message: its instruction takes the place of block 8, uncut."""
+        if self._request.current is None:
+            return self._request.instruction, False
         text = self._request.current.content
         tokens = await self._tokens(text)
         truncated = False
@@ -452,13 +482,13 @@ class _Run:
         query = RetrievalQuery(
             character_id=request.character_id,
             conversation_id=request.conversation_id,
-            text="\n".join([*recent, request.current.content]),
+            text="\n".join([*recent, request.current_text or request.hint]),
             topic=request.topic,
             language=request.language,
             token_budget=budget,
             now=request.now,
             include_shared=request.shares_memory,
-            past_intent=is_past_intent(request.current.content, request.language),
+            past_intent=is_past_intent(request.current_text, request.language),
             previous_ids=request.previous_memory_ids,
         )
         # The retriever reads the database: off the event loop, like every other read of a reply.

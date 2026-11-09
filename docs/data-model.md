@@ -219,14 +219,16 @@ the delete is not stored. The delete also cancels the conversation's `pending` s
 | `content` | TEXT | Copy of the active variant's text, for the list and FTS |
 | `token_count` | INTEGER | NULL until counted |
 | `tokenizer_id` | TEXT | Text profile whose tokenizer produced `token_count`. A different active profile makes the count stale |
-| `scheduled_event_id` | TEXT | FK, SET NULL. Set on proactive messages |
+| `scheduled_event_id` | TEXT | NULL. Set on proactive messages; a plain column, not a key |
 | `edited_at`, `deleted_at`, `created_at` | TEXT | |
 
 Index: `(conversation_id, seq)`, partial `(conversation_id, seq) WHERE deleted_at IS NULL`.
 
 Delivered in revision `0004` (P02.5b) with `CHECK` lists, the unique `(conversation_id, seq)` that also serves as the
 first index, and a partial unique index on `(conversation_id, client_message_id)` for non-null values.
-`scheduled_event_id` is a plain column until `scheduled_events` exists. `active_variant_id` has no key, because the
+`scheduled_event_id` is a plain column that the proactive message stage (P07.2) fills in the same transaction that ends
+the event `delivered`; it has no key, because SQLite adds one only by rebuilding `messages` (like `image_id`), and the
+service keeps it valid. `active_variant_id` has no key, because the
 variant table points back at the message; the service keeps it valid. `read_state` is NULL for messages that are not
 the user's. `seq` is taken from `conversations.next_seq` in the same write transaction as the insert and is never
 reused, so a deleted message leaves a gap. A send writes a user message and a reply placeholder with consecutive

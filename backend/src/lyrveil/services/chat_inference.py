@@ -300,6 +300,8 @@ def load_context_request(
     user: UserProfile,
     now: datetime,
     previous_memory_ids: frozenset[str] = frozenset(),
+    instruction: str | None = None,
+    hint: str = "",
 ) -> ContextRequest | None:
     """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
     readable messages before it, the scenario copy the chat started with, the chat's active checkpoints, its state
@@ -309,15 +311,23 @@ def load_context_request(
     Everything is keyed by this conversation, so another chat of the same character adds nothing; memories are read
     later by the builder, under the same scope. The notes read only replies before `before_seq`, so a regenerated reply
     gets the notes its first variant had. Returns None when no user message has text. The conversation must exist.
+
+    With an `instruction` the request is a proactive message's: it has no current message, every readable message
+    before `before_seq` is history, and `hint` joins the memory query. It then never returns None.
     """
     conversation = conversation_repository.get(connection, conversation_id)
     assert conversation is not None
     stored = character_repository.get_card(connection, conversation.character_id)
     assert stored is not None, "a conversation's character cannot be removed while the chat exists"
-    split = split_messages(repository.prompt_messages(connection, conversation_id, before_seq, MAX_HISTORY_MESSAGES))
-    if split is None:
-        return None
-    history, current = split
+    messages = repository.prompt_messages(connection, conversation_id, before_seq, MAX_HISTORY_MESSAGES)
+    current: Message | None = None
+    if instruction is None:
+        split = split_messages(messages)
+        if split is None:
+            return None
+        history, current = split
+    else:
+        history = [message for message in messages if message.author is not Author.SYSTEM]
     stored_state = state_repository.load_state(connection, conversation_id)
     state = StateText() if stored_state is None else StateText(*state_lines(stored_state.state, user))
     language = conversation.effective_language
@@ -343,6 +353,8 @@ def load_context_request(
         state=state,
         notes=notes,
         previous_memory_ids=previous_memory_ids,
+        instruction=instruction or "",
+        hint=hint,
     )
 
 
@@ -644,7 +656,7 @@ class ChatInferenceService:
                 await self._restart(job, reply, "V1", streamed)
                 continue
             found = check_reply(
-                normalized.text, rules, previous=previous[-PREVIOUS_REPLIES:], user_message=wanted.current.content
+                normalized.text, rules, previous=previous[-PREVIOUS_REPLIES:], user_message=wanted.current_text
             )
             checks = dict(sorted({**found, **cut}.items(), key=lambda item: int(item[0][1:])))
             status = MessageStatus.INTERRUPTED if done.finish == "aborted" else MessageStatus.COMPLETE

@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The writing of proactive messages, in the backend only (P07.2). A queued proactive job now asks the model whether the
+  character has a real reason to write (`send: false` ends the event `skipped` and creates no message), then writes a short
+  message without replying to anything: the normal prompt without a current message, `brevi` length, the same normalizer
+  and reply checks as a reply, and one corrective generation. A message at least 80% similar to one of the last 20
+  proactive messages of the chat is discarded and written once more; a second similar one skips the event. The message
+  is stored with its event and the chat's unread count grows. Still off by default and not switchable from the
+  interface; notifications and the missed-event policies come later.
+
 - The scheduler of proactive messages, in the backend only (P07.1). Every minute it creates the inactivity, follow-up and
   contextual-initiative events and queues a job for the one the limits allow: quiet hours, minimum interval, daily caps
   and the unanswered limit. Proactive messages stay off by default, globally and per conversation, and nothing in the

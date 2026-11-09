@@ -555,7 +555,7 @@ Since P06.5 ([Safe shutdown](gpu-orchestration.md#safe-shutdown)):
 | `image_request` | Stages in [Image generation](image-generation.md#job-stages). |
 | `visual_profile_translate` | Lease, structured generation of `VisualIdentityResult` under a vocabulary grammar, sanitizer, store the identity slots and wardrobe tags that are not locked. The generation and the merge exist since P05.3b ([Visual consistency](#visual-consistency)); the handler does not. |
 | `image_proposal` | Lease, structured generation, store a proposal when valid. |
-| `proactive_message` | Stages `decide` and `generate`. See [Scheduler](scheduler.md#generation-flow). |
+| `proactive_message` | Stages `decide` and `generate`, both run by `ProactiveMessageService` in the first one. See [Scheduler](scheduler.md#generation-flow). |
 | `summary_checkpoint` | Lease, structured generation, store a checkpoint. |
 | `memory_extraction`, `memory_reevaluation` | Lease, structured generation, consistency rules, commit with cursor. |
 | `maintenance` | `required_mode = none`. Retention, orphan cleanup, expiry of memories. Since P06.6a the model reload and the custom file hash, told apart by `payload.operation`. |
