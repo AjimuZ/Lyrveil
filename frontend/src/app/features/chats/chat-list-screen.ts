@@ -1,13 +1,28 @@
 // Screen 1 of docs/frontend.md: the conversation list with search, an archived tab, row actions and the new-chat dialog.
-import { AfterViewInit, ChangeDetectionStrategy, Component, OnInit, inject, signal, viewChild } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
 import { formatActivity } from './activity-time';
 import { ChatsStore } from './chats-store';
-import { Conversation, ConversationStatus } from './chats.model';
+import { Conversation, ConversationActivity, ConversationStatus } from './chats.model';
 import { NewChatDialog } from './new-chat-dialog';
+
+const ACTIVITY_TEXT: Readonly<Record<ConversationActivity, TextKey>> = {
+  typing: 'chats.activity.typing',
+  drawing: 'chats.activity.drawing',
+  queued: 'chats.activity.queued',
+};
 
 interface Tab {
   readonly status: ConversationStatus;
@@ -17,7 +32,9 @@ interface Tab {
 /**
  * The list of conversations. Each row links to its chat, shows the primary avatar (the initial while it has none), the title, the character, the time
  * of the last activity and whether it is pinned, and has a menu with pin, archive and delete. Loading, empty and error
- * states are shown. Unread counts, previews and typing flags stay out until the services behind them exist (P07, P05).
+ * states are shown. A row also shows the unread count, a one-line preview of the newest finished message and, while
+ * the character types, draws or waits in the queue, that hint instead of the preview. The rows follow the event
+ * socket while the screen is open (`ChatsStore.follow`).
  */
 @Component({
   selector: 'lyr-chat-list-screen',
@@ -28,7 +45,7 @@ interface Tab {
   // Esc closes an open row menu from anywhere, as docs/frontend.md (Keyboard) promises.
   host: { '(document:keydown.escape)': 'closeMenu()' },
 })
-export class ChatListScreen implements OnInit, AfterViewInit {
+export class ChatListScreen implements OnInit, AfterViewInit, OnDestroy {
   protected readonly store = inject(ChatsStore);
   private readonly translator = inject(Translator);
   private readonly route = inject(ActivatedRoute);
@@ -44,6 +61,11 @@ export class ChatListScreen implements OnInit, AfterViewInit {
 
   ngOnInit(): void {
     void this.store.showTab(this.store.tab());
+    this.store.follow();
+  }
+
+  ngOnDestroy(): void {
+    this.store.unfollow();
   }
 
   ngAfterViewInit(): void {
@@ -91,6 +113,25 @@ export class ChatListScreen implements OnInit, AfterViewInit {
 
   protected time(conversation: Conversation): string {
     return formatActivity(conversation.last_message_at ?? conversation.created_at, new Date(), this.translator.locale());
+  }
+
+  /** The one-line preview of the newest finished message: the user's own are prefixed, an image without a caption is
+   * named. Empty while the chat has no finished message. */
+  protected preview(conversation: Conversation): string {
+    const last = conversation.last_message;
+    if (last === null || last === undefined) {
+      return '';
+    }
+    const text = last.text !== '' ? last.text : last.kind === 'text' ? '' : this.translator.t('chats.preview.image');
+    return last.author === 'user' && text !== '' ? this.translator.t('chats.preview.you', { text }) : text;
+  }
+
+  protected activityText(activity: ConversationActivity): string {
+    return this.translator.t(ACTIVITY_TEXT[activity]);
+  }
+
+  protected unreadLabel(conversation: Conversation): string {
+    return this.translator.plural('chats.unread', conversation.unread_count);
   }
 
   protected initial(conversation: Conversation): string {

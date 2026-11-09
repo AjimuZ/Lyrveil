@@ -9,15 +9,31 @@ import json
 from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.characters import CharacterProfile
-from lyrveil.domain.conversations import CharacterRef, Conversation, ConversationStatus
+from lyrveil.domain.conversations import (
+    PREVIEW_CHARS,
+    Activity,
+    CharacterRef,
+    Conversation,
+    ConversationStatus,
+    LastMessage,
+)
 
-_SELECT = """
+# A message the user can read: not deleted and finished. Queued, streaming and failed replies are not read yet.
+_FINISHED = "m.conversation_id = c.id AND m.deleted_at IS NULL AND m.status IN ('complete', 'interrupted')"
+_SELECT = f"""
 SELECT c.id, c.character_id, ch.first_name, ch.last_name, c.title, c.language, ch.primary_language, c.status,
        c.pinned_at, c.shares_memory, c.next_seq, c.last_read_seq, c.last_message_at, c.created_at, c.updated_at,
        c.deleted_at, c.scenario_id, json_extract(c.scenario_snapshot_json, '$.title') AS scenario_title,
        (SELECT a.id FROM character_assets AS a
         WHERE a.character_id = c.character_id AND a.kind = 'avatar' AND a.is_primary = 1 AND a.deleted_at IS NULL
-        LIMIT 1) AS avatar_asset_id
+        LIMIT 1) AS avatar_asset_id,
+       (SELECT count(*) FROM messages AS m
+        WHERE {_FINISHED} AND m.author = 'character' AND m.seq > c.last_read_seq) AS unread_count,
+       (SELECT json_object('author', m.author, 'kind', m.kind, 'text', substr(m.content, 1, {PREVIEW_CHARS + 1}))
+        FROM messages AS m WHERE {_FINISHED} ORDER BY m.seq DESC LIMIT 1) AS last_message_json,
+       (SELECT json_object('kind', m.kind, 'status', m.status) FROM messages AS m
+        WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.author = 'character'
+          AND m.status IN ('queued', 'streaming') ORDER BY m.seq DESC LIMIT 1) AS pending_json
 FROM conversations AS c JOIN characters AS ch ON ch.id = c.character_id
 """
 # Pinned chats first (newest pin first), then by the latest activity; a chat with no message counts from its creation.
@@ -26,6 +42,26 @@ _ORDER = "ORDER BY c.pinned_at IS NULL, c.pinned_at DESC, COALESCE(c.last_messag
 
 def _display_name(first_name: str, last_name: str | None) -> str:
     return first_name if not last_name else f"{first_name} {last_name}"
+
+
+def _last_message(raw: str | None) -> LastMessage | None:
+    if raw is None:
+        return None
+    fields = json.loads(raw)
+    text_value: str = fields["text"]
+    if len(text_value) > PREVIEW_CHARS:
+        text_value = text_value[:PREVIEW_CHARS].rstrip() + "…"
+    return LastMessage(author=fields["author"], kind=fields["kind"], text=text_value)
+
+
+def _activity(raw: str | None) -> Activity | None:
+    """A queued reply is `queued`; one being produced is `drawing` for an image and `typing` otherwise."""
+    if raw is None:
+        return None
+    fields = json.loads(raw)
+    if fields["status"] == "queued":
+        return Activity.QUEUED
+    return Activity.DRAWING if fields["kind"] == "image" else Activity.TYPING
 
 
 def _conversation(row: RowMapping) -> Conversation:
@@ -39,7 +75,7 @@ def _conversation(row: RowMapping) -> Conversation:
         status=ConversationStatus(row["status"]),
         pinned_at=row["pinned_at"],
         shares_memory=bool(row["shares_memory"]),
-        unread_count=max(0, row["next_seq"] - 1 - row["last_read_seq"]),
+        unread_count=row["unread_count"],
         last_message_at=row["last_message_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -47,6 +83,8 @@ def _conversation(row: RowMapping) -> Conversation:
         avatar_asset_id=row["avatar_asset_id"],
         scenario_id=row["scenario_id"],
         scenario_title=row["scenario_title"],
+        last_message=_last_message(row["last_message_json"]),
+        activity=_activity(row["pending_json"]),
     )
 
 
@@ -160,6 +198,15 @@ def list_all(
     params = {"status": status.value, "character_id": character_id, "match": match}
     rows = connection.execute(text(f"{_SELECT} {clause} {_ORDER}"), params).mappings().all()
     return [_conversation(row) for row in rows]
+
+
+def mark_read(connection: Connection, conversation_id: str, up_to_seq: int) -> None:
+    """Moves `last_read_seq` forward to `up_to_seq`, never past the last message number taken and never back. It does
+    not touch `updated_at`: reading is not activity."""
+    connection.execute(
+        text("UPDATE conversations SET last_read_seq = MAX(last_read_seq, MIN(:up_to, next_seq - 1)) WHERE id = :id"),
+        {"up_to": up_to_seq, "id": conversation_id},
+    )
 
 
 def update(connection: Connection, conversation_id: str, now: str, **columns: object) -> None:

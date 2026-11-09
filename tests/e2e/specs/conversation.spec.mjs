@@ -40,8 +40,8 @@ test('a message can be edited and deleted, and both survive a reload (T-MSG-05, 
   // While a message is edited its text is in a field, so the bubble is found by its place: the user's first message.
   const message = page.locator('li.message.mine').first();
   await expect(message).toContainText('Prima versione');
-  // The sender sees one check until the server marks the message read.
-  await expect(message.getByRole('img', { name: 'Inviato' })).toBeVisible();
+  // The sender sees one check until the character starts answering, then two (T-MSG-10); the stack's fake runtime answers.
+  await expect(message.getByRole('img', { name: 'Letto' })).toBeVisible();
 
   await message.getByRole('button', { name: 'Modifica' }).click();
   const editor = message.getByLabel('Testo del messaggio');

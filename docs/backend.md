@@ -64,7 +64,7 @@ orchestrator/
 | `CharacterService` | `services` | CRUD, versioning, diff, restore, locks, duplicate, import and export. Sole writer of canonical data. |
 | `CharacterCreatorService` | `services` | Natural-language drafts, draft validation, avatar requests. Delivered in P03.3: the drafts, as the `character_draft` handler. |
 | `CharacterAssetService` | `services` | Character assets: upload, crop, list, primary avatar, delete, and the files of the media routes. Delivered in P03.4a, without generated avatars (P05). |
-| `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. |
+| `ConversationService` | `services` | Chat list, creation, pinning, archive, deletion, read state, unread counts. Since P07.6 `mark_read` moves the read mark forward, and a listed chat carries its unread count (finished character messages after the mark), a preview of the newest finished message and its activity. |
 | `MessageService` | `services` | Sending, variants, edits, deletion, search. Notifies derived data on changes. Delivered in P02.5b: send, edit, delete, regenerate, variants and history paging; search with P02.5d; the notification with P04.7, through `InvalidationService` (`services/invalidation.py`) in the transaction of each change ([Delivered in P04.7](memory-engine.md#delivered-in-p047)). |
 | `MemoryManager` | `memory` | Facade over the memory engine for the rest of the backend, and Memory Studio operations. |
 | `MemoryExtractionService` | `memory` | Trigger rules, windows, extraction jobs, idempotency, storing results. |

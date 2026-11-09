@@ -227,6 +227,8 @@
 - A step that keeps an item for later should move the item out of its own selection criterion, here by setting due_at to now, so running the step again finds nothing and adds no duplicate notification.
 - A service that needs to announce something after its transaction returns a plain result (an id or a document) and the caller publishes on the event loop. This keeps worker-thread code free of hub calls and keeps equality in existing tests stable (use `field(compare=False)` for the extra id).
 - For browser flows that depend on a feature with no switch yet, an e2e spec can play the REST routes with `page.route` and inject event frames with `page.routeWebSocket` (ids far above the real ones). The spec should say so in its header, and the backend half should have its own integration test.
+- Derive a state that must stay consistent after edits, deletes and regenerations (such as the simulated read state) in the read query instead of storing it.
+- Keep store side effects that call REST in the screen, driven by an effect on a computed signal. Store specs that call HttpTestingController.verify() stay unaffected.
 
 ---
 
@@ -2106,4 +2108,33 @@ Not done:
   - The catalog lint requires every catalog test ID in docs/testing.md to be named by a roadmap `Exit:` line, so a new T-xxx ID cannot be added without editing the roadmap.
   - `image_ready`, `job_failed` and `memory_conflict` notification kinds are accepted by the table but nothing writes them yet.
   - There is no `notification.read` event, so a second open tab only learns of a read mark after a reload.
+---
+
+## 2026-11-09T20:53:26Z - P07.6
+- Implemented read state and unread counts (T-MSG-10) plus the list-row and conversation details that depend on them. Only `scripts/lyrveil.cmd test lint` was run, and it passes. The new backend, Vitest and Playwright tests are written but not run. The acceptance line "every remaining messaging detail of screens 1 and 2 works" is only partly met. The context panel, the image lightbox, search inside a chat, "Ricorda questo" and virtual scrolling are not delivered. The interface still draws no control for them, and the docs say so.
+
+**Backend:**
+- `unread_count` now counts only finished, non-deleted character messages after `last_read_seq`. The user's own messages and queued, streaming or failed replies no longer count.
+- New `POST /conversations/{id}/read` with `{up_to_seq}`. The mark only moves forward, is capped at the last message number taken, and does not touch `updated_at`.
+- Conversation rows gain `last_message` (author, kind, text cut to 140 characters) and `activity` (`typing`, `drawing` or `queued`).
+- A user message's `read_state` is derived in the message query. It is `read` once a later character message is streaming, complete or interrupted, and `sent` before.
+
+**Frontend:**
+- Chat-list rows show an unread badge, a one-line preview (own messages prefixed "Tu:") and the typing, drawing or queue hint in place of the preview. `ChatsStore.follow` keeps the rows live from socket events, with a 300 ms debounced reload.
+- The conversation screen shows two checks from the live messages. `ConversationStore.markRead` posts the read mark when a reply finishes, and when a hidden tab is shown again.
+- The unsent composer text is kept per chat in localStorage.
+
+**Tests and docs:**
+- Added `test_read_state.py`, a "read mark" block in `conversation-store.spec.ts`, a live-rows test in `chats-store.spec.ts`, and `tests/e2e/specs/read-state.spec.mjs`.
+- The existing e2e assertion for "Inviato" in `conversation.spec.mjs` now expects "Letto", because the fake runtime's reply turns the check double.
+- Updated `docs/api.md`, `docs/frontend.md`, `docs/testing.md`, `docs/backend.md` and `CHANGELOG.md`. I left the roadmap checkbox alone.
+- Files changed: backend/src/lyrveil/domain/conversations.py, backend/src/lyrveil/persistence/conversations.py, backend/src/lyrveil/persistence/messages.py, backend/src/lyrveil/services/conversations.py, backend/src/lyrveil/api/conversations.py, backend/tests/integration/test_read_state.py, frontend/src/app/features/chats/chats.model.ts, frontend/src/app/features/chats/chats-store.ts, frontend/src/app/features/chats/chats-store.spec.ts, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/chats/chat-list-screen.html, frontend/src/app/features/chats/chat-list-screen.scss, frontend/src/app/features/conversation/conversation-store.ts, frontend/src/app/features/conversation/conversation-store.spec.ts, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/draft-storage.ts, frontend/src/i18n/it.json, tests/e2e/specs/read-state.spec.mjs, tests/e2e/specs/conversation.spec.mjs, docs/api.md, docs/frontend.md, docs/testing.md, docs/backend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Only the lint level ran. If the orchestrator's runs fail, look first at test_read_state.py, the new Vitest blocks and read-state.spec.mjs.
+  - The conversation routes still have include_in_schema=False, so backend/openapi.json and the generated frontend types are unchanged. The new fields are typed by hand in chats.model.ts.
+  - The read mark is sent by ConversationScreen through an effect on store.newestFinishedReply, not from inside the store's event handlers. That keeps existing store specs, which call HttpTestingController.verify(), free of stray POSTs.
+  - A user message's read_state is computed in _MESSAGE_SELECT (persistence/messages.py), not stored. The stored column keeps its value 'sent'.
+  - The conversation list's activity and last_message come from correlated subqueries in persistence/conversations.py _SELECT, with json_object parsed in Python.
+  - Not delivered, and the interface still draws no control for them: context panel, image lightbox, search inside a chat, 'Ricorda questo', virtual scrolling. These need their own tasks.
+  - In e2e, send a message through page.request.post to get a deterministic unread reply while the list is open. Wait for the read POST with page.waitForResponse before navigating away.
 ---

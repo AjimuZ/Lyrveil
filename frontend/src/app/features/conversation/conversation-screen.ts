@@ -20,6 +20,7 @@ import { Translator } from '../../core/i18n/translator';
 import { ConversationStore, isActive } from './conversation-store';
 import { MAX_MESSAGE_CHARS, Message, imageOriginalUrl, imageThumbnailUrl } from './conversation.model';
 import { dayKey, formatClock, formatDayLabel } from './day-label';
+import { loadDraft, saveDraft } from './draft-storage';
 import { ImageDialog } from './image-dialog';
 import { ImageProgress, PHASE_TEXT, progressFraction } from './image-request';
 
@@ -30,6 +31,9 @@ export const COUNTER_FROM = 7000;
 const BOTTOM_SLACK_PX = 80;
 /** How close to the top the list loads the next older page. */
 const TOP_SLACK_PX = 40;
+
+/** The statuses of a character message that count as "the character has started answering". */
+const STARTED: ReadonlySet<string> = new Set(['streaming', 'complete', 'interrupted']);
 
 /** What the template draws for one message: its text, state and which actions apply. */
 export interface MessageRow {
@@ -48,6 +52,8 @@ export interface MessageRow {
   readonly canDelete: boolean;
   readonly canRegenerate: boolean;
   readonly isLast: boolean;
+  /** The user's message shows two checks: the server says `read`, or the character has started answering after it. */
+  readonly read: boolean;
   /** The thumbnail and the original of the message's image, or null when it has none (yet). */
   readonly image: { readonly thumbnailUrl: string; readonly originalUrl: string } | null;
   /** The message is an image still being drawn: show its progress instead of the typing indicator. */
@@ -70,13 +76,16 @@ export interface DayRow {
  *
  * Bubble actions are edit, regenerate (latest text reply), alternatives (latest text reply), delete and copy. The
  * composer's image button opens the image form; an image message shows its thumbnail, and while it is drawn the phase
- * and the step count of the current pass. The context panel, the lightbox, regenerating an image, cancelling a draw,
- * search, "Ricorda questo" and virtual scrolling are planned (docs/frontend.md), so the screen draws no control for them.
+ * and the step count of the current pass. The text typed and not sent is kept per chat (`draft-storage.ts`), the
+ * user's messages show one check or two (the character started answering), and the newest finished reply is reported
+ * read to the server. The context panel, the lightbox, regenerating an image, cancelling a draw, search, "Ricorda
+ * questo" and virtual scrolling are planned (docs/frontend.md), so the screen draws no control for them.
  */
 @Component({
   selector: 'lyr-conversation-screen',
   imports: [RouterLink, TranslatePipe, ImageDialog],
   providers: [ConversationStore],
+  host: { '(document:visibilitychange)': 'becameVisible()' },
   templateUrl: './conversation-screen.html',
   styleUrl: './conversation-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -120,6 +129,12 @@ export class ConversationScreen {
     const locale = this.translator.locale();
     const now = new Date();
     const rows: (DayRow | MessageRow)[] = [];
+    // The simulated read state follows the live events too, so it does not wait for a reload: the same rule as the
+    // server's (lyrveil.persistence.messages), a later character message that is streaming or finished.
+    const answeredUpTo = messages.reduce(
+      (latest, m) => (m.author === 'character' && STARTED.has(m.status) ? Math.max(latest, m.seq) : latest),
+      0,
+    );
     let currentDay = '';
     messages.forEach((message, index) => {
       const day = dayKey(message.created_at);
@@ -146,6 +161,7 @@ export class ConversationScreen {
         // Regenerating an image is a gallery action (P05.6); the text route does not apply to it.
         canRegenerate: latestReply?.id === message.id && !active && message.kind !== 'image' && message.kind !== 'mixed',
         isLast: index === messages.length - 1,
+        read: message.author === 'user' && (message.read_state === 'read' || message.seq < answeredUpTo),
         image:
           typeof message.image_id === 'string'
             ? { thumbnailUrl: imageThumbnailUrl(message.image_id), originalUrl: imageOriginalUrl(message.image_id) }
@@ -161,7 +177,16 @@ export class ConversationScreen {
   constructor() {
     effect(() => {
       const id = this.conversationId();
-      untracked(() => void this.store.open(id));
+      untracked(() => {
+        this.draft.set(loadDraft(id));
+        void this.store.open(id);
+      });
+    });
+    // Reading: once the newest finished reply is on screen the chat counts as read, so its unread count clears in the
+    // list. A reply that arrives while the tab is hidden is marked when the tab is shown again (`becameVisible`).
+    effect(() => {
+      this.store.newestFinishedReply();
+      untracked(() => void this.store.markRead());
     });
     // New rows, a growing reply and a pending message scroll into view while the user stays at the bottom.
     effect(() => {
@@ -206,6 +231,7 @@ export class ConversationScreen {
     }
     const text = this.draft();
     this.draft.set('');
+    saveDraft(this.conversationId(), '');
     this.followBottom = true;
     void this.store.send(text);
     this.composer()?.nativeElement.focus();
@@ -220,7 +246,14 @@ export class ConversationScreen {
   }
 
   protected typed(event: Event): void {
-    this.draft.set((event.target as HTMLTextAreaElement).value);
+    const text = (event.target as HTMLTextAreaElement).value;
+    this.draft.set(text);
+    saveDraft(this.conversationId(), text);
+  }
+
+  /** The tab was shown again: replies that arrived while it was hidden are now read. */
+  protected becameVisible(): void {
+    void this.store.markRead();
   }
 
   protected startEdit(message: Message): void {

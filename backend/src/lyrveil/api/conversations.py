@@ -9,17 +9,26 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 
-from lyrveil.domain.conversations import Conversation, ConversationStatus
+from lyrveil.domain.conversations import Activity, Conversation, ConversationStatus
 from lyrveil.services.conversations import ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"], include_in_schema=False)
 
 
+class LastMessageOut(BaseModel):
+    """The preview of a chat's newest finished message: who wrote it, its kind and its text cut to 140 characters."""
+
+    author: str
+    kind: str
+    text: str
+
+
 class ConversationOut(BaseModel):
     """A conversation as the chat list and the chat header show it.
 
-    `avatar_url` is the thumbnail route of the character's primary avatar, null while it has none. The last-message
-    preview and the typing flag join it with streaming (P02.5c).
+    `avatar_url` is the thumbnail route of the character's primary avatar, null while it has none. `unread_count` counts
+    the finished character messages after the read mark. `last_message` is null until a message has finished.
+    `activity` is `typing`, `drawing` or `queued` while the character has a reply in that state, else null.
     """
 
     id: str
@@ -39,6 +48,8 @@ class ConversationOut(BaseModel):
     avatar_url: str | None = None
     scenario_id: str | None = None
     scenario_title: str | None = None
+    last_message: LastMessageOut | None = None
+    activity: Activity | None = None
 
 
 class ConversationList(BaseModel):
@@ -53,6 +64,12 @@ class CreateConversation(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     language: str | None = Field(default=None, min_length=2, max_length=16)
     shares_memory: bool = False
+
+
+class ReadMark(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    up_to_seq: int = Field(ge=0)
 
 
 class PatchConversation(BaseModel):
@@ -89,6 +106,16 @@ def _out(conversation: Conversation) -> ConversationOut:
         ),
         scenario_id=conversation.scenario_id,
         scenario_title=conversation.scenario_title,
+        last_message=(
+            None
+            if conversation.last_message is None
+            else LastMessageOut(
+                author=conversation.last_message.author,
+                kind=conversation.last_message.kind,
+                text=conversation.last_message.text,
+            )
+        ),
+        activity=conversation.activity,
     )
 
 
@@ -144,6 +171,13 @@ def patch_conversation(
     """Changes the title, the pin, the archive state, the language or the shared-memory flag; 404 when the
     conversation does not exist or is deleted."""
     return _out(service.update(conversation_id, body.model_dump(exclude_unset=True)))
+
+
+@router.post("/{conversation_id}/read", response_model=ConversationOut)
+def read_conversation(conversation_id: str, body: ReadMark, service: ConversationService = Service) -> ConversationOut:
+    """Marks the chat read up to message number `up_to_seq` and returns it with its new unread count. The mark only
+    moves forward and never passes the last message; 404 when the conversation does not exist or is deleted."""
+    return _out(service.mark_read(conversation_id, body.up_to_seq))
 
 
 @router.delete("/{conversation_id}", status_code=204)

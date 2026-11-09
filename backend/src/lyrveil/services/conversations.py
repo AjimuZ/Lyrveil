@@ -1,4 +1,4 @@
-"""ConversationService: creates, lists, changes, deletes and restores conversations.
+"""ConversationService: creates, lists, changes, reads, deletes and restores conversations.
 
 Deletion follows docs/data-model.md (Deletion policy): a delete only sets `status = deleted` and `deleted_at`, a
 restore within RESTORE_WINDOW undoes it, and no row leaves durable history.
@@ -179,6 +179,26 @@ class ConversationService:
                 columns["shares_memory"] = int(bool(changes["shares_memory"]))
             if columns:
                 repository.update(connection, conversation_id, now, **columns)
+            updated = repository.get(connection, conversation_id)
+            assert updated is not None
+            return updated
+
+        return write(self._engine, work)
+
+    def mark_read(self, conversation_id: str, up_to_seq: int) -> Conversation:
+        """Records that the user has read the chat up to message number `up_to_seq` and returns the conversation with
+        its new unread count.
+
+        The mark only moves forward: an older `up_to_seq` changes nothing, and one beyond the last message is cut to
+        it, so a message that arrives later still counts as unread. Raises NotFoundError when the conversation does
+        not exist or is deleted.
+        """
+
+        def work(connection: Any) -> Conversation:
+            current = repository.get(connection, conversation_id)
+            if current is None or current.status is ConversationStatus.DELETED:
+                raise NotFoundError(_NO_CHAT)
+            repository.mark_read(connection, conversation_id, up_to_seq)
             updated = repository.get(connection, conversation_id)
             assert updated is not None
             return updated

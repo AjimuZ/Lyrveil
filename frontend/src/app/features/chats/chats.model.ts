@@ -4,6 +4,16 @@
 /** The states a listed conversation can be in; a deleted one is never listed. */
 export type ConversationStatus = 'active' | 'archived';
 
+/** The newest finished message of a chat, for the row's preview. `text` is already cut to 140 characters. */
+export interface LastMessage {
+  readonly author: 'user' | 'character' | 'system';
+  readonly kind: string;
+  readonly text: string;
+}
+
+/** What the character is doing in a chat: producing text, drawing an image, or waiting in the queue. */
+export type ConversationActivity = 'typing' | 'drawing' | 'queued';
+
 /** One row of `GET /conversations` (docs/api.md, Conversations). */
 export interface Conversation {
   readonly id: string;
@@ -25,6 +35,9 @@ export interface Conversation {
   /** The scenario the chat started from, null once it is deleted; `scenario_title` is the title of the chat's copy. */
   readonly scenario_id?: string | null;
   readonly scenario_title?: string | null;
+  /** The finished messages of the character after the read mark; the user's own messages never count. */
+  readonly last_message?: LastMessage | null;
+  readonly activity?: ConversationActivity | null;
 }
 
 export interface ConversationList {

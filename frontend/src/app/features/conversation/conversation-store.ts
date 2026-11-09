@@ -92,6 +92,8 @@ export class ConversationStore {
 
   private conversationId = '';
   private generation = 0;
+  /** The highest `seq` already reported to the server as read in this chat. */
+  private reportedRead = 0;
   private subscriptions: Subscription[] = [];
   private inbox: Delta[] = [];
   private gaps = new Map<string, Delta[]>();
@@ -134,6 +136,14 @@ export class ConversationStore {
     const last = this.messagesState().at(-1);
     return last?.author === 'character' ? last : null;
   });
+  /** The `seq` of the newest character message that has finished (0 when none): what reading the chat covers. */
+  readonly newestFinishedReply = computed(() =>
+    this.messagesState().reduce(
+      (latest, m) =>
+        m.author === 'character' && (m.status === 'complete' || m.status === 'interrupted') ? Math.max(latest, m.seq) : latest,
+      0,
+    ),
+  );
   /** True while the character is generating: a `typing` event, or a reply the server marks streaming. */
   readonly typing = computed(() => this.typingState() || this.messagesState().some((m) => m.status === 'streaming'));
   /** True while the newest reply waits in the queue. */
@@ -203,6 +213,37 @@ export class ConversationStore {
     } finally {
       if (ticket === this.generation) {
         this.loadingState.set(false);
+      }
+    }
+  }
+
+  /**
+   * Tells the server the user has read the chat up to its newest finished reply, which clears the chat's unread count.
+   * Does nothing while nothing new was finished since the last mark, or while the page is hidden (a reply that arrives
+   * in a background tab stays unread until the tab is shown). A failed mark is forgotten, so the next call retries it.
+   * Never rejects.
+   */
+  async markRead(): Promise<void> {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
+    const upTo = this.newestFinishedReply();
+    if (upTo <= this.reportedRead) {
+      return;
+    }
+    const ticket = this.generation;
+    const before = this.reportedRead;
+    this.reportedRead = upTo;
+    try {
+      const updated = await firstValueFrom(
+        this.api.post<Conversation>(`/conversations/${this.conversationId}/read`, { up_to_seq: upTo }),
+      );
+      if (ticket === this.generation) {
+        this.conversationState.set(updated);
+      }
+    } catch {
+      if (ticket === this.generation && this.reportedRead === upTo) {
+        this.reportedRead = before;
       }
     }
   }
@@ -424,6 +465,7 @@ export class ConversationStore {
     this.stopListening();
     this.generation += 1;
     this.conversationId = conversationId;
+    this.reportedRead = 0;
     this.inbox = [];
     this.gaps.clear();
     this.conversationState.set(null);

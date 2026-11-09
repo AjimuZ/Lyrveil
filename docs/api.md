@@ -283,7 +283,7 @@ Delivered in P03.7a, not in `backend/openapi.json`, with two routes added to the
 | `DELETE /conversations/{id}` | Soft delete. |
 | `POST /conversations/{id}/undelete` | Restores within 30 days. |
 | `GET /conversations/{id}/purge-preview`, `POST /conversations/{id}/purge` | Permanent removal. Body `{"confirm": true, "keep_images": true}`. |
-| `POST /conversations/{id}/read` | Body `{"up_to_seq": 42}`. |
+| `POST /conversations/{id}/read` | Body `{"up_to_seq": 42}`. Marks the chat read up to that message number. Delivered in P07.6 (see below). |
 | `GET /conversations/{id}/search?q=` | Search in one chat. |
 | `GET /conversations/{id}/export?format=json\|md` | Export. |
 | `GET`, `PATCH /conversations/{id}/proactive` | Proactive settings. |
@@ -297,8 +297,24 @@ copy of the scenario, takes its language when the body gives none, and a non-emp
 message, written by the character. A row also holds `scenario_id` (null once the scenario is deleted) and
 `scenario_title` (from the copy). A character can have any number of conversations; `GET /conversations?character_id=`
 lists them all. A row holds `avatar_url`, the thumbnail route of the character's primary avatar (null while it has none),
-and lacks the last message and typing flag until messages exist. These routes are not
+and lacked the last message and the activity flag until P07.6. These routes are not
 in `backend/openapi.json` until it is next regenerated with Docker.
+
+Delivered in P07.6: read state and the facts of a list row (T-MSG-10).
+
+- `unread_count` is the number of the character's messages after the read mark that are finished (`complete` or
+  `interrupted`) and not deleted. The user's own messages, a reply still queued or streaming, and a failed one never
+  count. A chat from a scenario with an opening message starts with 1 unread.
+- `POST /conversations/{id}/read` takes `{"up_to_seq": n}` (`n` of 0 or more, no other field) and answers the
+  conversation with its new `unread_count`. The mark only moves forward: a smaller `n` changes nothing, and a larger one is
+  cut to the last message number taken, so a message that arrives later is unread. Reading does not change `updated_at`
+  or `last_message_at`. `404 NOT_FOUND` for an unknown or deleted chat, `422 VALIDATION_ERROR` for a missing or negative
+  `up_to_seq`. There is no event for a read mark.
+- A row holds `last_message`, `{"author", "kind", "text"}` of the newest finished message that is not deleted (the text cut
+  to 140 characters with `…`), or null while there is none, and `activity`: `queued` while a reply of the character waits,
+  `typing` while a text reply is produced, `drawing` while an image is, else null.
+- A user message's `read_state` is `read` once a later character message is streaming, complete or interrupted, and `sent`
+  before. It is derived on every read, not stored, so an edit, a delete or a regeneration never leaves a stale mark.
 
 Delivered in P02.5d: search. `q` (on the list) keeps the chats whose title or non-deleted messages contain every word
 of it. `GET /conversations/{id}/search?q=&limit=` answers `{"items": [message, ...]}`, newest first, `limit` as for

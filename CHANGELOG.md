@@ -10,6 +10,16 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Read state and unread counts (P07.6). Each row of the chat list now shows the number of unread replies, a one-line
+  preview of the newest message (the user's own prefixed with **Tu:**) and, while the character types, draws or waits
+  in the queue, **Sta scrivendo…**, **Sta disegnando…** or **In coda** instead of the preview. Rows update live while the
+  list is open. Opening a chat reads it: the unread count clears once the newest reply is on screen, and a reply that
+  arrives in a hidden tab is read when the tab is shown. The user's messages show two checks (**Letto**) as soon as the
+  character starts answering. The text typed in a chat and not sent is kept per chat and survives a reload. The backend
+  gains `POST /conversations/{id}/read`, and a conversation now carries `last_message` and `activity`; its
+  `unread_count` counts only finished replies of the character, not the user's own messages. Not delivered yet: the
+  context panel, the image lightbox, search inside a chat, **Ricorda questo** and virtual scrolling, which the
+  interface still does not draw.
 - In-app notifications (P07.5). A bell icon next to the brand shows the number of unread notices, opens a list of the
   newest 50 (title, text, time, **Segna come letta**, **Segna tutte come lette**) and shows a brief toast when a new
   notice arrives. A notice that belongs to a chat opens it. A delivered proactive message now writes a notice with the

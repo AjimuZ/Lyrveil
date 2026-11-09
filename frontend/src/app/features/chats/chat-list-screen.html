@@ -69,12 +69,22 @@
             <span class="text">
               <span class="name">{{ conversation.title }}</span>
               <span class="meta">{{ conversation.character_name }}</span>
+              @if (conversation.activity; as activity) {
+                <span class="preview activity" data-testid="chat-activity">{{ activityText(activity) }}</span>
+              } @else if (preview(conversation); as line) {
+                <span class="preview" data-testid="chat-preview">{{ line }}</span>
+              }
             </span>
             <span class="side">
               @if (conversation.pinned) {
                 <span class="pill">{{ 'chats.pinned' | t }}</span>
               }
               <time [attr.datetime]="conversation.last_message_at ?? conversation.created_at">{{ time(conversation) }}</time>
+              @if (conversation.unread_count > 0) {
+                <span class="unread" data-testid="chat-unread" role="img" [attr.aria-label]="unreadLabel(conversation)">
+                  <span aria-hidden="true">{{ conversation.unread_count }}</span>
+                </span>
+              }
             </span>
           </a>
           <button

@@ -118,14 +118,22 @@ Every screen has loading, empty and error states. Every control has real behavio
 
 ### Notification bell (shell)
 
-Delivered in P07.5 (`features/notifications/`). The shell shows a bell beside the brand on every screen. `NotificationsStore` loads `GET /notifications` when the shell opens, follows `notification.created` through `EventsSocket` and reloads after `resync.required`. The bell shows the unread badge (the server's `unread_count`); its accessible name is **Notifiche**, plus the count when there is one. It opens a list of the newest 50 notices, each with its title, text, time and **Segna come letta**, and **Segna tutte come lette**. A notice that belongs to a chat opens it and counts as read. A new notice shows a toast for 6 seconds in a polite live region. The Browser Notification API is not used. The unread count on the rows of the conversation list (screen 1) is a separate, still unbuilt, count of messages.
+Delivered in P07.5 (`features/notifications/`). The shell shows a bell beside the brand on every screen. `NotificationsStore` loads `GET /notifications` when the shell opens, follows `notification.created` through `EventsSocket` and reloads after `resync.required`. The bell shows the unread badge (the server's `unread_count`); its accessible name is **Notifiche**, plus the count when there is one. It opens a list of the newest 50 notices, each with its title, text, time and **Segna come letta**, and **Segna tutte come lette**. A notice that belongs to a chat opens it and counts as read. A new notice shows a toast for 6 seconds in a polite live region. The Browser Notification API is not used. The unread count on the rows of the conversation list (screen 1, P07.6) is a separate count of unread replies.
 
 ### 1. Conversation list
 
 Avatar, name, last message (one line), time, unread count, typing indicator, and a pending-image or queue hint. Search covers names, titles and messages. Pinned chats come first, then activity. A context menu offers pin, archive, delete. **+** opens
 a picker: choose a character, an optional scenario and a language. The list has a separate tab for archived conversations.
 
-Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, the conversation screen of P02.6b. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03). The scenario choice joined the picker in P03.7a (see screen 7). Previews and the avatar take their place when those exist. The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
+Delivered in P02.6a (`features/chats/chat-list-screen.ts`): search (debounced 250 ms, over `GET /conversations?q=`), the **Attive** and **Archiviate** tabs, a per-row menu with pin, archive or unarchive, and delete, and a **Ripristina** notice after a delete. **Nuova conversazione** opens `new-chat-dialog.ts`: a character, a conversation language (or the character's) and **Inizia conversazione**, plus **Nuovo personaggio**, a minimal form (name, optional last name, age 18 to 120, **Come parla di sé**, language) that the Creator replaces in P03. A row links to `/chats/:conversationId`, the conversation screen of P02.6b. Not shown because nothing backs them yet: last-message preview, unread count (P07), typing and queue hints, avatar images (P03). The scenario choice joined the picker in P03.7a (see screen 7). Previews and the avatar take their place when those exist. (Update, P07.6: the preview, unread count and activity hints are delivered, see below.) The row's model types in `chats.model.ts` are written by hand until `backend/openapi.json` includes the conversation and character routes.
+
+Delivered in P07.6 (T-MSG-10, `chat-list-screen.*`, `chats-store.ts`): each row shows the unread count as a badge
+(accessible name such as **3 messaggi non letti**), a one-line preview of the newest finished message (the user's own
+prefixed with **Tu:**, an image without a caption named **Immagine**) and, while the character has a reply in progress,
+**Sta scrivendo…**, **Sta disegnando…** or **In coda** in its place. `ChatsStore.follow` (called by the screen, undone on
+destroy) keeps the rows live: `message.*`, `typing.*` and `image.completed` events and a resync reload the list once
+after 300 ms. The queue hint is the server's `activity`, so it does not say whether a reply waits behind an image (the
+conversation screen does).
 
 ### 2. Conversation
 
@@ -143,8 +151,8 @@ Delivered in P02.6b (`features/conversation/`): the route `/chats/:conversationI
 provides its own `ConversationStore` and opens the chat named by the route.
 
 - **Delivered:** the header with the avatar initial, the name and the status (**Sta scrivendo…** or **In coda**); messages
-  under day separators and with a `HH:mm` time; one check for a sent message (the server never reports `read` yet); the
-  typing indicator and the queue note in a reply bubble that has no text yet; bubble actions **Copia**, **Modifica**,
+  under day separators and with a `HH:mm` time; one check for a sent message (two since P07.6); the
+  typing indicator and the queue note in a reply bubble that has no text yet (the `read` state came in P07.6, below); bubble actions **Copia**, **Modifica**,
   **Elimina** (with an inline confirmation), and on the latest reply **Rigenera** and `‹ 2/3 ›` alternatives, shown on
   hover and keyboard focus and always shown where there is no hover; the composer with Enter to send, Shift+Enter for a
   line break, a counter from 7000 characters and a refusal over 8000; **Mostra messaggi precedenti**, which also loads
@@ -186,9 +194,16 @@ provides its own `ConversationStore` and opens the chat named by the route.
   dell'avatar…**, **Disegno l'avatar…**, **Salvo l'avatar…**). When the job completes the list is read again; a generated
   variant has a **Generato** mark. The server makes the new avatar primary only when the character had none; otherwise
   **Rendi principale** chooses it. A failed job shows its Italian reason. Leaving the screen stops the polling.
+- **Read state and drafts (P07.6, T-MSG-10).** The user's message shows two checks (**Letto**) once a later character
+  message is streaming, complete or interrupted, and one (**Inviato**) before; the screen applies the rule to the live
+  messages (`MessageRow.read`), the server applies it to a reload. `ConversationStore.markRead` posts
+  `POST /conversations/{id}/read` with the newest finished reply (`newestFinishedReply`) when the screen opens, when a reply
+  finishes and when a hidden tab is shown again; it sends nothing while the tab is hidden or nothing new finished, and a
+  failed mark is retried by the next call. The unsent text of each chat is kept in `localStorage`
+  (`lyrveil.chat-draft.<id>`, `draft-storage.ts`) and returns when the chat is opened again.
 - **Message text** is bound as text and drawn with `white-space: pre-wrap`; no template uses `innerHTML` (T-SEC-03, T-SEC-09).
 - **Not delivered, so no control is drawn for it:** the context panel, the lightbox, regenerating or cancelling an
-  image, the contextual proposal card, search in a chat, "Ricorda questo", the simulated `read` state, unsent text kept per chat in `localStorage`, and
+  image, the contextual proposal card, search in a chat, "Ricorda questo" and
   virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
   navigate to a new chat after **Inizia conversazione**.
 - **Direct visits to a deep route.** `index.html` has no `<base>` element, because the Content-Security-Policy says

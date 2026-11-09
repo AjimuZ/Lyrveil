@@ -8,8 +8,15 @@ from sqlalchemy import Connection, RowMapping, text
 
 from lyrveil.domain.messages import Author, Message, MessageStatus, Variant, VariantSource, VariantStatus
 
+# The simulated read state (docs/frontend.md, screen 2): a user message is `read` once the character has started
+# answering after it, that is when a later character message is streaming, complete or interrupted. Until then it
+# keeps the stored `sent`. Deriving it means an edit, a deletion or a regenerated reply never leaves a stale mark.
 _MESSAGE_SELECT = """
-SELECT m.id, m.conversation_id, m.seq, m.client_message_id, m.author, m.kind, m.status, m.read_state,
+SELECT m.id, m.conversation_id, m.seq, m.client_message_id, m.author, m.kind, m.status,
+       CASE WHEN m.author = 'user' AND EXISTS (
+              SELECT 1 FROM messages AS r WHERE r.conversation_id = m.conversation_id AND r.author = 'character'
+                AND r.seq > m.seq AND r.deleted_at IS NULL AND r.status IN ('streaming', 'complete', 'interrupted'))
+            THEN 'read' ELSE m.read_state END AS read_state,
        m.active_variant_id, m.content, m.edited_at, m.deleted_at, m.created_at,
        (SELECT count(*) FROM message_variants AS v WHERE v.message_id = m.id) AS variant_count,
        (SELECT v.image_id FROM message_variants AS v JOIN generated_images AS g ON g.id = v.image_id

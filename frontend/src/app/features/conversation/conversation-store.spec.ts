@@ -147,6 +147,48 @@ describe('ConversationStore', () => {
     expect(store.hasOlder()).toBe(true);
   });
 
+  describe('read mark', () => {
+    const isMark = (request: { method: string; url: string }): boolean =>
+      request.method === 'POST' && request.url === '/api/v1/conversations/c1/read';
+
+    it('reports the newest finished reply once and takes the unread count from the answer', async () => {
+      await openWith([message('m1', 1, { author: 'user' }), message('m2', 2)]);
+      expect(store.newestFinishedReply()).toBe(2);
+
+      const marking = store.markRead();
+      const mark = backend.expectOne(isMark);
+      expect(mark.request.body).toEqual({ up_to_seq: 2 });
+      mark.flush({ ...chat, unread_count: 0 });
+      await marking;
+      expect(store.conversation()?.unread_count).toBe(0);
+
+      // Nothing finished since: asking again sends nothing (the afterEach verify fails on a stray request).
+      await store.markRead();
+    });
+
+    it('ignores a reply that is still produced and marks the next finished one', async () => {
+      await openWith([message('m1', 1, { author: 'user' }), message('r1', 2, { status: 'streaming', content: 'Ci' })]);
+      expect(store.newestFinishedReply()).toBe(0);
+      await store.markRead();
+
+      socket.receive(event('message.completed', { message: message('r1', 2) }));
+      const marking = store.markRead();
+      backend.expectOne(isMark).flush(chat);
+      await marking;
+    });
+
+    it('forgets a failed mark, so the next call sends it again', async () => {
+      await openWith([message('m1', 1)]);
+      const failing = store.markRead();
+      backend.expectOne(isMark).flush({ code: 'NETWORK' }, { status: 503, statusText: 'Service Unavailable' });
+      await failing;
+
+      const retrying = store.markRead();
+      backend.expectOne(isMark).flush(chat);
+      await retrying;
+    });
+  });
+
   it('shows the error when the chat cannot be opened', async () => {
     const opened = store.open('c1');
     backend.expectOne(isChat).flush({ code: 'NOT_FOUND' }, { status: 404, statusText: 'Not Found' });

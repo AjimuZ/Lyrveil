@@ -1,9 +1,10 @@
 // Conversation list state: the list for a tab and a search, the actions on a row, and the characters a chat starts from.
 import { Injectable, inject, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api-client';
 import { ApiError, toApiError } from '../../core/api/api-error';
+import { DataEventType, EventsSocket } from '../../core/realtime/events-socket';
 import {
   Character,
   CharacterList,
@@ -16,18 +17,39 @@ import {
 /** How long typing in the search box rests before the list is requested again. */
 export const SEARCH_DELAY_MS = 250;
 
+/** How long the live list waits after an event before it asks again, so a burst of events costs one request. */
+export const LIVE_DELAY_MS = 300;
+
+/** The events that change a row: its preview, unread count or what the character is doing. Deltas are left out. */
+const ROW_EVENTS: readonly DataEventType[] = [
+  'message.created',
+  'message.updated',
+  'message.completed',
+  'message.failed',
+  'message.deleted',
+  'typing.started',
+  'typing.stopped',
+  'image.completed',
+];
+
 /**
  * Holds what the conversation list shows. Reads are `Readonly` signals; every method is an intent that calls the
  * REST API and then reloads the list, because the server is the source of truth (docs/frontend.md, State).
  *
  * A reload that is overtaken by a newer one is dropped, so a slow answer never replaces a fresher list. A failed
  * reload keeps the previous rows and sets `error`; a failed action sets `actionError` and changes nothing.
+ *
+ * While `follow` is active the rows stay live: a message or typing event, or a resync, reloads the list after
+ * LIVE_DELAY_MS, which updates previews, unread counts and the typing, drawing and queue hints.
  */
 @Injectable({ providedIn: 'root' })
 export class ChatsStore {
   private readonly api = inject(ApiClient);
+  private readonly socket = inject(EventsSocket);
   private latestReload = 0;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
+  private liveTimer: ReturnType<typeof setTimeout> | undefined;
+  private followers: Subscription[] = [];
 
   private readonly itemsState = signal<readonly Conversation[]>([]);
   private readonly loadingState = signal(true);
@@ -69,6 +91,38 @@ export class ChatsStore {
         this.loadingState.set(false);
       }
     }
+  }
+
+  /** Connects the event socket and keeps the rows live until `unfollow`. Does nothing while already following. */
+  follow(): void {
+    if (this.followers.length > 0) {
+      return;
+    }
+    this.socket.connect();
+    this.followers = [
+      ...ROW_EVENTS.map((type) => this.socket.on(type).subscribe(() => this.reloadSoon())),
+      this.socket.resync$.subscribe(() => this.reloadSoon()),
+    ];
+  }
+
+  /** Stops following events. The rows on hand stay. */
+  unfollow(): void {
+    for (const follower of this.followers) {
+      follower.unsubscribe();
+    }
+    this.followers = [];
+    clearTimeout(this.liveTimer);
+    this.liveTimer = undefined;
+  }
+
+  private reloadSoon(): void {
+    if (this.liveTimer !== undefined) {
+      return;
+    }
+    this.liveTimer = setTimeout(() => {
+      this.liveTimer = undefined;
+      void this.reload();
+    }, LIVE_DELAY_MS);
   }
 
   /** Switches between the active and the archived chats and reloads. */

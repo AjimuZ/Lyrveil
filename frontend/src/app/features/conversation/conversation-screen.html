@@ -113,8 +113,8 @@
                   <span>· {{ 'conv.edited' | t }}</span>
                 }
                 @if (row.mine) {
-                  <span class="read" role="img" [attr.aria-label]="(row.message.read_state === 'read' ? 'conv.read.read' : 'conv.read.sent') | t">
-                    <span aria-hidden="true">{{ row.message.read_state === 'read' ? '✓✓' : '✓' }}</span>
+                  <span class="read" role="img" [attr.aria-label]="(row.read ? 'conv.read.read' : 'conv.read.sent') | t">
+                    <span aria-hidden="true">{{ row.read ? '✓✓' : '✓' }}</span>
                   </span>
                 }
               </p>

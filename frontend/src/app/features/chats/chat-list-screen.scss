@@ -178,7 +178,8 @@
 }
 
 .name,
-.meta {
+.meta,
+.preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -186,6 +187,25 @@
 
 .meta {
   color: var(--ob-text-muted);
+}
+
+.preview {
+  color: var(--ob-text);
+
+  &.activity {
+    color: var(--ob-primary-hover);
+  }
+}
+
+.unread {
+  min-width: 24px;
+  padding: 0 var(--ob-space-2);
+  background: var(--ob-primary);
+  color: var(--ob-bg);
+  border-radius: var(--ob-radius-sm);
+  font-size: 12px;
+  line-height: 24px;
+  text-align: center;
 }
 
 .side {
