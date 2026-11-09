@@ -536,6 +536,22 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
 | `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
 | `POST /backups`, `GET /backups` | Create and list. Restore is `scripts\lyrveil.cmd restore`, because it stops services. |
 
+Delivered in P07.5: the three notification routes (`lyrveil/api/notifications.py`), not in the committed OpenAPI
+document yet:
+
+- A notification is `{"id", "kind", "conversation_id", "message_id", "title", "body", "read", "read_at", "created_at"}`.
+  `kind` is one of `proactive_message`, `image_ready`, `job_failed`, `memory_conflict` and `missed_events`; only the
+  first and the last are written so far. `conversation_id` and `message_id` are null for a notice about no chat and
+  after the chat or the message was deleted. `title` and `body` are Italian text.
+- `GET /notifications?unread=&cursor=&limit=` answers `{"items": [], "next_cursor": null, "unread_count": 0}`: newest
+  first, only the unread ones with `unread=true`, 50 per page by default (`limit` 1 to 200). `unread_count` counts every
+  unread notification, whatever the filter and the page. `422 VALIDATION_ERROR` for a `cursor` the server did not issue.
+- `POST /notifications/{id}/read` answers the notification, now read. Calling it again is harmless and keeps the first
+  `read_at`. `404 NOT_FOUND` for an unknown id.
+- `POST /notifications/read-all` answers `{"updated": n}`, the number of notifications it marked.
+- **Event.** `notification.created` carries `{"notification": {...}}`, the document above, after the change was
+  committed. There is no event for a read mark.
+
 Delivered in P06.6a: the five `/settings/models` routes (`lyrveil/api/model_settings.py`, [Model
 catalog](models.md#delivered-in-p066a)), not in the committed OpenAPI document yet:
 
@@ -676,7 +692,7 @@ reconnects after 1, 2, 5 and then every 10 seconds.
 | `image.proposed` | `proposal` | Contextual proposal ready. |
 | `memory.updated` | `memory_id`, `action` | Memory changed. |
 | `memory.conflict` | `memory_id`, `conversation_id` | Needs review. Since P04.2b, published after an extraction run that stored an uncertain memory of importance at least 3, with the new memory's id. |
-| `notification.created` | `notification` | In-app notification. |
+| `notification.created` | `notification` | In-app notification. Since P07.5, published for a delivered proactive message and for the `missed_events` notice of the startup step. |
 | `resync.required` | None | Reload through REST. |
 
 Client frames: `hello` and `ping`. All actions go through REST.

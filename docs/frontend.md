@@ -116,6 +116,10 @@ The server is the source of truth. A store applies events optimistically and rel
 
 Every screen has loading, empty and error states. Every control has real behavior.
 
+### Notification bell (shell)
+
+Delivered in P07.5 (`features/notifications/`). The shell shows a bell beside the brand on every screen. `NotificationsStore` loads `GET /notifications` when the shell opens, follows `notification.created` through `EventsSocket` and reloads after `resync.required`. The bell shows the unread badge (the server's `unread_count`); its accessible name is **Notifiche**, plus the count when there is one. It opens a list of the newest 50 notices, each with its title, text, time and **Segna come letta**, and **Segna tutte come lette**. A notice that belongs to a chat opens it and counts as read. A new notice shows a toast for 6 seconds in a polite live region. The Browser Notification API is not used. The unread count on the rows of the conversation list (screen 1) is a separate, still unbuilt, count of messages.
+
 ### 1. Conversation list
 
 Avatar, name, last message (one line), time, unread count, typing indicator, and a pending-image or queue hint. Search covers names, titles and messages. Pinned chats come first, then activity. A context menu offers pin, archive, delete. **+** opens

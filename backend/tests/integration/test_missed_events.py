@@ -9,10 +9,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import anyio
 import pytest
 from sqlalchemy import Connection, Engine, text
 
 from lyrveil.domain.identifiers import new_id, to_utc_text
+from lyrveil.events.hub import EventHub
 from lyrveil.jobs.policy import JobKind
 from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import read, write
@@ -302,3 +304,36 @@ def test_a_running_event_with_no_live_job_is_ended_and_one_with_a_queued_job_is_
     assert states[orphan][:2] == ("failed", "interrupted")
     assert states[live][0] == "running"
     assert notification_rows(migrated) == []
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_run_forever_announces_the_missed_events_notification(migrated: Engine, clock: FakeClock) -> None:
+    """P07.5: the startup step publishes `notification.created` once its transaction committed."""
+    conversation = add_chat(migrated)
+    add_event(migrated, conversation, timedelta(hours=5), MissedPolicy.SKIP)
+    hub = EventHub("boot")
+    scheduler = service(migrated, clock)
+    scheduler.publish_to(hub)
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(scheduler.run_forever)
+        with anyio.fail_after(5):
+            while not hub.missed(0, hub.boot_id):
+                await anyio.sleep(0.01)
+        group.cancel_scope.cancel()
+
+    published = hub.missed(0, hub.boot_id)
+    assert published is not None
+    assert [event.type for event in published] == ["notification.created"]
+    notice = published[0].data["notification"]
+    assert notice["kind"] == "missed_events"
+    assert notice["read"] is False
+    assert notice["conversation_id"] is None
+    assert notice["body"] == read(
+        migrated, lambda connection: connection.execute(text("SELECT body FROM notifications")).scalar_one()
+    )

@@ -638,9 +638,12 @@ character deletes its events.
 
 Delivered in revision `0017` (P07.3) with a `CHECK` list on `kind` and the indexes `(created_at)` and
 `(read_at, created_at)`. The keys to `conversations` and `messages` are SET NULL, so deleting either keeps the notice.
-Only `missed_events` is written so far, by the scheduler's startup step (`persistence/notifications.py`): `title` and
-`body` are Italian, the count is in the body, and `conversation_id` and `message_id` are NULL. The service, the API and
-the `notification.created` event come with P07.5.
+Two kinds are written so far (`persistence/notifications.py`). `missed_events` comes from the scheduler's startup step:
+`title` and `body` are Italian, the count is in the body, and `conversation_id` and `message_id` are NULL.
+`proactive_message` comes from the delivery of a proactive message (P07.5), in the transaction that stores the message:
+`title` is the character's first name, `body` the first 140 characters of the message, and both keys are set. The
+service (`services/notifications.py`), the routes and the `notification.created` event are P07.5's; reading sets
+`read_at` once and never clears it.
 
 ### `application_settings`
 

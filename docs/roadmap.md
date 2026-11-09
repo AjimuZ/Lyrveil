@@ -180,7 +180,7 @@ Evidence:
 - [x] P07.2 Decide and generate stages, with the repetition check.
 - [x] P07.3 Missed-event policies.
 - [x] P07.4 Time context in prompts.
-- [ ] P07.5 Notifications.
+- [x] P07.5 Notifications.
 - [ ] P07.6 Read state, unread counts and final messaging details.
 
 Exit: T-MSG-10 and T-SCH-01 to T-SCH-07 pass. AC-17 holds.

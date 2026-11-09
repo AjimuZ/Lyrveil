@@ -16,6 +16,7 @@ MESSAGE_DELETED = "message.deleted"
 IMAGE_PROGRESS = "image.progress"
 IMAGE_COMPLETED = "image.completed"
 IMAGE_PROPOSED = "image.proposed"
+NOTIFICATION_CREATED = "notification.created"
 
 
 class EventPublisher(Protocol):

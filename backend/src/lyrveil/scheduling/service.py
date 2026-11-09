@@ -8,7 +8,7 @@ mode, only after the user has been idle, and never takes the GPU from an image f
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, tzinfo
 
 import anyio
@@ -22,6 +22,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
 from lyrveil.persistence import notifications
 from lyrveil.persistence import settings as settings_repository
+from lyrveil.ports.events import EventPublisher
 from lyrveil.scheduling import store
 from lyrveil.scheduling.rules import (
     MISSED_AFTER,
@@ -38,6 +39,7 @@ from lyrveil.scheduling.rules import (
     user_recently_active,
     week_start,
 )
+from lyrveil.services.notifications import NotificationService, announce
 
 # docs/scheduler.md: the backend evaluates every 60 seconds.
 EVALUATION_INTERVAL_S = 60.0
@@ -84,6 +86,9 @@ class MissedResolution:
     kept: int = 0
     moved: int = 0
     interrupted: int = 0
+    # The id of the `missed_events` notification the step wrote, for run_forever to announce. Not part of equality: two
+    # resolutions that did the same are equal whichever row they wrote.
+    notification_id: str | None = field(default=None, compare=False)
 
 
 class SchedulerService:
@@ -107,6 +112,11 @@ class SchedulerService:
         self._clock = clock
         self._queue = queue if queue is not None else JobQueue(clock=clock)
         self._interval_s = interval_s
+        self._events: EventPublisher | None = None
+
+    def publish_to(self, events: EventPublisher) -> None:
+        """Sets where `notification.created` goes. Without it the notification is stored and nothing is published."""
+        self._events = events
 
     def evaluate(self) -> Evaluation:
         """Runs one pass and returns what it did. Blocks; run it in a worker thread.
@@ -132,7 +142,8 @@ class SchedulerService:
         event of the conversation pending and due now, which the evaluation queues at the next allowed moment, and
         ends the others `missed`; `next_window` moves `due_at` to the next allowed moment (rules.next_window_start). It
         never writes a message, so no message gets a time earlier than its generation. When anything was found it
-        writes one `missed_events` notification with the count and no other content. All in one transaction.
+        writes one `missed_events` notification with the count and no other content; its id is in the result, and
+        run_forever announces it once the transaction committed. All in one transaction.
         """
         if not read(self._engine, _switched_on):
             return MissedResolution()
@@ -167,15 +178,16 @@ class SchedulerService:
                     reason = "newer_missed_event" if superseded else "policy_skip"
                     store.mark_missed(connection, event.id, reason, stamp)
                     missed += 1
+        notification_id: str | None = None
         if found:
-            notifications.insert_notification(
+            notification_id = notifications.insert_notification(
                 connection,
                 kind=notifications.MISSED_EVENTS,
                 title="Messaggi programmati scaduti",
                 body=_missed_body(found),
                 now=stamp,
             )
-        return MissedResolution(found, missed, kept, moved, interrupted)
+        return MissedResolution(found, missed, kept, moved, interrupted, notification_id)
 
     def _pass(self, connection: Connection) -> Evaluation:
         now = self._clock()
@@ -284,9 +296,16 @@ class SchedulerService:
         logger.info("proactive_job_queued", conversation_id=conversation.id, event_kind=event.kind.value)
         return 1
 
+    async def _announce(self, notification_id: str) -> None:
+        """Publishes `notification.created` for a notification the startup step committed."""
+        assert self._events is not None
+        notification = await to_thread.run_sync(NotificationService(self._engine).get, notification_id)
+        if notification is not None:
+            announce(self._events, notification)
+
     async def run_forever(self) -> None:
-        """Applies the missed-event policies once, then evaluates every interval until cancelled. A failed step or
-        pass is logged and the next pass runs on time."""
+        """Applies the missed-event policies once and announces the `missed_events` notification it wrote, then
+        evaluates every interval until cancelled. A failed step or pass is logged and the next pass runs on time."""
         try:
             resolution = await to_thread.run_sync(self.resolve_missed)
             if resolution.found or resolution.interrupted:
@@ -298,6 +317,8 @@ class SchedulerService:
                     moved=resolution.moved,
                     interrupted=resolution.interrupted,
                 )
+            if resolution.notification_id is not None and self._events is not None:
+                await self._announce(resolution.notification_id)
         except Exception:
             logger.error("proactive_missed_failed", exc_info=True)
         while True:

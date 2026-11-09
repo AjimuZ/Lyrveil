@@ -1,0 +1,77 @@
+<div class="center">
+  <button
+    type="button"
+    class="bell"
+    data-testid="notification-bell"
+    [attr.aria-label]="bellLabel()"
+    [attr.aria-expanded]="open()"
+    aria-controls="notification-panel"
+    (click)="toggle()"
+  >
+    <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M8 1.5a4 4 0 0 0-4 4v3L2.5 11.5v1h11v-1L12 8.5v-3a4 4 0 0 0-4-4zM6.5 13.5a1.5 1.5 0 0 0 3 0z" />
+    </svg>
+    @if (store.unreadCount() > 0) {
+      <span class="badge" data-testid="notification-badge" aria-hidden="true">{{ store.unreadCount() }}</span>
+    }
+  </button>
+
+  @if (open()) {
+    <section id="notification-panel" class="panel" data-testid="notification-panel" [attr.aria-label]="'notifications.title' | t">
+      <header class="panel-header">
+        <p class="panel-title">{{ 'notifications.title' | t }}</p>
+        <button
+          type="button"
+          class="link"
+          data-testid="notification-read-all"
+          [disabled]="store.unreadCount() === 0"
+          (click)="store.markAllRead()"
+        >
+          {{ 'notifications.readAll' | t }}
+        </button>
+      </header>
+
+      @if (store.actionError(); as failure) {
+        <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+      }
+
+      @if (store.items().length === 0) {
+        <p class="empty">{{ 'notifications.empty' | t }}</p>
+      } @else {
+        <ul class="list">
+          @for (notification of store.items(); track notification.id) {
+            <li class="item" [class.unread]="!notification.read" data-testid="notification-item">
+              <button type="button" class="item-main" (click)="openNotification(notification)">
+                <span class="item-head">
+                  <span class="item-title">{{ notification.title }}</span>
+                  <span class="item-time">{{ time(notification) }}</span>
+                </span>
+                <span class="item-body">{{ notification.body }}</span>
+                @if (!notification.read) {
+                  <span class="visually-hidden">{{ 'notifications.unreadItem' | t }}</span>
+                }
+              </button>
+              @if (!notification.read) {
+                <button type="button" class="link" data-testid="notification-mark-read" (click)="store.markRead(notification)">
+                  {{ 'notifications.markRead' | t }}
+                </button>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>
+
+<div class="toasts" role="status" aria-live="polite">
+  @if (store.toast(); as toast) {
+    <div class="toast" data-testid="notification-toast">
+      <div class="toast-text">
+        <strong class="toast-title">{{ toast.title }}</strong>
+        <span class="toast-body">{{ toast.body }}</span>
+      </div>
+      <button type="button" class="link" [attr.aria-label]="'notifications.dismiss' | t" (click)="store.dismissToast()">×</button>
+    </div>
+  }
+</div>

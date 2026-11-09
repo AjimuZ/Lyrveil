@@ -27,6 +27,7 @@ from lyrveil.api import (
     memories,
     messages,
     model_settings,
+    notifications,
     scenarios,
     system,
 )
@@ -284,7 +285,8 @@ def create_app(
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
 
-    `proactive`, kept in `app.state.proactive`, is evaluated every minute by the lifespan; tests leave it out.
+    `proactive`, kept in `app.state.proactive`, is evaluated every minute by the lifespan and publishes its
+    `notification.created` on the app's event hub; tests leave it out.
 
     `model_profiles`, kept in `app.state.model_profiles`, serves the /settings/models routes; without it they answer
     500 `INTERNAL`. `ai_resources`, kept in `app.state.ai_resources`, serves GET /system/resources the same way.
@@ -319,6 +321,8 @@ def create_app(
     app.state.daily_backup = daily_backup
     app.state.scheduler = None
     app.state.proactive = proactive
+    if proactive is not None:
+        proactive.publish_to(app.state.events)
     app.state.model_profiles = model_profiles
     app.state.ai_resources = ai_resources
     app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
@@ -332,6 +336,7 @@ def create_app(
     app.include_router(diagnostics.router, prefix=API_PREFIX)
     app.include_router(images.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
+    app.include_router(notifications.router, prefix=API_PREFIX)
     app.include_router(model_settings.router, prefix=API_PREFIX)
     app.include_router(system.router, prefix=API_PREFIX)
     app.include_router(events.router)

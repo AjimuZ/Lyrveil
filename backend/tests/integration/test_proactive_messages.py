@@ -252,8 +252,13 @@ async def test_a_message_is_written_with_its_event_and_goes_through_the_reply_ch
     assert recorded["regenerations"] == 0
     published = hub.missed(0, hub.boot_id)
     assert published is not None
-    assert [event.type for event in published] == ["message.completed"]
+    assert [event.type for event in published] == ["message.completed", "notification.created"]
     assert published[0].data["message"]["id"] == message_id
+    notice = published[1].data["notification"]
+    assert notice["kind"] == "proactive_message"
+    assert notice["message_id"] == message_id
+    assert notice["read"] is False
+    assert notice["body"] == "Ciao Utente, ti penso. Come stai?"
 
 
 @pytest.mark.anyio

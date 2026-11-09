@@ -80,7 +80,7 @@ orchestrator/
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
 | `SchedulerService` | `scheduling` | Evaluates proactive rules and creates jobs. Once at startup it applies the [missed-event policies](scheduler.md#missed-events) (P07.3) and writes the `missed_events` notification. |
-| `NotificationService` | `services` | In-app notifications and their events. |
+| `NotificationService` | `services` | In-app notifications and their events. Delivered in P07.5: the list with its cursor and unread count, and the read marks; `announce` publishes `notification.created` for the services that write a notification (the proactive delivery and the scheduler's startup step) once their transaction committed. |
 | `PersistenceService` | `persistence` | Units of work, backups, purges, integrity checks. |
 | `ModelLifecycleManager` | orchestrator | GPU state machine, leases, mode changes, recovery. |
 | `GPUResourceMonitor` | orchestrator | NVML sampling, release verification, preflight facts. |

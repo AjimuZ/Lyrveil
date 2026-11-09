@@ -680,6 +680,13 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-SCH-06 | Never causes a mode change | Unit | P07 |
 | T-SCH-07 | Time context values in Italian | Unit | P07 |
 
+Tests of the in-app notifications (P07.5) have no catalog identifier of their own; they are not yet run when written.
+`backend/tests/integration/test_notifications.py` covers the three routes, the cursor, the unread count and the event on
+the hub; `test_proactive_messages.py` and `test_missed_events.py` check that the delivery and the startup step announce
+their notice; `frontend/src/app/features/notifications/notifications-store.spec.ts` covers the store; and
+`tests/e2e/specs/notifications.spec.mjs` shows the badge, the list, the toast and marking read. In that last file the
+browser plays the notification routes and the event, because nothing switches proactive messages on yet.
+
 ### Security
 
 | ID | Test | Level | Phase |

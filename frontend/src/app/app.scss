@@ -18,6 +18,12 @@
   border-right: 1px solid var(--ob-border);
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .brand {
   margin: 0;
   font-family: var(--ob-font-pixel);

@@ -13,9 +13,10 @@ end the event `skipped`.
 
 A delivered message is written whole in one transaction with the event's end: `created_at` is the real generation time,
 `scheduled_event_id` links it to its event and the event becomes `delivered`. Nothing streams, so the client gets one
-`message.completed`. The unread count follows from the new message; the notification and its toast are P07.5's. A
-failure that will not be retried ends the event `failed`, a cancellation `cancelled`; a run the scheduler retries or
-resumes after a restart finds its event still `running`. No message, memory, reason or prompt is ever logged.
+`message.completed`. The unread count follows from the new message, and a `proactive_message` notification is written
+in the same transaction and announced with `notification.created` right after (P07.5). A failure that will not be
+retried ends the event `failed`, a cancellation `cancelled`; a run the scheduler retries or resumes after a restart
+finds its event still `running`. No message, memory, reason or prompt is ever logged.
 """
 
 import json
@@ -54,6 +55,7 @@ from lyrveil.domain.messages import (
     content_hash,
     message_document,
 )
+from lyrveil.domain.notifications import Notification
 from lyrveil.domain.proactive import ProactiveDecision
 from lyrveil.jobs.handlers import (
     INTERNAL,
@@ -68,6 +70,7 @@ from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence import notifications as notification_repository
 from lyrveil.persistence import settings as settings_repository
 from lyrveil.ports.events import MESSAGE_COMPLETED, EventPublisher
 from lyrveil.ports.memory_retriever import RetrievalQuery
@@ -93,6 +96,7 @@ from lyrveil.scheduling.repetition import RECENT_PROACTIVE, is_repetition
 from lyrveil.scheduling.rules import EventKind, parse_settings
 from lyrveil.services.chat_inference import ReplySettings, load_context_request, reply_request
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
+from lyrveil.services.notifications import announce
 
 # Generated once from the schema, so the grammar always follows the model.
 DECISION_GRAMMAR = schema_to_gbnf(ProactiveDecision)
@@ -105,6 +109,8 @@ DECISION_MEMORY_TOKENS = 400
 # The reason given to the generation when the user scheduled the message without a note, or the model gave no reason.
 SCHEDULED_REASON = "Hai deciso tu di scrivere a quest'ora."
 DEFAULT_REASON = "Hai voglia di scrivere."
+# The notification quotes this many characters of the message.
+PREVIEW_CHARS = 140
 
 logger = get_logger(__name__)
 
@@ -147,6 +153,23 @@ class _Pass:
     normalized: NormalizedReply | None
     cut: str | None = None
     stopped: str | None = None
+
+
+@dataclass(frozen=True)
+class _Delivery:
+    """A delivered message and the notification written with it."""
+
+    message: Message
+    notification: Notification
+
+
+def _preview(text_: str) -> str:
+    """Returns the start of the message for the notice: whitespace folded, at most PREVIEW_CHARS characters, with an
+    ellipsis when it was cut."""
+    flat = " ".join(text_.split())
+    if len(flat) <= PREVIEW_CHARS:
+        return flat
+    return flat[: PREVIEW_CHARS - 1].rstrip() + "…"
 
 
 class _EventEndedError(Exception):
@@ -279,10 +302,12 @@ class ProactiveMessageService:
             await to_thread.run_sync(self._end, event.id, "skipped", outcome.reason)
             logger.info("proactive_skipped", job_id=job.id, conversation_id=event.conversation_id, state=outcome.reason)
             return JobDone({"status": "skipped", "reason": outcome.reason})
-        delivered = await to_thread.run_sync(self._deliver, event, outcome)
-        if delivered is None:
+        result = await to_thread.run_sync(self._deliver, event, outcome, wanted.card.identity.first_name)
+        if result is None:
             return JobDone({"status": "not_running"})
+        delivered = result.message
         self._events.publish(MESSAGE_COMPLETED, {"message": message_document(delivered)})
+        announce(self._events, result.notification)
         logger.info(
             "proactive_delivered",
             job_id=job.id,
@@ -499,12 +524,14 @@ class ProactiveMessageService:
 
     # Delivering
 
-    def _deliver(self, event: store.RunningEvent, written: _Written) -> Message | None:
-        """Writes the message, its variant and the event's end in one transaction and returns the message, or None when
-        the event is no longer `running` or its chat is gone: then nothing is written. Blocks."""
+    def _deliver(self, event: store.RunningEvent, written: _Written, character_name: str) -> _Delivery | None:
+        """Writes the message, its variant, the event's end and the `proactive_message` notification in one
+        transaction and returns the message with the notification, or None when the event is no longer `running` or its
+        chat is gone: then nothing is written. The notice is titled with the character's name and quotes the start of
+        the message. Blocks."""
         now = to_utc_text(self._clock())
 
-        def work(connection: Connection) -> Message:
+        def work(connection: Connection) -> _Delivery:
             conversation = conversation_repository.get(connection, event.conversation_id)
             if conversation is None or conversation.status is not ConversationStatus.ACTIVE:
                 raise _EventEndedError("conversation_unavailable")
@@ -541,7 +568,18 @@ class ProactiveMessageService:
                 raise _EventEndedError("not_running")
             delivered = repository.get_message(connection, message_id)
             assert delivered is not None
-            return delivered
+            notification_id = notification_repository.insert_notification(
+                connection,
+                kind=notification_repository.PROACTIVE_MESSAGE,
+                title=character_name,
+                body=_preview(written.text),
+                now=now,
+                conversation_id=event.conversation_id,
+                message_id=message_id,
+            )
+            notification = notification_repository.get(connection, notification_id)
+            assert notification is not None
+            return _Delivery(delivered, notification)
 
         try:
             return write(self._engine, work)

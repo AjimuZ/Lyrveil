@@ -5,7 +5,8 @@ Revises: 0016
 
 The list under the bell icon. `conversation_id` and `message_id` are plain columns with a SET NULL key, so deleting a
 chat or a message never blocks and never removes the notice. The first writer is the missed-event step of the scheduler
-(P07.3); the service, the API and the `notification.created` event come with P07.5.
+(P07.3); the service, the API and the `notification.created` event came with P07.5, and the delivery of a proactive
+message writes the second kind.
 """
 
 import sqlalchemy as sa

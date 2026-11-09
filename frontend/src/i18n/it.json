@@ -8,6 +8,17 @@
   "nav.settings": "Impostazioni",
   "nav.models": "Modelli",
   "nav.resources": "Risorse AI",
+  "notifications.bell": "Notifiche",
+  "notifications.title": "Notifiche",
+  "notifications.unread": {
+    "one": "{count} non letta",
+    "other": "{count} non lette"
+  },
+  "notifications.unreadItem": "Non letta",
+  "notifications.empty": "Non hai notifiche.",
+  "notifications.readAll": "Segna tutte come lette",
+  "notifications.markRead": "Segna come letta",
+  "notifications.dismiss": "Chiudi la notifica",
   "screen.chats": "Conversazioni",
   "screen.conversation": "Conversazione",
   "screen.characters": "Personaggi",

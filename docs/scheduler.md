@@ -5,9 +5,9 @@ Delivered with P07.1: the `scheduled_events` table, the evaluation every 60 seco
 `inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Delivered with
 P07.2: the `proactive_message` job handler (`ProactiveMessageService`) with the `decide` and `generate` stages and the
 repetition check. Delivered with P07.3: the missed-event policies at startup (`SchedulerService.resolve_missed`) and the
-stored `missed_events` notification. Not delivered yet: the time context (P07.4), the rest of the notifications (P07.5),
-`scheduled_message` events made by the user (the handler already serves them), recurrence rules, and the API and screens
-that switch the feature on. Until then the two switches can only be changed in the database, and both are off.
+stored `missed_events` notification. Delivered with P07.4: the time context lines of block 4. Delivered with P07.5: the
+in-app notifications (see [Notifications](#notifications)). Not delivered yet: `scheduled_message` events made by the
+user (the handler already serves them), recurrence rules, and the API and screens that switch the feature on. Until then the two switches can only be changed in the database, and both are off.
 
 How P07.3 settles points the text leaves open:
 
@@ -27,7 +27,8 @@ How P07.3 settles points the text leaves open:
 - `next_window` sets `due_at` to now when the local time is already inside a window, and otherwise to the earliest
   window start after now (`rules.next_window_start`), using the conversation's current windows.
 - The notification is one `missed_events` row for the whole step, with the number of overdue events found, whatever their
-  policy, in its Italian `body` and no conversation, message or topic. It is stored unread; showing it is P07.5's.
+  policy, in its Italian `body` and no conversation, message or topic. It is stored unread and announced with `notification.created` once the step's
+  transaction committed (see [Notifications](#notifications)).
 - A `running` event whose job row is gone, or whose job is no longer `queued` or `running`, ends `failed` with the reason
   `interrupted`: nothing would finish it, and a `running` event blocks its conversation.
 - Recurrence: `recurrence_json` has no defined rule yet, so "a recurring event computes its next occurrence from the
@@ -199,6 +200,27 @@ Rules:
 ## Notifications
 
 Notifications are in-app only: the unread badge in the chat list, a brief toast and the list under the bell icon. The Browser Notification API is not used in 1.0.
+
+Delivered with P07.5:
+
+- **Producers.** A delivered proactive message writes one `proactive_message` notification in the same transaction as the
+  message: `title` is the character's first name, `body` the start of the message (whitespace folded, at most 140
+  characters, an ellipsis when cut), with `conversation_id` and `message_id`. The startup step writes the
+  `missed_events` one. `image_ready`, `job_failed` and `memory_conflict` are accepted by the table but nothing writes
+  them yet.
+- **Announcing.** `notification.created` carries `{"notification": {...}}` and is published only after the notice's
+  transaction committed, right after `message.completed` for a proactive message. The startup notice is published when
+  the scheduler starts, usually before a browser connects, so a client reads it through `GET /notifications`.
+- **Routes.** `GET /notifications?unread=&cursor=&limit=`, `POST /notifications/{id}/read` and `POST
+  /notifications/read-all` (see [the API](api.md#jobs-scheduling-notifications-settings-data)). The list is newest
+  first and does not hide read notices.
+- **Screen.** The bell sits next to the brand in the shell, on every screen. Its badge shows the number of unread notices
+  (the server's count, not the length of the loaded list). Opening it lists the newest 50 with **Segna come letta** per
+  notice and **Segna tutte come lette**; a notice with a chat opens that chat and counts as read. A new notice shows a
+  toast for 6 seconds and stays in the list. A reload through REST follows every `resync.required`.
+- **Limits.** The badge is on the bell in the shell; the chat list rows keep their own unread message count. Notices are
+  not removed or expired, and the toast shows only the newest notice. There is no `notification.read` event, so a second
+  open tab learns of a read mark at its next reload.
 
 ## Safety
 

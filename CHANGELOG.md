@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- In-app notifications (P07.5). A bell icon next to the brand shows the number of unread notices, opens a list of the
+  newest 50 (title, text, time, **Segna come letta**, **Segna tutte come lette**) and shows a brief toast when a new
+  notice arrives. A notice that belongs to a chat opens it. A delivered proactive message now writes a notice with the
+  character's name and the start of the message, and the `missed_events` notice written at startup shows in the list.
+  The backend gains `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` and the
+  `notification.created` event. Notices are in-app only: the browser's Notification API is not used. Proactive messages
+  are still off by default and nothing in the interface switches them on yet, so a notice appears only once they are on.
 - Time context in prompts (P07.4). Block 4 of a reply or proactive message now ends with the local date and part of the
   day in Italian (`Adesso è domenica di sera, 1 novembre.`) and, when the chat has an earlier message, how long ago it
   was (`Vi siete sentiti l'ultima volta tre giorni fa.`). Values are coarse and follow `LYRVEIL_TZ`.
