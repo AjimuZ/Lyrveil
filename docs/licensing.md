@@ -88,7 +88,7 @@ Versions and individual licenses are in [Technology choices](technology.md). All
 | License | Packages include |
 | --- | --- |
 | MIT | FastAPI, Pydantic, SQLAlchemy, Alembic, Angular, Pillow (MIT-CMU), structlog (dual), PSScriptAnalyzer (development only) |
-| BSD-3-Clause | Uvicorn, HTTPX, websockets, Jinja2, snowballstemmer, nvidia-ml-py |
+| BSD-3-Clause | Uvicorn, HTTPX, websockets, snowballstemmer, nvidia-ml-py |
 | Apache-2.0 | RxJS, TypeScript, python-multipart, tzdata, Pester (development only) |
 | PSF-2.0 | Python |
 | MPL-2.0 | Hypothesis and `@axe-core/playwright`, development only |

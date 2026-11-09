@@ -1,10 +1,11 @@
 # Character Consistency Engine
 
-Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text profiles. Implementation: planned, phase
-P04. Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
+Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text profiles. Implementation (2026-11-09): delivered in
+phase P04 and passed by its automated exit; the Italian quality and consistency protocols (T-QLT-05, T-QLT-06) have not
+run on any real profile, so P04.10 is pending. Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
 stored as a memory that no prompt shows and that changes nothing else
 ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Code does not yet detect a card change the model did not
-label; "Applica al profilo" is P04.9. Delivered in P04.6: the Character State Manager with bounded updates and replay
+label; "Applica al profilo" has no screen, because the Memory Studio's **Proposte** tab is not drawn. Delivered in P04.6: the Character State Manager with bounded updates and replay
 ([Delivered in P04.6](#delivered-in-p046)). Delivered in P04.8a and P04.8b: the reply normalizer
 ([Delivered in P04.8a](#delivered-in-p048a)), the reply checks V1 to V13, the corrective generation and the adaptive
 notes ([Delivered in P04.8b](#delivered-in-p048b)).

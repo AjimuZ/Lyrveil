@@ -1,7 +1,7 @@
 # Operations
 
 Status: accepted (2026-11-01), revised 2026-11-05 for model profiles, the 32 GB reference machine and operation from
-Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). Most scripts and files described here do not exist yet. They are delivered in phase P01 and completed through P06. This guide is their specification; [Reference Compose file](#reference-compose-file) says what `compose.yaml` already holds.
+Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). Reconciled with the delivered code on 2026-11-09: `setup.cmd`, `start.cmd`, `stop.cmd`, `restart.cmd`, `status.cmd`, `logs.cmd`, `scripts\lyrveil.cmd` with `models`, `import-model`, `backup`, `restore` and `test`, and `compose.yaml` with its five services and the one-shot download tool exist, and the `docker` level exercised them against test projects in the phase exits. They have not been run on the real project with the real models and GPU: the hardware parts of P02 to P06 are pending. Sections that describe later behavior say so where they do.
 
 ## Requirements
 
@@ -167,12 +167,14 @@ Delivered in P01.6a, in `scripts/lib/Setup.psm1` ([evidence](verification/2026-1
 - The owner of step 3 is set after step 4, because the one-off containers use the local backend image and never pull.
   A first container with no capability reads the owner of each volume root. Only when it is not `10001:10001`, a
   second container with no network, a read-only root and only `CAP_CHOWN` changes it. Files inside are never changed.
-- Step 8 creates the runtime services that the Compose file defines. `compose.yaml` has none yet (P02, P05), so setup
-  says so and creates nothing.
-- Steps 5 to 7 are not delivered in setup: the models command does licenses and downloads (P01.6c), but it needs
-  `config/model-catalog.json`, which is in the backend image since P02.1a, but setup does not use it yet, and launch
-  files are planned (P02). Setup prints that nothing was downloaded. `-AcceptModelLicenses` and `-VerifyModels` exit 1 until then and point at
-  `scripts\lyrveil.cmd models`, and `-SkipModels` is accepted.
+- Step 8 creates the containers of `lyrveil-llm` and `lyrveil-image` with `docker compose create`, which are in
+  `compose.yaml` since P02.1 and P05.1, and does not start them. Its message that they are "not in the Compose file
+  yet" is out of date and only prints if a service is missing.
+- Steps 5 to 7 are not delivered in setup, as of 2026-11-09: the models command does licenses and downloads (P01.6c),
+  and the model catalog is in the backend image since P02.1a, but setup does not call either. Setup prints that nothing
+  was downloaded (its message blames the catalog, which is no longer the reason). `-AcceptModelLicenses` and
+  `-VerifyModels` exit 1 and point at `scripts\lyrveil.cmd models`, and `-SkipModels` is accepted. A user runs
+  `scripts\lyrveil.cmd models` after setup to accept the licenses and download the files.
 
 ### Model downloads
 
@@ -265,7 +267,7 @@ Delivered in P01.6d, in `scripts/lib/DataFiles.psm1` and `backend/src/lyrveil/to
 3. Verify GPU support with `docker compose run --rm --no-deps lyrveil-orchestrator python -m lyrveil_orchestrator.preflight`, which reads NVML and Docker facts. On a first run the image does not exist yet, so step 5 runs first and this check follows it.
 4. Check that both volumes exist and carry the label.
 5. Run setup if `.env`, volumes, images or runtime containers are missing.
-6. Check the files of the active profiles, presence and exact size, with `docker compose run --rm --no-deps lyrveil-backend python -m lyrveil.cli preflight`. A full hash only runs through `.\setup.cmd -VerifyModels`.
+6. Check the files of the active profiles, presence and exact size, with `docker compose run --rm --no-deps lyrveil-backend python -m lyrveil.cli preflight` (not delivered: see below). A full hash only runs through `.\setup.cmd -VerifyModels`, which exits 1 today, and through `scripts\lyrveil.cmd models -Verify`.
 7. Start core services: `docker compose up -d --no-build lyrveil-backend lyrveil-orchestrator lyrveil-frontend`.
 8. Wait up to 120 s for health checks. Exit 3 with the last logs on failure.
 9. The active text model starts automatically: the orchestrator's default mode is `llm`. Wait up to 300 s for `LLM_READY`. On timeout, print a warning and continue, because the app works for reading and editing.
@@ -283,13 +285,17 @@ option.
 - Step 3 runs the orchestrator's preflight in a one-off container with `docker compose run --rm --no-deps -T`. A failed
   row, or Docker failing to run the container, exits 2. This step has not run against a real GPU yet: the tests skip it.
 - Step 7 starts only `lyrveil-backend` and `lyrveil-frontend`, with `docker compose up --detach --no-build --wait
-  --wait-timeout 120`. The orchestrator is not started yet: `lyrveil_orchestrator.main` serves the control API since
-  P02.6c, but start.cmd begins starting it only with the rest of P02's startup; start prints a warning for it.
+  --wait-timeout 120`. The orchestrator is not started: `lyrveil_orchestrator.main` has served the control API since
+  P02.6c, but on 2026-11-09 `start.cmd` still does not start it and prints a warning for it. Without the orchestrator the
+  backend's scheduler cannot ask for a mode, so only stages that need no GPU run and a reply is not generated by the
+  real text model. The `e2e` level uses a fake orchestrator, so no test shows this gap. No roadmap item names the wiring yet.
 - Step 8: a service that is unhealthy, or not healthy within 120 s, exits 3 with the last 50 log lines of both
   services. After the health checks, start sends a GET to the published port of the frontend on `127.0.0.1` and exits 3
   if it does not answer.
-- Steps 6 and 9 are not delivered: the model catalog and the runtimes come with P02. Each prints a `WARNING` line and
-  never fails the start.
+- Steps 6 and 9 are not delivered in `start.cmd`, as of 2026-11-09: the file check needs a `preflight` command that
+  `lyrveil.cli` does not have yet (the backend's `ModelFiles` can measure the files, but no script calls it), and the
+  wait for `LLM_READY` needs the orchestrator started in step 7. Each prints a `WARNING` line (whose text still blames
+  the catalog and "P02") and never fails the start.
 - Step 10 (P03.7b) runs `python -m lyrveil.cli export-backups` as the `backup` command does, and prints
   `PASS     Backups: every backup of the data volume is in <folder>`. An invalid `LYRVEIL_BACKUP_DIR`, a missing data
   volume or image, or a failed copy prints a `WARNING` line instead and never fails the start.
@@ -332,8 +338,10 @@ Prints services and health, GPU state, VRAM, queue sizes, active model, launch l
 Delivered in P01.6b: every service of the Compose file except the one-shot tools, with its state (`missing` when it has
 no container) and health, the URL and whether it answers, whether Lyrveil is ready (backend and frontend running and
 healthy, and the URL answering), and the free space on the drive of `%LOCALAPPDATA%`. GPU state, VRAM, queue sizes,
-active model, launch level and model verification are not available yet: the text output prints a `WARNING` line for
-each, and the JSON has them as `null` with the reasons in `warnings`.
+active model, launch level and model verification are not available yet, and still were not on 2026-11-09 (the orchestrator
+and the job queue exist, but `status.cmd` does not read them; the reasons it prints blame P02 and are out of date): the
+text output prints a `WARNING` line for each, and the JSON has them as `null` with the reasons in `warnings`. The same
+data is on the **Risorse AI** screen.
 
 ```json
 {
@@ -401,7 +409,7 @@ by Docker and free disk. It prints them in the same format, with the advice for 
 the `.wslconfig` values for the machine's RAM when memory is too low. A row that needs the daemon fails as not checked
 when the daemon is unreachable. `start.cmd` judges the same rows except Git, then the data and models volume rows in
 `scripts/lib/Lifecycle.psm1` (P01.6b), and runs the orchestrator's four rows in a container. The model file row is
-planned for the backend, with the catalog (P02).
+not delivered: the backend lists the model files (`ModelFiles`, used by the models screen) but `start.cmd` has no row for them.
 
 The memory failure can be overridden with `LYRVEIL_ALLOW_LOW_MEMORY=true`. That setup is unsupported, and image generation may fail.
 

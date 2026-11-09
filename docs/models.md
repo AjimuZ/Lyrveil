@@ -1,6 +1,6 @@
 # Model catalog
 
-Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: the catalog file and its validator are delivered (P02.1a), and so are the backend's text profile change and custom registration (P06.6a, [Delivered in P06.6a](#delivered-in-p066a)); the rest is planned, phases P02, P04, P05 and P06. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
+Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers. Implementation: the catalog file and its validator are delivered (P02.1a), and so are the backend's text profile change and custom registration (P06.6a, [Delivered in P06.6a](#delivered-in-p066a)); the **Modelli** screen and the `models` command are delivered too (P06.6b, P01.6c). Not delivered: the image profile and quality choice, and the prompt template and sampler preset following the active text profile (see the "Not delivered" note under [Delivered in P06.6a](#delivered-in-p066a)). The measurements of P02.7, P04.10 and P05.8 have not run. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. No model has been downloaded or loaded yet, so every memory and speed figure is an estimate.
 
 The user chooses the active text and image models from verified profiles ([ADR 0024](decisions/0024-selectable-model-profiles.md)). One text model serves every text task, and it never shares the GPU with the image model ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -65,8 +65,8 @@ Lyrveil never changes the active profile by itself, not even after a failure. A 
 ## Catalog file
 
 `config/model-catalog.json` is part of the repository and is reviewed like code. The backend validates it at startup with a Pydantic model and refuses to start on an error. `scripts\lyrveil.cmd models` reads it with the Python standard library. Delivered in P02.1a: the file, with all eight
-profiles, and the validator `lyrveil.catalog` in the backend (`load_catalog`, `parse_catalog`). Wiring the validator
-into the backend's startup is planned for the settings and model services of P02. One text entry and one image entry:
+profiles, and the validator `lyrveil.catalog` in the backend (`load_catalog`, `parse_catalog`). The backend's startup
+loads the catalog through the validator (`main.py`) and refuses to start on an error. One text entry and one image entry:
 
 ```json
 {

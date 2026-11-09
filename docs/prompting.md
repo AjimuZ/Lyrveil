@@ -3,7 +3,15 @@
 Status: accepted (2026-11-01), revised 2026-11-05 for selectable text models and 2026-11-06 for the prompt layout and the
 voice fields. Implementation: partial. Delivered in P02.3b: `PromptFormatter` for the three families of
 [Prompt format](#prompt-format) ([Backend](backend.md#prompt-formatter)). Delivered in P04.5: blocks 1, 2, 3, 5, 6 and 9
-and the length bands of a reply ([System blocks](#system-blocks)). The rest is planned, phases P02 to P05.
+and the length bands of a reply ([System blocks](#system-blocks)). Reconciled on 2026-11-09: the prompts of the character
+draft, the memory extraction, the summaries, the image scene, the visual profile translation and the
+proactive message are delivered as Python modules in `backend/src/lyrveil/prompts/`, with the Italian pattern lists as
+text files in `prompts/it/`. The Italian quality protocol (T-QLT-01) has not run on a real model.
+
+**Not delivered: `PromptTemplateService` and the `.j2` files.** The design below loads versioned Jinja2 templates from
+`backend/src/lyrveil/prompts/<language>/`. The code does not: Jinja2 is not a dependency, and the template listings in this
+document show the wording of the prompts, which the Python modules build. The paragraph that follows describes the
+design.
 
 `PromptTemplateService` loads templates from `backend/src/lyrveil/prompts/<language>/`. Each
 file has a version in its name, such as `extraction.v1.j2`. Rendering uses Jinja2 with

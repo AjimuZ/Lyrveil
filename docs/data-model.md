@@ -1,6 +1,6 @@
 # Data model
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the generated images (P05.4b, revision `0013`), are described in their "Delivered in" notes below. The rest is planned, phases P05 to P07.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles. Implementation: partial. Delivered: `application_settings` (P01), `generation_jobs` (P02.4), `conversations` with `characters` (P02.5a, revision `0003`), and `messages` with `message_variants` (P02.5b, revision `0004`); the later revisions, up to the generated images (P05.4b, revision `0013`), are described in their "Delivered in" notes below. Reconciled on 2026-11-09: the committed revisions run from `0001` to `0017` (`backend/migrations/versions/`), adding the image proposals (`0014`, P05.5a), the stored lifecycle events (`0015`, P06.5), the scheduled events (`0016`, P07.1) and the notifications (`0017`, P07.5). A table or column described below without a "Delivered" note and absent from those revisions is not delivered.
 
 SQLite is the single database, at `data/db/lyrveil.sqlite3`. Only the backend opens it
 ([ADR 0004](decisions/0004-single-sqlite-writer.md)).

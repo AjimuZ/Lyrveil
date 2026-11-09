@@ -1,6 +1,6 @@
 # Documentation
 
-**Status (2026-11-06): the design is complete and no application code exists yet.** These documents describe the target system and are the specification for implementation. "Planned" means not yet built. Measured facts are marked as such.
+**Status (2026-11-09): the design is complete and the application is built through phase P07, with phase P08 in progress. No real model has run yet.** These documents describe the target system and record what each phase delivered. "Planned" and "not delivered" mean not yet built. Measured facts are marked as such, and a result that needs the real GPU is marked as not run. The [roadmap](roadmap.md) gives the state of each phase, and the [reconciliation of 2026-11-09](verification/2026-11-09-documentation-reconciliation.md) records which statements were corrected.
 
 ## Start here
 
@@ -75,7 +75,11 @@
 | [Models command, 2026-11-07](verification/2026-11-07-models.md) | `scripts\lyrveil.cmd models` against a local HTTPS test server, T-DCK-11, and what has not run |
 | [Import, backup and restore, 2026-11-07](verification/2026-11-07-data-files.md) | `import-model`, `backup` and `restore`, the `cli.py` backup commands, their unit tests, and what has not run |
 | [P01 exit, 2026-11-07](verification/2026-11-07-p01-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, WAL and FTS5 in the real image, the contract test fix, and what has not run |
+| [P02 exit, 2026-11-07](verification/2026-11-07-p02-exit.md) | The `unit`, `integration`, `e2e` and `lint` levels with the tests named by the exit, and the hardware part that has not run |
+| [P03 exit, 2026-11-07](verification/2026-11-07-p03-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with the tests named by the exit, and the hardware and manual part that has not run |
+| [P04 exit, 2026-11-07](verification/2026-11-07-p04-exit.md) | The `unit`, `integration`, `e2e` and `lint` levels with the memory and consistency tests, and the quality part that has not run |
 | [P05 exit, 2026-11-07](verification/2026-11-07-p05-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, the fixes to two specs and one Pester file, and the hardware and quality parts that have not run |
 | [P06 exit, 2026-11-08](verification/2026-11-08-p06-exit.md) | The `unit`, `integration`, `e2e`, `docker` and `lint` levels with result counts, the fixes to one integration test, two specs and one Pester file, and the hardware part that has not run |
 | [P07 exit, 2026-11-09](verification/2026-11-09-p07-exit.md) | The `unit`, `integration`, `e2e` and `lint` levels with result counts, T-MSG-10 and T-SCH-01 to T-SCH-07 by file, the fixes to three tests and one spec, the e2e failures that were not explained, and the `docker` level that did not finish |
+| [Documentation reconciliation, 2026-11-09](verification/2026-11-09-documentation-reconciliation.md) | P08.6: the statements corrected to match the delivered code, the lint run, and what was not checked |
 | [Image runtime image, 2026-11-07](verification/2026-11-07-image-runtime.md) | The ComfyUI image of P05.1: the lock, the build checks, a CPU start in a build stage, and what has not run |

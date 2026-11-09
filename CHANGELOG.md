@@ -6,7 +6,18 @@ All notable user-visible changes are recorded here. The format follows
 
 ## Unreleased
 
-No application exists yet. This section records the design documentation.
+Not released. This section records the design documentation and, from phase P01, the application as it is built. Where
+an entry says "not yet run", the test was written and has not run.
+
+### Changed
+
+- Documentation matched to the delivered code (P08.6). The README, the documentation index, the roadmap and the status
+  line of each design document no longer say that no code exists or that built features are planned. Statements that
+  were not true are corrected: `start.cmd` does not start the orchestrator (so no real model reply yet), `setup.cmd`
+  does not download models (use `scripts\lyrveil.cmd models`), the committed OpenAPI document holds only the health
+  routes, Jinja2 and `PromptTemplateService` are not in the code, and the Memory Studio has no **Conflitti** or
+  **Proposte** tab. The check is recorded in
+  [docs/verification/2026-11-09-documentation-reconciliation.md](docs/verification/2026-11-09-documentation-reconciliation.md).
 
 ### Added
 

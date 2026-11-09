@@ -245,6 +245,8 @@
 - When a window of rows depends on measured heights, use an estimate for rows never drawn. Anchor the window to the bottom through the follow signal rather than the last scroll event, and restore the reader's place after a prepend by distance from the bottom, measured in the list's own units.
 - Cache `Intl.DateTimeFormat` instances and per-item formatted labels (a `WeakMap` keyed by the item object) when a list of thousands is recomputed on every streamed update.
 - Screenshot and fixture generators check page text against a deny list of paths, e-mails and tokens before writing a file.
+- When a task changes behavior, update the status line of every design document it touches in the same change. The lint level does not catch a 'planned' claim that has become false.
+- Check a 'delivered' or 'planned' claim against the code (routes, compose.yaml, pyproject.toml, package.json) before writing it, and record a gap found that way as a finding rather than a silent edit.
 
 ---
 
@@ -2333,4 +2335,32 @@ I did not add a test for the script; it only runs against a live stack.
   - The screenshot script has never run. Check that the characters list returns `is_demo` and `first_name` for 'Nerea' and that the heading selectors match; both are untested.
   - Output goes to docs/images/screenshots/. The images are still to be generated and referenced from the README in P09.4.
   - The conversation screen is not captured because the text comes from the fake runtimes and has not been reviewed.
+---
+
+## 2026-11-09T22:36:32Z - P08.6
+- I reconciled the README, the documentation index, the roadmap and the status lines and stale passages of the design documents with the delivered code. I recorded the pass in a dated file. `scripts/lyrveil.cmd test lint` exited 0 before and after the edits. After the edits the documentation checks report 106 files, 1144 links and anchors with 0 broken, and 0 incomplete ADRs. PSScriptAnalyzer, ruff, mypy, ESLint and the strict build also passed. Lint only checks links, anchors, markers, tracing and ADRs. It does not compare a statement with the code, so the corrections come from my reading. It was a targeted pass: I did not re-verify every "Delivered in P0x" note in the design documents one by one. Nothing besides `lint` ran, so no phase exit result was refreshed.
+
+Statements I corrected, among others:
+- The README said "design phase, no code exists". It now says the project is in development and no real model has run.
+- `setup.cmd` was described as downloading models. It does not; `scripts\lyrveil.cmd models` does.
+- Jinja2 and `PromptTemplateService` were described as the implementation. They are not in the code, so they are now marked not delivered, and `@angular/aria`, pytest-asyncio and pytest-cov are marked as not installed.
+- "Applica al profilo" was described as a Memory Studio action, but the Memory Studio has no Conflitti or Proposte tab.
+- The job list, job retry and scheduled-events routes were unmarked; they are now marked not delivered.
+- The architecture document's repository layout marked existing directories as planned.
+- The frontend image was described as never built, and the status lines of about 18 design documents said "planned" or "not started" for built phases.
+
+Findings that are real gaps in the code, now documented as they are (I changed no code):
+- `start.cmd` does not start the orchestrator, so a real installation gets no model reply.
+- `start.cmd`, `status.cmd` and `setup.cmd` still print messages that blame P02, and the `lyrveil.cli preflight` command that step 6 names does not exist.
+- The committed `backend/openapi.json` holds only the two health routes, because the other routers use `include_in_schema=False`. The frontend's generated types and the contract test therefore cover only those two.
+- The default text profiles still have `quality_evidence: null`, which the P08 exit forbids.
+- Files changed: README.md, CHANGELOG.md, CONTRIBUTING.md, SECURITY.md, docs/README.md, docs/roadmap.md, docs/traceability.md, docs/requirements.md, docs/architecture.md, docs/operations.md, docs/frontend.md, docs/backend.md, docs/api.md, docs/data-model.md, docs/design-system.md, docs/security.md, docs/gpu-orchestration.md, docs/models.md, docs/configuration.md, docs/testing.md, docs/character-system.md, docs/prompting.md, docs/image-generation.md, docs/memory-engine.md, docs/consistency-engine.md, docs/scheduler.md, docs/technology.md, docs/licensing.md, docs/verification/2026-11-09-documentation-reconciliation.md
+- **Learnings for future iterations:**
+  - start.cmd keeps lyrveil-orchestrator in DeferredServices (scripts/lib/Lifecycle.psm1), so on a real installation no model reply is generated. No roadmap item covers wiring it. Probably worth a task before P09.5.
+  - start.cmd, status.cmd and setup.cmd still print warnings that blame P02 and the missing model catalog, and `lyrveil.cli preflight` does not exist. Fixing the messages and wiring the model-file check is a small code task.
+  - backend/openapi.json holds only the health routes because the other routers use include_in_schema=False. The frontend's generated types and the Schemathesis contract test cover only those routes. Fixing it means turning the flag off, regenerating with the Docker `openapi` target, and running `npm run api:generate --prefix frontend`.
+  - The documentation lint does not compare statements with code. Stale 'planned' claims survived because the checks only look at links, anchors, markers, tracing and ADRs.
+  - Memory Studio has no Conflitti or Proposte tab, so 'Applica al profilo' has no screen. The characters list, the general settings and /settings/data still show the placeholder.
+  - The P08 specs (empty-loading, responsive, accessibility, performance) and virtual-window.spec.ts have never run, and the default text profiles still have quality_evidence null, which the P08 exit forbids. Neither fact is fixed by this task.
+  - Bash grep was denied late in the session; use the Grep tool for read-only searches.
 ---

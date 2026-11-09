@@ -11,7 +11,10 @@ duplicate, archive and purge ([Duplicate, archive, purge](#duplicate-archive-pur
 creation ([Assisted creation](#assisted-creation)). Delivered in P03.4a and P03.5, backend only: assets
 ([Avatars and images](#avatars-and-images)) and the [exchange format](#exchange-format). Delivered in P03.6a: the
 content guard on every card that is stored and on every draft ([Security](security.md#character-data)). Delivered in
-P05.3b: the translation and its merge, which keeps locked slots. Planned: the translation job on save.
+P05.3b: the translation and its merge, which keeps locked slots. Planned: the translation job on save. Reconciled on
+2026-11-09: the Creator, the profile and the exchange routes are delivered; the Creator's import and export actions, the
+characters list and the counter of examples are not drawn in the interface, as the notes in
+[Frontend](frontend.md#3-character-creator) say.
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.

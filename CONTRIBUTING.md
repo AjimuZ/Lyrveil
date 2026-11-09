@@ -4,8 +4,8 @@ Lyrveil keeps private data on one machine and controls a GPU through Docker. The
 rules keep it trustworthy. A change is finished only when it is verified,
 documented and committed cleanly.
 
-Implementation starts at roadmap phase P01: see [docs/roadmap.md](docs/roadmap.md).
-Commands in this guide apply from that phase on.
+Implementation is under way (phases P01 to P07 are built and P08 is in progress): see
+[docs/roadmap.md](docs/roadmap.md) for the state of each phase.
 
 ## Engineering rules
 

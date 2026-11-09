@@ -12,7 +12,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P05 | Images in messages | In progress: automated exit passed; hardware part (P05.EXIT-HW) and measurement part (P05.8) pending |
 | P06 | Automatic GPU orchestration and recovery | In progress: automated exit passed; hardware part (P06.EXIT-HW) pending |
 | P07 | Proactive messages and messaging details | Done |
-| P08 | Obsidian Bloom polish, responsive layout, accessibility | Planned |
+| P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: P08.1 to P08.5 built, the documents reconciled in P08.6; the exit checks have not run, and the P08 specs are written and not run |
 | P09 | Audit and public release | Planned |
 
 Through P03, the project delivers the complete working path from character creation to persistent conversation. Later phases add advanced memory, images and orchestration on top of it.
@@ -198,9 +198,13 @@ Evidence:
 - [x] P08.3 Keyboard, focus and live regions.
 - [x] P08.4 Performance: long histories, large galleries and prompt prefix stability.
 - [x] P08.5 Demo screenshots from the demo characters and synthetic data.
-- [ ] P08.6 Update all documents to match delivered behavior.
+- [x] P08.6 Update all documents to match delivered behavior.
 
 Exit: T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profile lacks `quality_evidence`. No literal colors outside the tokens. No control without behavior.
+
+Evidence:
+
+- [Documentation reconciliation](verification/2026-11-09-documentation-reconciliation.md) (P08.6). The P08 exit has no evidence yet: T-QLT-01, T-QLT-03 (`accessibility.spec.mjs` is written and has not run), T-QLT-04, T-QLT-05 and T-GPU-13 need the real GPU or a run of the P08 specs, and the default profiles have no `quality_evidence`. The color check (`npm run lint`) passes with 0 literals outside the tokens.
 
 ## P09: Publication
 

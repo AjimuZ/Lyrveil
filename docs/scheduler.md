@@ -1,6 +1,6 @@
 # Proactive messages and time
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation: in progress, phase P07.
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation (2026-11-09): delivered in phase P07 and passed by its automated exit ([evidence](verification/2026-11-09-p07-exit.md)), apart from the items named "not delivered" below. Real proactive messages from a real model have not been seen.
 Delivered with P07.1: the `scheduled_events` table, the evaluation every 60 seconds, the limits, and the creation of the
 `inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Delivered with
 P07.2: the `proactive_message` job handler (`ProactiveMessageService`) with the `decide` and `generate` stages and the

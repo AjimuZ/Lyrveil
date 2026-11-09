@@ -10,7 +10,7 @@ The threat model and the controls are in [docs/security.md](docs/security.md).
 
 | Version | Supported |
 | --- | --- |
-| No release yet | Design documentation only; no code exists |
+| No release yet | Development only; the code is not released, and the pre-publication audit has not run |
 | Latest release, once published | Yes |
 
 ## Reporting a vulnerability

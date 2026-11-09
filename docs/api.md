@@ -1,6 +1,6 @@
 # APIs
 
-Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), the message routes listed under [Messages](#messages), the asset routes and the asset media routes delivered under [Assets](#assets) and [Images](#images), with `PAYLOAD_TOO_LARGE` and `UNSUPPORTED_MEDIA`, and on `/ws` the `hello` with replay or `resync.required` and the reply events listed under [Event WebSocket](#event-websocket). The other events, the other error codes and the rest are planned, phases P01 to P07.
+Status: accepted (2026-11-01). Implementation: partial. Delivered: the backend's health routes, the committed OpenAPI document, the frontend's client of the event WebSocket ([evidence](verification/2026-11-06-api-types-and-socket.md)), the token check, health and preflight routes of the [control API](#control-api), the Host and Origin checks with the `FORBIDDEN_ORIGIN` answer and the generic `INTERNAL` answer, and the handshake of `/ws` with its `connected` frame, the conversation routes listed under [Conversations](#conversations), the message routes listed under [Messages](#messages), the asset routes and the asset media routes delivered under [Assets](#assets) and [Images](#images), with `PAYLOAD_TOO_LARGE` and `UNSUPPORTED_MEDIA`, and on `/ws` the `hello` with replay or `resync.required` and the reply events listed under [Event WebSocket](#event-websocket). Reconciled on 2026-11-09: the routes, events and error codes of phases P02 to P07 are delivered too, but the other routers are declared with `include_in_schema=False`, so neither the committed `backend/openapi.json` nor the document the application serves holds more than the two health routes on 2026-11-09. The frontend's generated types and the Schemathesis contract test therefore cover only those two. Putting the routes in the schema means turning that flag off, regenerating the file with `docker build -f backend/Dockerfile --target openapi --output type=local,dest=backend .` and the types with `npm run api:generate --prefix frontend`; it is not done. The sections below mark the routes they still describe as planned, such as the job list and retry routes and the recover route of the resources screen.
 
 Lyrveil has three interfaces: the REST API, the event WebSocket and the internal
 control API. The first two pass through `lyrveil-frontend`. The third is reachable
@@ -187,9 +187,9 @@ Delivered in P03.1b: `PUT /characters/{id}` and the four version routes.
   vocabulary of the card categories in file order. The Creator builds its chips and its Italian search from it. It is
   declared before `/characters/{id}`, so `vocabulary` is never read as an id.
 - Automatic sources are not routes yet. The service applies a proposal with `CharacterService.apply_proposal`, which
-  keeps locked traits and locked visual fields and records actor `proposal`. Every route of this table that this
-  section does not describe as delivered (export, import and format schema) is planned. These routes are not in
-  `backend/openapi.json` until it is next regenerated with Docker.
+  keeps locked traits and locked visual fields and records actor `proposal`. Export, import and the format schema
+  are delivered since P03.5 (`api/characters.py`; see the [CHANGELOG](../CHANGELOG.md)). Like the other routes of
+  P02 to P07, they are not in the committed `backend/openapi.json` yet.
 
 Delivered in P03.3: `POST /characters/drafts` ([Assisted creation](character-system.md#assisted-creation)).
 
@@ -540,9 +540,9 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /jobs?status=&kind=`, `GET /jobs/{id}` | Queue and details. |
-| `POST /jobs/{id}/cancel`, `/retry` | Control. |
-| `GET`, `POST /scheduled-events`, `PATCH`, `DELETE /scheduled-events/{id}` | Planned messages. |
+| `GET /jobs?status=&kind=`, `GET /jobs/{id}` | Queue and details. Only `GET /jobs/{id}` is delivered; the list is not. |
+| `POST /jobs/{id}/cancel`, `/retry` | Control. Only `cancel` is delivered (P06.3); `retry` is not. |
+| `GET`, `POST /scheduled-events`, `PATCH`, `DELETE /scheduled-events/{id}` | Planned messages. Not delivered: no route exists, and the scheduler creates its events itself (P07.1). |
 | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | In-app notifications. |
 | `GET`, `PATCH /settings` | Application settings. |
 | `GET /settings/models` | Catalog profiles and registered custom profiles, each with tier, license, size and local state (`verified`, `size_mismatch`, `missing`), the active profiles, the quality preset and the launch values. |

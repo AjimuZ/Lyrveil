@@ -1,7 +1,7 @@
 # Image generation
 
 Status: accepted (2026-11-01), revised 2026-11-05 for image profiles and two-pass rendering, and 2026-11-06 for the
-structured identity, scenes and captions. Implementation: planned, phase P05.
+structured identity, scenes and captions. Implementation (2026-11-09): delivered in P05 and P06 and passed by their automated exits, which use the fake text model and the fake ComfyUI. A real image has not been rendered by the stack yet: the hardware part (P05.EXIT-HW) and the measurements of P05.8 are pending. The "Not delivered" notes below name what is still missing, such as the `image_proposal` job handler, the lightbox in the conversation and the regeneration route.
 
 Images are normal messages. The text model writes a structured scene and a caption, code builds the prompt, ComfyUI
 renders it, and the backend stores the result independently of the runtime. The GPU hand-over is described in
@@ -153,8 +153,8 @@ Image jobs run through the orchestrator's normal mode switch ([GPU orchestration
 - **Delivered later.** The wait limit `images.max_wait_seconds`, `images.max_in_a_row` and preemption of background
   work came in P06.3 ([Selection](gpu-orchestration.md#selection)), with the cancellation of an image at each stage
   ([Cancellation](gpu-orchestration.md#cancellation)). The VRAM check before a load came in P06.2
-  ([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)). Still not delivered: the `waiting` phase of
-  `image.progress`, and the timed retry out of `ERROR` (P06.4).
+  ([Verifying GPU release](gpu-orchestration.md#verifying-gpu-release)). The timed retry out of `ERROR` came in P06.4
+  ([Recovery](gpu-orchestration.md#recovery)). Still not delivered: the `waiting` phase of `image.progress`.
 
 ## Job stages
 

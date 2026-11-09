@@ -1,6 +1,9 @@
 # Lyrveil Memory Engine
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation: partial, phase P04. Delivered in
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout. Implementation (2026-11-09): delivered in
+phase P04 and passed by its automated exit, which used scripted runtimes. No real model has written memories yet: the
+extraction evaluation (T-QLT-06) is pending with P04.10. Not delivered: the Memory Studio tabs **Conflitti** and
+**Proposte** (so "Applica al profilo" has no screen), shared memories and manual creation in the interface. Delivered in
 P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` indexes, and the text preparation of
 [Stemming](#stemming). Delivered in P04.2a: the extraction pipeline without the consistency rules
 ([Delivered in P04.2a](#delivered-in-p042a)). Delivered in P04.2b: the consistency rules without tombstones
@@ -8,7 +11,9 @@ P04.1: the memory tables of layers B to E, the `memory_fts` and `episode_fts` in
 tombstones ([Delivered in P04.2c](#delivered-in-p042c)). Delivered in P04.3: `FtsMemoryRetriever` with its scoring and
 selection ([Delivered in P04.3](#delivered-in-p043)). Delivered in P04.4 and P04.5: summaries and the context builder.
 Delivered in P04.7: invalidation after message changes and re-evaluation
-([Delivered in P04.7](#delivered-in-p047)). Everything else is planned.
+([Delivered in P04.7](#delivered-in-p047)). Delivered in P04.6, P04.8 and P04.9: the character state, the reply
+checks and the Memory Studio, described in the [consistency engine](consistency-engine.md) and the
+[frontend](frontend.md#5-character-memory-studio).
 
 The engine keeps what a character should remember. It lives in SQLite and never depends
 on a model staying in the GPU, so memory survives restarts, model switches and very long
@@ -259,8 +264,8 @@ Guards applied after the table:
 4. **Lock.** A locked target is never changed. New information becomes `uncertain` with
    `needs_review`.
 5. **Identity.** Information that would change canonical data is stored only with
-   `kind = identity_candidate`. It never enters prompts. The Memory Studio offers
-   "Applica al profilo", which creates a new character version after the user's review.
+   `kind = identity_candidate`. It never enters prompts. The Memory Studio is meant to offer
+   "Applica al profilo", which creates a new character version after the user's review (not delivered: see the status line).
 6. **Tombstone.** See below.
 
 ### Deduplication
@@ -331,7 +336,8 @@ deduplication, what the relation and guard 3 ask of each existing memory, then t
   `needs_review`.
 - **Identity (guard 5).** `identity_candidate` memories are stored with their sources but never shown in a prompt,
   never targeted, and never change another memory or the character's card. Code relies on the model's label: a card
-  change the model stores under another kind is not detected yet. "Applica al profilo" is the Memory Studio's, P04.9.
+  change the model stores under another kind is not detected yet. "Applica al profilo" is designed for the Memory Studio's
+  **Proposte** tab, which is not drawn, so no screen applies an `identity_candidate` to the card yet.
 - **Revisions.** Every change to an existing memory first appends its whole row to `memory_revisions` under its current
   version, then moves it to the next `version`. `actor` is `extraction` and `run_id` the run; `reason` is `update`,
   `correction`, `contradiction`, `subject_change`, `subject_conflict` or `inference_conflict`. A duplicate writes no

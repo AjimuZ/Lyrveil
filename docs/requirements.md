@@ -1,6 +1,6 @@
 # Requirements
 
-Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner, and 2026-11-06 for consistency across models and anime image quality. Implementation: not started.
+Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner, and 2026-11-06 for consistency across models and anime image quality. Implementation (2026-11-09): phases P01 to P07 are built and their automated exits passed, and P08 is in progress. The hardware and quality checks of P02 to P06 and the audit of P09 have not run, so a requirement that needs the real GPU or a model's measured quality is not shown to hold yet. [Traceability](traceability.md) and the [roadmap](roadmap.md) give the state per phase.
 
 This document is the normative statement of what Lyrveil must do. Each requirement
 has a stable identifier. [Traceability](traceability.md) maps every group to its

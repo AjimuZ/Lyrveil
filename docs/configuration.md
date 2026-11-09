@@ -1,6 +1,6 @@
 # Configuration
 
-Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: the backend's reading of the deployment settings is delivered (P01.3a), and so is the creation of `.env` by `setup.cmd` (P01.6a); the rest is planned, phase P01 onward.
+Status: accepted (2026-11-01), revised 2026-11-05 for model profiles and operation from Windows. Implementation: the backend's reading of the deployment settings is delivered (P01.3a), and so is the creation of `.env` by `setup.cmd` (P01.6a). Reconciled on 2026-11-09: the text launch file and the model settings are delivered too (P02, P06.6), as are the `application_settings` keys that the sections below mark as delivered. The keys they mark as not read or written (`images.profile_id`, `images.quality` and the keys of the missing General settings screen) are not delivered.
 
 Configuration has three levels:
 

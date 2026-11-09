@@ -1,6 +1,6 @@
 # Traceability
 
-Maps each [requirement](requirements.md) group to its design, phase and tests. All implementation is planned. See the [roadmap](roadmap.md) for status.
+Maps each [requirement](requirements.md) group to its design, phase and tests. The phase column says where a group is built, not whether it is: phases P01 to P07 are built and their automated exits passed, P08 is in progress and P09 has not started. A group that needs the real GPU or a real model is not shown to hold until its hardware or quality item in the [roadmap](roadmap.md) runs.
 
 | Requirements | Topic | Design | Phase | Tests |
 | --- | --- | --- | --- | --- |

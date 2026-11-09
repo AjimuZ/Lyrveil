@@ -2,15 +2,17 @@
 
 **A private messaging app where the contacts are AI characters you create. It runs entirely on your own computer.**
 
-> **Project status: design phase.** This repository holds the complete design documentation. No application code exists yet, so nothing below can be run today. Features and commands describe version 1.0, as planned in the [roadmap](docs/roadmap.md).
+> **Project status (2026-11-09): in development, not released.** The application code exists: the backend, the GPU orchestrator, the Angular interface, the Docker images and the Windows scripts. Phases P01 to P07 of the [roadmap](docs/roadmap.md) are built and passed their automated tests with fake text and image runtimes. **No real model has run yet**: the hardware checks of phases P02 to P06 (a real reply, a real image, the GPU hand-over) and the quality measurements are pending, so the speed, memory and quality claims below are targets, not results. `start.cmd` does not yet start the orchestrator, so a conversation on a real installation does not yet get a model reply (see [Starting](#starting)). The release audit (P09) has not run.
 
-**In italiano.** Lyrveil è un'applicazione di messaggistica simulata e completamente locale. Crei personaggi con una propria identità, memoria e stile, chatti con loro in italiano e ricevi anche immagini generate. Nessun dato lascia il tuo computer. Per ora il repository contiene solo la documentazione di progetto.
+**In italiano.** Lyrveil è un'applicazione di messaggistica simulata e completamente locale. Crei personaggi con una propria identità, memoria e stile, chatti con loro in italiano e ricevi anche immagini generate. Nessun dato lascia il tuo computer. Il progetto è in sviluppo e non è ancora stato rilasciato: nessun modello reale è stato ancora provato.
 
 ## Screenshots
 
-There are none yet, because the interface does not exist. Phase P08 adds real screenshots that use only original demo characters and synthetic data. Until then, the [design system](docs/design-system.md#layout) has layout sketches.
+There are none in the repository yet. A script generates them from the demo characters and synthetic data ([Demo screenshots](docs/screenshots.md)), but it has not run, and the images are added to this page in phase P09 after a visual review. Until then, the [design system](docs/design-system.md#layout) has layout sketches.
 
-## Planned features
+## Features
+
+These describe version 1.0. Each is built and tested against fake runtimes, except where [Limitations](#limitations) says otherwise; none has been seen with a real model.
 
 - **A familiar messenger.** Contacts, unread counts, typing indicators, streaming replies, day separators, images in chat, alternatives, editing and search.
 - **Characters with depth.** Identity, personality, communication style and visual profile, described in words rather than sliders. Example lines show how each character writes, and a wardrobe holds their outfits. Create them by hand, or from a natural-language description. Versioned, importable and exportable.
@@ -19,7 +21,7 @@ There are none yet, because the interface does not exist. Phase P08 adds real sc
 - **Memory you can see and correct.** The Memory Studio shows what a character remembers, where it came from and how sure it is.
 - **Images as messages.** Ask in Italian and get an image in the chat. Images stay available when the image runtime is off.
 - **Automatic GPU handling.** The text and image models take turns on a single 12 GB card. Messages sent meanwhile are saved and answered afterwards.
-- **Optional proactive messages.** Off by default, with quiet hours and limits.
+- **Optional proactive messages.** Off by default, with quiet hours and limits. The scheduler is built, but no screen switches it on yet.
 - **Italian first.** Interface, characters and memories default to Italian. Each character or chat can use another language.
 - **Offline and private.** No account, no cloud, no telemetry.
 
@@ -52,8 +54,9 @@ See the [full requirements](docs/operations.md#requirements).
 
 ## Installation
 
-Planned for P01. Everything runs from Windows, in PowerShell or with a double click. Docker Desktop runs the containers
-in its own virtual machine, which you never open.
+Everything runs from Windows, in PowerShell or with a double click. Docker Desktop runs the containers
+in its own virtual machine, which you never open. The steps below were run against test projects with fake runtimes,
+not yet against the real models and GPU.
 
 ```powershell
 git clone https://github.com/AjimuZ/Lyrveil.git $env:USERPROFILE\Desktop\projects\lyrveil
@@ -67,7 +70,10 @@ cd $env:USERPROFILE\Desktop\projects\lyrveil
 .\setup.cmd
 ```
 
-`setup.cmd` checks the system, shows the model licenses for your acceptance, downloads the default text and image models of your hardware tier with verification, and builds the images.
+`setup.cmd` checks the system, creates the data and models volumes and `.env`, builds the images and creates the runtime
+containers without starting them. It does not download models yet. Run `scripts\lyrveil.cmd models` afterwards: it shows
+the model licenses for your acceptance, downloads the default text and image models of your hardware tier with
+verification, and `scripts\lyrveil.cmd models -List` shows what is present.
 Conversations and models are kept in Docker volumes for speed, and a daily backup is copied to
 `Documents\Lyrveil\backups`.
 
@@ -82,6 +88,10 @@ Settings live in `.env`, in the launch files and in the application's settings s
 ```
 
 Then open `http://localhost:4200`. The other commands are `.\stop.cmd`, `.\restart.cmd`, `.\status.cmd` and `.\logs.cmd`.
+
+As of 2026-11-09, `start.cmd` starts the backend and the frontend only. It does not start the orchestrator, which
+controls the text and image runtimes, so the app opens for reading and editing, but a message gets no reply from a real
+model. The tests start a fake orchestrator themselves. See [Operations](docs/operations.md#startcmd).
 
 ## Supported models
 

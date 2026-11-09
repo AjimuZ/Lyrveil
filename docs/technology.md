@@ -44,14 +44,14 @@ asset, so its image starts from the pinned source. Lyrveil builds both images it
 | HTTPX | 0.28.1 | BSD-3-Clause | Async HTTP to runtimes and to the Docker socket. |
 | websockets | 17.4 | BSD-3-Clause | WebSocket server support (backend, since P02.6c) and ComfyUI progress client. |
 | python-multipart | 0.0.33 | Apache-2.0 | Avatar and reference uploads. |
-| Jinja2 | 3.1.6 | BSD-3-Clause | Prompt templates with `StrictUndefined`. |
 | Pillow | 13.0.0 | MIT-CMU | Validates uploads, crops, writes thumbnails. |
 | snowballstemmer | 3.1.1 | BSD-3-Clause | Italian and other stemming for FTS5, no model needed. |
 | structlog | 26.1.0 | MIT or Apache-2.0 | Structured JSON logs. |
 | nvidia-ml-py | 13.615.71 | BSD-3-Clause | NVML access. Orchestrator only. |
 | tzdata | 2026.6 | Apache-2.0 | Time zone data with no network access. |
 
-Not used: `docker` SDK, because a small HTTPX client limits the orchestrator to its
+Not used: Jinja2, which this page listed at 3.1.6 before the code was written. Prompts are Python modules and plain
+text files in `backend/src/lyrveil/prompts/` (reconciled on 2026-11-09). `docker` SDK, because a small HTTPX client limits the orchestrator to its
 allowlist and removes a dependency from the most privileged service. `aiosqlite`,
 because of [ADR 0009](decisions/0009-synchronous-sqlalchemy.md). AnyIO comes with
 Starlette and provides `to_thread`.
@@ -63,7 +63,7 @@ Starlette and provides `to_thread`.
 | Node.js | 24, image `node:24.22.2-alpine` (build only) | MIT | Inside Angular's supported range `^24.15.0`. |
 | Angular framework | 22.2.4 | MIT | Active until 2027-06. Zoneless by default since v21. Signal Forms stable since v22. |
 | Angular CLI and `@angular/build` | 22.2.5 | MIT | Build and Vitest integration. |
-| `@angular/aria` | 22.2.5 | MIT | Headless accessible listbox, menu, tabs, combobox. |
+| `@angular/aria` | 22.2.5 | MIT | Headless accessible listbox, menu, tabs, combobox. Not installed on 2026-11-09. |
 | `@angular/cdk` | 22.2.5 | MIT | Overlay, focus trap. Not installed yet. The message list does its own windowing ([ADR 0043](decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md)). |
 | TypeScript | 6.0.3 | Apache-2.0 | Angular 22 requires `>=6.0 <6.1`. The npm `latest` tag is 7.0.2 and must not be used. |
 | RxJS | 7.8.2 | Apache-2.0 | Required by Angular. Used only at HTTP and WebSocket boundaries. |
@@ -86,9 +86,9 @@ single-user app.
 | uv | 0.13.6 | MIT or Apache-2.0 | Python lock files and installs. |
 | Ruff | 0.17.3 | MIT | Lint and format. |
 | mypy | 2.4.1 | MIT | `--strict`, with the Pydantic plugin. |
-| pytest, pytest-asyncio, pytest-cov | 9.2.0, 1.4.1.post1, 7.1.0 | MIT, Apache-2.0, MIT | Tests. |
-| Hypothesis | 6.170.14 | MPL-2.0 | Property tests of the state machine. Development only. |
-| respx | 0.23.1 | BSD-3-Clause | HTTP stubs in unit tests. |
+| pytest | 9.2.0 | MIT | Tests. `pytest-asyncio` and `pytest-cov` are not installed. |
+| Hypothesis | 6.170.14 | MPL-2.0 | Property tests of the state machine. Development only, orchestrator only. |
+| respx | 0.23.1 | BSD-3-Clause | HTTP stubs in unit tests. Orchestrator only. |
 | Schemathesis | 4.33.0 | MIT | Contract tests from OpenAPI. |
 | Vitest | 5.0.5 | MIT | Angular unit tests. |
 | jsdom | 31.0.0 | MIT | DOM for Vitest through `ng test`. Development only. |

@@ -1,6 +1,6 @@
 # Frontend
 
-Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. P03.2a delivered the Character Creator, screen 3 (`features/characters/`), on Signal Forms. P03.2b delivered the Character Profile, screen 4; the characters list is still a placeholder. Every other real screen is planned, phases P03 to P08.
+Status: accepted (2026-11-01). Implementation: partial. P01.5a delivered the zoneless shell, the route table with placeholder screens, the tokens, the bundled fonts, the text catalog with `Translator`, the lint and build gates, and the `Dockerfile` and `nginx.conf` ([evidence](verification/2026-11-06-frontend-shell.md)). P01.5b added the generated API types, the HTTP providers with error mapping and the WebSocket client ([evidence](verification/2026-11-06-api-types-and-socket.md)). P02.6a delivered screen 1, the conversation list, with the minimal character form (`features/chats/`); it uses the HTTP layer. P02.6b delivered screen 2, the conversation (`features/conversation/`), which calls `EventsSocket.connect()` when it opens a chat; the shell does not show connection state yet. P03.2a delivered the Character Creator, screen 3 (`features/characters/`), on Signal Forms. P03.2b delivered the Character Profile, screen 4; the characters list is still a placeholder. Later phases delivered the Memory Studio (P04.9), the Gallery and the image dialog (P05), the Scenarios, **Modelli** and **Risorse AI** screens (P03.7, P06.6), the notification center (P07.5) and the P08 polish (responsive layouts, shortcuts and live regions, the windowed message list). Reconciled on 2026-11-09: every screen listed under [Screens](#screens) is delivered except the general settings (screen 8) and the characters list, which still show the placeholder, and each screen's "Not delivered" note below names what it still lacks. The end-to-end specs of P08 (`responsive`, `accessibility`, `performance`) and the unit spec `virtual-window.spec.ts` are written and have not run.
 
 Angular 22 with standalone components, signals, zoneless change detection, SCSS and client-side rendering. The style is [Obsidian Bloom](design-system.md). See
 [ADR 0015](decisions/0015-angular-22-zoneless-signal-forms.md).
@@ -67,7 +67,8 @@ Technical screens are reached only from `/settings`. Any other path redirects to
 
 Until a phase delivers a screen, its route loads `core/shell/unavailable-screen.ts`, which shows the screen's title from
 the route's `data.screen` key and says that the screen is not available yet. Delivering a screen replaces only the
-route's `loadComponent`.
+route's `loadComponent`. On 2026-11-09 three routes still load it: `/characters`, `/settings` and `/settings/data`. Every
+other route in the table loads its screen.
 
 ## State
 
@@ -279,7 +280,7 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
   kept the locked traits and fields. A failed draft shows the server's Italian reason, such as "L'età deve essere almeno
   18.", and leaves the form as it was. The draft replaces what the form held; there is no merge. The job is followed by
   polling, because the backend does not publish `job.updated` yet.
-- **Not delivered, so no control is drawn for it:** import and export, avatar generation, the counter of how many examples enter the prompt, the first-chunk warning of
+- **Not delivered, so no control is drawn for it:** import and export (avatar generation came in P05.5b), the counter of how many examples enter the prompt, the first-chunk warning of
   **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
   the locks' effect on a tag translation (there is no such job yet). The characters list is still a
   placeholder; the new-chat dialog links to the Creator.
@@ -521,7 +522,7 @@ Multi-stage `frontend/Dockerfile`:
 1. `node:24.22.2-alpine`: `npm ci --ignore-scripts`, then `node tools/build-strict.mjs`, the same strict build as the lint level.
 2. `nginxinc/nginx-unprivileged:1.30.6-alpine`: copies `dist/lyrveil/browser` and `nginx.conf`, as `conf.d/default.conf`, port 8080, user `10001:10001` instead of the base image's user 101.
 
-`nginx.conf` serves `index.html` for client routes, caches hashed files for a year, proxies `/api`, `/media` and `/ws` to `lyrveil-backend:8000`, passes the original `Host` and `Origin`, disables proxy buffering on `/ws`, limits bodies to 80 MB, answers `GET /healthz` for the Compose health check, and sets the security headers, dropping the backend's copies so each arrives once ([Security](security.md#http-headers)). The image has not been built yet: see the [evidence](verification/2026-11-06-frontend-shell.md#not-executed).
+`nginx.conf` serves `index.html` for client routes, caches hashed files for a year, proxies `/api`, `/media` and `/ws` to `lyrveil-backend:8000`, passes the original `Host` and `Origin`, disables proxy buffering on `/ws`, limits bodies to 80 MB, answers `GET /healthz` for the Compose health check, and sets the security headers, dropping the backend's copies so each arrives once ([Security](security.md#http-headers)). The image is built by the `docker` and `e2e` levels, which passed in the phase exits ([P01 exit](verification/2026-11-07-p01-exit.md)); the first build was not run when [the shell](verification/2026-11-06-frontend-shell.md#not-executed) was delivered.
 
 ## Tests
 

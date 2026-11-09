@@ -1,6 +1,6 @@
 # Architecture
 
-Status: accepted (2026-11-01). Implementation: planned, phases P01 to P07.
+Status: accepted (2026-11-01), reconciled with the delivered code on 2026-11-09. Implementation: the five services, the flows and the failure handling below are delivered through phase P07 and checked by the automated tests of each phase exit ([roadmap](roadmap.md)). What no run has shown yet is the behavior on the real GPU: the hardware parts of P02, P03, P05 and P06 are pending, so the timings and recoveries described here are not measured.
 
 Lyrveil has five Docker services. Three are always on and hold no model. Two are AI
 runtimes that take turns on the GPU. SQLite and the media files on the WSL2 Linux
@@ -173,25 +173,27 @@ stores the file and gives the GPU back. See
 
 ## Repository layout
 
-Directories marked "planned" do not exist yet.
+Every path below exists, except the ones marked "planned".
 
 ```text
 lyrveil/
-  frontend/              Angular application (planned, P01)
-  backend/               FastAPI application and migrations (planned, P01)
-  orchestrator/          Model Lifecycle Manager (planned, P01)
+  frontend/              Angular application
+  backend/               FastAPI application and migrations
+  orchestrator/          Model Lifecycle Manager
   docker/
-    llm/                 KoboldCpp image: Dockerfile, entrypoint (P02.1)
-    image/               ComfyUI image: Dockerfile, entrypoint, requirements.lock (P05.1), clip_tokens.py (P05.3a)
-  workflows/comfyui/     API-format ComfyUI workflows (planned, P05)
-  config/examples/       Example launch files, reference only
-  scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell module and helpers (planned, P01)
-  tests/                 End-to-end, GPU, quality tests and fakes (planned, P01)
+    llm/                 KoboldCpp image: Dockerfile, entrypoint
+    image/               ComfyUI image: Dockerfile, entrypoint, requirements.lock, clip_tokens.py
+  workflows/comfyui/     API-format ComfyUI workflows
+  config/                model-catalog.json, and examples/ with launch files for reference only
+  scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell modules in lib/, and ci/ checks
+  tests/                 End-to-end (e2e/), Docker (docker/), script (scripts/) and fakes (fakes/); the GPU and quality tests are planned
   docs/                  This documentation
-  setup.cmd start.cmd stop.cmd restart.cmd status.cmd logs.cmd   Entry points (planned, P01)
-  compose.yaml           Service definitions: the three core services so far (the runtimes are planned, P02 and P05)
+  setup.cmd start.cmd stop.cmd restart.cmd status.cmd logs.cmd   Entry points
+  compose.yaml           Service definitions: the three core services, the two runtimes and the one-shot download tool
+  compose.test.yaml      The same services with the fake runtimes, for the e2e level
   .env.example           Configuration template
   README.md LICENSE NOTICE CHANGELOG.md CONTRIBUTING.md SECURITY.md
+  THIRD_PARTY_NOTICES.md (planned, P09.2)
   .gitignore .dockerignore .gitattributes
 ```
 
