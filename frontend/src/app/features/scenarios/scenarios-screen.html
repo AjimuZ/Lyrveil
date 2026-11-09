@@ -119,22 +119,20 @@
   }
 
   @if (store.loading()) {
-    <p class="note" role="status">{{ 'scenarios.loading' | t }}</p>
+    <ob-skeleton [lines]="4" [label]="'scenarios.loading' | t" />
   } @else if (store.error(); as failure) {
     <div class="error" role="alert">
       <p>{{ failure.textKey | t }}</p>
       <button type="button" class="button" (click)="store.reload()">{{ 'scenarios.retry' | t }}</button>
     </div>
   } @else if (store.items().length === 0) {
-    <p class="note">
-      @if (store.query().trim() !== '') {
-        {{ 'scenarios.empty.search' | t }}
-      } @else if (store.tab() === 'archived') {
-        {{ 'scenarios.empty.archived' | t }}
-      } @else {
-        {{ 'scenarios.empty.active' | t }}
-      }
-    </p>
+    <ob-empty-state
+      icon="empty-chat"
+      [message]="
+        (store.query().trim() !== '' ? 'scenarios.empty.search' : store.tab() === 'archived' ? 'scenarios.empty.archived' : 'scenarios.empty.active')
+          | t
+      "
+    />
   } @else {
     <ul class="list">
       @for (scenario of store.items(); track scenario.id) {

@@ -2203,3 +2203,11 @@ Not verified or not done:
   - A component input named like a native attribute (`role`) leaves that attribute on the host element too; ob-menu-item uses `kind` for that reason.
   - The ob-toast outlet is not in the shell yet, and no screen uses the primitives; later P08.1 tasks wire them in.
 ---
+
+## 2026-11-09T21:50:12Z - P08.1b
+- In this attempt I added the missing CHANGELOG.md entry for P08.1b and reverted a roadmap checkbox that had been ticked, since the orchestrator ticks it. I did not re-inspect the screen code (the four screens, the conversation motion and `empty-loading.spec.mjs`) written in the earlier attempt. I ran no checks, including `scripts/lyrveil.cmd test lint`, and the new e2e spec has never been run.
+- Files changed: CHANGELOG.md, docs/design-system.md, frontend/src/app/features/chats/chat-list-screen.html, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/gallery/gallery-screen.html, frontend/src/app/features/gallery/gallery-screen.ts, frontend/src/app/features/scenarios/scenarios-screen.html, frontend/src/app/features/scenarios/scenarios-screen.ts, tests/e2e/specs/empty-loading.spec.mjs
+- **Learnings for future iterations:**
+  - The memory, profile, creator, models and resources screens still use plain status and empty notes. The ob-toast outlet is not placed in the shell.
+  - The e2e spec empty-loading.spec.mjs and the shared/ui specs have never been run. If the e2e or unit level fails, check those first.
+---

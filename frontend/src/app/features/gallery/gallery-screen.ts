@@ -4,6 +4,8 @@ import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey } from '../../core/i18n/translator';
+import { ObEmptyState } from '../../shared/ui/empty-state';
+import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Character } from '../chats/chats.model';
 import { GalleryStore } from './gallery-store';
 import { GalleryImage, IMAGE_PURPOSES, ImagePurpose } from './gallery.model';
@@ -25,7 +27,7 @@ const PURPOSE_TEXT: Readonly<Record<ImagePurpose, TextKey>> = {
  */
 @Component({
   selector: 'lyr-gallery-screen',
-  imports: [RouterLink, TranslatePipe],
+  imports: [RouterLink, TranslatePipe, ObEmptyState, ObSkeleton],
   templateUrl: './gallery-screen.html',
   styleUrl: './gallery-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -13,6 +13,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
+import { ObEmptyState } from '../../shared/ui/empty-state';
+import { ObSkeleton } from '../../shared/ui/skeleton';
 import { formatActivity } from './activity-time';
 import { ChatsStore } from './chats-store';
 import { Conversation, ConversationActivity, ConversationStatus } from './chats.model';
@@ -38,7 +40,7 @@ interface Tab {
  */
 @Component({
   selector: 'lyr-chat-list-screen',
-  imports: [RouterLink, TranslatePipe, NewChatDialog],
+  imports: [RouterLink, TranslatePipe, NewChatDialog, ObEmptyState, ObSkeleton],
   templateUrl: './chat-list-screen.html',
   styleUrl: './chat-list-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

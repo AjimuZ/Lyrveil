@@ -16,6 +16,8 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
+import { ObEmptyState } from '../../shared/ui/empty-state';
+import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Translator } from '../../core/i18n/translator';
 import { ConversationStore, isActive } from './conversation-store';
 import { MAX_MESSAGE_CHARS, Message, imageOriginalUrl, imageThumbnailUrl } from './conversation.model';
@@ -83,7 +85,7 @@ export interface DayRow {
  */
 @Component({
   selector: 'lyr-conversation-screen',
-  imports: [RouterLink, TranslatePipe, ImageDialog],
+  imports: [RouterLink, TranslatePipe, ImageDialog, ObEmptyState, ObSkeleton],
   providers: [ConversationStore],
   host: { '(document:visibilitychange)': 'becameVisible()' },
   templateUrl: './conversation-screen.html',

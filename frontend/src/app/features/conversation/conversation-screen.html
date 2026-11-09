@@ -27,7 +27,7 @@
 }
 
 @if (store.loading()) {
-  <p class="note" role="status">{{ 'conv.loading' | t }}</p>
+  <ob-skeleton [lines]="4" [label]="'conv.loading' | t" />
 } @else if (store.error(); as failure) {
   <div class="note error" role="alert">
     <p>{{ failure.textKey | t }}</p>
@@ -41,7 +41,7 @@
       </button>
     }
     @if (rows().length === 0 && store.pending().length === 0) {
-      <p class="note">{{ 'conv.empty' | t }}</p>
+      <ob-empty-state icon="empty-chat" [message]="'conv.empty' | t" />
     }
     <ol class="messages" [attr.aria-label]="'conv.messages' | t">
       @for (row of rows(); track row.key) {
@@ -94,7 +94,8 @@
                     <p class="hint">{{ (row.afterImage ? 'conv.queuedAfterImage' : 'conv.queued') | t }}</p>
                   } @else {
                     <span class="typing" role="status" [attr.aria-label]="typingLabel()">
-                      <span></span><span></span><span></span>
+                      <span class="square"></span><span class="square"></span><span class="square"></span>
+                      <span class="typing-text">{{ typingLabel() }}</span>
                     </span>
                   }
                 } @else if (row.text !== '' || row.image === null) {

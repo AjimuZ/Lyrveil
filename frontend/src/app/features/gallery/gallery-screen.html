@@ -29,14 +29,14 @@
   </div>
 
   @if (store.loading()) {
-    <p class="note" role="status">{{ 'gallery.loading' | t }}</p>
+    <ob-skeleton [lines]="4" [label]="'gallery.loading' | t" />
   } @else if (store.error(); as failure) {
     <div class="error" role="alert">
       <p>{{ failure.textKey | t }}</p>
       <button type="button" class="button" (click)="store.load()">{{ 'gallery.retry' | t }}</button>
     </div>
   } @else if (store.items().length === 0) {
-    <p class="note">{{ 'gallery.empty' | t }}</p>
+    <ob-empty-state icon="empty-image" [message]="'gallery.empty' | t" />
   } @else {
     <ul class="grid" [attr.aria-label]="'gallery.grid' | t">
       @for (image of store.items(); track image.id) {

@@ -159,7 +159,7 @@ Implementation notes (P08.1a):
 - `ob-menu-item` takes `kind` (`menuitem` or `option`) instead of `role`, so the host element does not also carry the attribute. A selected option has `aria-selected`; a selected menu item has `aria-current`.
 - `ob-field` styles the native `input`, `textarea` or `select` projected in it through `styles/global.scss`; the control sets `aria-describedby` to `{fid}-hint` and `{fid}-error`.
 - `ob-toast` is the outlet; the `ToastService` queues messages and removes each after 4 seconds. The outlet is not yet placed in the shell.
-- No screen uses the primitives yet; the typing indicator, motion in the screens and the loading and empty states of each screen are later P08.1 work.
+- P08.1b: the chat list, conversation, gallery and scenarios screens show `ob-skeleton` while loading and `ob-empty-state` when empty. The conversation's new messages fade in and rise 4 px in 120 ms, and under `prefers-reduced-motion` the typing squares give way to the typing text. The memory, profile, creator, models and resources screens still use plain status and empty notes; the `ob-toast` outlet is not placed in the shell. Covered by `tests/e2e/specs/empty-loading.spec.mjs` (written, not yet run).
 
 ## Motion
 

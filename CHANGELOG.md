@@ -10,6 +10,10 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Loading and empty states, and message motion (P08.1b). The chat list, conversation, gallery and scenarios screens
+  show skeleton placeholders while they load and an empty-state message with its next action when there is nothing to
+  show. New messages fade in and rise 4 px in 120 ms; under `prefers-reduced-motion` the motion stops and the typing
+  squares give way to the typing text. The end-to-end spec is written but has not been run yet.
 - Read state and unread counts (P07.6). Each row of the chat list now shows the number of unread replies, a one-line
   preview of the newest message (the user's own prefixed with **Tu:**) and, while the character types, draws or waits
   in the queue, **Sta scrivendo…**, **Sta disegnando…** or **In coda** instead of the preview. Rows update live while the

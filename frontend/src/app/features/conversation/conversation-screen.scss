@@ -223,7 +223,7 @@
   gap: var(--ob-space-1);
   padding: var(--ob-space-1) 0;
 
-  span {
+  .square {
     width: var(--ob-space-2);
     height: var(--ob-space-2);
     background: var(--ob-text-muted);
@@ -237,6 +237,12 @@
       animation-delay: 320ms;
     }
   }
+
+  // Shown only under reduced motion, where the squares give way to static text.
+  .typing-text {
+    display: none;
+    color: var(--ob-text-muted);
+  }
 }
 
 @keyframes blink {
@@ -245,9 +251,29 @@
   }
 }
 
+// A new message fades in and rises 4 px (docs/design-system.md, Motion).
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.message {
+  animation: arrive var(--ob-quick) steps(3);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .typing span {
+  .message {
     animation: none;
+  }
+
+  .typing .square {
+    display: none;
+  }
+
+  .typing .typing-text {
+    display: inline;
   }
 }
 

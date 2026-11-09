@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
+import { ObEmptyState } from '../../shared/ui/empty-state';
+import { ObSkeleton } from '../../shared/ui/skeleton';
 import { TextKey } from '../../core/i18n/translator';
 import { Character, LANGUAGE_CODES } from '../chats/chats.model';
 import { SCENARIO_LIMITS, Scenario, ScenarioStatus } from './scenario.model';
@@ -30,7 +32,7 @@ const LANGUAGE_LABELS = {
  */
 @Component({
   selector: 'lyr-scenarios-screen',
-  imports: [RouterLink, TranslatePipe],
+  imports: [RouterLink, TranslatePipe, ObEmptyState, ObSkeleton],
   templateUrl: './scenarios-screen.html',
   styleUrl: './scenarios-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
