@@ -151,6 +151,11 @@ test('a reply written while the WebSocket is down appears after it reconnects (T
     });
   });
 
+  // The shell opens the socket when the app starts (the notification center, P07.5), before this route exists, and a
+  // route does not reach a connection made earlier. A reload makes the first connection under the route.
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Conversazioni' })).toBeVisible();
+
   const name = uniqueName('Chiara');
   await startChatWithNewCharacter(page, name);
   await openChat(page, name);

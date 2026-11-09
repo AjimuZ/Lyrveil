@@ -11,7 +11,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P04 | Memory and consistency | In progress: automated exit passed; quality part (P04.10) pending |
 | P05 | Images in messages | In progress: automated exit passed; hardware part (P05.EXIT-HW) and measurement part (P05.8) pending |
 | P06 | Automatic GPU orchestration and recovery | In progress: automated exit passed; hardware part (P06.EXIT-HW) pending |
-| P07 | Proactive messages and messaging details | Planned |
+| P07 | Proactive messages and messaging details | Done |
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | Planned |
 | P09 | Audit and public release | Planned |
 
@@ -184,6 +184,10 @@ Evidence:
 - [x] P07.6 Read state, unread counts and final messaging details.
 
 Exit: T-MSG-10 and T-SCH-01 to T-SCH-07 pass. AC-17 holds.
+
+Evidence:
+
+- [P07 exit: the `unit`, `integration`, `e2e` and `lint` levels, with T-MSG-10, T-SCH-01 to T-SCH-07 and AC-17 through T-SCH-01 to T-SCH-03](verification/2026-11-09-p07-exit.md). The `docker` level did not finish and is not part of this exit; two `e2e` failures in earlier runs were not explained and did not recur.
 
 ## P08: Polish
 

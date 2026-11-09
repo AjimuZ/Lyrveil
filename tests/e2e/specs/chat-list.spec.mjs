@@ -141,7 +141,10 @@ test('pin, archive, delete, restore and search work on the list (T-MSG-11)', asy
   await expect(page.getByText(`Conversazione «${first}» eliminata.`)).toBeHidden();
 
   // A deleted chat stays deleted after a reload; the second chat was never touched.
+  // The reload must not overtake the request: wait for the server's answer to the delete first.
+  const deleted = page.waitForResponse((response) => response.request().method() === 'DELETE' && response.url().includes('/conversations/'));
   await chooseAction(page, second, 'Elimina');
+  expect((await deleted).ok()).toBe(true);
   await page.reload();
   await expect(row(page, first)).toBeVisible();
   await expect(row(page, second)).toBeHidden();

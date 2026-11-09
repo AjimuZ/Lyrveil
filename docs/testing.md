@@ -606,7 +606,7 @@ shape), the same two with the content guard, prompt formatter, normalizer, conte
 | T-MSG-07 | Page reload during streaming resumes correctly. Delivered: the third test of `conversation-stream.spec.mjs` holds back the frames after the first piece of a reply, reloads, and expects the whole reply once; the fake's reply takes about a second, so a reply that is half stored is covered by the store test "resumes a reply after a page reload" | E2E | P02 |
 | T-MSG-08 | History paging and recovery. Delivered: the fourth test of `tests/e2e/specs/conversation.spec.mjs` | Integration, E2E | P02 |
 | T-MSG-09 | Simultaneous conversations are served in order, with no mixed text. Delivered on the screen side: the fourth test of `conversation-stream.spec.mjs` (two chats, each with its own reply only) | Integration, E2E | P02 |
-| T-MSG-10 | Read state and unread counts. Written in P07.6 and not run there: `backend/tests/integration/test_read_state.py` (the count, the read route, the preview and activity of a row, the derived read state), the "read mark" block of `conversation-store.spec.ts`, the live-rows test of `chats-store.spec.ts` and `tests/e2e/specs/read-state.spec.mjs` | Integration, E2E | P07 |
+| T-MSG-10 | Read state and unread counts. Written in P07.6 and run in the [P07 exit](verification/2026-11-09-p07-exit.md): `backend/tests/integration/test_read_state.py` (the count, the read route, the preview and activity of a row, the derived read state), the "read mark" block of `conversation-store.spec.ts`, the live-rows test of `chats-store.spec.ts` and `tests/e2e/specs/read-state.spec.mjs` | Integration, E2E | P07 |
 | T-MSG-11 | Pin, archive, delete, restore, search. Delivered: `test_conversations.py`, `test_messages.py` and the second test of `tests/e2e/specs/chat-list.spec.mjs` | Integration, E2E | P02 |
 | T-MSG-12 | WebSocket reconnect with replay and resync. Delivered: the fifth test of `conversation-stream.spec.mjs` cuts the connection, sends a message and expects the reply after the page reconnects; the store test "reloads through REST when the server asks for a resync" covers the resync | Integration, E2E | P02 |
 | T-MSG-13 | Crash during streaming leaves `interrupted` | Integration | P02 |
@@ -680,7 +680,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-SCH-06 | Never causes a mode change | Unit | P07 |
 | T-SCH-07 | Time context values in Italian | Unit | P07 |
 
-Tests of the in-app notifications (P07.5) have no catalog identifier of their own; they are not yet run when written.
+Tests of the in-app notifications (P07.5) have no catalog identifier of their own (`test_notifications.py` and `notifications.spec.mjs`); they ran with the levels of the [P07 exit](verification/2026-11-09-p07-exit.md).
 `backend/tests/integration/test_notifications.py` covers the three routes, the cursor, the unread count and the event on
 the hub; `test_proactive_messages.py` and `test_missed_events.py` check that the delivery and the startup step announce
 their notice; `frontend/src/app/features/notifications/notifications-store.spec.ts` covers the store; and

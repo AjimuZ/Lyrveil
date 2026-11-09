@@ -217,8 +217,18 @@ def test_initiative_slots_are_stable_inside_the_window_and_match_the_frequency()
 
 def test_the_scheduling_package_cannot_reach_the_orchestrator_or_a_runtime() -> None:
     """T-SCH-06: with no import of the orchestrator client, the runtime ports or the GPU state, the scheduler has no way
-    to ask for a mode change; the only thing it writes is a queued job, which needs the text mode."""
-    forbidden = ("lyrveil.orchestration", "lyrveil.ports", "lyrveil.runtimes", "lyrveil.gpu")
+    to ask for a mode change; the only thing it writes is a queued job, which needs the text mode.
+
+    `lyrveil.ports.events` is allowed: it only publishes events to the interface (notifications) and holds no runtime
+    or mode control."""
+    forbidden = (
+        "lyrveil.orchestration",
+        "lyrveil.ports.text_runtime",
+        "lyrveil.ports.image_runtime",
+        "lyrveil.ports.memory_retriever",
+        "lyrveil.runtimes",
+        "lyrveil.gpu",
+    )
     package = Path(rules.__file__).parent
     imported: set[str] = set()
     for source in package.glob("*.py"):
