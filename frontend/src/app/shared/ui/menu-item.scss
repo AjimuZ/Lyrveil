@@ -1,0 +1,57 @@
+:host {
+  display: block;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--ob-space-2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  text-align: left;
+  background: transparent;
+  color: var(--ob-text);
+  border: 1px solid transparent;
+  border-radius: var(--ob-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--ob-hover);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+// The cursor is a small stepped arrowhead pointing right, cut with clip-path from a square of --ob-px units.
+.cursor {
+  flex: none;
+  width: calc(var(--ob-px) * 3);
+  height: calc(var(--ob-px) * 5);
+  background: var(--ob-primary);
+  clip-path: polygon(0 0, 33.34% 0, 33.34% 20%, 66.67% 20%, 66.67% 40%, 100% 40%, 100% 60%, 66.67% 60%, 66.67% 80%, 33.34% 80%, 33.34% 100%, 0 100%);
+  visibility: hidden;
+}
+
+:host(.selected) .item {
+  background: var(--ob-selected);
+  border-color: var(--ob-border);
+}
+
+:host(.selected) .cursor,
+.item:hover:not(:disabled) .cursor,
+.item:focus-visible .cursor {
+  visibility: visible;
+}

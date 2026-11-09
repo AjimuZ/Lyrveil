@@ -1,0 +1,35 @@
+:host {
+  --size: 40px;
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--size);
+  height: var(--size);
+  overflow: hidden;
+  background: var(--ob-elevated);
+  color: var(--ob-text);
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: calc(var(--size) * 0.4);
+  line-height: 1;
+}
+
+:host([data-size="32"]) {
+  --size: 32px;
+}
+
+:host([data-size="64"]) {
+  --size: 64px;
+}
+
+:host([data-size="128"]) {
+  --size: 128px;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

@@ -1,0 +1,23 @@
+:host {
+  display: block;
+}
+
+.blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-2);
+}
+
+.block {
+  height: 14px;
+  background: var(--ob-elevated);
+  border-radius: var(--ob-radius-sm);
+
+  &:nth-child(3n + 2) {
+    width: 75%;
+  }
+
+  &:nth-child(3n) {
+    width: 50%;
+  }
+}

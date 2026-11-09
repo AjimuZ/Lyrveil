@@ -12,13 +12,13 @@ File names follow the Angular v20+ style without role suffixes. Interfaces keep 
 ```text
 frontend/
   angular.json  package.json  package-lock.json  tsconfig*.json  eslint.config.mjs  Dockerfile  nginx.conf
-  tools/build-icons.mjs       Planned
+  tools/build-icons.mjs       Builds src/assets/icons/sprite.svg and shared/ui/icon-names.ts from the grids; `check` fails when they differ
   tools/build-strict.mjs      Production build that fails on a warning or a network reference
   tools/check-styles.mjs      Fails on a color literal outside styles/tokens.scss
   tools/api-types.mjs         Generates the API types and fails when the committed ones are out of date
   tools/eslint/               T-SEC-09 restrictions, their fixtures and test
   src/
-    assets/icons/             ASCII icon grids
+    assets/icons/             ASCII icon grids (*.txt) and the built sprite.svg
     i18n/it.json              Interface text
     styles/                   tokens.scss, reset.scss, typography.scss, global.scss
     app/
@@ -30,7 +30,7 @@ frontend/
         session/              first-start notice, display name
         shell/                Layout, navigation, breakpoints; unavailable-screen.ts until each screen exists
       shared/
-        ui/                   ob-* primitives
+        ui/                   ob-* primitives and ob-icon (P08.1a; see design-system.md, Primitives)
         pipes/                relative-time.ts, day-label.ts
       features/
         chats/                List, search, conversation store

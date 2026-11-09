@@ -1,0 +1,49 @@
+:host {
+  position: relative;
+  display: block;
+  background: var(--ob-surface);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+// Three steps of --ob-px, clipped from one square; the other corners mirror it.
+.mark {
+  position: absolute;
+  width: calc(var(--ob-px) * 3);
+  height: calc(var(--ob-px) * 3);
+  background: var(--ob-accent);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 33.34%,
+    66.67% 33.34%,
+    66.67% 66.67%,
+    33.34% 66.67%,
+    33.34% 100%,
+    0 100%
+  );
+  pointer-events: none;
+}
+
+.top-left {
+  top: calc(var(--ob-px) * -1);
+  left: calc(var(--ob-px) * -1);
+}
+
+.top-right {
+  top: calc(var(--ob-px) * -1);
+  right: calc(var(--ob-px) * -1);
+  transform: scaleX(-1);
+}
+
+.bottom-left {
+  bottom: calc(var(--ob-px) * -1);
+  left: calc(var(--ob-px) * -1);
+  transform: scaleY(-1);
+}
+
+.bottom-right {
+  right: calc(var(--ob-px) * -1);
+  bottom: calc(var(--ob-px) * -1);
+  transform: scale(-1);
+}

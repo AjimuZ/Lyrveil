@@ -27,6 +27,13 @@
             "deployUrl": "/",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
+            "assets": [
+              {
+                "glob": "sprite.svg",
+                "input": "src/assets/icons",
+                "output": "assets/icons"
+              }
+            ],
             "styles": [
               "node_modules/@fontsource-variable/inter/wght.css",
               "node_modules/@fontsource-variable/inter/wght-italic.css",

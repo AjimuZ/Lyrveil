@@ -1,0 +1,50 @@
+:host {
+  display: block;
+}
+
+.list {
+  display: flex;
+  gap: var(--ob-space-1);
+  border-bottom: 1px solid var(--ob-border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ob-space-1);
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: transparent;
+  color: var(--ob-text-muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover {
+    background: var(--ob-hover);
+  }
+
+  &[aria-selected="true"] {
+    color: var(--ob-text);
+    border-bottom-color: var(--ob-primary);
+  }
+}
+
+.cursor {
+  width: calc(var(--ob-px) * 3);
+  height: calc(var(--ob-px) * 5);
+  background: var(--ob-primary);
+  clip-path: polygon(0 0, 33.34% 0, 33.34% 20%, 66.67% 20%, 66.67% 40%, 100% 40%, 100% 60%, 66.67% 60%, 66.67% 80%, 33.34% 80%, 33.34% 100%, 0 100%);
+  display: none;
+}
+
+.tab[aria-selected="true"] .cursor {
+  display: block;
+}
+
+.panel {
+  padding-top: var(--ob-space-4);
+}

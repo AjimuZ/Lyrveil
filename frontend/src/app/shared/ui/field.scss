@@ -1,0 +1,23 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+}
+
+.label {
+  color: var(--ob-text);
+}
+
+.hint,
+.error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--ob-text-muted);
+}
+
+.error {
+  color: var(--ob-danger);
+}

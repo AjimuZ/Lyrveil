@@ -1,0 +1,10 @@
+:host {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+}
+
+svg {
+  fill: currentColor;
+  shape-rendering: crispEdges;
+}

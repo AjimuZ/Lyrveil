@@ -1,0 +1,36 @@
+:host {
+  display: block;
+}
+
+.track {
+  display: flex;
+  gap: var(--ob-px);
+  padding: var(--ob-px);
+  background: var(--ob-bg);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+}
+
+.segment {
+  flex: 1;
+  height: 10px;
+  background: var(--ob-border);
+}
+
+.segment.on {
+  background: var(--ob-primary);
+}
+
+// Unknown value: one neutral striped track, with no segment lit.
+.unknown {
+  gap: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ob-bg) 0 var(--ob-px),
+    var(--ob-border) var(--ob-px) calc(var(--ob-px) * 2)
+  );
+}
+
+.unknown .segment {
+  background: transparent;
+}

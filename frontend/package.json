@@ -11,7 +11,9 @@
     "ng": "ng",
     "api:generate": "node tools/api-types.mjs generate",
     "api:check": "node tools/api-types.mjs check",
-    "lint": "eslint --max-warnings 0 . && node tools/check-styles.mjs && node tools/api-types.mjs check",
+    "icons:build": "node tools/build-icons.mjs build",
+    "icons:check": "node tools/build-icons.mjs check",
+    "lint": "eslint --max-warnings 0 . && node tools/check-styles.mjs && node tools/build-icons.mjs check && node tools/api-types.mjs check",
     "build": "node tools/build-strict.mjs",
     "test": "ng test --watch=false && node --test \"tools/**/*.test.mjs\""
   },

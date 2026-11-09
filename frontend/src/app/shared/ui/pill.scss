@@ -1,0 +1,30 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ob-space-2);
+  padding: 2px var(--ob-space-2);
+  font-size: 12px;
+  color: var(--ob-text);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+}
+
+.square {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--ob-text-muted);
+}
+
+:host(.success) .square {
+  background: var(--ob-success);
+}
+
+:host(.warning) .square {
+  background: var(--ob-warning);
+}
+
+:host(.danger) .square {
+  background: var(--ob-danger);
+}

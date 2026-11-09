@@ -232,6 +232,9 @@
 - A test that bans imports of a package should name the specific modules it forbids; banning a whole package breaks when a harmless module (here ports.events) is added to it.
 - In e2e specs, wait for the server's response to a mutating click (page.waitForResponse) before reloading the page.
 - A Playwright routeWebSocket only affects connections made after it is installed; reload the page after installing it when the app opens its socket at start.
+- Generated files that are committed (sprite.svg, icon-names.ts) get a `check` mode wired into `npm run lint`, so drift from the source fails the lint level.
+- Tool tests build a temporary copy of the inputs (mkdtemp + cpSync) to test failure paths without touching the repository.
+- Primitives take the text they show (labels, messages) as inputs instead of embedding Italian strings, so the translator stays the single source of interface text.
 
 ---
 
@@ -2169,4 +2172,34 @@ I added the evidence file `docs/verification/2026-11-09-p07-exit.md`. The roadma
   - The shell's NotificationCenter starts the root EventsSocket when the app boots, so a Playwright routeWebSocket installed after page.goto misses the first connection; reload the page after installing the route.
   - The docker level exceeded the 10-minute shell limit in ImageRuntime.Tests.ps1 in this session; it may need a longer budget or a separate run.
   - The unit and integration levels pass no arguments to pytest except unit (which passes them to every component); a path filter fails in the orchestrator component.
+---
+
+## 2026-11-09T21:46:46Z - P08.1a
+- Added the icon build, 32 icon grids with the built sprite, and all 14 ob-* primitives plus ob-icon in frontend/src/app/shared/ui/. The lint level passes. The Angular specs for the primitives were written but not run, so those tests are unverified. A rebuilt sprite and name list would match the committed ones, but I wrote those two files by hand because the shell refused `npm run icons:build`.
+
+Verified:
+- `scripts/lyrveil.cmd test lint` passes: ESLint, the style color check, the new icon check, the API types check, and the strict production build.
+- `node --test frontend/tools/build-icons.test.mjs` passes (6 tests). It confirms the committed sprite and `icon-names.ts` equal what the builder produces from the grids.
+- `node --test frontend/tools/tools.test.mjs` passes (6 tests), including the new test that the style check fails on a color literal outside the token file.
+
+What exists:
+- **Icon build:** `frontend/tools/build-icons.mjs` has `build` and `check` modes. It rejects wrong sizes, bad characters, empty grids and missing required icons, and its output depends only on the grids.
+- **Lint wiring:** `check` is now part of `npm run lint`, so lint fails when the sprite or `icon-names.ts` differ from the grids.
+- **Icons:** all 30 required grids, plus two 24 x 24 empty-state grids (`empty-chat`, `empty-image`), in `frontend/src/assets/icons/`.
+- **Sprite delivery:** `angular.json` now copies `sprite.svg` to `/assets/icons/`.
+- **Primitives:** window, menu-item, button, field, tabs, gauge, pill, activity, avatar, bubble, dialog, toast, empty-state and skeleton, each with a stylesheet using tokens only. Shared styles for `ob-field` controls and `.ob-sr-only` are in `global.scss`.
+- **Specs:** `display-primitives.spec.ts`, `control-primitives.spec.ts` and `overlay-primitives.spec.ts`.
+
+Not verified or not done:
+- **Specs not run:** `npm` was refused and I did not run the unit level, so there is no result for those specs. Likely failure points: the `<use href>` binding under jsdom, the dialog stubs, and focus handling in the tabs spec.
+- **No CDK or aria dependency:** `@angular/aria` and `@angular/cdk` are not installed, and adding them means changing the lock file. `ob-tabs` implements the tabs keyboard pattern itself. `ob-dialog` relies on the native modal dialog to keep focus inside, without the CDK focus trap. This is documented in `docs/design-system.md`.
+- **No screen uses the primitives yet.** The `ob-toast` outlet is not placed in the shell, and the typing indicator and motion in the screens are not done.
+- Files changed: frontend/tools/build-icons.mjs, frontend/tools/build-icons.test.mjs, frontend/tools/tools.test.mjs, frontend/package.json, frontend/angular.json, frontend/src/styles/global.scss, frontend/src/assets/icons/*.txt (32 grids), frontend/src/assets/icons/sprite.svg, frontend/src/app/shared/ui/icon-names.ts, frontend/src/app/shared/ui/test-dom.ts, frontend/src/app/shared/ui/{icon,window,menu-item,button,field,tabs,gauge,pill,activity,avatar,bubble,dialog,toast,empty-state,skeleton}.ts and .scss, frontend/src/app/shared/ui/display-primitives.spec.ts, frontend/src/app/shared/ui/control-primitives.spec.ts, frontend/src/app/shared/ui/overlay-primitives.spec.ts, docs/design-system.md, docs/frontend.md
+- **Learnings for future iterations:**
+  - `npm --prefix frontend run ...` was refused by the shell in this session, so the sprite and icon-names.ts were written by hand with Write. After any grid change, recompute them and let `node --test frontend/tools/build-icons.test.mjs` or the lint level show the first differing line.
+  - The Angular specs of shared/ui were never run. The unit level (scripts/lyrveil.cmd test unit) is the first real run, so check them first if it fails: the `<use [attr.href]>` binding under jsdom, the showModal/close stubs, and tab focus.
+  - @angular/aria and @angular/cdk are not installed. Adding them means package.json and lock changes via `docker build --target lockfile`. ob-tabs and ob-dialog work without them.
+  - ESLint forbids non-null assertions (`!`) in specs too; use the helpers in shared/ui/test-dom.ts (find, findAll, nth, textOf).
+  - A component input named like a native attribute (`role`) leaves that attribute on the host element too; ob-menu-item uses `kind` for that reason.
+  - The ob-toast outlet is not in the shell yet, and no screen uses the primitives; later P08.1 tasks wire them in.
 ---

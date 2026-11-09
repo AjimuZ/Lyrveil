@@ -1,6 +1,6 @@
 # Design system: Obsidian Bloom
 
-Status: accepted (2026-11-01). Implementation: partial. The color and non-color tokens, the three bundled font families and the color literal check exist since P01.5a ([evidence](verification/2026-11-06-frontend-shell.md)). Icons, primitives and the P08 checks are planned.
+Status: accepted (2026-11-01). Implementation: partial. The color and non-color tokens, the three bundled font families and the color literal check exist since P01.5a ([evidence](verification/2026-11-06-frontend-shell.md)). The icons, the icon build and the `ob-*` primitives exist since P08.1a; their Angular specs (`shared/ui/*-primitives.spec.ts`) were not run in that task, so they are written but not yet shown to pass; the icon build tests (`tools/build-icons.test.mjs`) and the lint level did pass. The motion rules, the empty and loading states in the screens, and the P08 checks are planned.
 
 Obsidian Bloom is 80 % modern messaging app and 20 % quiet JRPG identity. The result must feel like a real product used every day. Readability always beats retro
 fidelity. It never looks like a dashboard, a terminal or a game menu.
@@ -128,6 +128,9 @@ with `àèéìòù`, and records file hashes in the license notices.
 - Decorative icons have `aria-hidden="true"`. Icon-only buttons have an accessible name.
 - Required set: `chat`, `plus`, `search`, `pin`, `archive`, `trash`, `pencil`, `refresh`, `image`, `send`, `check`, `check-double`, `arrow-left`, `arrow-right`, `chevron`, `close`, `gear`, `user`, `brain`, `lock`,
   `unlock`, `bell`, `star`, `upload`, `download`, `warning`, `error`, `gpu`, `scene`, `clock`.
+- A grid is 16 lines of 16 characters, `#` for a filled pixel and `.` for an empty one. A name that starts with `empty-` is a 24 x 24 grid for an empty state (`empty-chat` and `empty-image` exist). The builder rejects any other size, a character other than `#` and `.`, an empty grid and a missing required icon.
+- `node tools/build-icons.mjs build` (in `frontend/`) writes `src/assets/icons/sprite.svg` and `src/app/shared/ui/icon-names.ts`; `check` writes nothing. The output depends on the grids only, so a second build is identical. `npm run lint` runs the check and fails when a built file differs from the grids. `angular.json` copies the sprite to `/assets/icons/sprite.svg`.
+- `ob-icon` (`name`, optional `label`, whole-number `scale`) draws one symbol of the sprite and is decorative unless it has a `label`.
 
 ## Primitives
 
@@ -149,6 +152,14 @@ All are standalone components in `frontend/src/app/shared/ui/`, with the prefix 
 | `ob-toast` | Bottom corner, 4 seconds, `aria-live="polite"`, never the only source of an error. |
 | `ob-empty-state` | 24 px pixel icon, one sentence, one action. |
 | `ob-skeleton` | Static stepped blocks for loading. No shimmer. |
+
+Implementation notes (P08.1a):
+
+- `@angular/aria` and `@angular/cdk` are not dependencies of the frontend. `ob-tabs` implements the WAI-ARIA tabs pattern itself (roving tab index, arrow keys, Home and End, automatic activation). `ob-dialog` uses `showModal()`, which makes the rest of the page inert, so Tab stays in the dialog and the browser returns focus when it closes; it has no CDK focus trap. Adding either package is a change of `package.json` and the lock file.
+- `ob-menu-item` takes `kind` (`menuitem` or `option`) instead of `role`, so the host element does not also carry the attribute. A selected option has `aria-selected`; a selected menu item has `aria-current`.
+- `ob-field` styles the native `input`, `textarea` or `select` projected in it through `styles/global.scss`; the control sets `aria-describedby` to `{fid}-hint` and `{fid}-error`.
+- `ob-toast` is the outlet; the `ToastService` queues messages and removes each after 4 seconds. The outlet is not yet placed in the shell.
+- No screen uses the primitives yet; the typing indicator, motion in the screens and the loading and empty states of each screen are later P08.1 work.
 
 ## Motion
 

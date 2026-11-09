@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+}
+
+.line {
+  position: relative;
+  height: calc(var(--ob-px) * 2);
+  overflow: hidden;
+  background: var(--ob-border);
+}
+
+.bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: var(--ob-primary);
+  animation: sweep 1.2s steps(8) infinite;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--ob-text-muted);
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+// The global reset zeroes the duration under reduced motion; the bar then rests at the start of the line.
