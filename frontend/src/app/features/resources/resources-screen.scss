@@ -1,6 +1,6 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
@@ -77,8 +77,9 @@
 
 .row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--ob-space-3);
+  gap: var(--ob-space-1) var(--ob-space-3);
   padding: var(--ob-space-1) 0;
   border-bottom: 1px solid var(--ob-border);
 }

@@ -202,7 +202,11 @@ provides its own `ConversationStore` and opens the chat named by the route.
   failed mark is retried by the next call. The unsent text of each chat is kept in `localStorage`
   (`lyrveil.chat-draft.<id>`, `draft-storage.ts`) and returns when the chat is opened again.
 - **Message text** is bound as text and drawn with `white-space: pre-wrap`; no template uses `innerHTML` (T-SEC-03, T-SEC-09).
-- **Not delivered, so no control is drawn for it:** the context panel, the lightbox, regenerating or cancelling an
+- **Context panel (P08.2):** the header button **Dettagli** shows or hides a panel with the character's name and links
+  **Apri il profilo** and **Apri la memoria**. From 1024 px it is a collapsible 320 px column (remembered per browser);
+  below that it opens as a dialog. Its other contents (relationship, recent events, images, scenario, proactive
+  settings) are not delivered. See [Design system](design-system.md#implementation-notes-p082).
+- **Not delivered, so no control is drawn for it:** the rest of the context panel, the lightbox, regenerating or cancelling an
   image, the contextual proposal card, search in a chat, "Ricorda questo" and
   virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
   navigate to a new chat after **Inizia conversazione**.

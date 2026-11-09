@@ -9,6 +9,23 @@ html {
   color-scheme: dark;
 }
 
+// Long words, URLs and identifiers wrap instead of widening a screen (docs/design-system.md, Layout: no horizontal
+// scrolling at 320 px or at 200 % zoom).
+body {
+  overflow-wrap: anywhere;
+}
+
+// The padding around a routed screen: 24 px, and 12 px on a phone so the content keeps its width at 320 px.
+:root {
+  --ob-gutter: var(--ob-space-5);
+}
+
+@media (max-width: 639px) {
+  :root {
+    --ob-gutter: var(--ob-space-3);
+  }
+}
+
 a {
   color: var(--ob-primary);
 }

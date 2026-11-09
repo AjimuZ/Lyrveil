@@ -1,6 +1,6 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
@@ -184,8 +184,14 @@
 
 .fact {
   display: grid;
-  grid-template-columns: minmax(120px, 200px) 1fr;
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
   gap: var(--ob-space-3);
+
+  // On a phone the label sits above its value, so neither is squeezed into a narrow column.
+  @media (max-width: 639px) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ob-space-1);
+  }
   padding: var(--ob-space-2) 0;
   border-bottom: 1px solid var(--ob-border);
 

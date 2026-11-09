@@ -235,6 +235,9 @@
 - Generated files that are committed (sprite.svg, icon-names.ts) get a `check` mode wired into `npm run lint`, so drift from the source fails the lint level.
 - Tool tests build a temporary copy of the inputs (mkdtemp + cpSync) to test failure paths without touching the repository.
 - Primitives take the text they show (labels, messages) as inputs instead of embedding Italian strings, so the translator stays the single source of interface text.
+- Pad routed screens and dialogs with `var(--ob-gutter)` instead of a fixed space token, so phones get the smaller margin from one place.
+- Use `minmax(min(Npx, 100%), 1fr)` in grids and `minmax(0, ...)` for `max-content` columns, so a grid never forces a horizontal scroll at 320 px.
+- Fixed-height screens read the viewport through `--ob-viewport-height` (set from `visualViewport`) with `100dvh` as the fallback, never a bare `100vh`.
 
 ---
 
@@ -2210,4 +2213,39 @@ Not verified or not done:
 - **Learnings for future iterations:**
   - The memory, profile, creator, models and resources screens still use plain status and empty notes. The ob-toast outlet is not placed in the shell.
   - The e2e spec empty-loading.spec.mjs and the shared/ui specs have never been run. If the e2e or unit level fails, check those first.
+---
+
+## 2026-11-09T21:58:51Z - P08.2
+- I implemented the three breakpoint layouts of docs/design-system.md (Layout), but none of the new tests has been run, so T-QLT-04 is unverified. `scripts/lyrveil.cmd test lint` passed: docs, ruff, mypy, eslint, the color check, the icons check, the API types check and the strict build, with 0 problems. The build prints one warning: `conversation-screen.scss` is 7.61 kB against a 6 kB warning budget, and the error budget is 8 kB.
+
+What changed:
+- **Shell:**
+  - `app.html`, `app.scss` and `app.ts` now form a grid with a 320 px sidebar from 1024 px and a 200–320 px sidebar from 640 to 1023 px.
+  - Under 640 px the navigation is a bottom bar that wraps to two rows instead of cutting links off.
+  - A conversation hides the brand row and the bottom bar on a phone.
+  - The shell is as tall as the visible viewport, with `100dvh` as the fallback, and each screen scrolls inside it.
+- **`core/shell/viewport.ts`:** new helpers for the media queries, for following `visualViewport` so the composer stays above the on-screen keyboard, and for detecting a conversation URL.
+- **Conversation:**
+  - The messages are capped at 760 px.
+  - A **Dettagli** button opens a context panel: a collapsible 320 px column from 1024 px, remembered in `localStorage`, and an `ob-dialog` below that.
+  - On a phone the avatar is dropped from the header, the composer is one row of image button, field and send button with icons, and the tool buttons are at least 44 px.
+- **Other screens and dialogs:** they pad with a new `--ob-gutter` (24 px, 12 px under 640 px), `body` wraps long words, and several fixed-width grids, tabs and rows now wrap or shrink.
+- **Tests:**
+  - Added unit specs `viewport.spec.ts` and `context-panel-storage.spec.ts`.
+  - Added the e2e spec `tests/e2e/specs/responsive.spec.mjs`. It checks seven screens and the conversation at 320, 640, 1024 and 1440 px and at 200 % zoom, emulated as a half-size viewport.
+- **Docs:** I updated `docs/design-system.md`, `docs/frontend.md` and `CHANGELOG.md`.
+
+Departures from the mock-up:
+- The sidebar does not embed the chat list. The list stays a routed screen.
+- The context panel holds only links to the character's profile and the Memory Studio. The relationship, recent events, images, scenario and proactive settings are not drawn.
+
+Both are recorded in the docs.
+- Files changed: frontend/src/app/app.ts, frontend/src/app/app.html, frontend/src/app/app.scss, frontend/src/app/core/shell/viewport.ts, frontend/src/app/core/shell/viewport.spec.ts, frontend/src/app/core/shell/unavailable-screen.scss, frontend/src/styles/global.scss, frontend/src/i18n/it.json, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, frontend/src/app/features/conversation/context-panel-storage.ts, frontend/src/app/features/conversation/context-panel-storage.spec.ts, frontend/src/app/features/conversation/image-dialog.scss, frontend/src/app/features/chats/chat-list-screen.scss, frontend/src/app/features/chats/new-chat-dialog.scss, frontend/src/app/features/gallery/gallery-screen.scss, frontend/src/app/features/scenarios/scenarios-screen.scss, frontend/src/app/features/characters/character-creator-screen.scss, frontend/src/app/features/characters/character-profile-screen.scss, frontend/src/app/features/memory/memory-studio-screen.scss, frontend/src/app/features/models/model-settings-screen.scss, frontend/src/app/features/resources/resources-screen.scss, frontend/src/app/shared/ui/dialog.scss, tests/e2e/specs/responsive.spec.mjs, docs/design-system.md, docs/frontend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Only `scripts/lyrveil.cmd test lint` (with its strict build) was run. The new unit specs (viewport, context-panel-storage) and `tests/e2e/specs/responsive.spec.mjs` have never been run, so check them first if the unit or e2e level fails.
+  - `conversation-screen.scss` compiles to 7.61 kB against the `anyComponentStyle` budget (warning at 6 kB, error at 8 kB in `frontend/angular.json`). The build only warns now, but the next additions there will fail it. Split the context-panel and composer styles out, or raise the budget deliberately.
+  - The shell now owns scrolling (`main.content` has `overflow-y: auto` inside an `--ob-viewport-height` grid), so a screen must not set its own `100dvh` height. The conversation uses `height: 100%`.
+  - The sidebar does not embed the chat list. The context panel is only links to the profile and the Memory Studio. Both are documented as departures from the mock-up.
+  - The e2e responsive spec emulates 200 % zoom with a half-size viewport, not browser zoom. It checks overflow and the layout of each breakpoint, and tap targets of 44 px only for the navigation links and the conversation composer, not for every control.
+  - The memory, profile, creator, models and resources screens were only checked by reading their SCSS for overflow. Run the responsive e2e spec to confirm them.
 ---

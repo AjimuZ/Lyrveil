@@ -10,6 +10,13 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Responsive layouts (P08.2). From 1024 px the shell is a 320 px sidebar beside the screen, and the conversation has a
+  collapsible 320 px **Dettagli** panel (links to the character's profile and Memory Studio; the choice is remembered
+  per browser) with messages capped at 760 px. From 640 to 1023 px the sidebar narrows and **Dettagli** opens as a
+  dialog. Under 640 px the navigation is a bar at the bottom, a conversation fills the screen without it, and its
+  composer is one row (image, field, send) that follows the on-screen keyboard. Screens use smaller margins on a
+  phone, and no screen scrolls sideways at 320 px or at 200 % zoom. The end-to-end spec
+  `tests/e2e/specs/responsive.spec.mjs` is written but has not been run yet.
 - Loading and empty states, and message motion (P08.1b). The chat list, conversation, gallery and scenarios screens
   show skeleton placeholders while they load and an empty-state message with its next action when there is nothing to
   show. New messages fade in and rise 4 px in 120 ms; under `prefers-reduced-motion` the motion stops and the typing

@@ -1,11 +1,11 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
   max-width: 760px;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
   background: var(--ob-surface);
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);

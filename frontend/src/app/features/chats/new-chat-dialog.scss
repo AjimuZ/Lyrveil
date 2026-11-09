@@ -1,6 +1,8 @@
 .dialog {
   width: min(480px, calc(100vw - var(--ob-space-5)));
-  padding: var(--ob-space-5);
+  max-height: calc(100dvh - var(--ob-space-5));
+  padding: var(--ob-gutter);
+  overflow-y: auto;
   background: var(--ob-elevated);
   color: var(--ob-text);
   border: 1px solid var(--ob-border);

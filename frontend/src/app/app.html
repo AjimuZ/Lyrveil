@@ -1,26 +1,24 @@
-<div class="shell">
-  <header class="sidebar">
-    <div class="brand-row">
-      <p class="brand">{{ 'app.brand' | t }}</p>
-      <lyr-notification-center />
-    </div>
-    <nav class="nav" [attr.aria-label]="'nav.label' | t">
-      <a class="nav-link" routerLink="/chats" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.chats' | t }}</a>
-      <a class="nav-link" routerLink="/characters" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.characters' | t }}</a>
-      <a class="nav-link" routerLink="/gallery" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.gallery' | t }}</a>
-      <a class="nav-link" routerLink="/scenarios" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.scenarios' | t }}</a>
-      <a
-        class="nav-link"
-        routerLink="/settings"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-        ariaCurrentWhenActive="page"
-        >{{ 'nav.settings' | t }}</a
-      >
-      <a class="nav-link" routerLink="/settings/models" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.models' | t }}</a>
-      <a class="nav-link" routerLink="/settings/resources" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.resources' | t }}</a>
-    </nav>
+<div class="shell" [class.immersive]="immersive()">
+  <header class="topbar">
+    <p class="brand">{{ 'app.brand' | t }}</p>
+    <lyr-notification-center />
   </header>
+  <nav class="nav" [attr.aria-label]="'nav.label' | t">
+    <a class="nav-link" routerLink="/chats" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.chats' | t }}</a>
+    <a class="nav-link" routerLink="/characters" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.characters' | t }}</a>
+    <a class="nav-link" routerLink="/gallery" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.gallery' | t }}</a>
+    <a class="nav-link" routerLink="/scenarios" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.scenarios' | t }}</a>
+    <a
+      class="nav-link"
+      routerLink="/settings"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: true }"
+      ariaCurrentWhenActive="page"
+      >{{ 'nav.settings' | t }}</a
+    >
+    <a class="nav-link" routerLink="/settings/models" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.models' | t }}</a>
+    <a class="nav-link" routerLink="/settings/resources" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.resources' | t }}</a>
+  </nav>
   <main class="content">
     <router-outlet />
   </main>

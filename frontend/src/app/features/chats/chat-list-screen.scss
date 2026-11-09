@@ -1,6 +1,6 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
@@ -47,6 +47,7 @@
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--ob-space-2);
   margin-bottom: var(--ob-space-4);
 }

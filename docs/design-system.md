@@ -218,6 +218,29 @@ Sidebar and conversation. The context panel opens as a dialog.
 - Secondary panels open on demand.
 - Tap targets of at least 44 x 44 px. No horizontal scrolling at 320 px, or at 200 % zoom.
 
+### Implementation notes (P08.2)
+
+- **Shell** (`app.html`, `app.scss`): a grid of the brand row, the navigation and the screen. It is as tall as the
+  visible viewport (`--ob-viewport-height`, set by `followVisualViewport` in `core/shell/viewport.ts` from
+  `visualViewport`, with `100dvh` as the fallback), and each screen scrolls inside it. From 1024 px the sidebar is 320
+  px; from 640 to 1023 px it is 30 % of the width, between 200 and 320 px; under 640 px the navigation is a bar at the
+  bottom that wraps to a second row rather than cut a link off, and a conversation (`/chats/:id`) hides the brand row
+  and the bar.
+- **Sidebar content:** the sidebar holds the brand, the bell and the navigation links. The chat list of the desktop
+  mock-up is not embedded in it: the list stays the routed screen **Conversazioni**, so on desktop it fills the area
+  beside the sidebar and a conversation replaces it.
+- **Conversation** (`conversation-screen.*`): messages and the composer line up in a 760 px column. The context panel
+  is delivered with its reachable part only, links to the profile and to the Memory Studio; the relationship in words,
+  recent events, images, scenario and proactive settings of `docs/frontend.md` are not drawn. From 1024 px it is a
+  320 px column that the **Dettagli** button collapses (remembered in `localStorage`, `lyrveil.context-panel`); below
+  that the button opens the same content in an `ob-dialog`. Under 640 px the avatar is dropped from the header and the
+  composer is one row, with icons for the image and send buttons (their words remain the accessible names).
+- **Margins:** `--ob-gutter` (`styles/global.scss`) is 24 px, and 12 px under 640 px; every screen and dialog pads with
+  it. `body` sets `overflow-wrap: anywhere`, so no long word or identifier widens a screen.
+- **Tested by** `core/shell/viewport.spec.ts` and `context-panel-storage.spec.ts` (unit), and
+  `tests/e2e/specs/responsive.spec.mjs` (T-QLT-04: seven screens and the conversation at 320, 640, 1024 and 1440 px
+  and at 200 % zoom, emulated as a viewport of half the size). Written, not yet run.
+
 ## Accessibility
 
 | Area | Rule |

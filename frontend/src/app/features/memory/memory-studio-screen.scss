@@ -1,6 +1,6 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
@@ -65,7 +65,7 @@
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   gap: 0 var(--ob-space-3);
 }
 
@@ -249,7 +249,7 @@
 
 .values {
   display: grid;
-  grid-template-columns: max-content max-content;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
   gap: var(--ob-space-1) var(--ob-space-4);
   margin: 0;
 }

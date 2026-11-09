@@ -194,7 +194,7 @@ Evidence:
 **Depends on:** P07. **Areas:** design system, accessibility, performance, documentation.
 
 - [x] P08.1 Complete Obsidian Bloom: primitives, icons, motion, empty and loading states.
-- [ ] P08.2 Responsive layouts for desktop, tablet and mobile.
+- [x] P08.2 Responsive layouts for desktop, tablet and mobile.
 - [ ] P08.3 Keyboard, focus and live regions.
 - [ ] P08.4 Performance: long histories, large galleries and prompt prefix stability.
 - [ ] P08.5 Demo screenshots from the demo characters and synthetic data.

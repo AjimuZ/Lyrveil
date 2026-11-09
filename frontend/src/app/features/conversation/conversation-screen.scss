@@ -1,8 +1,45 @@
+// The screen fills the shell's content area (app.scss gives it the visible viewport height), so the header and the
+// composer stay in place and only the message list scrolls. From 1024 px the context panel is a column on the right.
 :host {
   display: flex;
-  flex-direction: column;
-  height: 100dvh;
+  height: 100%;
   min-height: 0;
+}
+
+.conversation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.context {
+  flex: none;
+  width: 320px;
+  padding: var(--ob-space-4);
+  overflow-y: auto;
+  background: var(--ob-surface);
+  border-left: 1px solid var(--ob-border);
+}
+
+.context-title {
+  margin: 0 0 var(--ob-space-3);
+  font-size: 1.125rem;
+}
+
+.context-name {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-text-muted);
+}
+
+.context-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-2);
+  margin: 0 0 var(--ob-space-3);
+  padding: 0;
+  list-style: none;
 }
 
 .sr-only {
@@ -60,7 +97,28 @@
 }
 
 .who {
+  flex: 1;
   min-width: 0;
+}
+
+.info {
+  flex: none;
+  min-height: 44px;
+  padding: var(--ob-space-1) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--ob-hover);
+  }
+
+  &[aria-expanded="true"] {
+    background: var(--ob-selected);
+  }
 }
 
 .title {
@@ -113,11 +171,14 @@
   overflow-y: auto;
 }
 
+// Messages are capped at 760 px and centered; the scroller itself spans the area so its scrollbar stays at the edge.
 .messages {
   display: flex;
   flex-direction: column;
   gap: var(--ob-space-2);
-  margin: 0;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
   padding: 0;
   list-style: none;
 }
@@ -209,7 +270,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--ob-space-1);
-  min-width: 220px;
+  min-width: min(220px, 100%);
 }
 
 .bar {
@@ -342,6 +403,12 @@
 .tool {
   min-height: 32px;
   font-size: 13px;
+
+  // Tap targets are at least 44 x 44 px on touch and on a phone-width screen (docs/design-system.md, Mobile).
+  @media (pointer: coarse), (max-width: 639px) {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 .step {
@@ -393,19 +460,28 @@
   }
 }
 
+// The composer's content lines up with the 760 px message column on a wide area.
 .composer {
   display: flex;
   flex: none;
   align-items: flex-start;
   gap: var(--ob-space-3);
-  padding: var(--ob-space-3) var(--ob-space-4);
+  padding: var(--ob-space-3) max(var(--ob-space-4), calc((100% - 760px) / 2));
   background: var(--ob-surface);
   border-top: 1px solid var(--ob-border);
 
   .control {
     flex: 1;
+    min-width: 0;
     max-height: 30dvh;
   }
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ob-space-2);
 }
 
 .composer-side {
@@ -423,5 +499,69 @@
 
   &.over {
     color: var(--ob-danger);
+  }
+}
+
+// Mobile (docs/design-system.md, Layout): a compact header without the avatar, and a composer in one row, image
+// button, field and send button, with icons in place of the words (which stay as the buttons' accessible names).
+@media (max-width: 639px) {
+  .header {
+    gap: var(--ob-space-2);
+    padding: var(--ob-space-2) var(--ob-space-3);
+  }
+
+  .avatar {
+    display: none;
+  }
+
+  .scroller {
+    padding: var(--ob-space-3);
+  }
+
+  .composer {
+    display: grid;
+    grid-template-areas:
+      "image field send"
+      ". counter .";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--ob-space-1) var(--ob-space-2);
+    padding: var(--ob-space-2) var(--ob-space-3);
+
+    .control {
+      grid-area: field;
+    }
+  }
+
+  // The side column dissolves so its buttons and counter become cells of the composer grid.
+  .composer-side {
+    display: contents;
+  }
+
+  .counter {
+    grid-area: counter;
+  }
+
+  .action {
+    min-width: 44px;
+    padding: var(--ob-space-1);
+
+    &:not(.primary) {
+      grid-area: image;
+    }
+
+    &.primary {
+      grid-area: send;
+    }
+  }
+
+  .action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

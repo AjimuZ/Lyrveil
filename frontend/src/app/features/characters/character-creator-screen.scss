@@ -1,6 +1,6 @@
 :host {
   display: block;
-  padding: var(--ob-space-5);
+  padding: var(--ob-gutter);
 }
 
 .screen {
@@ -158,7 +158,7 @@ textarea.control {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   column-gap: var(--ob-space-4);
 }
 
@@ -228,6 +228,7 @@ textarea.control {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--ob-space-3);

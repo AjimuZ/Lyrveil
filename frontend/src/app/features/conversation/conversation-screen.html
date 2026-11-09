@@ -1,3 +1,4 @@
+<div class="conversation">
 <header class="header">
   <a class="back" routerLink="/chats" [attr.aria-label]="'conv.back' | t"><span aria-hidden="true">‹</span></a>
   <span class="avatar" aria-hidden="true">{{ initial() }}</span>
@@ -13,6 +14,17 @@
       }
     </p>
   </div>
+  @if (store.conversation()) {
+    <button
+      type="button"
+      class="info"
+      aria-controls="context-panel"
+      [attr.aria-expanded]="panelShown()"
+      (click)="togglePanel()"
+    >
+      {{ 'conv.context.open' | t }}
+    </button>
+  }
 </header>
 
 @if (store.actionError(); as failure) {
@@ -209,10 +221,45 @@
           {{ counter() }}
         }
       </p>
-      <button type="button" class="button" (click)="openImageForm()">{{ 'conv.image.button' | t }}</button>
-      <button type="submit" class="button primary" [disabled]="!canSend()">{{ 'conv.composer.send' | t }}</button>
+      <button type="button" class="button action" (click)="openImageForm()">
+        <ob-icon name="image" /><span class="action-label">{{ 'conv.image.button' | t }}</span>
+      </button>
+      <button type="submit" class="button action primary" [disabled]="!canSend()">
+        <ob-icon name="send" /><span class="action-label">{{ 'conv.composer.send' | t }}</span>
+      </button>
     </div>
   </form>
+}
+</div>
+
+@if (store.conversation(); as conversation) {
+  <ng-template #panel>
+    <h2 class="context-title">{{ 'conv.context.title' | t }}</h2>
+    <p class="context-name">{{ name() }}</p>
+    <ul class="context-links">
+      <li>
+        <a class="button" [routerLink]="['/characters', conversation.character_id]">{{ 'conv.context.profile' | t }}</a>
+      </li>
+      <li>
+        <a class="button" [routerLink]="['/characters', conversation.character_id, 'memory']">{{ 'conv.context.memory' | t }}</a>
+      </li>
+    </ul>
+  </ng-template>
+
+  @if (wide()) {
+    @if (!panelCollapsed()) {
+      <aside class="context" id="context-panel" [attr.aria-label]="'conv.context.title' | t">
+        <ng-container [ngTemplateOutlet]="panel" />
+      </aside>
+    }
+  } @else {
+    <ob-dialog [label]="'conv.context.title' | t" [(open)]="panelDialogOpen">
+      <div id="context-panel">
+        <ng-container [ngTemplateOutlet]="panel" />
+        <button type="button" class="button" (click)="panelDialogOpen.set(false)">{{ 'conv.context.close' | t }}</button>
+      </div>
+    </ob-dialog>
+  }
 }
 
 <lyr-image-dialog />

@@ -1,7 +1,9 @@
 // Screen 2 of docs/frontend.md: the conversation with its messages, live reply, composer and message actions.
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -16,11 +18,15 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
+import { ObDialog } from '../../shared/ui/dialog';
 import { ObEmptyState } from '../../shared/ui/empty-state';
+import { ObIcon } from '../../shared/ui/icon';
 import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Translator } from '../../core/i18n/translator';
+import { WIDE_QUERY, matchesMedia, watchMedia } from '../../core/shell/viewport';
 import { ConversationStore, isActive } from './conversation-store';
 import { MAX_MESSAGE_CHARS, Message, imageOriginalUrl, imageThumbnailUrl } from './conversation.model';
+import { loadPanelCollapsed, savePanelCollapsed } from './context-panel-storage';
 import { dayKey, formatClock, formatDayLabel } from './day-label';
 import { loadDraft, saveDraft } from './draft-storage';
 import { ImageDialog } from './image-dialog';
@@ -80,12 +86,16 @@ export interface DayRow {
  * composer's image button opens the image form; an image message shows its thumbnail, and while it is drawn the phase
  * and the step count of the current pass. The text typed and not sent is kept per chat (`draft-storage.ts`), the
  * user's messages show one check or two (the character started answering), and the newest finished reply is reported
- * read to the server. The context panel, the lightbox, regenerating an image, cancelling a draw, search, "Ricorda
- * questo" and virtual scrolling are planned (docs/frontend.md), so the screen draws no control for them.
+ * read to the server. The lightbox, regenerating an image, cancelling a draw, search, "Ricorda questo" and virtual
+ * scrolling are planned (docs/frontend.md), so the screen draws no control for them.
+ *
+ * The context panel (P08.2) holds links to the character's profile and Memory Studio, the part of the panel that
+ * other screens back today. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
+ * per browser; below that the same content opens in a dialog on request.
  */
 @Component({
   selector: 'lyr-conversation-screen',
-  imports: [RouterLink, TranslatePipe, ImageDialog, ObEmptyState, ObSkeleton],
+  imports: [RouterLink, NgTemplateOutlet, TranslatePipe, ImageDialog, ObDialog, ObEmptyState, ObIcon, ObSkeleton],
   providers: [ConversationStore],
   host: { '(document:visibilitychange)': 'becameVisible()' },
   templateUrl: './conversation-screen.html',
@@ -111,6 +121,15 @@ export class ConversationScreen {
   protected readonly editing = signal<{ readonly id: string; readonly text: string } | null>(null);
   protected readonly confirmingDelete = signal<string | null>(null);
   protected readonly copied = signal(false);
+
+  /** The desktop layout applies (1024 px and up): the context panel is a column rather than a dialog. */
+  protected readonly wide = signal(matchesMedia(WIDE_QUERY));
+  /** The user collapsed the desktop column; remembered per browser. */
+  protected readonly panelCollapsed = signal(loadPanelCollapsed());
+  /** The panel is open as a dialog (tablet and mobile). Not remembered: the dialog is for a single look. */
+  protected readonly panelDialogOpen = signal(false);
+  /** What the header button reports as expanded, for the layout in use. */
+  protected readonly panelShown = computed(() => (this.wide() ? !this.panelCollapsed() : this.panelDialogOpen()));
 
   protected readonly length = computed(() => this.draft().length);
   protected readonly tooLong = computed(() => this.length() > MAX_MESSAGE_CHARS);
@@ -177,6 +196,12 @@ export class ConversationScreen {
   });
 
   constructor() {
+    // The panel changes form with the width; a dialog left open while the window grows would otherwise disappear.
+    const stopWatching = watchMedia(WIDE_QUERY, (matches) => {
+      this.wide.set(matches);
+      this.panelDialogOpen.set(false);
+    });
+    inject(DestroyRef).onDestroy(stopWatching);
     effect(() => {
       const id = this.conversationId();
       untracked(() => {
@@ -198,6 +223,17 @@ export class ConversationScreen {
         afterNextRender(() => this.scrollToBottom(), { injector: this.injector });
       }
     });
+  }
+
+  /** The header button: collapses or restores the desktop column, or opens the dialog on a narrower screen. */
+  protected togglePanel(): void {
+    if (this.wide()) {
+      const collapsed = !this.panelCollapsed();
+      this.panelCollapsed.set(collapsed);
+      savePanelCollapsed(collapsed);
+    } else {
+      this.panelDialogOpen.set(true);
+    }
   }
 
   protected onScroll(): void {
