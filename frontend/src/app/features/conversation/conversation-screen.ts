@@ -23,7 +23,10 @@ import { ObEmptyState } from '../../shared/ui/empty-state';
 import { ObIcon } from '../../shared/ui/icon';
 import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Translator } from '../../core/i18n/translator';
+import { Announcer } from '../../core/shell/announcer';
 import { WIDE_QUERY, matchesMedia, watchMedia } from '../../core/shell/viewport';
+import { ShortcutService } from '../shortcuts/shortcut-service';
+import { ChatFind, foldText } from './chat-find';
 import { ConversationStore, isActive } from './conversation-store';
 import { MAX_MESSAGE_CHARS, Message, imageOriginalUrl, imageThumbnailUrl } from './conversation.model';
 import { loadPanelCollapsed, savePanelCollapsed } from './context-panel-storage';
@@ -92,12 +95,27 @@ export interface DayRow {
  * The context panel (P08.2) holds links to the character's profile and Memory Studio, the part of the panel that
  * other screens back today. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
  * per browser; below that the same content opens in a dialog on request.
+ *
+ * Keyboard and assistive technology (P08.3): the messages are a `role="log"` that is not live itself, so a streaming
+ * reply is never read piece by piece; the finished reply is announced once through `Announcer`. Ctrl+F opens a find bar
+ * over the loaded messages, ArrowUp in an empty composer edits the user's latest message, and Esc leaves the find bar,
+ * the editor or a delete confirmation.
  */
 @Component({
   selector: 'lyr-conversation-screen',
-  imports: [RouterLink, NgTemplateOutlet, TranslatePipe, ImageDialog, ObDialog, ObEmptyState, ObIcon, ObSkeleton],
+  imports: [
+    RouterLink,
+    NgTemplateOutlet,
+    TranslatePipe,
+    ChatFind,
+    ImageDialog,
+    ObDialog,
+    ObEmptyState,
+    ObIcon,
+    ObSkeleton,
+  ],
   providers: [ConversationStore],
-  host: { '(document:visibilitychange)': 'becameVisible()' },
+  host: { '(document:visibilitychange)': 'becameVisible()', '(keydown.escape)': 'escape($event)' },
   templateUrl: './conversation-screen.html',
   styleUrl: './conversation-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -112,8 +130,14 @@ export class ConversationScreen {
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
   private readonly imageDialog = viewChild.required(ImageDialog);
+  private readonly editor = viewChild<ElementRef<HTMLTextAreaElement>>('editor');
+  private readonly finder = viewChild(ChatFind);
+  private readonly shortcuts = inject(ShortcutService);
+  private readonly announcer = inject(Announcer);
   /** Whether new text scrolls into view: true until the user scrolls up. */
   private followBottom = true;
+  /** The id of the newest finished reply already announced; undefined until the chat has loaded (history is no news). */
+  private announcedReply: string | null | undefined = undefined;
 
   protected readonly maxChars = MAX_MESSAGE_CHARS;
   protected readonly draft = signal('');
@@ -121,6 +145,12 @@ export class ConversationScreen {
   protected readonly editing = signal<{ readonly id: string; readonly text: string } | null>(null);
   protected readonly confirmingDelete = signal<string | null>(null);
   protected readonly copied = signal(false);
+
+  /** The find bar (Ctrl+F) is open. */
+  protected readonly findOpen = signal(false);
+  protected readonly findQuery = signal('');
+  /** The 0-based place of the current match, or null for the newest one (a chat is read from the bottom). */
+  private readonly findPosition = signal<number | null>(null);
 
   /** The desktop layout applies (1024 px and up): the context panel is a column rather than a dialog. */
   protected readonly wide = signal(matchesMedia(WIDE_QUERY));
@@ -195,7 +225,93 @@ export class ConversationScreen {
     return rows;
   });
 
+  /** The keys of the messages that contain the find text, in display order. Empty while the bar is closed. */
+  protected readonly matches = computed<readonly string[]>(() => {
+    const locale = this.translator.locale();
+    const needle = this.findOpen() ? foldText(this.findQuery().trim(), locale) : '';
+    if (needle === '') {
+      return [];
+    }
+    return this.rows().flatMap((row) => (row.kind === 'message' && foldText(row.text, locale).includes(needle) ? [row.key] : []));
+  });
+  protected readonly matchSet = computed(() => new Set(this.matches()));
+  /** The 0-based place of the current match, -1 when there is none. */
+  protected readonly matchIndex = computed(() => {
+    const count = this.matches().length;
+    const position = this.findPosition();
+    return count === 0 ? -1 : position === null ? count - 1 : Math.min(position, count - 1);
+  });
+  protected readonly currentMatch = computed(() => this.matches()[this.matchIndex()] ?? null);
+
+  /** The id of the message being edited, so focus follows the editor opening and closing, not each keystroke. */
+  private readonly editingId = computed(() => this.editing()?.id ?? null);
+
   constructor() {
+    // Ctrl+F inside the chat opens the find bar (or returns to its field when it is already open).
+    let seenFindRequests = this.shortcuts.findRequests();
+    effect(() => {
+      const requests = this.shortcuts.findRequests();
+      untracked(() => {
+        if (requests === seenFindRequests) {
+          return;
+        }
+        seenFindRequests = requests;
+        this.findOpen.set(true);
+        afterNextRender(() => this.finder()?.focus(), { injector: this.injector });
+      });
+    });
+    // The current match scrolls into view, which also ends following the bottom.
+    effect(() => {
+      const key = this.currentMatch();
+      if (key === null) {
+        return;
+      }
+      this.followBottom = false;
+      afterNextRender(() => document.getElementById(`msg-${key}`)?.scrollIntoView?.({ block: 'center' }), {
+        injector: this.injector,
+      });
+    });
+    // Opening the editor puts the caret at the end of the text; closing it returns focus to the composer.
+    let wasEditing = false;
+    effect(() => {
+      const editing = this.editingId() !== null;
+      untracked(() => {
+        if (editing) {
+          afterNextRender(
+            () => {
+              const field = this.editor()?.nativeElement;
+              field?.focus();
+              field?.setSelectionRange(field.value.length, field.value.length);
+            },
+            { injector: this.injector },
+          );
+        } else if (wasEditing) {
+          this.composer()?.nativeElement.focus();
+        }
+        wasEditing = editing;
+      });
+    });
+    // A reply that finishes is announced once, whole. Streaming text is not (the log is `aria-live="off"`), and the
+    // history that is on screen when the chat opens is not news, so the first loaded state only sets the baseline.
+    effect(() => {
+      const loading = this.store.loading();
+      const latest = this.store
+        .messages()
+        .filter((message) => message.author === 'character' && message.status === 'complete')
+        .at(-1);
+      untracked(() => {
+        if (loading) {
+          return;
+        }
+        if (this.announcedReply === undefined) {
+          this.announcedReply = latest?.id ?? null;
+        } else if (latest !== undefined && latest.id !== this.announcedReply) {
+          this.announcedReply = latest.id;
+          const text = latest.content.trim() !== '' ? latest.content : this.imageAlt();
+          this.announcer.announce(this.translator.t('conv.announce.reply', { name: this.name(), text }));
+        }
+      });
+    });
     // The panel changes form with the width; a dialog left open while the window grows would otherwise disappear.
     const stopWatching = watchMedia(WIDE_QUERY, (matches) => {
       this.wide.set(matches);
@@ -205,6 +321,8 @@ export class ConversationScreen {
     effect(() => {
       const id = this.conversationId();
       untracked(() => {
+        this.announcedReply = undefined;
+        this.closeFind(false);
         this.draft.set(loadDraft(id));
         void this.store.open(id);
       });
@@ -275,11 +393,62 @@ export class ConversationScreen {
     this.composer()?.nativeElement.focus();
   }
 
-  /** Enter sends; Shift+Enter keeps the browser's new line. Enter that confirms an input-method choice does nothing. */
+  /**
+   * Enter sends; Shift+Enter keeps the browser's new line. Enter that confirms an input-method choice does nothing.
+   * ArrowUp in an empty composer opens the editor of the user's latest editable message (docs/frontend.md, Keyboard).
+   */
   protected composerKey(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    if (event.isComposing) {
+      return;
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.submit();
+    } else if (event.key === 'ArrowUp' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const last = [...this.rows()]
+        .reverse()
+        .find((row) => row.kind === 'message' && row.mine && row.canEdit && row.text !== '');
+      if (this.draft() === '' && last?.kind === 'message') {
+        event.preventDefault();
+        this.startEdit(last.message);
+      }
+    }
+  }
+
+  /** Esc leaves the find bar, then the editor, then a delete confirmation. A dialog handles its own Esc. */
+  protected escape(event: Event): void {
+    if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('dialog') !== null)) {
+      return;
+    }
+    if (this.findOpen()) {
+      this.closeFind(true);
+    } else if (this.editing() !== null) {
+      this.cancelEdit();
+    } else if (this.confirmingDelete() !== null) {
+      this.cancelDelete();
+    }
+  }
+
+  protected onFindQuery(text: string): void {
+    this.findQuery.set(text);
+    this.findPosition.set(null);
+  }
+
+  /** Moves to the next (1) or previous (-1) match, wrapping around the ends. */
+  protected stepFind(delta: -1 | 1): void {
+    const count = this.matches().length;
+    if (count > 0) {
+      this.findPosition.set((this.matchIndex() + delta + count) % count);
+    }
+  }
+
+  /** Closes the find bar and forgets its text; `refocus` returns the caret to the composer. */
+  protected closeFind(refocus: boolean): void {
+    this.findOpen.set(false);
+    this.findQuery.set('');
+    this.findPosition.set(null);
+    if (refocus) {
+      this.composer()?.nativeElement.focus();
     }
   }
 

@@ -255,6 +255,14 @@ Sidebar and conversation. The context panel opens as a dialog.
 | Motion | Honors reduced motion |
 | Language | `<html lang="it">`. Message text carries the conversation language |
 
+Implementation notes (P08.3):
+
+- **Focus ring:** `:focus-visible` in `styles/global.scss` draws it for every control; no stylesheet removes it. A skip link (**Vai al contenuto**) is the first Tab stop, and a change of path moves focus to the screen's `h1` ([Frontend](frontend.md#keyboard) gives the exceptions).
+- **Dialogs:** every dialog is a native `<dialog>` opened with `showModal()` (`ob-dialog`, the new-conversation dialog, the image form and the gallery lightbox). The browser makes the page behind it inert, so Tab stays inside, Esc closes it, and focus returns to the control that opened it. The shortcut help (`?`) is one of them.
+- **Live regions:** the shell has one `aria-live="polite"` region (`Announcer`) for a finished reply; toasts are `aria-live="polite"`; the conversation's typing, drawing and queue status, image progress, loading placeholders and the other status lines are `role="status"`, and errors are `role="alert"`. The message list is a `role="log"` with `aria-live="off"`, which is what keeps streaming text from being read token by token.
+- **Departure from the table:** the chat list is a list of links with a row menu, not a `listbox`. A `listbox` holds options, not links and buttons, and each row has both, so the list keeps the semantics that match its content.
+- **Tested by** `core/shell/shortcuts.spec.ts`, `core/shell/focus.spec.ts` and `features/conversation/chat-find.spec.ts` (unit), and `tests/e2e/specs/accessibility.spec.mjs` (T-QLT-03: `axe` on the ten screens and the keyboard walkthroughs). Written, not yet run.
+
 ## Interface text
 
 Text is Italian, informal and short. It describes people and actions, not technology. Neutral wording avoids assuming a character's gender.

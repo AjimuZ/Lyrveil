@@ -1,9 +1,19 @@
 // Screen 6 of docs/frontend.md: the image gallery with filters, paging and a lightbox.
-import { ChangeDetectionStrategy, Component, ElementRef, OnInit, inject, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnInit,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
-import { TextKey } from '../../core/i18n/translator';
+import { TextKey, Translator } from '../../core/i18n/translator';
+import { isTypingTarget } from '../../core/shell/shortcuts';
 import { ObEmptyState } from '../../shared/ui/empty-state';
 import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Character } from '../chats/chats.model';
@@ -23,17 +33,20 @@ const PURPOSE_TEXT: Readonly<Record<ImagePurpose, TextKey>> = {
  * an original) that the browser fetches lazily, filtered by character and purpose, with **Carica altre** for the next
  * page. A thumbnail opens the lightbox: the original with its metadata (request, prompts, aspect, seed, steps, CFG,
  * profile, preset and workflow), a link to the source chat, **Rigenera** (a new variant in the source chat, with the
- * seed kept on request) and **Elimina** with an inline confirmation.
+ * seed kept on request) and **Elimina** with an inline confirmation. ← and → (and two buttons) move to the previous or
+ * next loaded image without closing the lightbox.
  */
 @Component({
   selector: 'lyr-gallery-screen',
   imports: [RouterLink, TranslatePipe, ObEmptyState, ObSkeleton],
   templateUrl: './gallery-screen.html',
   styleUrl: './gallery-screen.scss',
+  host: { '(document:keydown)': 'lightboxKey($event)' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class GalleryScreen implements OnInit {
   protected readonly store = inject(GalleryStore);
+  private readonly translator = inject(Translator);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('lightbox');
 
   protected readonly purposes = IMAGE_PURPOSES.map((value) => ({ value, label: PURPOSE_TEXT[value] }));
@@ -74,6 +87,46 @@ export class GalleryScreen implements OnInit {
 
   protected close(): void {
     this.dialog().nativeElement.close();
+  }
+
+  /** Where the lightbox image sits among the loaded thumbnails: its 1-based place and their count, or null. */
+  protected readonly place = computed(() => {
+    const image = this.selected();
+    const index = image === null ? -1 : this.store.items().findIndex((item) => item.id === image.id);
+    return index === -1 ? null : { index: index + 1, total: this.store.items().length };
+  });
+
+  /** Shows the image `delta` places away (-1 before, 1 after) in the same dialog. Does nothing at either end. */
+  protected step(delta: -1 | 1): void {
+    const place = this.place();
+    const next = place === null ? undefined : this.store.items()[place.index - 1 + delta];
+    if (next === undefined) {
+      return;
+    }
+    this.store.clearActionError();
+    this.confirmingDelete.set(false);
+    this.keepSeed.set(false);
+    this.regenerated.set(false);
+    this.selected.set(next);
+  }
+
+  /**
+   * ← and → move between images (docs/frontend.md, Keyboard), except where the arrows belong to a control. Only while
+   * the lightbox is open: the modal dialog makes the rest of the page inert, so every such key comes from inside it.
+   */
+  protected lightboxKey(event: KeyboardEvent): void {
+    if (this.selected() === null || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || isTypingTarget(event.target)) {
+      return;
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      this.step(event.key === 'ArrowLeft' ? -1 : 1);
+    }
+  }
+
+  protected positionText(): string {
+    const place = this.place();
+    return place === null ? '' : this.translator.t('gallery.lightbox.position', place);
   }
 
   /** Runs when the dialog closes, by the button or by Escape. */

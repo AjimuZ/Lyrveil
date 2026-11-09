@@ -1,3 +1,4 @@
+<a class="skip" href="#content" (click)="skipToContent($event)">{{ 'shell.skip' | t }}</a>
 <div class="shell" [class.immersive]="immersive()">
   <header class="topbar">
     <p class="brand">{{ 'app.brand' | t }}</p>
@@ -19,7 +20,11 @@
     <a class="nav-link" routerLink="/settings/models" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.models' | t }}</a>
     <a class="nav-link" routerLink="/settings/resources" routerLinkActive="active" ariaCurrentWhenActive="page">{{ 'nav.resources' | t }}</a>
   </nav>
-  <main class="content">
+  <main class="content" id="content">
     <router-outlet />
   </main>
 </div>
+
+<div class="ob-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="announcer">{{ announcer.message() }}</div>
+
+<lyr-shortcut-help />

@@ -64,6 +64,7 @@
 
   <dialog #lightbox class="lightbox" [attr.aria-label]="'gallery.lightbox' | t" (close)="closed()">
     @if (selected(); as image) {
+      <p class="ob-sr-only" role="status" data-testid="lightbox-position">{{ positionText() }}</p>
       <img class="original" [src]="image.url" [alt]="image.user_request" />
       <dl class="meta">
         <dt>{{ 'gallery.meta.character' | t }}</dt>
@@ -98,6 +99,12 @@
       }
 
       <div class="actions">
+        <button type="button" class="button" [attr.aria-label]="'gallery.lightbox.previous' | t" [disabled]="place()?.index === 1" (click)="step(-1)">
+          <span aria-hidden="true">‹</span>
+        </button>
+        <button type="button" class="button" [attr.aria-label]="'gallery.lightbox.next' | t" [disabled]="place()?.index === place()?.total" (click)="step(1)">
+          <span aria-hidden="true">›</span>
+        </button>
         @if (image.conversation_id !== null) {
           <a class="button" [routerLink]="['/chats', image.conversation_id]" (click)="close()">{{ 'gallery.source' | t }}</a>
           <label class="keep">

@@ -27,6 +27,17 @@
   }
 </header>
 
+@if (findOpen()) {
+  <lyr-chat-find
+    [query]="findQuery()"
+    [count]="matches().length"
+    [position]="matchIndex() + 1"
+    (queryChange)="onFindQuery($event)"
+    (step)="stepFind($event)"
+    (closed)="closeFind(true)"
+  />
+}
+
 @if (store.actionError(); as failure) {
   <div class="banner error" role="alert">
     <span>{{ failure.detail ?? (failure.textKey | t) }}</span>
@@ -55,17 +66,26 @@
     @if (rows().length === 0 && store.pending().length === 0) {
       <ob-empty-state icon="empty-chat" [message]="'conv.empty' | t" />
     }
+    <div class="log" role="log" aria-live="off" [attr.aria-label]="'conv.log' | t">
     <ol class="messages" [attr.aria-label]="'conv.messages' | t">
       @for (row of rows(); track row.key) {
         @if (row.kind === 'day') {
           <li class="day"><span>{{ row.label }}</span></li>
         } @else {
           @let edit = editing();
-          <li class="message" [class.mine]="row.mine" [attr.data-status]="row.message.status">
+          <li
+            class="message"
+            [id]="'msg-' + row.key"
+            [class.mine]="row.mine"
+            [class.found]="matchSet().has(row.key)"
+            [class.current]="currentMatch() === row.key"
+            [attr.data-status]="row.message.status"
+          >
             <div class="bubble">
-              <span class="sr-only">{{ row.mine ? ('conv.you' | t) : name() }}:</span>
+              <span class="ob-sr-only">{{ row.mine ? ('conv.you' | t) : name() }}:</span>
               @if (edit !== null && edit.id === row.message.id) {
                 <textarea
+                  #editor
                   class="control"
                   rows="3"
                   [attr.aria-label]="'conv.edit.label' | t"
@@ -174,7 +194,7 @@
       @for (entry of store.pending(); track entry.clientMessageId) {
         <li class="message mine pending" [attr.data-state]="entry.state">
           <div class="bubble">
-            <span class="sr-only">{{ 'conv.you' | t }}:</span>
+            <span class="ob-sr-only">{{ 'conv.you' | t }}:</span>
             <p class="text">{{ entry.content }}</p>
             @if (entry.state === 'sending') {
               <p class="meta">{{ 'conv.sending' | t }}</p>
@@ -196,10 +216,11 @@
         </li>
       }
     </ol>
+    </div>
   </div>
 
   <form class="composer" (submit)="$event.preventDefault(); submit()">
-    <label class="sr-only" for="composer">{{ 'conv.composer.label' | t }}</label>
+    <label class="ob-sr-only" for="composer">{{ 'conv.composer.label' | t }}</label>
     <textarea
       id="composer"
       #composer

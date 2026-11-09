@@ -3,10 +3,15 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
   OnDestroy,
   OnInit,
+  afterNextRender,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -15,6 +20,7 @@ import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
 import { ObEmptyState } from '../../shared/ui/empty-state';
 import { ObSkeleton } from '../../shared/ui/skeleton';
+import { ShortcutService } from '../shortcuts/shortcut-service';
 import { formatActivity } from './activity-time';
 import { ChatsStore } from './chats-store';
 import { Conversation, ConversationActivity, ConversationStatus } from './chats.model';
@@ -36,7 +42,8 @@ interface Tab {
  * of the last activity and whether it is pinned, and has a menu with pin, archive and delete. Loading, empty and error
  * states are shown. A row also shows the unread count, a one-line preview of the newest finished message and, while
  * the character types, draws or waits in the queue, that hint instead of the preview. The rows follow the event
- * socket while the screen is open (`ChatsStore.follow`).
+ * socket while the screen is open (`ChatsStore.follow`). Ctrl+K focuses the search field and Ctrl+N opens the new-chat
+ * dialog, on this screen or from any other (`ShortcutService.pending`).
  */
 @Component({
   selector: 'lyr-chat-list-screen',
@@ -53,6 +60,10 @@ export class ChatListScreen implements OnInit, AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly newChat = viewChild.required(NewChatDialog);
+  private readonly searchField = viewChild<ElementRef<HTMLInputElement>>('searchField');
+  private readonly shortcuts = inject(ShortcutService);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly tabs: readonly Tab[] = [
     { status: 'active', label: 'chats.tab.active' },
@@ -60,6 +71,31 @@ export class ChatListScreen implements OnInit, AfterViewInit, OnDestroy {
   ];
   /** The id of the row whose menu is open, or null. */
   protected readonly openMenu = signal<string | null>(null);
+
+  constructor() {
+    // A request made before this screen existed is performed once its view is drawn; one made while it is on screen,
+    // right away. Either way the request is consumed, so it never fires twice.
+    effect(() => {
+      const request = this.shortcuts.pending();
+      if (request === null) {
+        return;
+      }
+      untracked(() =>
+        afterNextRender(
+          () => {
+            this.shortcuts.consume();
+            if (request === 'search') {
+              this.searchField()?.nativeElement.select();
+              this.searchField()?.nativeElement.focus();
+            } else {
+              this.openNewChat();
+            }
+          },
+          { injector: this.injector },
+        ),
+      );
+    });
+  }
 
   ngOnInit(): void {
     void this.store.showTab(this.store.tab());
@@ -111,6 +147,21 @@ export class ChatListScreen implements OnInit, AfterViewInit, OnDestroy {
 
   protected search(event: Event): void {
     this.store.search((event.target as HTMLInputElement).value);
+  }
+
+  /** Esc in the search field clears it and hands focus to the first conversation (or nowhere when the list is empty). */
+  protected leaveSearch(event: Event): void {
+    const field = event.target as HTMLInputElement;
+    if (field.value !== '') {
+      field.value = '';
+      this.store.search('');
+    }
+    const first = this.host.nativeElement.querySelector<HTMLElement>('a.chat');
+    if (first === null) {
+      field.blur();
+    } else {
+      first.focus();
+    }
   }
 
   protected time(conversation: Conversation): string {

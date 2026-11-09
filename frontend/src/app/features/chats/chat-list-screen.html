@@ -7,6 +7,7 @@
   <div class="search">
     <label class="search-label" for="chat-search">{{ 'chats.search.label' | t }}</label>
     <input
+      #searchField
       id="chat-search"
       class="control"
       type="search"
@@ -14,6 +15,7 @@
       [placeholder]="'chats.search.placeholder' | t"
       [value]="store.query()"
       (input)="search($event)"
+      (keydown.escape)="leaveSearch($event)"
     />
   </div>
 

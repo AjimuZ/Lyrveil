@@ -80,6 +80,29 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+
+  // `main` takes the focus only when a screen has no heading yet, and it is large: draw the ring inside its edge.
+  &:focus-visible {
+    outline-offset: -2px;
+  }
+}
+
+// The skip link is out of sight until it takes keyboard focus, then it sits over the top-left corner.
+.skip {
+  position: absolute;
+  top: var(--ob-space-2);
+  left: var(--ob-space-2);
+  z-index: 10;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-elevated);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  transform: translateY(-300%);
+
+  &:focus {
+    transform: none;
+  }
 }
 
 @media (min-width: 1024px) {

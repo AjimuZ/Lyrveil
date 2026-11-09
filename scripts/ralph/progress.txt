@@ -238,6 +238,9 @@
 - Pad routed screens and dialogs with `var(--ob-gutter)` instead of a fixed space token, so phones get the smaller margin from one place.
 - Use `minmax(min(Npx, 100%), 1fr)` in grids and `minmax(0, ...)` for `max-content` columns, so a grid never forces a horizontal scroll at 320 px.
 - Fixed-height screens read the viewport through `--ob-viewport-height` (set from `visualViewport`) with `100dvh` as the fallback, never a bare `100vh`.
+- A shortcut that must act on a screen not yet drawn sets a `pending` signal on a root service, navigates, and the screen's effect performs it inside `afterNextRender` and then consumes it. The root's route-focus logic skips its own focus move while `pending` is set.
+- A message list that streams is a `role="log"` with `aria-live="off"` inside the screen, plus an `Announcer` service that writes one sentence to a single `aria-live="polite"` region of the shell when the item finishes. The `ol` stays a list inside a wrapper `div role="log"`, because `li` needs a real list parent.
+- Pure key-matching functions (`shortcutFor`, `neighbourId`) take plain objects so unit tests need no DOM events. Typing-target detection is separate, so a bare character shortcut such as `?` never fires inside a field.
 
 ---
 
@@ -2248,4 +2251,47 @@ Both are recorded in the docs.
   - The sidebar does not embed the chat list. The context panel is only links to the profile and the Memory Studio. Both are documented as departures from the mock-up.
   - The e2e responsive spec emulates 200 % zoom with a half-size viewport, not browser zoom. It checks overflow and the layout of each breakpoint, and tap targets of 44 px only for the navigation links and the conversation composer, not for every control.
   - The memory, profile, creator, models and resources screens were only checked by reading their SCSS for overflow. Run the responsive e2e spec to confirm them.
+---
+
+## 2026-11-09T22:12:27Z - P08.3
+- Implemented the keyboard shortcuts, focus management and live regions of P08.3. `scripts/lyrveil.cmd test lint` passes (docs checks, ESLint, style tokens, strict build). The new unit specs and `accessibility.spec.mjs` have not been run: a targeted `ng test` was refused by the shell allowlist, and the e2e level was left to the orchestrator.
+
+**What was built**
+- **Shortcut service:** `ShortcutService` handles every document keydown.
+  - `core/shell/shortcuts.ts` holds the pure rules: `shortcutFor`, `neighbourId`, `isTypingTarget`, `conversationIdOf`.
+  - Combinations with an extra modifier are left to the browser.
+  - No shortcut acts while a modal dialog is open.
+  - `Ctrl+K` and `Ctrl+N` go to `/chats` and focus the search or open the new-chat dialog, through `ShortcutService.pending`.
+  - `Alt+↑` and `Alt+↓` step through `ChatsStore` items.
+  - `?` opens the new help dialog, `ShortcutHelp`.
+- **Shell:** `app.html` and `app.ts` add a skip link, **Vai al contenuto**.
+  - After a path change, focus moves to the `h1`, or to `main` if there is no heading yet.
+  - A polite `Announcer` live region sits in the shell.
+- **Conversation:**
+  - The messages sit in a `role="log"` with `aria-live="off"`. The existing `ol` keeps the name "Messaggi", which the existing e2e specs look up.
+  - A finished reply is announced once. The history shown on open is not.
+  - `Ctrl+F` opens a new find bar, `ChatFind`, over the loaded messages.
+  - `↑` in an empty composer edits the last user message.
+  - `Esc` leaves the find bar, the editor and a delete confirmation, and focus returns to the composer.
+- **Chat list:** `Esc` in the search field clears it and moves focus to the first conversation.
+- **Gallery lightbox:** `←` and `→` move between loaded images, with two buttons and a position status.
+- **Tests added:**
+  - Unit: `shortcuts.spec.ts`, `focus.spec.ts` and `chat-find.spec.ts`.
+  - E2E: `tests/e2e/specs/accessibility.spec.mjs`, covering axe on the ten screens plus walkthroughs of the skip link, route focus, the focus ring, `Ctrl+K`, `Ctrl+N`, `?`, `Alt+↑/↓`, the conversation and the lightbox.
+- **Docs:** `docs/frontend.md` (Keyboard section, and the not-delivered list), `docs/design-system.md` (Accessibility notes) and `CHANGELOG.md`.
+
+**Open points**
+- **Chat list:** it stays a list of links, not a `listbox`, because each row has a link and a menu button. This is recorded in the docs as a departure from the table.
+- **Conversation lightbox:** the conversation still has none, so `←` and `→` work only in the gallery lightbox.
+- **Find scope:** `Ctrl+F` searches only the messages already loaded.
+- **Build warning:** `conversation-screen.scss` is 7.59 kB against the 6 kB warning budget (8 kB errors). The build only warns. I removed a duplicated `.sr-only` rule to make room.
+- Files changed: frontend/src/app/app.ts, frontend/src/app/app.html, frontend/src/app/app.scss, frontend/src/app/core/shell/shortcuts.ts, frontend/src/app/core/shell/shortcuts.spec.ts, frontend/src/app/core/shell/focus.ts, frontend/src/app/core/shell/focus.spec.ts, frontend/src/app/core/shell/announcer.ts, frontend/src/app/features/shortcuts/shortcut-service.ts, frontend/src/app/features/shortcuts/shortcut-help.ts, frontend/src/app/features/shortcuts/shortcut-help.scss, frontend/src/app/features/chats/chat-list-screen.ts, frontend/src/app/features/chats/chat-list-screen.html, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, frontend/src/app/features/conversation/chat-find.ts, frontend/src/app/features/conversation/chat-find.scss, frontend/src/app/features/conversation/chat-find.spec.ts, frontend/src/app/features/gallery/gallery-screen.ts, frontend/src/app/features/gallery/gallery-screen.html, frontend/src/i18n/it.json, tests/e2e/specs/accessibility.spec.mjs, docs/frontend.md, docs/design-system.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Only `scripts/lyrveil.cmd test lint` was run (it includes the strict build). A targeted `ng test` through `npm exec` and `npm run test` was refused in this session, so `shortcuts.spec.ts`, `focus.spec.ts` and `chat-find.spec.ts` have never run. `tests/e2e/specs/accessibility.spec.mjs` has not run either. If the unit or e2e level fails, check those first.
+  - The accessibility spec is the first one to use axe's default rule set on the placeholder `/settings` screen, the character profile and the conversation with the find bar open. An unexpected axe finding there is likely in new markup (`.skip`, the `role="log"` wrapper, `lyr-chat-find`, the help dialog `dl`).
+  - ESLint forbids `innerHTML` even in specs: build DOM in tests with `document.createElement`. Its `interactive-supports-focus` rule rejects `(keydown)` on a non-focusable element such as `<dialog>`; use a `host` `(document:keydown)` listener instead.
+  - The TypeScript target is ES2022, so `Array.prototype.findLast` is not available. Use a reversed copy with `find`.
+  - `conversation-screen.scss` is at 7.59 kB of an 8 kB error budget, so further additions there must go into separate component stylesheets. I moved the find bar into `chat-find.scss`, and the conversation now uses the global `.ob-sr-only` instead of its own copy.
+  - Playwright's `page.route` fakes for the gallery images are now duplicated in `accessibility.spec.mjs` and `gallery.spec.mjs`. Move them to `tests/e2e/support/` if a third spec needs them.
+  - `ShortcutService.pending` is the pattern for a global shortcut whose target screen may not exist yet: record the request, navigate, and let the screen perform and consume it.
 ---

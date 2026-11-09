@@ -206,8 +206,9 @@ provides its own `ConversationStore` and opens the chat named by the route.
   **Apri il profilo** and **Apri la memoria**. From 1024 px it is a collapsible 320 px column (remembered per browser);
   below that it opens as a dialog. Its other contents (relationship, recent events, images, scenario, proactive
   settings) are not delivered. See [Design system](design-system.md#implementation-notes-p082).
-- **Not delivered, so no control is drawn for it:** the rest of the context panel, the lightbox, regenerating or cancelling an
-  image, the contextual proposal card, search in a chat, "Ricorda questo" and
+- **Not delivered, so no control is drawn for it:** the rest of the context panel, a lightbox in the conversation (the gallery has
+  one), regenerating or cancelling an
+  image, the contextual proposal card, "Ricorda questo" and
   virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
   navigate to a new chat after **Inizia conversazione**.
 - **Direct visits to a deep route.** `index.html` has no `<base>` element, because the Content-Security-Policy says
@@ -471,6 +472,20 @@ retry (the list and retry routes are planned), tokens per second, recent transit
 | `←`, `→` in the lightbox | Previous, next image |
 
 A help dialog under `?` lists them. Browser shortcuts stay intact when focus is outside the chat.
+
+Delivered in P08.3. `ShortcutService` (`features/shortcuts/`) listens once on the document, through the root component, and `core/shell/shortcuts.ts` holds the pure rules (`shortcutFor`, `neighbourId`), so a combination with an extra modifier, such as `Ctrl+Shift+N`, is left to the browser.
+
+- `Ctrl+K` (`⌘` on a Mac) opens `/chats` when needed and focuses the search field. `Ctrl+N` opens `/chats` and the new-conversation dialog. A request waits in `ShortcutService.pending` until the list screen is drawn, and is dropped if a guard keeps the user on the current screen.
+- `Alt+↑` and `Alt+↓` open the previous or next conversation of the list as `ChatsStore` holds it, so the tab and the search text in use apply. They stop at the ends, and from the list or from a chat that is not in it they open the first (down) or the last (up) row.
+- `Ctrl+F` acts only inside a conversation (focus in the screen, or nowhere while a chat is open) and opens a find bar over the **loaded** messages, ignoring case and accents. `Enter` and `Shift+Enter` go to the next and previous match, which is outlined and scrolled into view; the count ("1 di 3") is a live region. Older pages that were not loaded are not searched. Elsewhere the browser's own find stays.
+- `Enter` sends and `Shift+Enter` adds a line. `↑` in an empty composer opens the editor of the user's latest message, with the caret at its end.
+- `Esc` closes a native dialog (the browser does it), leaves the find bar, the message editor and a delete confirmation of the conversation, closes a row menu of the list, and in the search field of the list clears it and moves focus to the first conversation.
+- `←` and `→` move between the loaded images in the gallery lightbox, with two buttons for a pointer, and stop at the ends. The conversation has no lightbox yet (a thumbnail there still opens the original), so nothing answers the arrows in a chat.
+- `?` opens the help dialog (`ShortcutHelp`) unless focus is in a text field. No shortcut acts while a modal dialog is open.
+
+Focus and announcements (P08.3), also in [Design system](design-system.md#accessibility): the first Tab stop is a skip link, **Vai al contenuto**; after a navigation to another path focus moves to the screen's `h1` (to `main` when it has none yet), but not on the first load, on a change of query string, or when `Ctrl+K` or `Ctrl+N` is about to place focus itself. The messages of a conversation are a `role="log"` with `aria-live="off"`, so a streaming reply is not read piece by piece; when a reply reaches `complete`, `Announcer` writes "‹nome› ha risposto: ‹testo›" once into the polite region of the shell. The history shown when a chat opens is not announced. The header status line (typing, drawing, queued), the typing indicator and the image progress are `role="status"`.
+
+Not matched to the table: the chat list is a plain list of links, not a `listbox` (see [Design system](design-system.md#accessibility)).
 
 ## Text and translation
 

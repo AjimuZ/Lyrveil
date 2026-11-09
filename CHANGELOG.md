@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Keyboard, focus and live regions (P08.3). `Ctrl+K` searches the conversations, `Ctrl+N` starts a new one,
+  `Alt+↑` and `Alt+↓` move to the previous or next conversation, `Ctrl+F` inside a chat finds text in the loaded
+  messages, `↑` in an empty composer edits your last message, `Esc` leaves the find bar, the editor and a confirmation,
+  and `←` and `→` move between images in the gallery lightbox. `?` shows the list. A skip link starts the Tab order, a
+  change of screen moves focus to its heading, and a finished reply is announced once to screen readers while its
+  streaming text is not read piece by piece. The conversation list stays a list of links rather than a `listbox`. The
+  end-to-end spec `tests/e2e/specs/accessibility.spec.mjs` (`axe` on the ten screens and the keyboard walkthroughs) and
+  the unit specs of the shortcut rules are written but have not been run yet.
 - Responsive layouts (P08.2). From 1024 px the shell is a 320 px sidebar beside the screen, and the conversation has a
   collapsible 320 px **Dettagli** panel (links to the character's profile and Memory Studio; the choice is remembered
   per browser) with messages capped at 760 px. From 640 to 1023 px the sidebar narrows and **Dettagli** opens as a
