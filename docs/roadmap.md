@@ -12,7 +12,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P05 | Images in messages | In progress: automated exit passed; hardware part (P05.EXIT-HW) and measurement part (P05.8) pending |
 | P06 | Automatic GPU orchestration and recovery | In progress: automated exit passed; hardware part (P06.EXIT-HW) pending |
 | P07 | Proactive messages and messaging details | Done |
-| P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: P08.1 to P08.5 built, the documents reconciled in P08.6; the exit checks have not run, and the P08 specs are written and not run |
+| P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: automated exit passed; hardware and quality part (P08.EXIT-HW) pending |
 | P09 | Audit and public release | Planned |
 
 Through P03, the project delivers the complete working path from character creation to persistent conversation. Later phases add advanced memory, images and orchestration on top of it.
@@ -204,7 +204,8 @@ Exit: T-QLT-01, T-QLT-03, T-QLT-04, T-QLT-05 and T-GPU-13 pass. No default profi
 
 Evidence:
 
-- [Documentation reconciliation](verification/2026-11-09-documentation-reconciliation.md) (P08.6). The P08 exit has no evidence yet: T-QLT-01, T-QLT-03 (`accessibility.spec.mjs` is written and has not run), T-QLT-04, T-QLT-05 and T-GPU-13 need the real GPU or a run of the P08 specs, and the default profiles have no `quality_evidence`. The color check (`npm run lint`) passes with 0 literals outside the tokens.
+- [Documentation reconciliation](verification/2026-11-09-documentation-reconciliation.md) (P08.6).
+- [P08 automated exit: the `unit`, `e2e` and `lint` levels, with T-QLT-03 (`axe` on the ten screens and the keyboard walkthroughs), T-QLT-04 (320, 640, 1024 and 1440 px and 200 % zoom), the color check (0 literals outside the tokens) and a recorded review that no control lacks behavior](verification/2026-11-10-p08-exit.md). The hardware and quality part (T-QLT-01, T-QLT-05, T-GPU-13 and `quality_evidence` on the default profiles, which is still null) is pending with P08.EXIT-HW, so the phase is not done.
 
 ## P09: Publication
 

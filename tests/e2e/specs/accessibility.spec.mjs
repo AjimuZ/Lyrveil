@@ -4,11 +4,10 @@
 // (the finished reply is announced once, the message log is not live itself).
 //
 // The characters and chats are set up through the API; the gallery runs over fake image routes (the same approach as
-// gallery.spec.mjs), because how many real images exist depends on the specs that ran before. This spec was written but
-// not run in this change.
-import AxeBuilder from '@axe-core/playwright';
+// gallery.spec.mjs), because how many real images exist depends on the specs that ran before.
 import { expect, test } from '@playwright/test';
 
+import { axeViolations } from '../support/axe.mjs';
 import { uniqueName } from '../support/chats.mjs';
 
 // A 1x1 PNG, enough for the browser to decode a thumbnail and an original.
@@ -18,10 +17,7 @@ const PIXEL = Buffer.from(
 );
 
 async function expectNoAccessibilityViolations(page) {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(
-    results.violations.map((violation) => ({ rule: violation.id, targets: violation.nodes.map((node) => node.target) })),
-  ).toEqual([]);
+  expect(await axeViolations(page)).toEqual([]);
 }
 
 /** Creates a character and a chat with it through the API; returns their ids. */

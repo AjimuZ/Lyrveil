@@ -193,10 +193,17 @@ test('a gallery of 1,000 images loads its thumbnails lazily', async ({ page }, t
   expect(fetchedAtTop).toBeLessThan(TOTAL / 4);
 
   // Scrolling to the end fetches the thumbnails there, and still not all of them.
+  // The cells in between are drawn as the scroll passes them and change the page height, so the last cell can end up
+  // off screen after the first scroll: the scroll is repeated until its thumbnail has loaded.
   const last = grid.getByRole('listitem').last();
-  await last.scrollIntoViewIfNeeded();
   await expect
-    .poll(() => last.locator('img').evaluate((image) => image.complete && image.naturalWidth > 0), { timeout: 15_000 })
+    .poll(
+      async () => {
+        await last.scrollIntoViewIfNeeded();
+        return last.locator('img').evaluate((image) => image.complete && image.naturalWidth > 0);
+      },
+      { timeout: 15_000 },
+    )
     .toBe(true);
   expect(seen.thumbnails).toBeGreaterThan(fetchedAtTop);
   expect(seen.thumbnails).toBeLessThan(TOTAL);

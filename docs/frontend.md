@@ -214,10 +214,10 @@ provides its own `ConversationStore` and opens the chat named by the route.
   bottom, an older page keeps the reader's place, and the chat's find bar (Ctrl+F) moves the window to a match before it
   scrolls there. A shorter list is drawn whole. Formatting the day and clock of a message is cached per message, so a
   streamed piece does not format thousands of dates again. A virtual list leaves the rows outside the window out of the
-  DOM, so a screen reader and the browser's own find see only the window. Tests: `virtual-window.spec.ts` (unit, written
-  and not run) and the first test of `tests/e2e/specs/performance.spec.mjs` (10,000 synthetic messages over Playwright
-  routes: the open, 199 pages, a bounded DOM, scroll frames and a jump to the newest message, with the timings attached;
-  written and not run).
+  DOM, so a screen reader and the browser's own find see only the window. Tests: `virtual-window.spec.ts` (unit) and the
+  first test of `tests/e2e/specs/performance.spec.mjs` (10,000 synthetic messages over Playwright routes: the open, 199
+  pages, a bounded DOM, scroll frames and a jump to the newest message, with the timings attached). Both passed in the
+  P08 exit ([evidence](verification/2026-11-10-p08-exit.md)).
 - **Not delivered, so no control is drawn for it:** the rest of the context panel, a lightbox in the conversation (the gallery has
   one), regenerating or cancelling an
   image, the contextual proposal card and "Ricorda questo". The chat list does not
@@ -399,7 +399,7 @@ save-as-avatar (an avatar is chosen from the profile's avatar tools).
 - **A gallery of 1,000 images (P08.4):** no change to the screen. The second test of `tests/e2e/specs/performance.spec.mjs`
   loads all 42 pages of 24 over a Playwright fake (`tests/e2e/support/images.mjs`) without scrolling, and checks that the
   browser fetched far fewer than 1,000 thumbnails and no original, then that scrolling to the end fetches the last ones
-  (written and not run).
+  (passed in the P08 exit: 15 thumbnails fetched at the top and 55 at the end, [evidence](verification/2026-11-10-p08-exit.md)).
 - **Tests:** `gallery-store.spec.ts` (unit) and `tests/e2e/specs/gallery.spec.mjs`. The end-to-end spec drives the
   real screen over a Playwright fake of the image routes, because the number of images the Compose test project draws
   since P05.7 depends on the earlier specs and the mode switch's timing; the

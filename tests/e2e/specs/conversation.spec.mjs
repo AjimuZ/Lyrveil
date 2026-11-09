@@ -3,9 +3,9 @@
 //
 // Replies, alternatives, a reload while streaming, simultaneous chats and reconnecting are in
 // conversation-stream.spec.mjs. The messages sent here also get a reply from the stack's fake runtime.
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+import { axeViolations } from '../support/axe.mjs';
 import { bubble, openChat, sendText, startChatWithNewCharacter, uniqueName } from '../support/chats.mjs';
 
 test.beforeEach(async ({ page }) => {
@@ -27,8 +27,7 @@ test('markup in messages renders as text (T-SEC-03)', async ({ page }) => {
   await expect(sent.locator('img, b, script')).toHaveCount(0);
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
 
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.map((violation) => ({ rule: violation.id, targets: violation.nodes.map((node) => node.target) }))).toEqual([]);
+  expect(await axeViolations(page)).toEqual([]);
 });
 
 test('a message can be edited and deleted, and both survive a reload (T-MSG-05, T-MSG-06)', async ({ page }) => {

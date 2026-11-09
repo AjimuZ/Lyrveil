@@ -159,7 +159,7 @@ Implementation notes (P08.1a):
 - `ob-menu-item` takes `kind` (`menuitem` or `option`) instead of `role`, so the host element does not also carry the attribute. A selected option has `aria-selected`; a selected menu item has `aria-current`.
 - `ob-field` styles the native `input`, `textarea` or `select` projected in it through `styles/global.scss`; the control sets `aria-describedby` to `{fid}-hint` and `{fid}-error`.
 - `ob-toast` is the outlet; the `ToastService` queues messages and removes each after 4 seconds. No screen places the outlet: the notification center (P07.5) draws its own toast markup for new notices instead.
-- P08.1b: the chat list, conversation, gallery and scenarios screens show `ob-skeleton` while loading and `ob-empty-state` when empty. The conversation's new messages fade in and rise 4 px in 120 ms, and under `prefers-reduced-motion` the typing squares give way to the typing text. The memory, profile, creator, models and resources screens still use plain status and empty notes; no screen places the `ob-toast` outlet. Covered by `tests/e2e/specs/empty-loading.spec.mjs` (written, not yet run).
+- P08.1b: the chat list, conversation, gallery and scenarios screens show `ob-skeleton` while loading and `ob-empty-state` when empty. The conversation's new messages fade in and rise 4 px in 120 ms, and under `prefers-reduced-motion` the typing squares give way to the typing text. The memory, profile, creator, models and resources screens still use plain status and empty notes; no screen places the `ob-toast` outlet. Covered by `tests/e2e/specs/empty-loading.spec.mjs` (passed in the P08 exit, [evidence](verification/2026-11-10-p08-exit.md)).
 
 ## Motion
 
@@ -239,7 +239,9 @@ Sidebar and conversation. The context panel opens as a dialog.
   it. `body` sets `overflow-wrap: anywhere`, so no long word or identifier widens a screen.
 - **Tested by** `core/shell/viewport.spec.ts` and `context-panel-storage.spec.ts` (unit), and
   `tests/e2e/specs/responsive.spec.mjs` (T-QLT-04: seven screens and the conversation at 320, 640, 1024 and 1440 px
-  and at 200 % zoom, emulated as a viewport of half the size). Written, not yet run.
+  and at 200 % zoom, emulated as a viewport of half the size). Passed in the P08 exit, with the other `e2e` specs
+  ([evidence](verification/2026-11-10-p08-exit.md)). The general settings and the data settings are the placeholder
+  screen, so the check on them covers the placeholder only.
 
 ## Accessibility
 
@@ -258,10 +260,11 @@ Sidebar and conversation. The context panel opens as a dialog.
 Implementation notes (P08.3):
 
 - **Focus ring:** `:focus-visible` in `styles/global.scss` draws it for every control; no stylesheet removes it. A skip link (**Vai al contenuto**) is the first Tab stop, and a change of path moves focus to the screen's `h1` ([Frontend](frontend.md#keyboard) gives the exceptions).
-- **Dialogs:** every dialog is a native `<dialog>` opened with `showModal()` (`ob-dialog`, the new-conversation dialog, the image form and the gallery lightbox). The browser makes the page behind it inert, so Tab stays inside, Esc closes it, and focus returns to the control that opened it. The shortcut help (`?`) is one of them.
+- **Dialogs:** every dialog is a native `<dialog>` opened with `showModal()` (`ob-dialog`, the new-conversation dialog, the image form and the gallery lightbox). The browser makes the page behind it inert, Esc closes it, and focus returns to the control that opened it. `ob-dialog` also wraps Tab from the last control to the first and Shift+Tab the other way, because the browser alone hands focus to its own interface after the last control. The shortcut help (`?`) is one of them.
+- **Scrolling screen area:** `main` has `tabindex="0"`, so a keyboard user can scroll a screen whose content has no focusable control (`axe` rule `scrollable-region-focusable`).
 - **Live regions:** the shell has one `aria-live="polite"` region (`Announcer`) for a finished reply; toasts are `aria-live="polite"`; the conversation's typing, drawing and queue status, image progress, loading placeholders and the other status lines are `role="status"`, and errors are `role="alert"`. The message list is a `role="log"` with `aria-live="off"`, which is what keeps streaming text from being read token by token.
 - **Departure from the table:** the chat list is a list of links with a row menu, not a `listbox`. A `listbox` holds options, not links and buttons, and each row has both, so the list keeps the semantics that match its content.
-- **Tested by** `core/shell/shortcuts.spec.ts`, `core/shell/focus.spec.ts` and `features/conversation/chat-find.spec.ts` (unit), and `tests/e2e/specs/accessibility.spec.mjs` (T-QLT-03: `axe` on the ten screens and the keyboard walkthroughs). Written, not yet run.
+- **Tested by** `core/shell/shortcuts.spec.ts`, `core/shell/focus.spec.ts` and `features/conversation/chat-find.spec.ts` (unit), and `tests/e2e/specs/accessibility.spec.mjs` (T-QLT-03: `axe` on the ten screens and the keyboard walkthroughs). Passed in the P08 exit ([evidence](verification/2026-11-10-p08-exit.md)); `axe` is run once the entrance animations have finished, because it reads the color of text that is still fading in.
 
 ## Interface text
 
