@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- Long histories and large galleries (P08.4). A conversation of thousands of messages now keeps only the messages near
+  the screen in the page (from 200 rows on), so it opens, scrolls and loads older pages without slowing down; a shorter
+  chat is unchanged. Formatting the dates of a long chat is cached, so a streaming reply no longer reformats them. The
+  gallery already loaded thumbnails lazily and in pages, and is now checked with 1,000 images. A backend test reports
+  that the stable prompt prefix stays byte-identical over a scripted conversation of twelve replies for each template
+  family (it passes). The end-to-end spec `tests/e2e/specs/performance.spec.mjs` (10,000 messages and 1,000 images, with
+  recorded timings) and the unit spec `virtual-window.spec.ts` are written but have not been run yet
+  ([ADR 0043](docs/decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md)).
 - Keyboard, focus and live regions (P08.3). `Ctrl+K` searches the conversations, `Ctrl+N` starts a new one,
   `Alt+↑` and `Alt+↓` move to the previous or next conversation, `Ctrl+F` inside a chat finds text in the loaded
   messages, `↑` in an empty composer edits your last message, `Esc` leaves the find bar, the editor and a confirmation,

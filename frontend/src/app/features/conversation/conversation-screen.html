@@ -67,14 +67,18 @@
       <ob-empty-state icon="empty-chat" [message]="'conv.empty' | t" />
     }
     <div class="log" role="log" aria-live="off" [attr.aria-label]="'conv.log' | t">
-    <ol class="messages" [attr.aria-label]="'conv.messages' | t">
-      @for (row of rows(); track row.key) {
+    <ol class="messages" #list [attr.aria-label]="'conv.messages' | t">
+      @if (spaceBefore() > 0) {
+        <li [lyrSpace]="spaceBefore()"></li>
+      }
+      @for (row of shownRows(); track row.key) {
         @if (row.kind === 'day') {
-          <li class="day"><span>{{ row.label }}</span></li>
+          <li class="day" [attr.data-row]="row.key"><span>{{ row.label }}</span></li>
         } @else {
           @let edit = editing();
           <li
             class="message"
+            [attr.data-row]="row.key"
             [id]="'msg-' + row.key"
             [class.mine]="row.mine"
             [class.found]="matchSet().has(row.key)"
@@ -190,6 +194,9 @@
             }
           </li>
         }
+      }
+      @if (spaceAfter() > 0) {
+        <li [lyrSpace]="spaceAfter()"></li>
       }
       @for (entry of store.pending(); track entry.clientMessageId) {
         <li class="message mine pending" [attr.data-state]="entry.state">

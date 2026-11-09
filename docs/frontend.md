@@ -138,7 +138,7 @@ conversation screen does).
 ### 2. Conversation
 
 - Header: avatar, name, status (typing, queued, drawing), search, context panel toggle, menu.
-- Messages: virtual scrolling with `@angular/cdk`, upward paging, day separators in Italian such as `sabato 1 novembre`, and timestamps. User messages show a simulated read state: one check `sent`, two checks `read`.
+- Messages: virtual scrolling (our own window, [ADR 0043](decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md)), upward paging, day separators in Italian such as `sabato 1 novembre`, and timestamps. User messages show a simulated read state: one check `sent`, two checks `read`.
 - Bubble actions, on hover or long press: edit, regenerate (latest reply), alternatives `< 2/3 >` (latest reply), delete, "Ricorda questo", copy.
 - Images: thumbnail in the bubble. A lightbox shows the original full screen, with metadata in a collapsible section and regenerate. Arrow keys move between images.
 - Placeholders: typing indicator, queued state, image progress with phase text and cancel.
@@ -206,10 +206,20 @@ provides its own `ConversationStore` and opens the chat named by the route.
   **Apri il profilo** and **Apri la memoria**. From 1024 px it is a collapsible 320 px column (remembered per browser);
   below that it opens as a dialog. Its other contents (relationship, recent events, images, scenario, proactive
   settings) are not delivered. See [Design system](design-system.md#implementation-notes-p082).
+- **Long histories (P08.4)** (`virtual-window.ts`, `virtual-spacer.ts`, `conversation-screen.*`). History loads in
+  pages of 50 as the list is scrolled to its top. From 200 rows (messages and day separators) the list draws only the rows
+  within 800 px of the viewport, between two spacers; a row's height is measured once it has been drawn, and a row never
+  drawn is assumed to be 96 px (48 px for a day separator). While the screen follows the bottom the window is the
+  bottom, an older page keeps the reader's place, and the chat's find bar (Ctrl+F) moves the window to a match before it
+  scrolls there. A shorter list is drawn whole. Formatting the day and clock of a message is cached per message, so a
+  streamed piece does not format thousands of dates again. A virtual list leaves the rows outside the window out of the
+  DOM, so a screen reader and the browser's own find see only the window. Tests: `virtual-window.spec.ts` (unit, written
+  and not run) and the first test of `tests/e2e/specs/performance.spec.mjs` (10,000 synthetic messages over Playwright
+  routes: the open, 199 pages, a bounded DOM, scroll frames and a jump to the newest message, with the timings attached;
+  written and not run).
 - **Not delivered, so no control is drawn for it:** the rest of the context panel, a lightbox in the conversation (the gallery has
   one), regenerating or cancelling an
-  image, the contextual proposal card, "Ricorda questo" and
-  virtual scrolling (`@angular/cdk` is not a dependency yet; the list renders every loaded page). The chat list does not
+  image, the contextual proposal card and "Ricorda questo". The chat list does not
   navigate to a new chat after **Inizia conversazione**.
 - **Direct visits to a deep route.** `index.html` has no `<base>` element, because the Content-Security-Policy says
   `base-uri 'none'` and the browser refused it, so a reload on `/chats/:conversationId` loaded the assets from
@@ -383,8 +393,12 @@ offered only for an image that has a chat); and **Elimina** with an inline confi
 `data/media`, so the gallery works with ComfyUI off. A character's primary avatar cannot be deleted (`409`, with the
 reason on screen).
 Not delivered: the conversation and date filters (the route takes `conversation_id`, the screen does not offer it),
-virtual scrolling (paging plus lazy thumbnails instead), the advanced regenerate dialog with editable prompts, and
+virtual scrolling (paging plus lazy thumbnails instead, [ADR 0043](decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md)), the advanced regenerate dialog with editable prompts, and
 save-as-avatar (an avatar is chosen from the profile's avatar tools).
+- **A gallery of 1,000 images (P08.4):** no change to the screen. The second test of `tests/e2e/specs/performance.spec.mjs`
+  loads all 42 pages of 24 over a Playwright fake (`tests/e2e/support/images.mjs`) without scrolling, and checks that the
+  browser fetched far fewer than 1,000 thumbnails and no original, then that scrolling to the end fetches the last ones
+  (written and not run).
 - **Tests:** `gallery-store.spec.ts` (unit) and `tests/e2e/specs/gallery.spec.mjs`. The end-to-end spec drives the
   real screen over a Playwright fake of the image routes, because the number of images the Compose test project draws
   since P05.7 depends on the earlier specs and the mode switch's timing; the

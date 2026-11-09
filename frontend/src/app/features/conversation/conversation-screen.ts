@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  afterEveryRender,
   afterNextRender,
   computed,
   effect,
@@ -34,6 +35,8 @@ import { dayKey, formatClock, formatDayLabel } from './day-label';
 import { loadDraft, saveDraft } from './draft-storage';
 import { ImageDialog } from './image-dialog';
 import { ImageProgress, PHASE_TEXT, progressFraction } from './image-request';
+import { VirtualSpacer } from './virtual-spacer';
+import { offsetOf, virtualWindow } from './virtual-window';
 
 /** The composer shows its counter from this many characters, so it is quiet until the limit is near. */
 export const COUNTER_FROM = 7000;
@@ -42,6 +45,18 @@ export const COUNTER_FROM = 7000;
 const BOTTOM_SLACK_PX = 80;
 /** How close to the top the list loads the next older page. */
 const TOP_SLACK_PX = 40;
+
+/**
+ * From this many rows (messages and day separators) the list is virtual: only the rows near the viewport are in the
+ * DOM, and two spacers stand in for the others. A shorter list is drawn whole, which keeps every row reachable by
+ * assistive technology and by the browser's own find.
+ */
+export const VIRTUAL_FROM = 200;
+/** Pixels drawn above and below the viewport, so ordinary scrolling and a keyboard step never meet an empty edge. */
+const OVERSCAN_PX = 800;
+/** The height assumed for a row that was never drawn; a row replaces it with its real height once it has been. */
+const ESTIMATE_MESSAGE_PX = 96;
+const ESTIMATE_DAY_PX = 48;
 
 /** The statuses of a character message that count as "the character has started answering". */
 const STARTED: ReadonlySet<string> = new Set(['streaming', 'complete', 'interrupted']);
@@ -89,8 +104,12 @@ export interface DayRow {
  * composer's image button opens the image form; an image message shows its thumbnail, and while it is drawn the phase
  * and the step count of the current pass. The text typed and not sent is kept per chat (`draft-storage.ts`), the
  * user's messages show one check or two (the character started answering), and the newest finished reply is reported
- * read to the server. The lightbox, regenerating an image, cancelling a draw, search, "Ricorda questo" and virtual
- * scrolling are planned (docs/frontend.md), so the screen draws no control for them.
+ * read to the server. The lightbox, regenerating an image, cancelling a draw, search and "Ricorda questo" are planned
+ * (docs/frontend.md), so the screen draws no control for them.
+ *
+ * Long histories (P08.4): history loads in pages of 50 as the user scrolls up, and from `VIRTUAL_FROM` rows on only the
+ * rows near the viewport are in the DOM (`virtual-window.ts`), between two spacers sized from the measured height of
+ * the rows drawn so far and an estimate for the others. A shorter list is drawn whole.
  *
  * The context panel (P08.2) holds links to the character's profile and Memory Studio, the part of the panel that
  * other screens back today. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
@@ -113,6 +132,7 @@ export interface DayRow {
     ObEmptyState,
     ObIcon,
     ObSkeleton,
+    VirtualSpacer,
   ],
   providers: [ConversationStore],
   host: { '(document:visibilitychange)': 'becameVisible()', '(keydown.escape)': 'escape($event)' },
@@ -128,14 +148,26 @@ export class ConversationScreen {
   private readonly translator = inject(Translator);
   private readonly injector = inject(Injector);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
+  private readonly list = viewChild<ElementRef<HTMLElement>>('list');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
   private readonly imageDialog = viewChild.required(ImageDialog);
   private readonly editor = viewChild<ElementRef<HTMLTextAreaElement>>('editor');
   private readonly finder = viewChild(ChatFind);
   private readonly shortcuts = inject(ShortcutService);
   private readonly announcer = inject(Announcer);
-  /** Whether new text scrolls into view: true until the user scrolls up. */
-  private followBottom = true;
+  /** Whether new text scrolls into view: true until the user scrolls up. A virtual list draws the bottom while it is. */
+  private readonly follow = signal(true);
+  /** Pixels the viewport's top is below the top of the message list (virtual list only), and the viewport's height. */
+  private readonly listScroll = signal(0);
+  private readonly viewport = signal(800);
+  /** The measured height of each drawn row, with the gap that follows it, by row key. Cleared when another chat opens. */
+  private readonly heights = new Map<string, number>();
+  /** Counts changes of `heights`, so the window is computed again when a row turns out taller or shorter than assumed. */
+  private readonly heightsVersion = signal(0);
+  /** The gap the list puts between rows, in pixels; a spacer stands in for rows and their gaps, minus one. */
+  private rowGap = 8;
+  /** The day, clock and locale each message was labelled with, so a long list is not formatted again on every change. */
+  private readonly labels = new WeakMap<Message, { locale: string; day: string; clock: string }>();
   /** The id of the newest finished reply already announced; undefined until the chat has loaded (history is no news). */
   private announcedReply: string | null | undefined = undefined;
 
@@ -188,7 +220,7 @@ export class ConversationScreen {
     );
     let currentDay = '';
     messages.forEach((message, index) => {
-      const day = dayKey(message.created_at);
+      const { day, clock } = this.labelsOf(message, locale);
       if (day !== '' && day !== currentDay) {
         currentDay = day;
         rows.push({ kind: 'day', key: `day-${day}`, label: formatDayLabel(message.created_at, now, locale) });
@@ -203,7 +235,7 @@ export class ConversationScreen {
         key: message.id,
         message,
         text,
-        clock: formatClock(message.created_at, locale),
+        clock,
         mine: message.author === 'user',
         waiting: active && text === '',
         afterImage: waitingForImage.has(message.id),
@@ -224,6 +256,28 @@ export class ConversationScreen {
     });
     return rows;
   });
+
+  /**
+   * The span of `rows` to draw, or null while the list is short enough to draw whole (`VIRTUAL_FROM`). While the
+   * screen follows the bottom the window is the bottom, whatever the last scroll event said.
+   */
+  private readonly span = computed(() => {
+    const rows = this.rows();
+    this.heightsVersion();
+    if (rows.length < VIRTUAL_FROM) {
+      return null;
+    }
+    const top = this.follow() ? Infinity : this.listScroll();
+    return virtualWindow(rows.length, (index) => this.heightOf(rows[index]), top, this.viewport(), OVERSCAN_PX);
+  });
+  /** The rows in the DOM: all of them for a short list, the window of them for a long one. */
+  protected readonly shownRows = computed(() => {
+    const span = this.span();
+    return span === null ? this.rows() : this.rows().slice(span.start, span.end);
+  });
+  /** The heights, in pixels, of the spacers that stand in for the rows above and below the window. */
+  protected readonly spaceBefore = computed(() => Math.max(0, (this.span()?.before ?? 0) - this.rowGap));
+  protected readonly spaceAfter = computed(() => Math.max(0, (this.span()?.after ?? 0) - this.rowGap));
 
   /** The keys of the messages that contain the find text, in display order. Empty while the bar is closed. */
   protected readonly matches = computed<readonly string[]>(() => {
@@ -266,11 +320,10 @@ export class ConversationScreen {
       if (key === null) {
         return;
       }
-      this.followBottom = false;
-      afterNextRender(() => document.getElementById(`msg-${key}`)?.scrollIntoView?.({ block: 'center' }), {
-        injector: this.injector,
-      });
+      untracked(() => this.reveal(key));
     });
+    // Drawn rows are measured after every render, so a virtual list knows the real height of what it has drawn.
+    afterEveryRender(() => this.measure());
     // Opening the editor puts the caret at the end of the text; closing it returns focus to the composer.
     let wasEditing = false;
     effect(() => {
@@ -322,6 +375,9 @@ export class ConversationScreen {
       const id = this.conversationId();
       untracked(() => {
         this.announcedReply = undefined;
+        this.heights.clear();
+        this.listScroll.set(0);
+        this.follow.set(true);
         this.closeFind(false);
         this.draft.set(loadDraft(id));
         void this.store.open(id);
@@ -337,7 +393,7 @@ export class ConversationScreen {
     effect(() => {
       this.rows();
       this.store.pending();
-      if (this.followBottom) {
+      if (this.follow()) {
         afterNextRender(() => this.scrollToBottom(), { injector: this.injector });
       }
     });
@@ -359,7 +415,8 @@ export class ConversationScreen {
     if (element === undefined) {
       return;
     }
-    this.followBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX;
+    this.follow.set(element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK_PX);
+    this.readViewport(element);
     if (element.scrollTop <= TOP_SLACK_PX && this.store.hasOlder()) {
       void this.older();
     }
@@ -369,13 +426,22 @@ export class ConversationScreen {
   protected async older(): Promise<void> {
     const element = this.scroller()?.nativeElement;
     const fromBottom = element === undefined ? 0 : element.scrollHeight - element.scrollTop;
-    this.followBottom = false;
+    // Distance from the bottom of the virtual list to the viewport's top, in the list's own measure.
+    const virtualBefore = this.span();
+    const listFromBottom = (virtualBefore?.total ?? 0) - this.listScroll();
+    this.follow.set(false);
     await this.store.loadOlder();
+    const total = virtualBefore === null ? undefined : this.span()?.total;
+    if (total !== undefined) {
+      // Draw the rows around the place the user was reading now, not after the scroll position has been restored.
+      this.listScroll.set(Math.max(0, total - listFromBottom));
+    }
     afterNextRender(
       () => {
-        if (element !== undefined) {
-          element.scrollTop = element.scrollHeight - fromBottom;
+        if (element === undefined) {
+          return;
         }
+        element.scrollTop = total === undefined ? element.scrollHeight - fromBottom : this.listOffset(element) + this.listScroll();
       },
       { injector: this.injector },
     );
@@ -388,7 +454,7 @@ export class ConversationScreen {
     const text = this.draft();
     this.draft.set('');
     saveDraft(this.conversationId(), '');
-    this.followBottom = true;
+    this.follow.set(true);
     void this.store.send(text);
     this.composer()?.nativeElement.focus();
   }
@@ -553,5 +619,96 @@ export class ConversationScreen {
     if (element !== undefined) {
       element.scrollTop = element.scrollHeight;
     }
+  }
+
+  /** The day key, clock and locale of `message`, computed once per message object and locale. */
+  private labelsOf(message: Message, locale: string): { day: string; clock: string } {
+    const known = this.labels.get(message);
+    if (known !== undefined && known.locale === locale) {
+      return known;
+    }
+    const made = { locale, day: dayKey(message.created_at), clock: formatClock(message.created_at, locale) };
+    this.labels.set(message, made);
+    return made;
+  }
+
+  /** The height a row takes in the list: what was measured when it was drawn, or an estimate before. */
+  private heightOf(row: DayRow | MessageRow | undefined): number {
+    if (row === undefined) {
+      return 0;
+    }
+    return this.heights.get(row.key) ?? (row.kind === 'day' ? ESTIMATE_DAY_PX : ESTIMATE_MESSAGE_PX);
+  }
+
+  /** Where the message list starts inside the scroller, in pixels from the scroller's scrollable top. */
+  private listOffset(scroller: HTMLElement): number {
+    const list = this.list()?.nativeElement;
+    return list === undefined ? 0 : list.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  }
+
+  /** Records the scroll position and the viewport height that the window of a virtual list is computed from. */
+  private readViewport(scroller: HTMLElement): void {
+    this.listScroll.set(Math.max(0, scroller.scrollTop - this.listOffset(scroller)));
+    this.viewport.set(scroller.clientHeight);
+  }
+
+  /**
+   * Reads the height of every drawn row of a virtual list (its box, its margins and the gap after it). A row whose
+   * height differs from what the window assumed makes the window be computed again; when the list follows the bottom
+   * the bottom is scrolled to again, because the rows it just measured moved it. Stops changing once every drawn row
+   * has been measured, so it settles instead of looping.
+   */
+  private measure(): void {
+    const scroller = this.scroller()?.nativeElement;
+    const list = this.list()?.nativeElement;
+    if (scroller === undefined || list === undefined || this.span() === null) {
+      return;
+    }
+    if (this.viewport() !== scroller.clientHeight) {
+      this.viewport.set(scroller.clientHeight);
+    }
+    this.rowGap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
+    let changed = false;
+    for (const element of Array.from(list.querySelectorAll<HTMLElement>(':scope > li[data-row]'))) {
+      const key = element.dataset['row'];
+      if (key === undefined) {
+        continue;
+      }
+      const style = getComputedStyle(element);
+      const margins = (Number.parseFloat(style.marginTop) || 0) + (Number.parseFloat(style.marginBottom) || 0);
+      const height = Math.round(element.getBoundingClientRect().height + margins + this.rowGap);
+      if (Math.abs((this.heights.get(key) ?? 0) - height) >= 1) {
+        this.heights.set(key, height);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.heightsVersion.update((version) => version + 1);
+      if (this.follow()) {
+        afterNextRender(() => this.scrollToBottom(), { injector: this.injector });
+      }
+    }
+  }
+
+  /**
+   * Scrolls the message with `key` to the middle of the viewport, which also ends following the bottom. In a virtual
+   * list the row may not be drawn yet, so the window is first moved to where the row is; the exact scroll follows once
+   * the row exists.
+   */
+  private reveal(key: string): void {
+    this.follow.set(false);
+    const rows = this.rows();
+    const element = this.scroller()?.nativeElement;
+    if (this.span() !== null && element !== undefined) {
+      const index = rows.findIndex((row) => row.key === key);
+      if (index >= 0) {
+        const middle = offsetOf(index, (position) => this.heightOf(rows[position])) - (this.viewport() - this.heightOf(rows[index])) / 2;
+        this.listScroll.set(Math.max(0, middle));
+        element.scrollTop = this.listOffset(element) + this.listScroll();
+      }
+    }
+    afterNextRender(() => document.getElementById(`msg-${key}`)?.scrollIntoView?.({ block: 'center' }), {
+      injector: this.injector,
+    });
   }
 }

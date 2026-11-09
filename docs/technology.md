@@ -64,7 +64,7 @@ Starlette and provides `to_thread`.
 | Angular framework | 22.2.4 | MIT | Active until 2027-06. Zoneless by default since v21. Signal Forms stable since v22. |
 | Angular CLI and `@angular/build` | 22.2.5 | MIT | Build and Vitest integration. |
 | `@angular/aria` | 22.2.5 | MIT | Headless accessible listbox, menu, tabs, combobox. |
-| `@angular/cdk` | 22.2.5 | MIT | Overlay, focus trap, virtual scrolling. |
+| `@angular/cdk` | 22.2.5 | MIT | Overlay, focus trap. Not installed yet. The message list does its own windowing ([ADR 0043](decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md)). |
 | TypeScript | 6.0.3 | Apache-2.0 | Angular 22 requires `>=6.0 <6.1`. The npm `latest` tag is 7.0.2 and must not be used. |
 | RxJS | 7.8.2 | Apache-2.0 | Required by Angular. Used only at HTTP and WebSocket boundaries. |
 | tslib | 2.9.1 | 0BSD | TypeScript helpers, required by Angular with `importHelpers`. |

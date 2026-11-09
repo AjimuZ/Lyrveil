@@ -1,12 +1,13 @@
 """Tests of lyrveil/context/blocks.py and lyrveil/context/builder.py without a database: T-CON-11 (length bands, the
-anchor, the examples of block 3) and T-MOD-05 with the full context (two replies share the stable text and the history).
+anchor, the examples of block 3), T-MOD-05 with the full context (two replies share the stable text and the history) and
+the prefix of a scripted conversation (P08.4).
 
 The runtime is a fake whose tokenizer counts whitespace-separated words; the retriever is a fake that packs fixed items
 by their estimated cost.
 """
 
-from collections.abc import AsyncIterator, Sequence
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator, Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any, get_args
 
 import pytest
@@ -301,3 +302,42 @@ async def test_consecutive_replies_share_the_stable_text_and_the_history(family:
         assert "[Contesto per" not in prompt.prefix
         assert "Ricordi pertinenti" not in prompt.prefix
         assert "Ricorda: sei" not in prompt.prefix
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("family", FAMILIES)
+async def test_the_stable_prefix_stays_byte_identical_across_a_scripted_conversation(
+    family: TextTemplate, record_property: Callable[[str, object], None]
+) -> None:
+    """P08.4: over twelve replies of one chat, with different memories, notes and clock at every turn, the prefix of
+    each reply (the stable text and the history) starts with the prefix of the one before, byte for byte, so KoboldCpp
+    reuses its cache. Reports the sizes per turn on the test's output and as the `prefix_stability` property."""
+    character = card(examples=[example(1)])
+    previous = b""
+    sizes: list[int] = []
+    for turn in range(1, 13):
+        assembly = await build(
+            character,
+            chat(2 * turn + 1),
+            retriever=Retriever([memory(turn, f"Anna ricorda il fatto numero {turn}.")]),
+            family=family,
+            notes=(f"Nota del turno {turn}.",),
+            now=NOW + timedelta(hours=turn),
+        )
+        prompt = assembly.prompt
+        prefix = prompt.prefix.encode("utf-8")
+        assert prompt.text.encode("utf-8").startswith(prefix)
+        assert prefix.startswith(previous), f"turn {turn}: the prefix of turn {turn - 1} is no longer its start"
+        assert len(prefix) > len(previous), f"turn {turn}: the history did not grow the prefix"
+        # What changes between replies sits after the prefix, in the dynamic context and the anchor.
+        dynamic = prompt.text[len(prompt.prefix) :]
+        assert f"fatto numero {turn}." in dynamic
+        assert f"Nota del turno {turn}." in dynamic
+        assert "fatto numero" not in prompt.prefix
+        assert "Nota del turno" not in prompt.prefix
+        sizes.append(len(prefix))
+        previous = prefix
+
+    report = f"{family}: {len(sizes)} replies, prefix bytes per reply {sizes}, every prefix extends the one before"
+    record_property("prefix_stability", report)
+    print(f"prefix stability, {report}")

@@ -728,6 +728,14 @@ KoboldCpp reuses the cached part of the prompt up to the first changed token. To
 - The bonus for `previous_ids` avoids needless memory churn.
 - State changes only after extraction.
 
+`test_the_stable_prefix_stays_byte_identical_across_a_scripted_conversation` (P08.4, in
+`backend/tests/unit/test_context_builder.py`) checks the first point over twelve replies of one chat for each template
+family. Memories, notes and the clock change at every turn, and the test asserts that the prefix of each reply starts
+with the bytes of the one before and that the changing text sits after the prefix. It prints the prefix size of every
+reply and records it as the `prefix_stability` property. The text it checks is the prompt text, not the cache itself:
+KoboldCpp's reuse is measured through `last_process` (R-10). The test does not cover a history that outgrows the
+context window, where the budget decides what the prompt keeps.
+
 A reply therefore reprocesses the previous exchange and the new dynamic context, about 1,000 to 2,500
 tokens. Gemma 4 profiles keep a sliding-window cache, so KoboldCpp also replays up to 2,048 cached tokens
 when the reuse point lies beyond that cache. SWA padding and SmartCache are measured levers for this

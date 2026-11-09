@@ -241,6 +241,9 @@
 - A shortcut that must act on a screen not yet drawn sets a `pending` signal on a root service, navigates, and the screen's effect performs it inside `afterNextRender` and then consumes it. The root's route-focus logic skips its own focus move while `pending` is set.
 - A message list that streams is a `role="log"` with `aria-live="off"` inside the screen, plus an `Announcer` service that writes one sentence to a single `aria-live="polite"` region of the shell when the item finishes. The `ol` stays a list inside a wrapper `div role="log"`, because `li` needs a real list parent.
 - Pure key-matching functions (`shortcutFor`, `neighbourId`) take plain objects so unit tests need no DOM events. Typing-target detection is separate, so a bare character shortcut such as `?` never fires inside a field.
+- Make a long list virtual only past a row-count threshold (here 200). Short lists stay fully in the DOM, so existing specs, find and assistive technology keep working.
+- When a window of rows depends on measured heights, use an estimate for rows never drawn. Anchor the window to the bottom through the follow signal rather than the last scroll event, and restore the reader's place after a prepend by distance from the bottom, measured in the list's own units.
+- Cache `Intl.DateTimeFormat` instances and per-item formatted labels (a `WeakMap` keyed by the item object) when a list of thousands is recomputed on every streamed update.
 
 ---
 
@@ -2294,4 +2297,24 @@ Both are recorded in the docs.
   - `conversation-screen.scss` is at 7.59 kB of an 8 kB error budget, so further additions there must go into separate component stylesheets. I moved the find bar into `chat-find.scss`, and the conversation now uses the global `.ob-sr-only` instead of its own copy.
   - Playwright's `page.route` fakes for the gallery images are now duplicated in `accessibility.spec.mjs` and `gallery.spec.mjs`. Move them to `tests/e2e/support/` if a third spec needs them.
   - `ShortcutService.pending` is the pattern for a global shortcut whose target screen may not exist yet: record the request, navigate, and let the screen perform and consume it.
+---
+
+## 2026-11-09T22:24:23Z - P08.4
+- The conversation now draws only a window of its rows once it reaches 200 rows. The prefix-stability test passes, and lint and the strict build pass. The two end-to-end tests and the new frontend unit spec are written but have not been run.
+
+- **Conversation:** `virtual-window.ts` computes the window from the scroll position, the viewport and the row heights. A row's height is measured once it has been drawn, and a row never drawn is assumed to be 96 px (48 px for a day separator). Two spacers (`virtual-spacer.ts`) stand in for the rows left out. A shorter chat is drawn whole, so the existing 60-message paging test is untouched. Date and clock formatting is now cached, so a streamed piece does not reformat thousands of dates. I did not add `@angular/cdk`; ADR 0043 explains why.
+- **Gallery:** the screen already paged (24 per page) and loaded thumbnails lazily, so it has no code change. I moved the Playwright image fake into `tests/e2e/support/images.mjs`, and `gallery.spec.mjs` now uses it.
+- **Prefix stability:** a new test in `test_context_builder.py` runs twelve scripted replies for each of the three template families, with the memories, notes and clock changing every turn. The prefix of each reply starts with the bytes of the previous one. It prints the sizes and records them as `prefix_stability`. It passed.
+- **End-to-end:** `performance.spec.mjs` has two tests, 10,000 synthetic messages and 1,000 synthetic images, both attaching recorded timings. The conversation test checks that the DOM stays small while all 200 pages load, then scrolls and jumps back to the newest message. The gallery test loads all pages without scrolling and checks the browser fetched far fewer than 1,000 thumbnails.
+- **Checks:** `scripts/lyrveil.cmd test lint` passed (docs checks, ruff, mypy, eslint, strict build). The scripted-conversation unit test passed through `scripts/lyrveil.cmd test unit -k scripted -s`.
+- **Not run:** `virtual-window.spec.ts` and `performance.spec.mjs`; I did not run any frontend unit or e2e test. The scrolling behaviour (keeping the reader's place when an older page loads, and the find bar moving the window to a match) is checked only by reading the code and by the build.
+- Files changed: frontend/src/app/features/conversation/virtual-window.ts, frontend/src/app/features/conversation/virtual-window.spec.ts, frontend/src/app/features/conversation/virtual-spacer.ts, frontend/src/app/features/conversation/day-label.ts, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, backend/tests/unit/test_context_builder.py, tests/e2e/specs/performance.spec.mjs, tests/e2e/specs/gallery.spec.mjs, tests/e2e/support/images.mjs, docs/decisions/0043-windowed-message-list-without-cdk-virtual-scroll.md, docs/decisions/README.md, docs/frontend.md, docs/technology.md, docs/memory-engine.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <args>` appends the args after `tests/unit` for both Python components, so pass only pytest options such as `-k name -s`, not a file path. It ran the backend scripted-prefix test (3 passed). It does not run the frontend unit specs.
+  - `virtual-window.spec.ts` and `performance.spec.mjs` have never run. If the unit or e2e level fails, check them first: the scroll restore after loading an older page, the bottom-anchored window, and the DOM bound of 150 rows are the likely weak points.
+  - The template lint (`@angular/eslint/template/no-inline-styles`) rejects `[style.height.px]` in a template. Put a size binding in a directive's `host` metadata instead (see `virtual-spacer.ts`).
+  - The virtual list measures rows after every render through `afterEveryRender`. It only writes a signal when a height changed by 1 px or more, so it settles instead of looping.
+  - `conversation-screen.scss` is at 7.61 kB of the 8 kB error budget, with a warning from 6 kB. Any further styles for that screen must go in a separate component stylesheet.
+  - `tests/e2e/support/images.mjs` now holds the image fake (`fakeImages(page, { total, pageSize })`). `accessibility.spec.mjs` still has its own copy, so move it there too if it is touched.
+  - Performance specs script-click `Carica altre` instead of using a real click. A real click scrolls the page, which would make the lazy thumbnails load as the list grows.
 ---

@@ -46,3 +46,4 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0040](0040-load-failures-launch-levels-and-timed-recovery.md) | Load failures in the state document, launch levels in the backend, timed recovery | Accepted |
 | [0041](0041-shutdown-drain-and-stored-lifecycle-events.md) | Shutdown drain through the database, lifecycle events copied at each new GPU state | Accepted |
 | [0042](0042-profile-reload-as-a-queued-job-and-name-only-registration.md) | Profile reload as a queued maintenance job, the tier read by the backend, name-only registration | Accepted |
+| [0043](0043-windowed-message-list-without-cdk-virtual-scroll.md) | A windowed message list of our own instead of the CDK virtual scroll | Accepted |

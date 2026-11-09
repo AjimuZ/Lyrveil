@@ -171,6 +171,11 @@
   list-style: none;
 }
 
+// Stands in for the rows a long list does not draw (virtual-window.ts); only its height matters.
+.space {
+  flex: none;
+}
+
 .day {
   align-self: center;
   margin: var(--ob-space-3) 0 var(--ob-space-1);
