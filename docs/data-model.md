@@ -201,7 +201,7 @@ Delivered in revision `0003` (P02.5a) with `CHECK` lists, `json_valid` on the JS
 `scenario_id` is a plain column (see `scenarios` above for why it stays one). `characters` has all its columns but none of its child
 tables yet (P03.1a). The list orders pinned chats first (newest pin first), then by `last_message_at`, or
 `created_at` while a chat has no message. Restoring a deleted conversation sets `active`, because the status before
-the delete is not stored; cancelling its scheduled events joins the delete with `scheduled_events` (P07).
+the delete is not stored. The delete also cancels the conversation's `pending` scheduled events (P07.1).
 
 ### `messages`
 
@@ -616,7 +616,13 @@ Delivered in revision `0014` (P05.5a). The keys to `conversations` and `messages
 | `outcome_reason` | TEXT | |
 | `created_at`, `updated_at` | TEXT | |
 
-Index: `(status, due_at)`.
+Indexes: `(status, due_at)` and `(conversation_id, kind, status)`.
+
+Delivered in revision `0016` (P07.1) with `CHECK` lists and `json_valid` on `recurrence_json`. `job_id` keeps its key
+(SET NULL); `message_id` is a plain column until the generation stage (P07.2) writes messages. A message counts against
+the limits from the moment its event is `running` (`updated_at` is that moment) and stays counted as `delivered`.
+Deleting a conversation sets its `pending` events to `cancelled` (`outcome_reason` `conversation_deleted`); purging a
+character deletes its events.
 
 ### `notifications`
 

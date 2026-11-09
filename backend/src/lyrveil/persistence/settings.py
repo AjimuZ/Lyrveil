@@ -15,6 +15,10 @@ DIAGNOSTIC_MODE = "app.diagnostic_mode"
 IMAGES_AUTO_DETECT_REQUESTS = "images.auto_detect_requests"
 # docs/configuration.md: the character may propose an image on its own, which the user must accept (off by default).
 IMAGES_CONTEXTUAL_ENABLED = "images.contextual_enabled"
+# docs/configuration.md (Proactive): the global switch of proactive messages. Off by default (ADR 0020).
+PROACTIVE_ENABLED = "proactive.enabled"
+# docs/configuration.md (Proactive): the most proactive messages of all conversations in a local day. Default 6.
+PROACTIVE_MAX_PER_DAY_GLOBAL = "proactive.max_per_day_global"
 # Not a user setting: true while `python -m lyrveil.cli drain` holds the job queue for a shutdown (JobQueue.paused,
 # lyrveil.jobs.drain). The backend sets it back to false when it starts.
 JOBS_PAUSED = "jobs.paused"

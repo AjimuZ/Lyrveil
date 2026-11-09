@@ -20,6 +20,7 @@ from lyrveil.persistence import conversations as repository
 from lyrveil.persistence import messages as message_repository
 from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.persistence.search import match_query
+from lyrveil.scheduling.store import cancel_pending_events
 
 # The fields PATCH may change (docs/api.md, Conversations).
 PATCHABLE = frozenset({"title", "pinned", "archived", "language", "shares_memory"})
@@ -188,7 +189,8 @@ class ConversationService:
         """Soft-deletes the conversation: it disappears from every list and read, and `restore` brings it back for
         RESTORE_WINDOW. Raises NotFoundError when it does not exist or is already deleted.
 
-        Cancelling its scheduled events joins here when `scheduled_events` exists (P07).
+        Its `pending` scheduled events become `cancelled` in the same transaction, so a restore does not bring back
+        proactive messages that fell due meanwhile.
         """
         now = to_utc_text(self._clock())
 
@@ -197,6 +199,7 @@ class ConversationService:
             if current is None or current.status is ConversationStatus.DELETED:
                 raise NotFoundError(_NO_CHAT)
             repository.update(connection, conversation_id, now, status=ConversationStatus.DELETED.value, deleted_at=now)
+            cancel_pending_events(connection, conversation_id, now)
 
         write(self._engine, work)
 

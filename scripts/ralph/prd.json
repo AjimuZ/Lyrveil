@@ -2330,8 +2330,8 @@
         "T-SCH-06 passes: the scheduler never causes a mode change."
       ],
       "priority": 98,
-      "passes": false,
-      "notes": "Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "passes": true,
+      "notes": "I finished P07.1, the backend scheduler for proactive messages. It creates the events and queues a job under the limits. Nothing in the app can switch it on yet, and no message is written until P07.2. The previous attempt had already written the migration, the `scheduling` package and the wiring in `main.py`. I added the tests and docs and fixed the lint findings. The targeted backend unit run (`-k \"proactive or scheduling\"`) passed 49 tests. The full integration level passed (backend 386, orchestrator 209), including 14 new tests and the migration head check at 0016. The lint level passes. I did not run the unit level in full, e2e, or docker. The orchestrator's unit run in the targeted command showed \"no tests selected\", which is only the filter. T-SCH-01, T-SCH-02 and T-SCH-06 are covered by the new tests. T-SCH-06 is checked in two ways: the `scheduling` package imports nothing from the orchestrator, the runtime ports or the runtimes, and the queued job needs only the text mode. A queued `proactive_message` job has no handler yet, because the handler belongs to P07.2.",
       "dependsOn": [
         "P06.EXIT"
       ],

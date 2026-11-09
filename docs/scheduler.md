@@ -1,6 +1,25 @@
 # Proactive messages and time
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation: planned, phase P07.
+Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0031. Implementation: in progress, phase P07.
+Delivered with P07.1: the `scheduled_events` table, the evaluation every 60 seconds, the limits, and the creation of the
+`inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Not delivered yet:
+the `decide` and `generate` stages and the repetition check (P07.2, so a queued `proactive_message` job has no handler
+yet), the missed-event policies at startup (P07.3), the time context (P07.4), notifications (P07.5), `scheduled_message`
+events made by the user, and the API and screens that switch the feature on. Until then the two switches can only be
+changed in the database, and both are off.
+
+How P07.1 settles points the text leaves open:
+
+- A message counts against the limits from the moment its event is `running`, and stays counted as `delivered`. The
+  unanswered count is the sent messages after the user's last live message (all of them when the user never wrote).
+- The caps count the local day in `LYRVEIL_TZ`. A window whose `from` is after its `to` crosses midnight; `from` is
+  included and `to` excluded.
+- `inactivity_check` is created once per silence: one event after the last message covers it. `follow_up` is created once
+  per thread, for threads whose `valid_until` passed in the last 7 days. `contextual_initiative` slots older than
+  10 minutes are not created, because nothing is simulated for a time the backend was off.
+- At most one job per conversation at a time, for the oldest due event whose kind is enabled. A held-back event stays
+  `pending` and is looked at again on the next pass.
+- Deleting a conversation sets its `pending` events to `cancelled`.
 
 Characters can write first. The feature is off by default, both globally and for each conversation
 ([ADR 0020](decisions/0020-proactive-messages-default-off.md)). A message is sent only when there is a real reason drawn from the

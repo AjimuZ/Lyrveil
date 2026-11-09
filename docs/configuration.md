@@ -183,7 +183,9 @@ it to `true` before a shutdown, the job worker starts nothing while it is, and e
 
 ### Proactive
 
-Listed in [Scheduler](scheduler.md#per-conversation-settings).
+Listed in [Scheduler](scheduler.md#per-conversation-settings). Since P07.1 the backend reads `proactive.enabled` (default
+`false`) and `proactive.max_per_day_global` (default 6, valid 1 to 24; any other value gives 6) from
+`application_settings`; `PATCH /settings` does not accept them yet.
 
 ## Example `.env`
 

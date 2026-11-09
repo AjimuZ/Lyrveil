@@ -10,6 +10,12 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The scheduler of proactive messages, in the backend only (P07.1). Every minute it creates the inactivity, follow-up and
+  contextual-initiative events and queues a job for the one the limits allow: quiet hours, minimum interval, daily caps
+  and the unanswered limit. Proactive messages stay off by default, globally and per conversation, and nothing in the
+  interface switches them on yet; no message is written until the generation stages (P07.2). Deleting a chat cancels its
+  pending events.
+
 - The **Modelli** and **Risorse AI** screens (`/settings/models`, `/settings/resources`), with links in the navigation.
   **Modelli** lists the text and image profiles with size, license, minimum tier and local state (**Verificato**,
   **Dimensione errata**, **Da scaricare**, with the download command and a copy button), marks the active and custom

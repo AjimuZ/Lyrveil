@@ -67,6 +67,7 @@ from lyrveil.ports.image_runtime import ImageRuntime
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.runtimes.comfyui import ComfyUiRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
+from lyrveil.scheduling.service import SchedulerService
 from lyrveil.services.ai_resources import AiResources
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
@@ -139,12 +140,16 @@ class Worker:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Runs the daily backup, when `app.state.daily_backup` holds one, and the job worker for the life of the
-    application. On shutdown a backup being written is finished before the application ends."""
+    """Runs the daily backup, when `app.state.daily_backup` holds one, the proactive evaluation, when
+    `app.state.proactive` holds a SchedulerService, and the job worker for the life of the application. On shutdown a
+    backup being written is finished before the application ends."""
     daily_backup: DailyBackup | None = app.state.daily_backup
+    proactive: SchedulerService | None = app.state.proactive
     async with anyio.create_task_group() as group:
         if daily_backup is not None:
             group.start_soon(daily_backup.run_forever)
+        if proactive is not None:
+            group.start_soon(proactive.run_forever)
         try:
             async with _job_worker(app):
                 yield
@@ -269,8 +274,11 @@ def create_app(
     daily_backup: DailyBackup | None = None,
     model_profiles: ModelProfiles | None = None,
     ai_resources: AiResources | None = None,
+    proactive: SchedulerService | None = None,
 ) -> FastAPI:
     """Returns the FastAPI application for the given settings, which it keeps in `app.state.settings`.
+
+    `proactive`, kept in `app.state.proactive`, is evaluated every minute by the lifespan; tests leave it out.
 
     `model_profiles`, kept in `app.state.model_profiles`, serves the /settings/models routes; without it they answer
     500 `INTERNAL`. `ai_resources`, kept in `app.state.ai_resources`, serves GET /system/resources the same way.
@@ -304,6 +312,7 @@ def create_app(
     app.state.worker = worker
     app.state.daily_backup = daily_backup
     app.state.scheduler = None
+    app.state.proactive = proactive
     app.state.model_profiles = model_profiles
     app.state.ai_resources = ai_resources
     app.state.media = media_store if media_store is not None else MediaStore(DEFAULT_MEDIA_ROOT)
@@ -349,7 +358,8 @@ def main() -> int:
     replies from KoboldCpp and draws images with ComfyUI under leases of the control API, asking it for the GPU mode
     its queue needs, publishing each GPU state it reports and storing the orchestrator's events, and DailyBackup
     writes one backup of /data a day while
-    the backend is idle. The access log is off, because request paths and queries can carry user text.
+    the backend is idle, and SchedulerService evaluates the proactive rules every minute. The access log is off,
+    because request paths and queries can carry user text.
     """
     try:
         settings = load_settings()
@@ -422,6 +432,7 @@ def main() -> int:
             daily_backup=daily_backup,
             model_profiles=model_profiles,
             ai_resources=AiResources(engine, orchestrator, model_profiles),
+            proactive=SchedulerService(engine, settings.zone),
         ),
         host=LISTEN_HOST,
         port=LISTEN_PORT,

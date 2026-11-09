@@ -176,7 +176,7 @@ Evidence:
 
 **Depends on:** P06. **Areas:** scheduler, notifications, messaging details.
 
-- [ ] P07.1 Scheduled events, evaluation and limits.
+- [x] P07.1 Scheduled events, evaluation and limits.
 - [ ] P07.2 Decide and generate stages, with the repetition check.
 - [ ] P07.3 Missed-event policies.
 - [ ] P07.4 Time context in prompts.

@@ -383,6 +383,7 @@ def purge(connection: Connection, character_id: str) -> None:
         f"DELETE FROM prompt_assemblies WHERE conversation_id IN ({owned_conversations})",
         "DELETE FROM generated_images WHERE character_id = :id",
         f"DELETE FROM image_proposals WHERE conversation_id IN ({owned_conversations})",
+        "DELETE FROM scheduled_events WHERE character_id = :id",
         f"DELETE FROM message_variants WHERE message_id IN ({owned_messages})",
         f"DELETE FROM messages WHERE conversation_id IN ({owned_conversations})",
         "DELETE FROM conversations WHERE character_id = :id",

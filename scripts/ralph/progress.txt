@@ -218,6 +218,8 @@
 - Do not use test.skip for a machine-dependent case in e2e. Make the state deterministic by rewriting the API response with page.route/route.fetch, or by seeding it.
 - In Playwright helpers, for a dialog that renders in stages, wrap check-then-click in `expect(async () => {...}).toPass()` and finish on the element the next step needs.
 - When a count in a docker-level test depends on files the app writes at startup, name those files in a comment next to the expected count.
+- Pure rules take the time and the counted activity as arguments, so quiet hours and caps are unit-tested with fixed datetimes. The SQL lives in a store module that never commits.
+- A package that must not cause a GPU mode change is guarded by an AST test over its imports, plus a check that the job it queues needs only the text mode.
 
 ---
 
@@ -1979,4 +1981,16 @@ The hardware part is not claimed: T-GPU-07 to T-GPU-12, AC-15, AC-18, AC-19, the
   - The shell cuts long docker-level output; the full output is saved to a file named in the tool result, and Grep on it finds `[-]` and the Pester summary line.
   - The new-chat dialog paints the picker once before its loading note, so an e2e helper cannot rely on one visibility check; retry the click until the form field shows.
   - P06.EXIT-HW still needs the real models, the GPU and `scripts/lyrveil.cmd test gpu`; the roadmap has no P06.EXIT-HW item line, only the phase table text and the Evidence list.
+---
+
+## 2026-11-09T19:55:49Z - P07.1
+- I finished P07.1, the backend scheduler for proactive messages. It creates the events and queues a job under the limits. Nothing in the app can switch it on yet, and no message is written until P07.2. The previous attempt had already written the migration, the `scheduling` package and the wiring in `main.py`. I added the tests and docs and fixed the lint findings. The targeted backend unit run (`-k "proactive or scheduling"`) passed 49 tests. The full integration level passed (backend 386, orchestrator 209), including 14 new tests and the migration head check at 0016. The lint level passes. I did not run the unit level in full, e2e, or docker. The orchestrator's unit run in the targeted command showed "no tests selected", which is only the filter. T-SCH-01, T-SCH-02 and T-SCH-06 are covered by the new tests. T-SCH-06 is checked in two ways: the `scheduling` package imports nothing from the orchestrator, the runtime ports or the runtimes, and the queued job needs only the text mode. A queued `proactive_message` job has no handler yet, because the handler belongs to P07.2.
+- Files changed: backend/migrations/versions/0016_scheduled_events.py, backend/src/lyrveil/scheduling/__init__.py, backend/src/lyrveil/scheduling/rules.py, backend/src/lyrveil/scheduling/service.py, backend/src/lyrveil/scheduling/store.py, backend/src/lyrveil/main.py, backend/src/lyrveil/persistence/characters.py, backend/src/lyrveil/persistence/settings.py, backend/src/lyrveil/services/conversations.py, backend/tests/integration/test_migrations.py, backend/tests/unit/test_proactive_rules.py, backend/tests/integration/test_proactive_evaluation.py, docs/scheduler.md, docs/data-model.md, docs/configuration.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit` always runs the whole tests/unit and appends any extra arguments, so use `-k expr -q` to filter. The orchestrator then exits 5 for 'no tests selected', which is not a failure. The integration level takes no arguments and runs about 2 minutes.
+  - SchedulerService(engine, zone, queue=, clock=) takes a fake clock. Tests seed rows with `write(engine, work)` and read them with `read(engine, work)` from lyrveil.jobs.scheduler.
+  - A message counts against the limits when its event is `running` (`updated_at` is that moment) and stays counted as `delivered`. P07.2 must set the event to `delivered` or `skipped` and fill `message_id`. A `skipped` event stops counting.
+  - No handler is registered for the `proactive_message` job kind yet. P07.2 adds it and adds the foreign key from `messages.scheduled_event_id` to `scheduled_events`.
+  - The `proactive.enabled` and `proactive.max_per_day_global` settings are read from `application_settings` but `PATCH /settings` does not accept them. P07.6 or a later UI item must add that, with the per-conversation `proactive_json` API.
+  - P07.3 (missed events at startup) still has to apply `missed_policy`. Today only the initiative slots are skipped when the backend was off.
 ---
