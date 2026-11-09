@@ -24,6 +24,7 @@ from lyrveil.scheduling.rules import (
     in_allowed_window,
     initiative_slots,
     local_day_bounds,
+    next_window_start,
     parse_global_cap,
     parse_settings,
     user_recently_active,
@@ -102,6 +103,35 @@ def test_quiet_hours_follow_the_local_time_of_the_zone() -> None:
     # 21:29 UTC is 22:29 local, still inside; 21:30 UTC is 22:30, whose end is excluded.
     assert blocking_limit(ON, Activity(), datetime(2026, 11, 9, 21, 29, tzinfo=UTC), ROME, 6) is None
     assert blocking_limit(ON, Activity(), datetime(2026, 11, 9, 21, 30, tzinfo=UTC), ROME, 6) is Limit.QUIET_HOURS
+
+
+def test_next_window_start_is_now_inside_a_window_and_the_next_opening_outside() -> None:
+    two = ProactiveSettings(enabled=True, windows=(Window(time(8, 30), time(12, 0)), Window(time(18, 0), time(22, 0))))
+
+    inside = datetime(2026, 11, 9, 10, 0, tzinfo=UTC)  # 11:00 local
+    assert next_window_start(two, inside, ROME) == inside
+    # 13:30 local: the first window is over, the evening one opens at 18:00 (17:00 UTC) the same day.
+    assert next_window_start(two, datetime(2026, 11, 9, 12, 30, tzinfo=UTC), ROME) == datetime(
+        2026, 11, 9, 17, 0, tzinfo=UTC
+    )
+    # 23:30 local: the next opening is 08:30 (07:30 UTC) the next day, and the end of a window is excluded.
+    assert next_window_start(two, datetime(2026, 11, 9, 22, 30, tzinfo=UTC), ROME) == datetime(
+        2026, 11, 10, 7, 30, tzinfo=UTC
+    )
+    assert next_window_start(two, datetime(2026, 11, 9, 21, 0, tzinfo=UTC), ROME) == datetime(
+        2026, 11, 10, 7, 30, tzinfo=UTC
+    )
+
+
+def test_next_window_start_follows_a_window_across_midnight_and_a_dst_change() -> None:
+    night = ProactiveSettings(enabled=True, windows=(Window(time(22, 0), time(2, 0)),))
+    assert next_window_start(night, datetime(2026, 11, 9, 10, 0, tzinfo=UTC), ROME) == datetime(
+        2026, 11, 9, 21, 0, tzinfo=UTC
+    )
+    # Clocks go back on 2026-10-25 (CEST to CET): 08:30 local on the 25th is 07:30 UTC, an hour later than on the 24th.
+    assert next_window_start(ON, datetime(2026, 10, 24, 23, 0, tzinfo=UTC), ROME) == datetime(
+        2026, 10, 25, 7, 30, tzinfo=UTC
+    )
 
 
 def test_a_window_that_crosses_midnight_holds_both_sides() -> None:

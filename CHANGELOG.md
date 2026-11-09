@@ -10,6 +10,14 @@ No application exists yet. This section records the design documentation.
 
 ### Added
 
+- The missed-event policies of proactive messages, in the backend only (P07.3). When the backend starts, a scheduled
+  event that is more than 10 minutes overdue counts as missed, and its policy decides: `skip` marks it `missed`,
+  `deliver_once` keeps only the newest one of the chat for the next allowed moment and marks the others `missed`,
+  `next_window` moves it to the start of the next allowed window. Nothing is written at startup, so no message ever
+  carries an earlier time than the one it was written at. When events were overdue, one `missed_events` notification
+  stores their count and no invented content; the list and the toast that show it come with the notifications step
+  (P07.5). A proactive event left `running` with no job to finish it is now ended `failed` at startup.
+
 - The writing of proactive messages, in the backend only (P07.2). A queued proactive job now asks the model whether the
   character has a real reason to write (`send: false` ends the event `skipped` and creates no message), then writes a short
   message without replying to anything: the normal prompt without a current message, `brevi` length, the same normalizer

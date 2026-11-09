@@ -79,7 +79,7 @@ orchestrator/
 | `ImageGenerationService` | `images` | Image jobs by stage, ComfyUI progress, persistence. |
 | `VisualConsistencyService` | `images` | Visual PromptBuilder, structured identity, wardrobe, tag vocabulary, sanitizer, scene filter, seed policy. |
 | `JobScheduler` | `jobs` | Durable queue, selection, mode requests, retries, cancellation, preemption. |
-| `SchedulerService` | `scheduling` | Evaluates proactive rules and creates jobs. |
+| `SchedulerService` | `scheduling` | Evaluates proactive rules and creates jobs. Once at startup it applies the [missed-event policies](scheduler.md#missed-events) (P07.3) and writes the `missed_events` notification. |
 | `NotificationService` | `services` | In-app notifications and their events. |
 | `PersistenceService` | `persistence` | Units of work, backups, purges, integrity checks. |
 | `ModelLifecycleManager` | orchestrator | GPU state machine, leases, mode changes, recovery. |

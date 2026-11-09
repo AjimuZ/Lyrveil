@@ -1,5 +1,6 @@
-"""SchedulerService: every minute, creates the due proactive events and queues a `proactive_message` job for the ones
-the limits allow (docs/scheduler.md, Evaluation).
+"""SchedulerService: once at startup, applies the missed-event policies; then every minute, creates the due proactive
+events and queues a `proactive_message` job for the ones the limits allow (docs/scheduler.md, Missed events and
+Evaluation).
 
 It only reads and writes the database. It has no port to the orchestrator and no GPU state, so it cannot ask for a
 mode change: the job it queues is `soft` and needs `llm` (lyrveil.jobs.policy), and JobScheduler runs it only in text
@@ -19,16 +20,19 @@ from lyrveil.jobs.policy import JobKind
 from lyrveil.jobs.queue import JobQueue, QueueFullError
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.logs import get_logger
+from lyrveil.persistence import notifications
 from lyrveil.persistence import settings as settings_repository
 from lyrveil.scheduling import store
 from lyrveil.scheduling.rules import (
     MISSED_AFTER,
     POSTPONE,
     EventKind,
+    MissedPolicy,
     ProactiveSettings,
     blocking_limit,
     initiative_slots,
     local_day_bounds,
+    next_window_start,
     parse_global_cap,
     parse_settings,
     user_recently_active,
@@ -47,12 +51,39 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _missed_body(count: int) -> str:
+    """The Italian text of the `missed_events` notification: the count and a statement that nothing was invented.
+    It names no conversation, character or topic, because nothing about the missed events is known to have happened."""
+    if count == 1:
+        found = "1 messaggio programmato risultava scaduto"
+    else:
+        found = f"{count} messaggi programmati risultavano scaduti"
+    return f"All'avvio {found} da più di 10 minuti. Nessun messaggio è stato scritto al posto loro."
+
+
+def _switched_on(connection: Connection) -> bool:
+    return settings_repository.get_flag(connection, settings_repository.PROACTIVE_ENABLED, False)
+
+
 @dataclass(frozen=True)
 class Evaluation:
     """What one pass did: the events it created and the jobs it queued."""
 
     events_created: int = 0
     jobs_queued: int = 0
+
+
+@dataclass(frozen=True)
+class MissedResolution:
+    """What the startup step did. `found` is the overdue events it looked at; the other counts split them by outcome:
+    `missed` ended `missed`, `kept` is the `deliver_once` event left pending for delivery, `moved` is the `next_window`
+    events whose `due_at` moved. `interrupted` is the `running` events with no live job it ended `failed`."""
+
+    found: int = 0
+    missed: int = 0
+    kept: int = 0
+    moved: int = 0
+    interrupted: int = 0
 
 
 class SchedulerService:
@@ -87,12 +118,64 @@ class SchedulerService:
         minutes later). A full queue ends the pass; the event stays pending for the next one.
         """
 
-        def switched_on(connection: Connection) -> bool:
-            return settings_repository.get_flag(connection, settings_repository.PROACTIVE_ENABLED, False)
-
-        if not read(self._engine, switched_on):
+        if not read(self._engine, _switched_on):
             return Evaluation()
         return write(self._engine, self._pass)
+
+    def resolve_missed(self) -> MissedResolution:
+        """Applies the missed-event policies once, at startup (docs/scheduler.md, Missed events). Blocks; run it in a
+        worker thread.
+
+        Does nothing while `proactive.enabled` is off, and leaves the events of a conversation whose own switch is
+        off as they are. For each other conversation, a `pending` event whose `due_at` is more than 10 minutes old is
+        missed, and its own `missed_policy` decides: `skip` ends it `missed`; `deliver_once` keeps the newest such
+        event of the conversation pending and due now, which the evaluation queues at the next allowed moment, and
+        ends the others `missed`; `next_window` moves `due_at` to the next allowed moment (rules.next_window_start). It
+        never writes a message, so no message gets a time earlier than its generation. When anything was found it
+        writes one `missed_events` notification with the count and no other content. All in one transaction.
+        """
+        if not read(self._engine, _switched_on):
+            return MissedResolution()
+        return write(self._engine, self._resolve)
+
+    def _resolve(self, connection: Connection) -> MissedResolution:
+        now = self._clock()
+        stamp = to_utc_text(now)
+        interrupted = store.end_interrupted_events(connection, stamp)
+        found = missed = kept = moved = 0
+        for conversation in store.enabled_conversations(connection):
+            settings = parse_settings(conversation.proactive_json)
+            if not settings.enabled:
+                continue
+            stale = store.stale_pending_events(connection, conversation.id, to_utc_text(now - MISSED_AFTER))
+            found += len(stale)
+            # The list is oldest first, so the last `deliver_once` event is the newest one.
+            deliverable = [event.id for event in stale if event.missed_policy is MissedPolicy.DELIVER_ONCE]
+            newest = deliverable[-1] if deliverable else None
+            for event in stale:
+                if event.missed_policy is MissedPolicy.NEXT_WINDOW:
+                    due_at = to_utc_text(next_window_start(settings, now, self._zone))
+                    store.postpone(connection, event.id, due_at, stamp)
+                    moved += 1
+                elif event.id == newest:
+                    # Due now, so the evaluation takes it at the next allowed moment and a second step does not
+                    # find it overdue again. The message it makes is stamped when it is written, never earlier.
+                    store.postpone(connection, event.id, stamp, stamp)
+                    kept += 1
+                else:
+                    superseded = event.missed_policy is MissedPolicy.DELIVER_ONCE
+                    reason = "newer_missed_event" if superseded else "policy_skip"
+                    store.mark_missed(connection, event.id, reason, stamp)
+                    missed += 1
+        if found:
+            notifications.insert_notification(
+                connection,
+                kind=notifications.MISSED_EVENTS,
+                title="Messaggi programmati scaduti",
+                body=_missed_body(found),
+                now=stamp,
+            )
+        return MissedResolution(found, missed, kept, moved, interrupted)
 
     def _pass(self, connection: Connection) -> Evaluation:
         now = self._clock()
@@ -202,7 +285,21 @@ class SchedulerService:
         return 1
 
     async def run_forever(self) -> None:
-        """Evaluates every interval until cancelled. A failed pass is logged and the next one runs on time."""
+        """Applies the missed-event policies once, then evaluates every interval until cancelled. A failed step or
+        pass is logged and the next pass runs on time."""
+        try:
+            resolution = await to_thread.run_sync(self.resolve_missed)
+            if resolution.found or resolution.interrupted:
+                logger.info(
+                    "proactive_missed_resolved",
+                    found=resolution.found,
+                    missed=resolution.missed,
+                    kept=resolution.kept,
+                    moved=resolution.moved,
+                    interrupted=resolution.interrupted,
+                )
+        except Exception:
+            logger.error("proactive_missed_failed", exc_info=True)
         while True:
             await anyio.sleep(self._interval_s)
             try:

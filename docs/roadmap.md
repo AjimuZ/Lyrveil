@@ -178,7 +178,7 @@ Evidence:
 
 - [x] P07.1 Scheduled events, evaluation and limits.
 - [x] P07.2 Decide and generate stages, with the repetition check.
-- [ ] P07.3 Missed-event policies.
+- [x] P07.3 Missed-event policies.
 - [ ] P07.4 Time context in prompts.
 - [ ] P07.5 Notifications.
 - [ ] P07.6 Read state, unread counts and final messaging details.

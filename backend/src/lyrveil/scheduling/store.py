@@ -161,6 +161,56 @@ def due_events(connection: Connection, conversation_id: str, now: str) -> list[E
     return [EventRow(row["id"], EventKind(row["kind"]), row["due_at"], row["note"]) for row in rows]
 
 
+@dataclass(frozen=True)
+class StaleEvent:
+    """A pending event found overdue at startup, with the policy it was created with."""
+
+    id: str
+    due_at: str
+    missed_policy: MissedPolicy
+
+
+def stale_pending_events(connection: Connection, conversation_id: str, due_before: str) -> list[StaleEvent]:
+    """Returns the conversation's `pending` events whose `due_at` is before `due_before`, oldest first."""
+    rows = connection.execute(
+        text(
+            "SELECT id, due_at, missed_policy FROM scheduled_events WHERE conversation_id = :id "
+            "AND status = 'pending' AND due_at < :before ORDER BY due_at, id"
+        ),
+        {"id": conversation_id, "before": due_before},
+    ).mappings()
+    return [StaleEvent(row["id"], row["due_at"], MissedPolicy(row["missed_policy"])) for row in rows]
+
+
+def mark_missed(connection: Connection, event_id: str, reason: str, now: str) -> None:
+    """Ends a `pending` event as `missed` with the reason. It never counts against the limits."""
+    connection.execute(
+        text(
+            "UPDATE scheduled_events SET status = 'missed', outcome_reason = :reason, updated_at = :now "
+            "WHERE id = :id AND status = 'pending'"
+        ),
+        {"id": event_id, "reason": reason, "now": now},
+    )
+
+
+def end_interrupted_events(connection: Connection, now: str) -> int:
+    """Ends as `failed` (reason `interrupted`) the `running` events that no queued or running job will finish: the job
+    row is gone or already ended. Returns how many it changed.
+
+    Without this a pruned job row would leave its event `running` for good, and a `running` event blocks its
+    conversation (`has_running_event`). A job that is still queued or running resumes its event, so it is left alone.
+    """
+    result = connection.execute(
+        text(
+            "UPDATE scheduled_events SET status = 'failed', outcome_reason = 'interrupted', updated_at = :now "
+            "WHERE status = 'running' AND (job_id IS NULL OR job_id NOT IN "
+            "(SELECT id FROM generation_jobs WHERE status IN ('queued', 'running')))"
+        ),
+        {"now": now},
+    )
+    return int(result.rowcount)
+
+
 def has_running_event(connection: Connection, conversation_id: str) -> bool:
     """Tells whether a message of the conversation is being decided or written."""
     found = connection.execute(

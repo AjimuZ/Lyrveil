@@ -636,6 +636,12 @@ character deletes its events.
 | `title`, `body` | TEXT | Italian by default |
 | `read_at`, `created_at` | TEXT | |
 
+Delivered in revision `0017` (P07.3) with a `CHECK` list on `kind` and the indexes `(created_at)` and
+`(read_at, created_at)`. The keys to `conversations` and `messages` are SET NULL, so deleting either keeps the notice.
+Only `missed_events` is written so far, by the scheduler's startup step (`persistence/notifications.py`): `title` and
+`body` are Italian, the count is in the body, and `conversation_id` and `message_id` are NULL. The service, the API and
+the `notification.created` event come with P07.5.
+
 ### `application_settings`
 
 | Column | Type | Rules |

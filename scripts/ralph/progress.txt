@@ -223,6 +223,8 @@
 - To reuse the reply pipeline for non-reply text, build a ContextRequest with no current message and an instruction; then stream through TurnCutoff, ReplyNormalizer, SentenceSplitter and `check_reply`, as `ProactiveMessageService._stream` and `ImagePromptStage.write_caption` do.
 - A handler whose job moves an event or placeholder must also end it when the job fails for good: re-raise while the scheduler will retry (retryable and `attempt < max_attempts`, or preemption), otherwise end the event first. Also implement `abandon` and `cancelled`.
 - Roll back a multi-row write on a late conflict by raising a private exception inside the `write()` closure, then catch it outside and decide what to end.
+- A startup-only sweep belongs in the long-running service, before its first loop pass, wrapped so a failure is logged and never stops the loop.
+- A step that keeps an item for later should move the item out of its own selection criterion, here by setting due_at to now, so running the step again finds nothing and adds no duplicate notification.
 
 ---
 
@@ -2023,4 +2025,35 @@ Not done: the notification and toast (P07.5) and diagnostics recording for proac
   - P07.3 should end or requeue events left `running` after a crash. The job recovery requeues the job, so the handler resumes the event, but an event whose job row was pruned would stay `running` and block its chat (`has_running_event`).
   - P07.5 should publish the `notification.created` event after the `message.completed` that the handler sends from `_serve` (the notification table comes with P07.5).
   - `messages.scheduled_event_id` is a plain column with no key. If a key is wanted later, it needs a rebuild of `messages` and its search triggers.
+---
+
+## 2026-11-09T20:24:14Z - P07.3
+- At startup, `SchedulerService.resolve_missed` now applies each event's missed policy. It runs once before the first 60-second pass and only while `proactive.enabled` is on. It leaves the events of conversations whose own switch is off pending. The next window moves due_at to now when the local time is inside a window, and otherwise to the next window start (`rules.next_window_start`, tested on its own).
+
+Policies, for pending events more than 10 minutes overdue:
+- **`skip`:** the event ends `missed`.
+- **`deliver_once`:** the newest event per conversation stays pending with `due_at` set to now. The others end `missed`.
+- **`next_window`:** `due_at` moves to now when the local time is inside a window, otherwise to the next window start.
+
+The step writes no message, so nothing is backdated. When it finds any overdue events it writes one Italian `missed_events` notification, holding the count and nothing else.
+
+I added migration 0017 for the `notifications` table, because the table did not exist yet. A `running` event with no queued or running job is also ended `failed` (`interrupted`), as the earlier learning asked.
+
+Checks, all run through `scripts/lyrveil.cmd`:
+- **Lint:** passed (ruff, mypy --strict, docs checks, frontend lint and build).
+- **Integration:** backend 406 passed, orchestrator 209 passed.
+- **Unit:** I ran only `-k next_window`. Its 2 backend tests passed, and the orchestrator exit 5 only meant no tests were selected. The full unit suite was not run.
+
+Not done:
+- **Recurrence rules:** the format is undefined, so "a recurring event computes its next occurrence from the current time" is not implemented.
+- **Notification display:** the service, API, toast and `notification.created` event belong to P07.5.
+- **Held-back events:** an event the limits held back for more than 10 minutes while the backend ran also counts as missed at the next startup. This follows the doc literally, and I documented it.
+- Files changed: backend/migrations/versions/0017_notifications.py, backend/migrations/versions/0016_scheduled_events.py, backend/src/lyrveil/persistence/notifications.py, backend/src/lyrveil/scheduling/rules.py, backend/src/lyrveil/scheduling/store.py, backend/src/lyrveil/scheduling/service.py, backend/tests/integration/test_missed_events.py, backend/tests/integration/test_migrations.py, backend/tests/integration/test_proactive_messages.py, backend/tests/unit/test_proactive_rules.py, docs/scheduler.md, docs/data-model.md, docs/backend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `SchedulerService.resolve_missed()` runs once at the start of `run_forever`. It returns a `MissedResolution` (found, missed, kept, moved, interrupted) and does nothing while `proactive.enabled` is off.
+  - The `notifications` table exists since revision 0017 (kind CHECK list, SET NULL keys). `persistence/notifications.insert_notification` only writes. P07.5 must add the service, the list and read API, the unread badge and the toast, and publish `notification.created`, including for the `missed_events` row, which is written with no event.
+  - A `deliver_once` event that is kept gets `due_at` = now, so a second startup within 10 minutes does not count it again. Other events overdue by more than 10 minutes at startup are `missed`, even ones the limits held back while the backend ran.
+  - `recurrence_json` still has no defined rule. The recurrence part of the missed rules needs the step that lets the user create scheduled messages.
+  - Revision 0017 is the new head. `test_migrations.py` holds the HEAD constant and the downgrade chain, so a future migration must add a step there.
+  - Backend integration tests alone take about 2 minutes, and `scripts/lyrveil.cmd test integration` has no filter.
 ---

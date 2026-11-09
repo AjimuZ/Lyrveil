@@ -192,6 +192,24 @@ def in_allowed_window(settings: ProactiveSettings, now: datetime, zone: tzinfo) 
     return any(window.contains(local) for window in settings.windows)
 
 
+def next_window_start(settings: ProactiveSettings, now: datetime, zone: tzinfo) -> datetime:
+    """Returns when an event that policy `next_window` moves may next be sent: `now` itself when the local time is
+    already inside a window, otherwise the earliest start of a window after `now`, as an aware UTC datetime.
+
+    Always holds: the result is not before `now` and is at most a day after it, because every window repeats daily.
+    """
+    if in_allowed_window(settings, now, zone):
+        return now
+    local = now.astimezone(zone)
+    starts = []
+    for window in settings.windows:
+        candidate = datetime.combine(local.date(), window.start, zone)
+        if candidate <= now:
+            candidate = datetime.combine(local.date() + timedelta(days=1), window.start, zone)
+        starts.append(candidate.astimezone(UTC))
+    return min(starts)
+
+
 def blocking_limit(
     settings: ProactiveSettings, activity: Activity, now: datetime, zone: tzinfo, global_cap: int
 ) -> Limit | None:

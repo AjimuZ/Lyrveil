@@ -9,7 +9,7 @@ text too similar to a recent proactive message is regenerated once and then skip
 import dataclasses
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -136,9 +136,14 @@ def add_proactive_message(engine: Engine, conversation_id: str, content: str) ->
 
 
 def add_running_event(
-    engine: Engine, conversation_id: str, kind: EventKind = EventKind.CONTEXTUAL_INITIATIVE, note: str | None = None
+    engine: Engine,
+    conversation_id: str,
+    kind: EventKind = EventKind.CONTEXTUAL_INITIATIVE,
+    note: str | None = None,
+    due_at: str | None = None,
 ) -> tuple[str, Job]:
-    """Creates an event the scheduler has already started, with its queued job, as SchedulerService leaves them."""
+    """Creates an event the scheduler has already started, with its queued job, as SchedulerService leaves them. The
+    event is due at `due_at`, by default NOW."""
     stamp = to_utc_text(NOW)
 
     def work(connection: Connection) -> tuple[str, Job]:
@@ -150,7 +155,7 @@ def add_running_event(
             conversation_id=conversation_id,
             character_id=character_id,
             kind=kind,
-            due_at=stamp,
+            due_at=due_at or stamp,
             note=note,
             missed_policy=MissedPolicy.SKIP,
             created_by="scheduler",
@@ -249,6 +254,27 @@ async def test_a_message_is_written_with_its_event_and_goes_through_the_reply_ch
     assert published is not None
     assert [event.type for event in published] == ["message.completed"]
     assert published[0].data["message"]["id"] == message_id
+
+
+@pytest.mark.anyio
+async def test_a_message_for_an_overdue_event_has_the_real_time_and_not_the_due_time(migrated: Engine) -> None:
+    """T-SCH-03, the delivery side: an event kept by `deliver_once` is sent late, and its message is never backdated."""
+    conversation_id = new_chat(migrated)
+    due_at = to_utc_text(NOW - timedelta(hours=5))
+    event_id, job = add_running_event(migrated, conversation_id, due_at=due_at)
+    runtime = FakeRuntime([decision(True)], ["Ciao Utente, ti penso. Come stai?"])
+
+    result = await run(service(migrated, runtime), job)
+
+    assert result["status"] == "delivered"
+    created_at = read(
+        migrated,
+        lambda c: c.execute(
+            text("SELECT created_at FROM messages WHERE scheduled_event_id = :id"), {"id": event_id}
+        ).scalar_one(),
+    )
+    assert created_at == to_utc_text(NOW)
+    assert created_at > due_at
 
 
 @pytest.mark.anyio

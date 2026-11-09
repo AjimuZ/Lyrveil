@@ -6,8 +6,7 @@ Revises: 0015
 One row per proactive trigger of docs/scheduler.md. `job_id` keeps its SET NULL key, so pruning old jobs never blocks.
 `message_id` is a plain column and `messages.scheduled_event_id` stays a plain column too, like `image_id`: SQLite can
 add a key only by rebuilding `messages`, which its search triggers and every reference to it make a risk for no gain,
-and the generation stage (P07.2) writes both columns in one transaction. `notifications` joins with the notification
-step (P07.5).
+and the generation stage (P07.2) writes both columns in one transaction. `notifications` follows in revision 0017.
 """
 
 import sqlalchemy as sa

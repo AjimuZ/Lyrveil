@@ -4,9 +4,34 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the prompt layout of ADR 0
 Delivered with P07.1: the `scheduled_events` table, the evaluation every 60 seconds, the limits, and the creation of the
 `inactivity_check`, `follow_up` and `contextual_initiative` events (`backend/src/lyrveil/scheduling/`). Delivered with
 P07.2: the `proactive_message` job handler (`ProactiveMessageService`) with the `decide` and `generate` stages and the
-repetition check. Not delivered yet: the missed-event policies at startup (P07.3), the time context (P07.4),
-notifications (P07.5), `scheduled_message` events made by the user (the handler already serves them), and the API and
-screens that switch the feature on. Until then the two switches can only be changed in the database, and both are off.
+repetition check. Delivered with P07.3: the missed-event policies at startup (`SchedulerService.resolve_missed`) and the
+stored `missed_events` notification. Not delivered yet: the time context (P07.4), the rest of the notifications (P07.5),
+`scheduled_message` events made by the user (the handler already serves them), recurrence rules, and the API and screens
+that switch the feature on. Until then the two switches can only be changed in the database, and both are off.
+
+How P07.3 settles points the text leaves open:
+
+- The step runs once, before the first 60-second pass, in the same process. It does nothing while `proactive.enabled` is
+  off, and it leaves the `pending` events of a conversation whose own switch is off as they are. Each event follows the
+  `missed_policy` it was created with, not the conversation's current one.
+- "Missed" is read literally: any `pending` event with `due_at` more than 10 minutes old at startup, including one the
+  limits held back (quiet hours, interval) while the backend was running. The notification text therefore says the
+  events were overdue at startup, not that the computer was off.
+- `skip` ends the event `missed` with the reason `policy_skip`. Because an `inactivity_check` or `follow_up` event
+  counts as created in any status, a skipped one is not made again for the same silence or thread.
+- `deliver_once` keeps the newest event (by `due_at`) of each conversation `pending` and sets its `due_at` to now, so the
+  normal evaluation queues it at the next moment the limits allow and a second startup within 10 minutes does not count
+  it again; the others end `missed` with the reason `newer_missed_event`.
+  Only events whose own policy is `deliver_once` compete. The step itself writes no message: the message is written by the
+  job, with the real time of its generation.
+- `next_window` sets `due_at` to now when the local time is already inside a window, and otherwise to the earliest
+  window start after now (`rules.next_window_start`), using the conversation's current windows.
+- The notification is one `missed_events` row for the whole step, with the number of overdue events found, whatever their
+  policy, in its Italian `body` and no conversation, message or topic. It is stored unread; showing it is P07.5's.
+- A `running` event whose job row is gone, or whose job is no longer `queued` or `running`, ends `failed` with the reason
+  `interrupted`: nothing would finish it, and a `running` event blocks its conversation.
+- Recurrence: `recurrence_json` has no defined rule yet, so "a recurring event computes its next occurrence from the
+  current time" waits for the step that lets the user create scheduled messages.
 
 How P07.2 settles points the text leaves open:
 
