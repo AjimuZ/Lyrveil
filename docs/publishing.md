@@ -109,7 +109,9 @@ git check-ignore models/x.gguf data/db/lyrveil.sqlite3 .env backups/a.tar
 git ls-files | grep -Ei '\.(gguf|safetensors|ckpt|pt|pth|onnx|sqlite3?|db|env)$'
 ```
 
-The second command must print nothing.
+The second command must print nothing, except the two example launch files in `config/examples/`, which were reviewed in the [2026-11-11 audit](verification/2026-11-11-release.md).
+
+Findings of gitleaks that were reviewed as fake test values are listed by fingerprint in `.gitleaksignore`, with the reason. Add a line only after reading the finding.
 
 ## Documentation phase checks
 

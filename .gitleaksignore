@@ -1,0 +1,19 @@
+# Reviewed gitleaks findings (P09.1, 2026-11-11). Each fingerprint is a fake value used only by
+# tests, or a non-secret identifier, and was checked by hand. See
+# docs/verification/2026-11-11-release.md for the review.
+
+# tests/docker/round_trip.py: a setting key name, not a secret.
+21b3a65b8cd38b4c1d59b3b7ecd5fc54d3792545:tests/docker/round_trip.py:generic-api-key:34
+
+# Fake control tokens (repeated hex digits) for test stacks and unit tests.
+3a8b7ff110812d2a530a107dbd141a36a5705140:orchestrator/tests/unit/test_main.py:generic-api-key:15
+3a8b7ff110812d2a530a107dbd141a36a5705140:tests/docker/Orchestrator.Tests.ps1:generic-api-key:14
+3a8b7ff110812d2a530a107dbd141a36a5705140:tests/docker/compose.orchestrator-test.yaml:generic-api-key:27
+3a8b7ff110812d2a530a107dbd141a36a5705140:tests/e2e/specs/reply-stream.spec.mjs:generic-api-key:12
+97493bc5d8d131c6ba805d688ecf60e2a73467c5:tests/docker/compose.data-test.yaml:generic-api-key:23
+0398d0f5f3abc6d40230b7b986697276b8203fb3:tests/docker/compose.lifecycle-test.yaml:generic-api-key:24
+5ec4693d55c8f01c31e1060eeaa6bd4441ddf8bb:compose.test.yaml:generic-api-key:30
+6596a4029fc44d2ac974c93609674afe6a63c1d1:backend/tests/unit/test_settings.py:generic-api-key:8
+
+# docs/verification/2026-11-05-environment.md: a GitHub repository name in a table cell.
+72bba7cfbe31b1191d4bea2cb689dcfce12e7435:docs/verification/2026-11-05-environment.md:generic-api-key:35
