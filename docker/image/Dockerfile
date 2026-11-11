@@ -9,7 +9,7 @@
 # verified again at the new tag (docs/technology.md, Version policy).
 # Run "/usr/local/bin/lyrveil-image-entrypoint --print-command" in a container to see the command a launch file gives.
 
-ARG PYTHON_IMAGE=python:3.12.16-slim-trixie
+ARG PYTHON_IMAGE=python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 
 FROM ${PYTHON_IMAGE} AS source
 RUN apt-get update \

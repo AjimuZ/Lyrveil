@@ -7,7 +7,7 @@ that date. AI runtimes and models were read again on 2026-11-05. Lock files pin 
 
 - Runtimes and models are pinned to one exact release or revision with its hash.
 - Application dependencies are pinned by `uv.lock` and `package-lock.json`.
-- Base images use exact tags in `docker/` and `*/Dockerfile`, and digests from P09 on.
+- Base images use exact tags in `docker/` and `*/Dockerfile`, and `@sha256` digests since P09.3. The lint level fails on a `FROM` without both (`scripts/lib/DockerfileChecks.psm1`). To update a base image, change the tag and its digest together.
 - Upgrading a runtime needs a re-verification of
   [Runtime contracts](runtime-contracts.md) and the GPU tests.
 

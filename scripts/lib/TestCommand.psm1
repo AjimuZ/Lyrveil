@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 
 Import-Module (Join-Path $PSScriptRoot 'RepositoryFiles.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'DocumentationChecks.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'DockerfileChecks.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PinnedTools.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
@@ -56,6 +57,12 @@ function Invoke-ScriptLint {
         Write-CheckLine -Name $result.Name -Checked $result.Checked -Failed $failures.Length -Unit $result.Unit -Failures $failures
         if ($failures.Length -gt 0) { $failed = $true }
     }
+
+    Write-Host 'Dockerfile checks'
+    $pins = Invoke-DockerfileCheck -Root $Root
+    $pinFailures = [string[]]$pins.Failures.ToArray()
+    Write-CheckLine -Name $pins.Name -Checked $pins.Checked -Failed $pinFailures.Length -Unit $pins.Unit -Failures $pinFailures
+    if ($pinFailures.Length -gt 0) { $failed = $true }
 
     $scripts = @(Get-RepositoryFile -Root $Root -Pattern @('*.ps1', '*.psm1'))
     $manifest = Install-PinnedModule -Name 'PSScriptAnalyzer' -Root $Root

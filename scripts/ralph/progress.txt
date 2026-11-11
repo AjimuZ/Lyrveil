@@ -251,6 +251,8 @@
 - When a list uses content-visibility: auto, scrolling to the last cell once is not enough because the page height changes while cells render; repeat the scroll inside the poll until the assertion holds.
 - Add a gitleaks finding to .gitleaksignore only after reading it, one fingerprint per line with a comment giving the reason. Never disable a rule or exclude a path.
 - Record license exceptions as exact package+license pairs in scripts/notices/policy.json, each backed by an ADR, so a changed license string fails again.
+- When changing a base image, change its tag and digest together in every Dockerfile that uses it.
+- In PowerShell, -or and -and have equal precedence; parenthesize mixed conditions or use intermediate variables.
 
 ---
 
@@ -2425,4 +2427,15 @@ Findings that are real gaps in the code, now documented as they are (I changed n
   - `node scripts/notices/generate.mjs --check` was refused by the shell; only the plain form is allowed, so the stale-file check is unverified.
   - After any lock change, regenerate the pip-licenses CSVs in scripts/notices/reports/ (commands in its README) and rerun the generator.
   - The roadmap checkbox for P09.2 is left for the orchestrator; the owner decision on certifi, pillow and tslib is now closed by ADR 0044.
+---
+
+## 2026-11-11T20:15:41Z - P09.3
+- Every base image now names its tag and sha256 digest: python:3.12.16-slim-trixie and node:24.22.2-alpine, plus nginx-unprivileged:1.30.6-alpine in the backend, orchestrator, frontend, docker/image, tests/fakes and models-server Dockerfiles. The docker/llm Dockerfile was already pinned. The lint level has a new Dockerfile check (scripts/lib/DockerfileChecks.psm1, wired into Invoke-ScriptLint) that fails on any FROM without a tag and a digest. It skips scratch and earlier stages and resolves ARG defaults. `scripts/lyrveil.cmd test lint` passed, with 11 base images checked and 0 unpinned. The five tests in tests/scripts/DockerfileChecks.Tests.ps1 were added but not run, because the unit level is left to the orchestrator. A separate Pester test checks the repository Dockerfiles. All seven Dockerfiles built with `docker build`. I built the frontend and docker/image with the default target, the backend, orchestrator, tests/fakes and models-server with the default target as well, and docker/llm with the default target. The backend and orchestrator test stages were also built by the lint run. A scratch folder `.tmp-digest/` was left behind from the digest lookup because `rm` was denied. Its Dockerfile is now only a comment, so it does not affect the check. Please delete the folder. I did not run the docker level, so whether the pinned images pass its tests is unverified.
+- Files changed: backend/Dockerfile, orchestrator/Dockerfile, frontend/Dockerfile, docker/image/Dockerfile, tests/fakes/Dockerfile, tests/docker/models-server/Dockerfile, scripts/lib/DockerfileChecks.psm1, scripts/lib/TestCommand.psm1, tests/scripts/DockerfileChecks.Tests.ps1, docs/technology.md, .tmp-digest/Dockerfile
+- **Learnings for future iterations:**
+  - Delete the .tmp-digest/ folder (scratch from the digest lookup); the shell refused rm.
+  - To get a digest without docker pull or imagetools, write a throwaway Dockerfile and run `docker build --no-cache --progress=plain`: the log prints `resolve name:tag@sha256:...`.
+  - Digests: python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b, node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8, nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03.
+  - Dockerfiles of this repo build with the repository root as context (`docker build -f <dir>/Dockerfile .`).
+  - A new Dockerfile must pin its FROM or the lint level fails.
 ---

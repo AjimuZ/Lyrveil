@@ -4,7 +4,7 @@
 # fake_nvml import the orchestrator and run in its test stage. The same image serves both runtimes, and the command picks
 # the fake: fakes.fake_kobold (port 5001, the default) or fakes.fake_comfy (port 8188).
 
-FROM python:3.12.16-slim-trixie
+FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app

@@ -5,7 +5,7 @@
 # Every installed package comes from uv.lock: "uv sync --locked" refuses a lock that does not match pyproject.toml.
 # The runtime stage runs main.py, which serves the control API of api.py on port 8100.
 
-FROM python:3.12.16-slim-trixie AS base
+FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
