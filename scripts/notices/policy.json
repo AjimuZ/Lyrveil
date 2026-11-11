@@ -1,0 +1,7 @@
+{
+  "reviewed": [
+    { "package": "certifi", "license": "Mozilla Public License 2.0 (MPL 2.0)", "adr": "0044" },
+    { "package": "pillow", "license": "MIT-CMU", "adr": "0044" },
+    { "package": "tslib", "license": "0BSD", "adr": "0044" }
+  ]
+}

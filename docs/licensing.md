@@ -96,11 +96,11 @@ Versions and individual licenses are in [Technology choices](technology.md). All
 
 ### Policy
 
-P09 generates `THIRD_PARTY_NOTICES.md` from `pip-licenses` and `license-checker-rseidelsohn`.
+`node scripts/notices/generate.mjs` writes `THIRD_PARTY_NOTICES.md` from the `uv.lock` files, `pip-licenses` reports (`scripts/notices/reports/`) and the `package-lock.json` files (their `license` fields, because `license-checker-rseidelsohn` could not be run in the build session). It lists every locked dependency and exits 1 when a production license is outside the table below and has no ADR-backed entry in `scripts/notices/policy.json`. `--check` fails on a stale file. Three reviewed exceptions are recorded in [ADR 0044](decisions/0044-accept-certifi-pillow-and-tslib-licenses.md): `certifi` (MPL-2.0, used unmodified), `pillow` (MIT-CMU) and `tslib` (0BSD).
 
 | Scope | Allowed | Otherwise |
 | --- | --- | --- |
-| Production Python and npm packages | MIT, BSD, ISC, Apache-2.0, PSF, Zlib, Unlicense, OFL for fonts | Refused until reviewed in an ADR |
+| Production Python and npm packages | MIT, BSD, ISC, Apache-2.0, PSF, Zlib, Unlicense, OFL for fonts | Refused until reviewed in an ADR (reviewed: certifi MPL-2.0, pillow MIT-CMU, tslib 0BSD) |
 | Development only | Also MPL-2.0 and GPL tools that are not distributed | Listed |
 
 `ng build` writes `3rdpartylicenses.txt` to the frontend bundle, and the frontend image serves it.

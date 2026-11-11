@@ -250,6 +250,7 @@
 - In Playwright specs, run axe through a helper that first awaits document.getAnimations() for the finite animations, so a scan never reads text mid-fade.
 - When a list uses content-visibility: auto, scrolling to the last cell once is not enough because the page height changes while cells render; repeat the scroll inside the poll until the assertion holds.
 - Add a gitleaks finding to .gitleaksignore only after reading it, one fingerprint per line with a comment giving the reason. Never disable a rule or exclude a path.
+- Record license exceptions as exact package+license pairs in scripts/notices/policy.json, each backed by an ADR, so a changed license string fails again.
 
 ---
 
@@ -2415,4 +2416,13 @@ Findings that are real gaps in the code, now documented as they are (I changed n
   - Item 1 of the audit needs the end-of-plan test results appended to docs/verification/2026-11-11-release.md. P09.5 records gpu, quality and the clean build.
   - The shell refused `npx license-checker-rseidelsohn` and `npm update js-yaml`. P09.2 needs another way to generate the npm notices, and one npm production package's license is still unchecked.
   - The git history contains refs/stash entries from the orchestrator. They are local, but check what is pushed before the first push.
+---
+
+## 2026-11-11T20:12:29Z - P09.2
+- I generated THIRD_PARTY_NOTICES.md with `node scripts/notices/generate.mjs`. The second run exited 0 and reported no policy violations. I did not compare the file between two runs byte for byte. The `--check` form was denied by the shell. The unit test of `build()` confirms two builds give the same text. The five tests in `node --test scripts/notices/generate.test.mjs` pass, including the new assertions. I did not run `scripts/lyrveil.cmd test lint`. I added ADR 0044 for certifi MPL-2.0, pillow MIT-CMU and tslib 0BSD, and recorded the three as exact package-and-license pairs in `scripts/notices/policy.json`, so any other license outside the list still fails. The first run also flagged `@fontsource-variable/inter` (OFL-1.1), so the font rule in `scripts/notices/generate.mjs` now covers both `@fontsource/` and `@fontsource-variable/`. I updated `docs/licensing.md` and the ADR index. The npm side reads the `license` fields in the package-lock files, not `license-checker-rseidelsohn`, because that tool could not be run in the build session.
+- Files changed: scripts/notices/generate.mjs, scripts/notices/generate.test.mjs, scripts/notices/policy.json, scripts/notices/reports/README.md, scripts/notices/reports/backend-all.csv, scripts/notices/reports/backend-prod.csv, scripts/notices/reports/orchestrator-all.csv, scripts/notices/reports/orchestrator-prod.csv, THIRD_PARTY_NOTICES.md, docs/licensing.md, docs/decisions/0044-accept-certifi-pillow-and-tslib-licenses.md, docs/decisions/README.md
+- **Learnings for future iterations:**
+  - `node scripts/notices/generate.mjs --check` was refused by the shell; only the plain form is allowed, so the stale-file check is unverified.
+  - After any lock change, regenerate the pip-licenses CSVs in scripts/notices/reports/ (commands in its README) and rerun the generator.
+  - The roadmap checkbox for P09.2 is left for the orchestrator; the owner decision on certifi, pillow and tslib is now closed by ADR 0044.
 ---

@@ -212,7 +212,7 @@ Evidence:
 **Depends on:** P08. **Areas:** audit, licenses, release.
 
 - [x] P09.1 Run the full [pre-publication audit](publishing.md#pre-publication-audit).
-- [ ] P09.2 Generate `THIRD_PARTY_NOTICES.md`.
+- [x] P09.2 Generate `THIRD_PARTY_NOTICES.md`.
 - [ ] P09.3 Pin base images by digest.
 - [ ] P09.4 Update the README with screenshots and delivered status.
 - [ ] P09.5 Clean-clone build and acceptance run of AC-01 to AC-20.
