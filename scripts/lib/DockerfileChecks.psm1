@@ -11,7 +11,8 @@ function Get-DockerfileBaseImage {
     Returns one record per FROM instruction of a Dockerfile text: Line (1-based), Reference (the image with
     ${NAME} and $NAME replaced by the default of a global ARG declared before the first FROM) and Pinned. A FROM
     that names an earlier stage or "scratch" is not a base image and is skipped. Pinned is true only when the
-    reference carries a tag and a sha256 digest of 64 hex digits.
+    reference carries a tag and a sha256 digest of 64 hex digits. The records are returned as a plain array, so
+    callers can count them with @(...).Length.
     #>
     [CmdletBinding()]
     param([AllowEmptyString()] [string]$Text)
@@ -43,14 +44,14 @@ function Get-DockerfileBaseImage {
                 Pinned    = [bool]($reference -cmatch $script:PinnedReference)
             })
     }
-    return , $found
+    return $found.ToArray()
 }
 
 function Invoke-DockerfileCheck {
     <#
     Checks every Dockerfile that Git tracks under Root (see Get-RepositoryFile) and returns one result with Name,
-    Unit, Checked (the base images seen) and Failures (each unpinned FROM, or a missing Dockerfile set). Throws
-    when Git fails.
+    Unit, Checked (the base images seen) and Failures (each unpinned FROM). A repository with no Dockerfile
+    passes with nothing checked, like the other lint checks over an empty set. Throws when Git fails.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)] [string]$Root)
@@ -62,11 +63,8 @@ function Invoke-DockerfileCheck {
         Checked  = 0
         Failures = New-Object System.Collections.Generic.List[string]
     }
-    if ($files.Length -eq 0) {
-        $result.Failures.Add('No Dockerfile is tracked: nothing was checked.')
-    }
     foreach ($file in $files) {
-        foreach ($image in (Get-DockerfileBaseImage -Text (Read-Utf8Text -Path (Join-Path $Root $file)))) {
+        foreach ($image in @(Get-DockerfileBaseImage -Text (Read-Utf8Text -Path (Join-Path $Root $file)))) {
             $result.Checked++
             if (-not $image.Pinned) {
                 $result.Failures.Add("${file}:$($image.Line): base image '$($image.Reference)' is not pinned as name:tag@sha256:<digest>.")
