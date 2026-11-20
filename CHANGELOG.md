@@ -33,7 +33,10 @@ an entry says "not yet run", the test was written and has not run.
 
 - Demo screenshot script (P08.5). `npm run screenshots` in `tests/e2e` regenerates the README screenshots from the demo
   characters and synthetic data, and refuses to save a screen that shows a home path, an e-mail address or a token.
-  The images themselves are not generated yet. See [Demo screenshots](docs/screenshots.md).
+  See [Demo screenshots](docs/screenshots.md).
+- README screenshots and status (P09.4). Five generated screenshots (conversations, character profile, scenarios,
+  models, gallery) are committed under `docs/images/screenshots/` and shown in the README, which states the current
+  status: software delivered, hardware acceptance (P09.5) pending, not released as 1.0.
 - Long histories and large galleries (P08.4). A conversation of thousands of messages now keeps only the messages near
   the screen in the page (from 200 rows on), so it opens, scrolls and loads older pages without slowing down; a shorter
   chat is unchanged. Formatting the dates of a long chat is cached, so a streaming reply no longer reformats them. The

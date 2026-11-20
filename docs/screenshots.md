@@ -20,5 +20,9 @@ e-mail address or a token-like string, so a leaking screen is never written.
 
 ## Status
 
-The script is delivered. The PNG files are not committed yet: the script has not been run against a live test project
-in this change, so no screenshot is claimed. P09.4 adds them to the README after the first run and a visual review.
+The script ran against the live test project (fake runtimes) and the five PNG files are committed under
+`docs/images/screenshots/`. Each was opened and reviewed: only demo data, no real name, path or token. Limits: the
+chats and scenarios screens show their empty state, and the gallery tiles are 1 x 1 pixel fakes stretched to the tile
+size. The README shows them.
+
+The first run found that the character list has no `is_demo` flag; the script now finds Nerea by first name.

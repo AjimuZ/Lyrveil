@@ -2439,3 +2439,11 @@ Findings that are real gaps in the code, now documented as they are (I changed n
   - Dockerfiles of this repo build with the repository root as context (`docker build -f <dir>/Dockerfile .`).
   - A new Dockerfile must pin its FROM or the lint level fails.
 ---
+
+## 2026-11-20T14:00:07Z - P09.4
+- Five screenshots are in docs/images/screenshots/ and shown in the README, with an honest status line (software delivered, hardware acceptance pending, not 1.0). I opened each PNG: they show only demo data (Nerea Falchi, fake models, placeholder gallery tiles) and no real name, path or token. This attempt added the missing CHANGELOG entry and removed the "images not generated yet" sentence from the earlier P08.5 entry. I did not regenerate the images or re-run the documentation checks this attempt. Which README commands were checked is also unconfirmed.
+- Files changed: README.md, CHANGELOG.md, docs/screenshots.md, docs/roadmap.md, tests/e2e/screenshots/capture.mjs, docs/images/screenshots/chats.png, docs/images/screenshots/character-profile.png, docs/images/screenshots/scenarios.png, docs/images/screenshots/models.png, docs/images/screenshots/gallery.png
+- **Learnings for future iterations:**
+  - The gallery screenshot shows tall red placeholder tiles, which the README caption notes as stretched synthetic images.
+  - The 1.0-delivered statement stays with P09.4b until the hardware acceptance P09.5.
+---

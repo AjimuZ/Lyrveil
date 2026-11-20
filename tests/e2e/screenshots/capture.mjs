@@ -45,7 +45,8 @@ try {
   }
   const { created } = await loaded.json();
   const characters = (await (await page.request.get(`${baseURL}/api/v1/characters`)).json()).items;
-  const nerea = characters.find((item) => item.is_demo && item.first_name === 'Nerea');
+  // The list items carry no `is_demo` flag, so the demo character is found by its name.
+  const nerea = characters.find((item) => item.first_name === 'Nerea');
   if (nerea === undefined) {
     throw new Error(`the demo character Nerea is missing (${created.length} created)`);
   }
