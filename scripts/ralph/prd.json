@@ -2750,15 +2750,16 @@
     },
     {
       "id": "P09.4",
-      "title": "Update the README with screenshots and delivered status",
-      "description": "Update README.md with the P08.5 screenshots and the delivered status.",
+      "title": "Update the README with the screenshots and the current status",
+      "description": "Generate the P08.5 screenshots, review them, and add them to README.md with the current status: software delivered, hardware acceptance (P09.5) pending.",
       "acceptanceCriteria": [
-        "The README shows the screenshots and describes 1.0 as delivered, with commands that work.",
+        "The P08.5 screenshots are generated with `npm run screenshots` in tests/e2e, reviewed by opening each PNG, and committed under docs/images/screenshots/.",
+        "The README shows the screenshots and states the current status honestly (software delivered, hardware acceptance pending), with commands that work; docs/screenshots.md no longer says the images are missing.",
         "The documentation checks pass."
       ],
       "priority": 117,
       "passes": false,
-      "notes": "BLOCKED: The P08.5 screenshots do not exist. docs/images/screenshots/ is missing and no PNG is tracked under docs/. docs/screenshots.md says the script has not been run and the images need a first run plus a visual review. Producing them takes `npm run screenshots` against a live Compose test project, with a browser and the fake runtimes. I cannot start that project with my allowlist, and I cannot review the images visually. The README would also have to call 1.0 delivered, but no real model has run and the hardware checks are pending. So I could not write that claim honestly. I made no edits.\nShell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "notes": "Supervisor, 2026-11-20: the Compose test project `lyrveil-test` is already running with the fake runtimes on http://127.0.0.1:14200 (healthy). Do NOT start or stop it. Generate the images with `npm run screenshots` run from tests/e2e (allowed: `npm run *`; node_modules is installed; if Chromium is missing run `npx playwright install chromium`). Then open each PNG in docs/images/screenshots/ with the Read tool and check it visually: demo characters and synthetic data only, no real name, path or token. Do not claim 1.0 as delivered: the 'describes 1.0 as delivered' requirement moved to P09.4b, which waits for the hardware acceptance P09.5.\nShell: only allowlisted commands, each run alone, no `cd ... &&`; read files with Read and Grep.",
       "dependsOn": [
         "P09.2",
         "P09.3",
@@ -2771,6 +2772,28 @@
         "line": "P09.4 Update the README with screenshots and delivered status."
       },
       "effort": "medium"
+    },
+    {
+      "id": "P09.4b",
+      "title": "Describe 1.0 as delivered in the README",
+      "description": "After the hardware acceptance P09.5, update the README status banner to describe 1.0 as delivered.",
+      "acceptanceCriteria": [
+        "The README describes 1.0 as delivered, citing the P09.5 acceptance evidence, with commands that work.",
+        "The documentation checks pass."
+      ],
+      "priority": 117,
+      "passes": false,
+      "notes": "Split from P09.4 on 2026-11-20: the delivered claim needs the P09.5 hardware acceptance first.",
+      "dependsOn": [
+        "P09.4",
+        "P09.5"
+      ],
+      "taskType": "docs_simple",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P09: Publication",
+        "line": "P09.4 Update the README with screenshots and delivered status."
+      }
     },
     {
       "id": "P09.5",
@@ -2811,7 +2834,8 @@
       "passes": false,
       "notes": "BLOCKED: waiting for a person: Decidi tu la pubblicazione: crea il tag v1.0.0, fai il push e pubblica la release.\nSet aside at setup: publishing a release is the owner's decision and needs `git tag` and `gh`, which sessions may not run. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
-        "P09.5"
+        "P09.5",
+        "P09.4b"
       ],
       "taskType": "docs_simple",
       "source": {
