@@ -27,10 +27,10 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0021](0021-character-format-and-card-v2.md) | Own versioned JSON format, Character Card V2 after 1.0 | Accepted |
 | [0022](0022-root-scripts-and-repository-layout.md) | Thin root scripts, implementations in `scripts/` | Superseded by [0029](0029-windows-operation-with-docker-volumes.md) |
 | [0023](0023-obsidian-bloom-accessibility-extensions.md) | Control border and semantic tokens added to the palette | Accepted |
-| [0024](0024-selectable-model-profiles.md) | Selectable model profiles with tier defaults | Accepted |
+| [0024](0024-selectable-model-profiles.md) | Selectable model profiles with tier defaults | Accepted; its Gemma 4 profiles and defaults superseded by [0045](0045-drop-gemma-4-rocinante-x-default.md) |
 | [0025](0025-prompt-templates-per-model-family.md) | Prompt templates per model family over the native generate API | Accepted |
 | [0026](0026-two-pass-image-rendering.md) | Two-pass image rendering with core ComfyUI nodes | Accepted |
-| [0027](0027-hardware-tiers-after-ram-upgrade.md) | Hardware tiers after the reference machine's RAM upgrade | Accepted |
+| [0027](0027-hardware-tiers-after-ram-upgrade.md) | Hardware tiers after the reference machine's RAM upgrade | Accepted; its default text profiles superseded by [0045](0045-drop-gemma-4-rocinante-x-default.md) |
 | [0028](0028-koboldcpp-pin-v1-124-2.md) | Locally built runtime images, with KoboldCpp pinned to v1.124.2 | Accepted |
 | [0029](0029-windows-operation-with-docker-volumes.md) | Operation from Windows, with live data and models in Docker volumes | Accepted |
 | [0030](0030-koboldcpp-efficiency-levers.md) | KoboldCpp efficiency levers measured in P02 | Accepted |
@@ -48,3 +48,4 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0042](0042-profile-reload-as-a-queued-job-and-name-only-registration.md) | Profile reload as a queued maintenance job, the tier read by the backend, name-only registration | Accepted |
 | [0043](0043-windowed-message-list-without-cdk-virtual-scroll.md) | A windowed message list of our own instead of the CDK virtual scroll | Accepted |
 | [0044](0044-accept-certifi-pillow-and-tslib-licenses.md) | Accept certifi (MPL-2.0), pillow (MIT-CMU) and tslib (0BSD) | Accepted |
+| [0045](0045-drop-gemma-4-rocinante-x-default.md) | Drop the Gemma 4 profiles, Rocinante X 12B the default on every tier | Accepted |

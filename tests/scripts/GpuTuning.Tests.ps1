@@ -77,12 +77,14 @@ Describe 'Get-GpuTuningPlan' {
         { Get-GpuTuningPlan -Catalog $script:Catalog -ProfileId @('missing') } | Should -Throw "*no text profile 'missing'*"
     }
 
-    It 'plans the three P02 profiles of the real catalog, with MOE_CPU_LAYERS trials only for gemma-4-26b-a4b' {
+    It 'plans rocinante-x-12b of the real catalog, with no MOE_CPU_LAYERS trial, since no profile is a mixture of experts (ADR 0045)' {
         $path = Join-Path $PSScriptRoot '..\..\config\model-catalog.json'
         $catalog = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json
         $plan = @(Get-GpuTuningPlan -Catalog $catalog)
+        @(Get-GpuTuningProfileId) | Should -Be @('rocinante-x-12b')
         @($plan | ForEach-Object { $_.Profile } | Select-Object -Unique) | Should -Be @(Get-GpuTuningProfileId)
-        @($plan | Where-Object { $_.Step -eq 7 } | ForEach-Object { $_.Profile } | Select-Object -Unique) | Should -Be @('gemma-4-26b-a4b')
+        @($plan | Where-Object { $_.Step -eq 7 }) | Should -BeNullOrEmpty
+        @($plan | ForEach-Object { $_.Name }) | Should -Contain 'context-16384'
     }
 }
 
@@ -283,9 +285,9 @@ Describe 'Step 7: Get-GpuMoeDecision' {
             '0' = Get-Summary @{ Speed = (Get-Repeat 12 20); PromptSecond = @(9) }
             '8' = Get-Summary @{ Speed = (Get-Repeat 14 20); PromptSecond = @(9) }
         }
-        $decision = Get-GpuMoeDecision -Moe $true -Setting $settings -FallbackProfile 'gemma-4-12b'
+        $decision = Get-GpuMoeDecision -Moe $true -Setting $settings -FallbackProfile 'dense'
         $decision.SpeedRuleMet | Should -BeFalse
-        $decision.DefaultProfile | Should -Be 'gemma-4-12b'
+        $decision.DefaultProfile | Should -Be 'dense'
         $decision.Value | Should -Be 8
     }
 
@@ -427,7 +429,7 @@ Describe 'Get-GpuEarlierTrial' {
     BeforeAll {
         function Write-ResultFile {
             # Writes a results file Name into Folder with Trial records, for GPU Gpu and procedure version Version.
-            param([string]$Folder, [string]$Name, [object[]]$Trial, [string]$Gpu = 'Card', [int]$Version = 1)
+            param([string]$Folder, [string]$Name, [object[]]$Trial, [string]$Gpu = 'Card', [int]$Version = (Get-GpuTuningRule).ProcedureVersion)
             $document = [ordered]@{ procedure_version = $Version; gpu = $Gpu; trials = $Trial }
             [System.IO.File]::WriteAllText((Join-Path $Folder $Name), (ConvertTo-Json -InputObject $document -Depth 8))
         }
@@ -445,7 +447,7 @@ Describe 'Get-GpuEarlierTrial' {
         Write-ResultFile $folder 'tuning-20261125-100000.json' @((Get-StoredTrial 'A' 'old'), (Get-StoredTrial 'batch-256' 'old'), (Get-StoredTrial 'mmap-0' 'old'))
         Write-ResultFile $folder 'tuning-20261125-110000.json' @((Get-StoredTrial 'A' 'new'), (Get-StoredTrial 'batch-256' 'bad' -Problem @('2 of 2 long prompts failed.')), (Get-StoredTrial 'mmap-1' 'invalid' -Status 'invalid'))
         Write-ResultFile $folder 'tuning-20261125-120000.json' @((Get-StoredTrial 'kv-q8_0' 'other')) -Gpu 'Other card'
-        Write-ResultFile $folder 'tuning-20261125-130000.json' @((Get-StoredTrial 'moe-8' 'v2')) -Version 2
+        Write-ResultFile $folder 'tuning-20261125-130000.json' @((Get-StoredTrial 'moe-8' 'older')) -Version 1
         [System.IO.File]::WriteAllText((Join-Path $folder 'tuning-20261125-140000.json'), 'not JSON')
 
         $found = Get-GpuEarlierTrial -Folder $folder -GpuName 'Card'

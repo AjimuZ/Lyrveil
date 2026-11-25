@@ -72,7 +72,8 @@ export class ModelSettingsScreen implements OnInit, OnDestroy {
 
   protected readonly newKind = signal<ModelKind>('text');
   protected readonly newFile = signal('');
-  protected readonly newTemplate = signal<CustomTemplate>('gemma4');
+  /** Starts on the family of the default profile, rocinante-x-12b (ADR 0045); `gemma4` stays offered. */
+  protected readonly newTemplate = signal<CustomTemplate>('mistral_v3_tekken');
 
   protected readonly sections = computed<readonly Section[]>(() => {
     const settings = this.store.settings();

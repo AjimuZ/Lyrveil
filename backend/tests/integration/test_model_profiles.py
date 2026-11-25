@@ -37,6 +37,8 @@ API = "/api/v1"
 BOOT = "0192f3a0-0000-7000-8000-000000000000"
 CUSTOM_TEXT = "my-model.Q4_K_M.gguf"
 CUSTOM_IMAGE = "my-checkpoint.safetensors"
+# The test-only profile of with_target_only.
+TARGET_ONLY = "target-only-12b"
 
 
 @pytest.fixture
@@ -72,6 +74,25 @@ def place(models: Path, catalog: Catalog, *profile_ids: str) -> None:
         if profile.id in profile_ids:
             folder = "llm" if profile.file.endswith(".gguf") else "image/checkpoints"
             (models / folder / profile.file).write_bytes(b"\0" * profile.bytes)
+
+
+def with_target_only(catalog: Catalog) -> Catalog:
+    """Returns `catalog` with one more text profile, TARGET_ONLY, a copy of its last one that needs the target tier.
+
+    Since ADR 0045 no shipped profile needs it, and the tier rule still needs a profile to refuse."""
+    document = catalog.model_dump(mode="json")
+    extra = dict(document["text"][-1])
+    extra |= {
+        "id": TARGET_ONLY,
+        "display_name": "Target only",
+        "file": "Target-Only.gguf",
+        "bytes": 2000,
+        "min_tier": "target",
+        "default_tiers": [],
+    }
+    extra["url"] = extra["url"].rsplit("/", 1)[0] + "/Target-Only.gguf"
+    document["text"].append(extra)
+    return parse_catalog(document)
 
 
 def profiles_for(engine: Engine, catalog: Catalog, models: Path, launch_file: Path, tier: Tier) -> ModelProfiles:
@@ -155,28 +176,30 @@ def depth(engine: Engine) -> int:
 async def test_a_text_profile_change_writes_the_launch_file_and_the_reload_stops_verifies_and_loads_it(
     engine: Engine, settings: Settings, catalog: Catalog, models: Path, launch_file: Path
 ) -> None:
-    place(models, catalog, "gemma-4-26b-a4b", "gemma-4-12b")
+    place(models, catalog, "rocinante-x-12b", "rocinante-12b-v1.1")
     profiles = profiles_for(engine, catalog, models, launch_file, "target")
     assert profiles.ensure_launch_file() is True
-    assert values(launch_file)["MODEL_PROFILE"] == "gemma-4-26b-a4b"
+    assert values(launch_file)["MODEL_PROFILE"] == "rocinante-x-12b"
     orchestrator = Orchestrator(launch_file)
     client = client_for(settings, engine, profiles)
 
     listed = client.get(f"{API}/settings/models").json()
     assert listed["tier"] == "target"
-    assert listed["active"] == {"text": "gemma-4-26b-a4b", "image": "illustrious-xl-v2.0"}
+    assert listed["active"] == {"text": "rocinante-x-12b", "image": "illustrious-xl-v2.0"}
     states = {item["id"]: (item["state"], item["selectable"]) for item in listed["text"]}
-    assert states["gemma-4-12b"] == ("verified", True)
-    assert states["orion-26b-a4b"] == ("missing", False)
-    orion = next(item for item in listed["text"] if item["id"] == "orion-26b-a4b")
-    assert orion["download_command"] == ".\\scripts\\lyrveil.cmd models -Model orion-26b-a4b"
+    assert states["rocinante-12b-v1.1"] == ("verified", True)
+    noobai = next(item for item in listed["image"] if item["id"] == "noobai-xl-1.1")
+    assert (noobai["state"], noobai["download_command"]) == (
+        "missing",
+        ".\\scripts\\lyrveil.cmd models -Model noobai-xl-1.1",
+    )
 
-    changed = client.patch(f"{API}/settings/models", json={"llm_profile_id": "gemma-4-12b"})
+    changed = client.patch(f"{API}/settings/models", json={"llm_profile_id": "rocinante-12b-v1.1"})
     assert changed.status_code == 200, changed.text
-    assert changed.json()["active"]["text"] == "gemma-4-12b"
-    small = next(profile for profile in catalog.text if profile.id == "gemma-4-12b")
+    assert changed.json()["active"]["text"] == "rocinante-12b-v1.1"
+    small = next(profile for profile in catalog.text if profile.id == "rocinante-12b-v1.1")
     assert values(launch_file) == {
-        "MODEL_PROFILE": "gemma-4-12b",
+        "MODEL_PROFILE": "rocinante-12b-v1.1",
         "MODEL_FILE": small.file,
         "CONTEXT_SIZE": str(small.context_size),
         "GPU_LAYERS": "-1",
@@ -188,7 +211,7 @@ async def test_a_text_profile_change_writes_the_launch_file_and_the_reload_stops
         "SMART_CACHE": str(small.smart_cache),
         "LEVEL": "A",
     }
-    assert read(engine, lambda connection: get_value(connection, LLM_PROFILE_ID)) == "gemma-4-12b"
+    assert read(engine, lambda connection: get_value(connection, LLM_PROFILE_ID)) == "rocinante-12b-v1.1"
     # The change alone touches no mode: the runtime reads the file at its next load.
     assert orchestrator.requests == []
 
@@ -204,7 +227,7 @@ async def test_a_text_profile_change_writes_the_launch_file_and_the_reload_stops
     reloaded = await scheduler.run_once()
     assert reloaded is not None
     assert (reloaded.id, reloaded.status) == (job["id"], JobStatus.COMPLETED)
-    assert reloaded.result == {"profile_id": "gemma-4-12b", "model_file": small.file}
+    assert reloaded.result == {"profile_id": "rocinante-12b-v1.1", "model_file": small.file}
     # The runtime stopped, the release was verified (IDLE), and only then the new file loaded.
     assert orchestrator.requests == [("none", job["id"]), ("llm", job["id"])]
     assert orchestrator.loaded == [small.file]
@@ -219,20 +242,21 @@ async def test_a_text_profile_change_writes_the_launch_file_and_the_reload_stops
 async def test_a_profile_above_the_tier_or_with_a_missing_file_is_refused_before_any_mode_change(
     engine: Engine, settings: Settings, catalog: Catalog, models: Path, launch_file: Path
 ) -> None:
-    place(models, catalog, "gemma-4-26b-a4b", "gemma-4-12b")
+    catalog = with_target_only(catalog)
+    place(models, catalog, TARGET_ONLY, "rocinante-x-12b")
     profiles = profiles_for(engine, catalog, models, launch_file, "reduced")
     profiles.ensure_launch_file()
     before = launch_file.read_bytes()
-    assert values(launch_file)["MODEL_PROFILE"] == "gemma-4-12b"
+    assert values(launch_file)["MODEL_PROFILE"] == "rocinante-x-12b"
     orchestrator = Orchestrator(launch_file)
     client = client_for(settings, engine, profiles)
 
     listed = {item["id"]: item for item in client.get(f"{API}/settings/models").json()["text"]}
-    assert (listed["gemma-4-26b-a4b"]["state"], listed["gemma-4-26b-a4b"]["selectable"]) == ("verified", False)
+    assert (listed[TARGET_ONLY]["state"], listed[TARGET_ONLY]["selectable"]) == ("verified", False)
 
     for profile_id, needle in (
-        ("gemma-4-26b-a4b", "20 GiB"),
-        ("rocinante-x-12b", ".\\scripts\\lyrveil.cmd models -Model rocinante-x-12b"),
+        (TARGET_ONLY, "20 GiB"),
+        ("rocinante-12b-v1.1", ".\\scripts\\lyrveil.cmd models -Model rocinante-12b-v1.1"),
         ("not-a-profile", "non esiste"),
     ):
         refused = client.patch(f"{API}/settings/models", json={"llm_profile_id": profile_id})
@@ -243,14 +267,14 @@ async def test_a_profile_above_the_tier_or_with_a_missing_file_is_refused_before
     assert client.patch(f"{API}/settings/models", json={"llm_profile_id": "../x"}).status_code == 422
 
     # A model file that went missing refuses Applica ora before a job exists.
-    small = next(profile for profile in catalog.text if profile.id == "gemma-4-12b")
+    small = next(profile for profile in catalog.text if profile.id == "rocinante-x-12b")
     (models / "llm" / small.file).unlink()
     refused = client.post(f"{API}/settings/models/apply")
     assert (refused.status_code, refused.json()["code"]) == (409, "MODEL_PROFILE_UNAVAILABLE")
     assert depth(engine) == 0
 
     # A file that goes missing after the job was queued fails the job before the mode changes.
-    place(models, catalog, "gemma-4-12b")
+    place(models, catalog, "rocinante-x-12b")
     assert client.post(f"{API}/settings/models/apply").status_code == 202
     (models / "llm" / small.file).write_bytes(b"\0" * (small.bytes + 1))
     failed = await scheduler_for(engine, profiles, orchestrator).run_once()
@@ -263,7 +287,7 @@ async def test_a_profile_above_the_tier_or_with_a_missing_file_is_refused_before
 def test_custom_registration_accepts_only_file_names_of_the_two_folders_with_the_two_extensions(
     engine: Engine, settings: Settings, catalog: Catalog, models: Path, launch_file: Path, tmp_path: Path
 ) -> None:
-    place(models, catalog, "gemma-4-12b")
+    place(models, catalog, "rocinante-x-12b")
     profiles = profiles_for(engine, catalog, models, launch_file, "reduced")
     client = client_for(settings, engine, profiles)
     llm = models / "llm"
@@ -278,7 +302,7 @@ def test_custom_registration_accepts_only_file_names_of_the_two_folders_with_the
     os.symlink(llm / CUSTOM_TEXT, llm / "alias.gguf")
     (llm / "folder.gguf").mkdir()
 
-    def register(kind: str, name: str, template: str | None = "gemma4") -> tuple[int, str]:
+    def register(kind: str, name: str, template: str | None = "mistral_v3_tekken") -> tuple[int, str]:
         body = {"kind": kind, "file": name} | ({} if template is None else {"template": template})
         answer = client.post(f"{API}/settings/models/custom", json=body)
         return answer.status_code, answer.json().get("code", "")
@@ -303,7 +327,7 @@ def test_custom_registration_accepts_only_file_names_of_the_two_folders_with_the
     assert register("text", CUSTOM_TEXT, None) == (422, "VALIDATION_ERROR")
     assert register("image", CUSTOM_IMAGE, "gemma4") == (422, "VALIDATION_ERROR")
     assert register("text", "absent.gguf") == (404, "NOT_FOUND")
-    small = next(profile for profile in catalog.text if profile.id == "gemma-4-12b")
+    small = next(profile for profile in catalog.text if profile.id == "rocinante-x-12b")
     assert register("text", small.file) == (409, "CONFLICT")
     assert depth(engine) == 0
 
@@ -326,7 +350,7 @@ def test_custom_registration_accepts_only_file_names_of_the_two_folders_with_the
 async def test_the_hash_job_stores_the_custom_profile_which_can_then_be_selected_and_removed(
     engine: Engine, settings: Settings, catalog: Catalog, models: Path, launch_file: Path
 ) -> None:
-    place(models, catalog, "gemma-4-12b")
+    place(models, catalog, "rocinante-x-12b")
     profiles = profiles_for(engine, catalog, models, launch_file, "reduced")
     profiles.ensure_launch_file()
     client = client_for(settings, engine, profiles)
@@ -386,7 +410,7 @@ async def test_the_hash_job_stores_the_custom_profile_which_can_then_be_selected
     busy = client.delete(f"{API}/settings/models/custom/{text_id}")
     assert (busy.status_code, busy.json()["code"]) == (409, "CONFLICT")
 
-    assert client.patch(f"{API}/settings/models", json={"llm_profile_id": "gemma-4-12b"}).status_code == 200
+    assert client.patch(f"{API}/settings/models", json={"llm_profile_id": "rocinante-x-12b"}).status_code == 200
     assert client.delete(f"{API}/settings/models/custom/{text_id}").status_code == 204
     assert client.delete(f"{API}/settings/models/custom/{text_id}").status_code == 404
     assert (models / "llm" / CUSTOM_TEXT).read_bytes() == text_bytes

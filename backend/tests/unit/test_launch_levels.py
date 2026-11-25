@@ -29,7 +29,7 @@ def catalog() -> Catalog:
     return load_catalog(find_catalog())
 
 
-def launch_file(profile: str, level: str = "A", context: int = 16384) -> str:
+def launch_file(profile: str, level: str = "A", context: int = 12288) -> str:
     """A launch file as setup writes it, with a comment the lowering must keep."""
     return (
         "# The launch file of the text runtime.\n"
@@ -63,8 +63,9 @@ def oom_load(seq: int, *, mode: LeaseMode = "llm", oom: bool = True) -> GpuStatu
 @pytest.mark.parametrize(
     ("profile_id", "expected"),
     [
-        ("gemma-4-26b-a4b", [LevelValues(16384, 512), LevelValues(12288, 512), LevelValues(8192, 256)]),
-        ("rocinante-x-12b", [LevelValues(8192, 512), LevelValues(6144, 512), LevelValues(4096, 256)]),
+        # Three quarters of 12288 is 9216, which the entrypoint refuses: level B takes 8192.
+        ("rocinante-x-12b", [LevelValues(12288, 512), LevelValues(8192, 512), LevelValues(6144, 256)]),
+        ("rocinante-12b-v1.1", [LevelValues(12288, 512), LevelValues(8192, 512), LevelValues(6144, 256)]),
     ],
 )
 def test_each_level_derives_from_the_profiles_context_as_the_table_says(
@@ -90,21 +91,21 @@ def test_a_grown_context_rounds_each_level_down_to_an_allowed_size(catalog: Cata
 
 def test_lowering_goes_from_a_to_c_and_no_further_keeping_every_other_line(catalog: Catalog, tmp_path: Path) -> None:
     path = tmp_path / "llm-launch.env"
-    path.write_text(launch_file("gemma-4-26b-a4b"), encoding="utf-8")
+    path.write_text(launch_file("rocinante-x-12b"), encoding="utf-8")
     path.chmod(0o644)
     levels = LaunchLevels(catalog, path)
 
     assert levels.current() is LaunchLevel.A
     assert levels.lower() is LaunchLevel.B
-    assert (keys(path)["LEVEL"], keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("B", "12288", "512")
+    assert (keys(path)["LEVEL"], keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("B", "8192", "512")
     assert levels.lower() is LaunchLevel.C
     after_c = path.read_text(encoding="utf-8")
-    assert (keys(path)["LEVEL"], keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("C", "8192", "256")
+    assert (keys(path)["LEVEL"], keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("C", "6144", "256")
     assert levels.lower() is None
     assert path.read_text(encoding="utf-8") == after_c
 
     # Only the level's keys changed; the comment, the order and the other values stayed, and so did the mode.
-    original = launch_file("gemma-4-26b-a4b").splitlines()
+    original = launch_file("rocinante-x-12b").splitlines()
     lowered = after_c.splitlines()
     changed = {line.split("=", 1)[0] for line, now in zip(original, lowered, strict=True) if line != now}
     assert changed == {"CONTEXT_SIZE", "BATCH_SIZE", "LEVEL"}
@@ -115,9 +116,9 @@ def test_lowering_goes_from_a_to_c_and_no_further_keeping_every_other_line(catal
 @pytest.mark.parametrize(
     "content",
     [
-        launch_file("gemma-4-26b-a4b", level="CUSTOM"),
+        launch_file("rocinante-x-12b", level="CUSTOM"),
         launch_file("custom-0123456789ab"),
-        launch_file("gemma-4-26b-a4b").replace("BATCH_SIZE=512\n", ""),
+        launch_file("rocinante-x-12b").replace("BATCH_SIZE=512\n", ""),
     ],
     ids=["custom level", "profile outside the catalog", "missing key"],
 )
@@ -139,7 +140,7 @@ def test_a_classified_load_failure_lowers_the_level_once_even_across_a_restart(
     catalog: Catalog, tmp_path: Path
 ) -> None:
     path = tmp_path / "llm-launch.env"
-    path.write_text(launch_file("rocinante-x-12b", context=8192), encoding="utf-8")
+    path.write_text(launch_file("rocinante-12b-v1.1"), encoding="utf-8")
     levels = LaunchLevels(catalog, path)
 
     # Another state, a failure that is not out of memory and an image failure change nothing.
@@ -159,4 +160,4 @@ def test_a_classified_load_failure_lowers_the_level_once_even_across_a_restart(
     assert levels.observe(oom_load(9)) is LaunchLevel.C
     markers = [line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("# lowered")]
     assert markers == [f"# lowered after orchestrator event {BOOT}/9"]
-    assert (keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("4096", "256")
+    assert (keys(path)["CONTEXT_SIZE"], keys(path)["BATCH_SIZE"]) == ("6144", "256")

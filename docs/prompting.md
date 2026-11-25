@@ -67,8 +67,9 @@ Thinking is always off.
 
 ### `gemma4`
 
-Used by `gemma-4-26b-a4b`, `gemma-4-12b` and `orion-26b-a4b`. Matches the official template with
-thinking off:
+No catalog profile uses it since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md), which removed
+`gemma-4-26b-a4b`, `gemma-4-12b` and `orion-26b-a4b`. It stays for custom profiles registered with this family.
+Matches the official template with thinking off:
 
 ```text
 <|turn>system
@@ -89,7 +90,7 @@ end token of the model.
 
 ### `mistral_v3_tekken`
 
-Used by `rocinante-x-12b`. No spaces around the markers. The system text joins the last user turn,
+Used by `rocinante-x-12b`, the default text profile of both tiers. No spaces around the markers. The system text joins the last user turn,
 as in the template of its GGUF, followed by the frame:
 
 ```text
@@ -132,30 +133,36 @@ Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}
   a test fixture. Delivered with GPU.2 as T-GPU-03: `backend/tests/fixtures/tokenization/` holds the prompts and the
   recorded identifiers of the three families, and the control tokens came out as documented
   ([evidence](verification/2026-11-25-gpu-text-profiles.md)). The comparison with the official Jinja templates has
-  not run.
+  not run. Since ADR 0045 the gpu level tokenizes only the `mistral_v3_tekken` and `chatml` prompts again; the
+  `gemma4` recording of GPU.2 (with `gemma-4-12b`) stays as the fixture of that family.
 
 ## Sampler presets
 
-Values not listed are left to upstream defaults. Each text profile names a preset. The Gemma 4 values
-start from the model card, which gives one configuration for all uses. The Mistral Nemo values start
+Values not listed are left to upstream defaults. Each text profile names a preset. The Mistral Nemo values start
 from the requirements and the Rocinante author's advice to use DRY. P02 and P04 tune them with the
-quality protocols.
+quality protocols. The `gemma4` preset left with the Gemma 4 profiles
+([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)).
 
-| Parameter | `gemma4` chat | `gemma4` structured | `nemo` chat | `nemo` structured |
-| --- | --- | --- | --- | --- |
-| `temperature` | 1.0 | 0.3 | 0.8 | 0.3 |
-| `top_p` | 0.95 | 0.95 | 0.95 | 0.9 |
-| `top_k` | 64 | 64 | 0 | 0 |
-| `min_p` | 0 | 0 | 0.05 | 0.05 |
-| `rep_pen` | 1.0 | 1.0 | 1.05 | 1.0 |
-| `rep_pen_range` | Unset | Unset | 512 | Unset |
-| `dry_multiplier` | 0.8 | 0 | 0.8 | 0 |
-| `dry_base` | 1.75 | Unset | 1.75 | Unset |
-| `dry_allowed_length` | 2 | Unset | 2 | Unset |
-| `dry_penalty_last_n` | 320 | Unset | 320 | Unset |
-| `dry_sequence_breakers` | `["\n", ":", "\"", "*"]` | Unset | `["\n", ":", "\"", "*"]` | Unset |
-| `max_length` | By length band, see below | By task, see below | By length band | By task |
-| `grammar` | Unset | Generated from the schema | Unset | Generated from the schema |
+| Parameter | `nemo` chat | `nemo` structured |
+| --- | --- | --- |
+| `temperature` | 0.8 | 0.3 |
+| `top_p` | 0.95 | 0.9 |
+| `top_k` | 0 | 0 |
+| `min_p` | 0.05 | 0.05 |
+| `rep_pen` | 1.05 | 1.0 |
+| `rep_pen_range` | 512 | Unset |
+| `dry_multiplier` | 0.8 | 0 |
+| `dry_base` | 1.75 | Unset |
+| `dry_allowed_length` | 2 | Unset |
+| `dry_penalty_last_n` | 320 | Unset |
+| `dry_sequence_breakers` | `["\n", ":", "\"", "*"]` | Unset |
+| `max_length` | By length band, see below | By task, see below |
+| `grammar` | Unset | Generated from the schema |
+
+Delivered: replies and image captions send the `nemo` chat values (`ReplySettings` in
+`backend/src/lyrveil/services/chat_inference.py`) whatever the active profile, until the settings store makes them
+follow it. The structured tasks send only their temperature, 0.3, with `max_length` and the grammar; the other
+structured values of the table are not sent yet.
 
 Structured tasks use a low temperature because the grammar already fixes the form, and the content
 should be stable. The `generic` preset has the `nemo` values and serves every custom profile, whatever
@@ -477,8 +484,8 @@ and [Scheduler](scheduler.md#generation-flow).
 
 ## Italian quality
 
-No profile states Italian by name. Gemma 4 states more than 35 supported languages, Mistral Nemo lists
-Italian for the base model, and the roleplay finetunes state nothing about it. Quality is therefore a
+No profile states Italian by name. Mistral Nemo lists Italian for the base model, and the roleplay
+finetunes state nothing about it. Quality is therefore a
 measured risk ([Risks](risks.md)). The levers are:
 
 - A character's example exchanges, which have the greatest influence on tone.
@@ -528,7 +535,8 @@ characters with different registers.
 | M5. Owner rating of naturalness on 30 sampled replies | Average at least 4 out of 5 |
 | M6. Blind test: which character wrote each of 20 replies | At least 80 % correct |
 
-P04 runs the protocol on the default text profile, `orion-26b-a4b` and `rocinante-x-12b`, with the same scripts.
+P04 runs the protocol on both catalog text profiles, `rocinante-x-12b` (the default) and `rocinante-12b-v1.1`, with
+the same scripts ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)).
 The [consistency protocol](consistency-engine.md#consistency-protocol) (T-QLT-05) and the
 [extraction evaluation](consistency-engine.md#extraction-evaluation) (T-QLT-06) run on every catalog profile.
 

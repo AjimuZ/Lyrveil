@@ -27,13 +27,13 @@ unpacked from the pinned asset, run as user 10001 with no GPU, printed `1.124.2`
 | --- | --- | --- |
 | `--model` | `/models/llm/<MODEL_FILE>` | File of the active [profile](models.md#text-profiles). |
 | `--usecuda` | No argument | CUDA acceleration. |
-| `--contextsize` | From the profile, 16384 for Gemma 4 and 8192 for Mistral Nemo | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-launch-levels). |
+| `--contextsize` | From the profile, 12288 for both Mistral Nemo catalog profiles | Context window. Fallback values in [GPU orchestration](gpu-orchestration.md#load-failures-and-launch-levels). |
 | `--gpulayers` | `-1` | Autofit, the upstream default. It adapts when other programs hold VRAM. Without `--moecpu`, the launcher also enables AutoFit with 1024 MB of padding, which places mixture-of-experts weights between GPU and RAM. |
 | `--moecpu` | Only when `MOE_CPU_LAYERS` is above 0 | Keeps the expert weights of the first N layers in RAM. It disables AutoFit. Fallback for the mixture-of-experts profiles, see [Memory estimates](models.md#memory-estimates). |
 | `--batchsize` | `BATCH_SIZE`, default `512` | Logical batch size, the upstream default. Accepts -1 and powers of two from 16 to 4096. P02 compares up to 2048. |
 | `--quantkv` | `KV_QUANT`, default `f16` | KV cache type. Accepts `f16`, `bf16`, `q8_0`, `q5_1`, `q4_0`. Full effect needs Flash Attention, which is on by default at `v1.124.2`. |
 | `--usemmap` | Only when `USE_MMAP` is 1 | Loads the model with mmap. Off by default upstream. |
-| `--swapadding` | Only when `SWA_PADDING` is above 0 | Extra positions in the sliding-window cache. Upstream: it "affects the rewind limit before reprocessing is forced". Default 0. P04 compares 0, 1024 and 2048 for Gemma 4 ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
+| `--swapadding` | Only when `SWA_PADDING` is above 0 | Extra positions in the sliding-window cache. Upstream: it "affects the rewind limit before reprocessing is forced". Default 0. Serves only a `gemma4` profile, so not passed for the catalog profiles since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). |
 | `--smartcache` | `SMART_CACHE` slots, only when above 0 | When the cached prompt matches a new prompt by less than 70 %, saves the cached state to RAM and restores a slot that matches by more than 70 %. A value of 2 or more sets the slot count, and no value or 1 gives 5 slots, so Lyrveil never passes 1. Requires fast forwarding, which is on by default. P04 compares 0 and 2 on the target tier. |
 | `--host` | `0.0.0.0` | Listens on the internal network only, because no port is published. |
 | `--port` | `5001` | Upstream default port. |
@@ -45,13 +45,14 @@ Flash attention is on by default and needs no flag. These flags are never used:
 `--hordekey`, `--savedatafile`, `--preloadstory`, `--password`. Port isolation makes a
 password unnecessary, and a shared secret would add a value to manage.
 
-`--mmproj` is never passed, so the vision encoders of Gemma 4 are not loaded. `--moe-cache-mib` is not passed,
+`--mmproj` is never passed, so no vision encoder is loaded. `--moe-cache-mib` is not passed,
 because the source marks it experimental. The batch, KV and mmap levers are measured in P02
-([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)), and SWA padding and SmartCache in P04
-([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)).
+([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)), and SmartCache in P04
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). SWA padding is not applicable to the catalog
+profiles since ADR 0045.
 
 `--noswa`, `--nofastforward`, `--noshift` and `--smartcontext` are never passed. `--noswa` keeps a full-size
-sliding-window cache, about 2.8 GiB more VRAM for Gemma 4 26B-A4B at 16384 tokens. `--nofastforward` would
+sliding-window cache for a model that has one, about 2.8 GiB more VRAM for Gemma 4 26B-A4B at 16384 tokens. `--nofastforward` would
 reprocess every prompt. `--smartcontext` is described upstream as outdated.
 
 Source facts used by the design:
@@ -107,7 +108,11 @@ part of `GenerationInput`. Lyrveil uses `grammar`.
 Read on 2026-11-05 unless stated. Memory and speed figures per profile are in
 [Model catalog](models.md#memory-estimates).
 
-### Gemma 4: `gemma-4-26b-a4b`, `gemma-4-12b`, `orion-26b-a4b`
+### Gemma 4: the `gemma4` family
+
+The profiles `gemma-4-26b-a4b`, `gemma-4-12b` and `orion-26b-a4b` left the catalog on 2026-11-25
+([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). These facts stay because the `gemma4` formatter
+serves custom profiles of that family.
 
 | Fact | Value | Source |
 | --- | --- | --- |
@@ -119,7 +124,7 @@ Read on 2026-11-05 unless stated. Memory and speed figures per profile are in
 | Languages | More than 35 supported, more than 140 in pre-training. Italian is not named | Model card |
 | Orion's template | "Gemma 4 31B template, thinking or non-thinking" | Orion card |
 
-### Mistral v3 Tekken: `rocinante-x-12b`
+### Mistral v3 Tekken: `rocinante-x-12b`, the default text profile
 
 | Fact | Value | Source |
 | --- | --- | --- |

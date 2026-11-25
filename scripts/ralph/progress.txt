@@ -264,6 +264,8 @@
 - A Pester script parameter used only inside BeforeDiscovery/BeforeAll needs `[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '<name>', Justification = ...)]` on its param block to pass lint.
 - Keep the rules of a hardware measurement in a pure module that reads both ordered dictionaries and JSON-parsed objects (`Get-TuningValue`). The GPU test then only measures, and stored results can be re-decided and unit-tested without hardware.
 - Under strict mode, index ordered dictionaries keyed by numbers with string keys: an integer index reads by position, not by key.
+- When a catalog change alters what an existing tuning record measured (for example level A's context), raise the ProcedureVersion in GpuTuning.psm1 so partial runs never mix old records into new decisions.
+- Tests that need a catalog shape the shipped file no longer has should derive a variant through model_dump(mode="json") plus parse_catalog, not depend on shipped profile indexes.
 
 ---
 
@@ -2558,4 +2560,26 @@ Docs updated: the testing guide, the GPU orchestration procedure (a "Delivered i
   - The ready time of `docker compose up --wait` has about 2 s resolution (health check `start_interval` 2s). For the 12B profiles both mmap reloads read the same time.
   - `git status` and direct `powershell`/Pester calls are denied in this sandbox. Only `scripts/lyrveil.cmd test <level> [args]` runs, so new Pester unit files can only be checked by the orchestrator's `unit` level.
   - P02.7 still has to apply the computed values to `config/model-catalog.json` and load each combination of kept values once (for example 26B at 24576 with batch 2048 and mmap 1).
+---
+
+## 2026-11-25T21:07:09Z - DROP.1
+- Applied the owner decision to drop Gemma 4 (ADR 0045). config/model-catalog.json now holds rocinante-x-12b (default on both tiers) and rocinante-12b-v1.1, both at the GPU.3 values (context 12288, batch 512, no mmap, f16), plus the three image profiles. The backend's fixed reply settings now use the mistral_v3_tekken family and the nemo chat preset (temperature 0.8, top_k 0, min_p 0.05, rep_pen 1.05, rep_pen_range 512), and the structured services default to the same family. The unused `gemma4` sampler preset is removed. The `gemma4` template, its formatter, its tokenization fixture, the swa_padding rule and the frontend option stay for custom profiles, justified in the ADR. The ADR records step 7 (MOE_CPU_LAYERS, AutoFit vs CPU expert layers) and SWA padding as not applicable. ADRs 0024 and 0027 are marked superseded in part. The gpu level now loads both Rocinante profiles in T-GPU-02 to 04 and tunes only rocinante-x-12b, with procedure version 2 and a fallback of rocinante-x-12b. Backend, frontend, Pester and docker tests, the example launch file, README and 16 docs are updated, and there is a new verification record.
+
+Checks:
+- `test lint` passed.
+- Backend and orchestrator pytest unit and integration (through `test unit` with paths) passed: 1479 and 793 tests.
+- Three `test gpu` selector runs covered every tuning trial and passed. All decisions were made and T-GPU-14 passed: 53.0 T/s, first token 2.22 s at 12288.
+- The full `test gpu` was cut off by the 10-minute tool limit during the tuning file. Its text-profile results file records no problem for either profile (margin about 2210 MiB), but its Pester summary and the T-GPU-01 result were not seen.
+
+Not run: the unit-level Pester files I changed (GpuTuning.Tests.ps1, TestCommand.Tests.ps1), frontend Vitest, e2e and docker.
+
+No prompt-injection attempts were found.
+- Files changed: config/model-catalog.json, config/examples/llm-launch.env, backend/src/lyrveil/catalog.py, backend/src/lyrveil/prompts/formatter.py, backend/src/lyrveil/services/chat_inference.py, backend/src/lyrveil/services/character_creator.py, backend/src/lyrveil/services/memory_extraction.py, backend/src/lyrveil/services/summaries.py, backend/tests/unit/test_catalog.py, backend/tests/unit/test_launch_levels.py, backend/tests/integration/test_launch_levels.py, backend/tests/integration/test_model_profiles.py, backend/tests/integration/test_ai_resources.py, backend/tests/integration/test_reply_streaming.py, backend/tests/integration/test_scenarios.py, frontend/src/app/features/models/model-settings-screen.ts, frontend/src/app/features/models/model-settings-screen.spec.ts, frontend/src/app/features/models/model-settings-store.spec.ts, frontend/src/app/features/resources/resources-store.spec.ts, scripts/lib/GpuTuning.psm1, scripts/lib/TestCommand.psm1, tests/gpu/TextProfiles.Tests.ps1, tests/gpu/Tuning.Tests.ps1, tests/scripts/GpuTuning.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, tests/docker/TextRuntime.Tests.ps1, README.md, CHANGELOG.md, docs/decisions/0045-drop-gemma-4-rocinante-x-default.md, docs/decisions/README.md, docs/decisions/0024-selectable-model-profiles.md, docs/decisions/0027-hardware-tiers-after-ram-upgrade.md, docs/models.md, docs/prompting.md, docs/gpu-orchestration.md, docs/consistency-engine.md, docs/api.md, docs/backend.md, docs/configuration.md, docs/glossary.md, docs/licensing.md, docs/memory-engine.md, docs/operations.md, docs/requirements.md, docs/risks.md, docs/runtime-contracts.md, docs/testing.md, docs/README.md, docs/verification/2026-11-25-rocinante-default-gpu.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <pytest paths>` also runs backend and orchestrator tests/integration files, so integration tests can be checked one by one without the integration level.
+  - The full gpu level (Passthrough, TextProfiles for 2 profiles, version-2 tuning of rocinante-x-12b) takes more than 10 minutes. Never pipe it to tail: a timeout loses all output. TextProfiles writes test-results/gpu/text-profiles-<time>.json in its AfterAll, so its numbers survive a kill during Tuning.
+  - The version-2 tuning trials of rocinante-x-12b fit three selector runs under 10 minutes: {A, context-16384} about 3 min, {batch-*, kv-*} about 4 min, {mmap-*} about 3.5 min.
+  - Run from 12288, step 5 of the procedure would grow rocinante-x-12b to 16384 (1580 MiB margin). The catalog keeps 12288 by owner decision; this is an open question in ADR 0045.
+  - The default reply family lives in ReplySettings (chat_inference.py); main.py passes ReplySettings.template to the structured services. Tests that parse reply prompts split the current message on the family's end marker ([/INST] now).
+  - After ADR 0045 no shipped catalog profile needs the target tier, so test_model_profiles builds a test-only target profile (with_target_only) to exercise the tier refusal.
 ---

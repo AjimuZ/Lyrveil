@@ -73,7 +73,7 @@ class CharacterCreatorService:
         engine: Engine,
         runtime: TextRuntime | None = None,
         *,
-        template: TextTemplate = "gemma4",
+        template: TextTemplate = "mistral_v3_tekken",
         queue: JobQueue | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:

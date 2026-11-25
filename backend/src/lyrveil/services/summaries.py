@@ -208,7 +208,7 @@ class SummaryService:
         engine: Engine,
         runtime: TextRuntime | None = None,
         *,
-        template: TextTemplate = "gemma4",
+        template: TextTemplate = "mistral_v3_tekken",
         user: UserProfile | None = None,
         settings: SummarySettings | None = None,
         queue: JobQueue | None = None,

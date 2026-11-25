@@ -47,7 +47,7 @@
 | Scope | Whether a memory belongs to one conversation or is shared by a character. |
 | Stable prefix | The system text and the history, which stay byte-identical between replies, so KoboldCpp reuses them from its cache. |
 | Stage | A durable step of a job. A restart continues from the last finished one. |
-| SWA | Sliding-window attention. Gemma 4 keeps most layers' cache only for a recent window, which limits how far KoboldCpp can rewind a cached prompt. |
+| SWA | Sliding-window attention. A model that uses it, such as Gemma 4 (a `gemma4` custom profile since ADR 0045), keeps most layers' cache only for a recent window, which limits how far KoboldCpp can rewind a cached prompt. The catalog profiles do not use it. |
 | Tag vocabulary | Lyrveil's original list of English image tags, with categories, Italian aliases and token counts. |
 | Tombstone | Hashes left by a deleted memory that block recreating it from the same source. |
 | Variant | One version of a message: an edit, a regeneration or an alternative. |

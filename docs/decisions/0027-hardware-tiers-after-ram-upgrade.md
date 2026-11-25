@@ -1,6 +1,6 @@
 # ADR 0027: Hardware tiers after the reference machine's RAM upgrade
 
-Status: accepted (2026-11-05). Supersedes: [ADR 0019](0019-hardware-tiers.md).
+Status: accepted (2026-11-05). Supersedes: [ADR 0019](0019-hardware-tiers.md). The default text profile column is superseded by [ADR 0045](0045-drop-gemma-4-rocinante-x-default.md) (2026-11-25): `rocinante-x-12b` on both tiers.
 
 ## Context
 On 2026-11-01 the reference machine had one 16 GB module, and [ADR 0019](0019-hardware-tiers.md) supported it as a reduced tier. On 2026-11-05 it has two Crucial DDR5-5600 modules of 16 GB, 31.77 GiB visible. Without `.wslconfig`, Docker sees 15.50 GiB, which is in preflight's warning band. With 32 GB, a mixture-of-experts text model can keep part of its weights in system RAM ([ADR 0024](0024-selectable-model-profiles.md)).

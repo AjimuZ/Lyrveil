@@ -45,13 +45,13 @@ Only known keys with validated values are read. The entrypoint does not `source`
 | --- | --- | --- |
 | `MODEL_PROFILE` | Default text profile of the tier | A catalog identifier or `custom-<12 hex>` |
 | `MODEL_FILE` | File of that profile | `^[A-Za-z0-9._-]{1,128}\.gguf$`. The file must exist under `/models/llm/` |
-| `CONTEXT_SIZE` | From the profile: `16384` for Gemma 4, `8192` for Mistral Nemo | `4096`, `6144`, `8192`, `12288`, `16384`, `24576` |
+| `CONTEXT_SIZE` | From the profile: `12288` for both catalog profiles | `4096`, `6144`, `8192`, `12288`, `16384`, `24576` |
 | `GPU_LAYERS` | `-1` | `-1` to `99` |
 | `BATCH_SIZE` | `512` | `128`, `256`, `512`, `1024`, `2048` |
 | `MOE_CPU_LAYERS` | `0`, meaning AutoFit decides | `0` to `99`. Above 0 adds `--moecpu` |
 | `USE_MMAP` | `0` | `0`, `1`. `1` adds `--usemmap`. P02 decides per profile ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)) |
 | `KV_QUANT` | `f16` | `f16`, `q8_0`. Passed as `--quantkv` |
-| `SWA_PADDING` | `0` | `0`, `1024`, `2048`. Above 0 adds `--swapadding`. Gemma 4 profiles only. P04 decides per profile ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)) |
+| `SWA_PADDING` | `0` | `0`, `1024`, `2048`. Above 0 adds `--swapadding`. `gemma4` profiles only, so `0` for every catalog profile since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)) |
 | `SMART_CACHE` | `0` | `0`, `2`. Above 0 adds `--smartcache`. Target tier only. P04 decides per profile |
 | `LEVEL` | `A` | `A`, `B`, `C`, `CUSTOM`. See [launch levels](gpu-orchestration.md#load-failures-and-launch-levels) |
 
@@ -95,7 +95,7 @@ with their screens.
 
 | Key | Default | Range |
 | --- | --- | --- |
-| `llm.profile_id` | `gemma-4-26b-a4b` on the target tier, `gemma-4-12b` on the reduced tier. Set by `setup.cmd` | A text profile allowed on the machine's tier |
+| `llm.profile_id` | `rocinante-x-12b` on both tiers ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). Set by `setup.cmd` | A text profile allowed on the machine's tier |
 | `images.profile_id` | `illustrious-xl-v2.0` | An image profile |
 | `images.quality` | `alta` | `alta`, `rapida` |
 | `models.custom` | Empty list | Registered [custom profiles](models.md#custom-profiles): identifier, kind, file, size, SHA-256, template family |
@@ -108,16 +108,17 @@ registration job and `DELETE /settings/models/custom/{id}` ([Model catalog](mode
 ### Text generation
 
 Defaults come from the active profile's [sampler preset](prompting.md#sampler-presets). Values below are for the
-`gemma4` preset, with the `nemo` preset in brackets. A changed value is stored for the active profile only.
+`nemo` preset of both catalog profiles, which the `generic` preset of custom profiles shares. A changed value is
+stored for the active profile only.
 
 | Key | Default | Range |
 | --- | --- | --- |
-| `llm.temperature` | 1.0 (0.8) | 0 to 2 |
-| `llm.top_p` | 0.95 (0.95) | 0 to 1 |
-| `llm.top_k` | 64 (0) | 0 to 200 |
-| `llm.min_p` | 0 (0.05) | 0 to 1 |
-| `llm.rep_pen` | 1.0 (1.05) | 1 to 1.5 |
-| `llm.rep_pen_range` | Unset (512) | 0 to 4096 |
+| `llm.temperature` | 0.8 | 0 to 2 |
+| `llm.top_p` | 0.95 | 0 to 1 |
+| `llm.top_k` | 0 | 0 to 200 |
+| `llm.min_p` | 0.05 | 0 to 1 |
+| `llm.rep_pen` | 1.05 | 1 to 1.5 |
+| `llm.rep_pen_range` | 512 | 0 to 4096 |
 | `llm.dry_multiplier` | 0.8 | 0 to 4 |
 | `llm.dry_base` | 1.75 | 1 to 4 |
 | `llm.dry_allowed_length` | 2 | 1 to 20 |

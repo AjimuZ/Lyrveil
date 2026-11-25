@@ -31,9 +31,9 @@ from lyrveil.ports.text_runtime import RuntimeOutOfMemoryError
 
 BOOT = "0192f3a0-0000-7000-8000-000000000000"
 LAUNCH_FILE = (
-    "MODEL_PROFILE=gemma-4-26b-a4b\n"
-    "MODEL_FILE=gemma-4-26B_q4_0-it.gguf\n"
-    "CONTEXT_SIZE=16384\n"
+    "MODEL_PROFILE=rocinante-x-12b\n"
+    "MODEL_FILE=TheDrummer_Rocinante-X-12B-v1-Q4_K_M.gguf\n"
+    "CONTEXT_SIZE=12288\n"
     "GPU_LAYERS=-1\n"
     "BATCH_SIZE=512\n"
     "MOE_CPU_LAYERS=0\n"
@@ -129,7 +129,7 @@ async def test_a_reply_out_of_memory_lowers_the_level_before_its_lease_is_releas
     assert (retried.status, retried.error_code) == (JobStatus.QUEUED, "LLM_OOM")
     # The orchestrator restarts the runtime when the lease ends with `oom`: by then the file holds level B.
     assert leases.released == [("oom", "B")]
-    assert (values(launch_file)["CONTEXT_SIZE"], values(launch_file)["BATCH_SIZE"]) == ("12288", "512")
+    assert (values(launch_file)["CONTEXT_SIZE"], values(launch_file)["BATCH_SIZE"]) == ("8192", "512")
 
 
 @pytest.mark.anyio
@@ -192,7 +192,7 @@ async def test_a_load_out_of_memory_read_by_the_follower_lowers_the_level_once_p
     assert values(launch_file)["LEVEL"] == "B"
     # The retry at level B fails too: the next failure lowers to C.
     await follower.follow_once()
-    assert (values(launch_file)["LEVEL"], values(launch_file)["CONTEXT_SIZE"]) == ("C", "8192")
+    assert (values(launch_file)["LEVEL"], values(launch_file)["CONTEXT_SIZE"]) == ("C", "6144")
     assert [data["state"] for kind, data in events.sent if kind == "gpu.state"] == [
         "RECOVERING",
         "IDLE",

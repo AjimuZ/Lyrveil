@@ -1,9 +1,10 @@
-# T-GPU-14 and the measuring and tuning procedure (docs/gpu-orchestration.md, steps 1 to 9) for the three P02 text profiles on the real GPU, in the project lyrveil-gpu-test.
+# T-GPU-14 and the measuring and tuning procedure (docs/gpu-orchestration.md, steps 1 to 9) for the measured P02 text profile on the real GPU, in the project lyrveil-gpu-test.
 #
 # Run only by "scripts\lyrveil.cmd test gpu", after TextProfiles.Tests.ps1, or alone, for some trials, with selectors:
-#   scripts\lyrveil.cmd test gpu gemma-4-12b/A gemma-4-12b/batch-*
-# scripts/lib/GpuTuning.psm1 plans the trials of gemma-4-12b, gemma-4-26b-a4b and rocinante-x-12b (each one launch
-# file, the catalog's level A with one lever changed) and computes every decision from their records; this file only
+#   scripts\lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/batch-*
+# scripts/lib/GpuTuning.psm1 plans the trials of rocinante-x-12b, the default of both tiers since ADR 0045 (each one
+# launch file, the catalog's level A with one lever changed; no MOE_CPU_LAYERS trial, because it is dense) and
+# computes every decision from their records; this file only
 # measures. For each trial it waits for the VRAM of the previous runtime to fall back, writes the launch file, starts
 # the real lyrveil-llm, and records NVML before and after the load, the ready time, the container's RAM ("docker
 # stats", after the load and after the workload) and the VRAM peak sampled every 250 ms during the workload:
@@ -80,7 +81,7 @@ BeforeAll {
     $script:ImageJob = [ordered]@{ checkpoint = ''; width = 768; height = 768; steps = 8 }
     if ($image.Length -eq 1) { $script:ImageJob.checkpoint = [string]$image[0].file }
     $fallback = @($script:Catalog.text | Where-Object { @($_.default_tiers) -contains 'reduced' } | Select-Object -First 1)
-    $script:FallbackProfile = 'gemma-4-12b'
+    $script:FallbackProfile = 'rocinante-x-12b'
     if ($fallback.Length -eq 1) { $script:FallbackProfile = [string]$fallback[0].id }
 
     function Get-Field {

@@ -9,11 +9,16 @@
 Set-StrictMode -Version Latest
 
 # The version of the trial plan, the workloads and the record fields. A results file of another version is never
-# reused, so a change that alters what an existing record means must raise it.
-$script:ProcedureVersion = 1
+# reused, so a change that alters what an existing record means must raise it. Version 2 (ADR 0045): the catalog's
+# level A of rocinante-x-12b moved from context 8192 to 12288, so its version-1 records measured other launch values.
+$script:ProcedureVersion = 2
 
-# The profiles that P02 measures. The other catalog profiles reuse the result of the profile with the same architecture.
-$script:MeasuredProfiles = @('gemma-4-12b', 'gemma-4-26b-a4b', 'rocinante-x-12b')
+# The profiles that P02 measures. The other catalog profiles reuse the result of the profile with the same architecture:
+# rocinante-12b-v1.1 takes the values of rocinante-x-12b. The Gemma 4 profiles left the catalog with ADR 0045.
+$script:MeasuredProfiles = @('rocinante-x-12b')
+# The profile that becomes the default on every tier when a mixture-of-experts default fails the speed rule (step 7).
+# No catalog profile is a mixture of experts since ADR 0045, so step 7 has nothing to compare; the rule stays for one.
+$script:DefaultFallbackProfile = 'rocinante-x-12b'
 
 # The CONTEXT_SIZE values that docker/llm/entrypoint.sh accepts, in order. A context step is the next value.
 $script:ContextSizes = @(4096, 6144, 8192, 12288, 16384, 24576)
@@ -86,7 +91,7 @@ function Get-GpuTuningRule {
 }
 
 function Get-GpuTuningProfileId {
-    # Returns the identifiers of the three profiles that P02 measures, in the order their trials run.
+    # Returns the identifiers of the profiles that P02 measures, in the order their trials run.
     [CmdletBinding()]
     [OutputType([string[]])]
     param()
@@ -96,8 +101,8 @@ function Get-GpuTuningProfileId {
 
 function Get-GpuNextContextSize {
     <#
-    Returns the allowed CONTEXT_SIZE right above ContextSize: 24576 for the Gemma 4 profiles at 16384 and 12288 for the
-    Mistral Nemo profiles at 8192. Throws when ContextSize is not an allowed value or is already the largest.
+    Returns the allowed CONTEXT_SIZE right above ContextSize: 16384 for the Mistral Nemo profiles at 12288, and 24576
+    for a profile at 16384. Throws when ContextSize is not an allowed value or is already the largest.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -131,7 +136,7 @@ function Get-TuningTrial {
 
 function Get-GpuTuningPlan {
     <#
-    Returns the trials of the procedure for each profile of ProfileId (by default the three P02 profiles) of Catalog,
+    Returns the trials of the procedure for each profile of ProfileId (by default the measured P02 profiles) of Catalog,
     the parsed config/model-catalog.json, in the order they run. Each trial has:
       Profile and Name ("A", "context-24576", "batch-1024", "moe-12", "mmap-1", "kv-q8_0", ...);
       Step, the step of the procedure it serves;
@@ -217,7 +222,7 @@ function Test-GpuTuningSelection {
     $messages = New-Object System.Collections.Generic.List[string]
     foreach ($item in $Pattern) {
         if ($item -notmatch '^[A-Za-z0-9.*_-]+/[A-Za-z0-9.*_-]+$') {
-            $messages.Add("'$item' is not a trial selector of the form <profile>/<trial>, such as gemma-4-12b/batch-*.")
+            $messages.Add("'$item' is not a trial selector of the form <profile>/<trial>, such as rocinante-x-12b/batch-*.")
             continue
         }
         if ($null -ne $Plan -and @(Select-GpuTuningTrial -Plan $Plan -Pattern @($item)).Length -eq 0) {
@@ -555,7 +560,7 @@ function Get-GpuMoeDecision {
     param(
         [Parameter(Mandatory = $true)] [bool]$Moe,
         [System.Collections.IDictionary]$Setting = @{},
-        [string]$FallbackProfile = 'gemma-4-12b'
+        [string]$FallbackProfile = $script:DefaultFallbackProfile
     )
 
     if (-not $Moe) {
@@ -702,7 +707,7 @@ function Get-GpuTuningDecision {
         [Parameter(Mandatory = $true)] $TextProfile,
         [Parameter(Mandatory = $true)] [AllowEmptyCollection()] [System.Collections.IDictionary]$Trial,
         [switch]$IsDefault,
-        [string]$FallbackProfile = 'gemma-4-12b',
+        [string]$FallbackProfile = $script:DefaultFallbackProfile,
         $ProtocolScoredNoLower = $null
     )
 

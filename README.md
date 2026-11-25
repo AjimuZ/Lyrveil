@@ -116,8 +116,7 @@ estimates, is in the [model catalog](docs/models.md).
 
 | Use | Default | Size | Other profiles | Runtime |
 | --- | --- | --- | --- | --- |
-| Text, 32 GB | [Gemma 4 26B-A4B](https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf), Q4_0 | 14.44 GB | Gemma 4 12B, Orion 26B-A4B, Rocinante-X 12B, Rocinante 12B v1.1 | [KoboldCpp](https://github.com/LostRuins/koboldcpp) |
-| Text, 16 GB | [Gemma 4 12B](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf), Q4_0 | 6.98 GB | Rocinante-X 12B, Rocinante 12B v1.1 | KoboldCpp |
+| Text, 32 GB and 16 GB | [Rocinante-X 12B](https://huggingface.co/bartowski/TheDrummer_Rocinante-X-12B-v1-GGUF), Q4_K_M | 7.48 GB | Rocinante 12B v1.1 | [KoboldCpp](https://github.com/LostRuins/koboldcpp) |
 | Images | [Illustrious XL v2.0](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0) | 6.94 GB | Illustrious XL v1.0, NoobAI-XL 1.1 | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) |
 
 Images render in two passes by default (**Alta**): a first pass near one megapixel, then a refinement pass at 1.5 times
@@ -144,7 +143,6 @@ These are expected in version 1.0:
 - Keeping a character's look consistent across images is best-effort. The same structured identity is used every time, but without reference images the model can still vary the face and small details.
 - No model card names Italian among its supported languages. Quality is measured, and known limits will be recorded here.
 - Custom text models can be used, but only catalog profiles are checked for consistency.
-- The 26B text profiles keep part of their weights in system RAM. They need 32 GB and start a new long conversation more slowly than the 12B profiles.
 - Characters must be adults, and the safeguards are best-effort filters.
 - Data is not encrypted by Lyrveil. Use disk encryption.
 - Conversations and models are stored in Docker volumes, not in visible folders. Resetting or uninstalling Docker Desktop deletes them. The daily backup copied to Windows limits the loss to one day.
@@ -162,10 +160,9 @@ Lyrveil's original code and documentation are under the [Apache License 2.0](LIC
 | --- | --- |
 | KoboldCpp | GNU AGPL v3.0 |
 | ComfyUI | GNU GPL v3.0 |
-| Gemma 4, default text models | Apache 2.0 |
+| Rocinante-X, the default text model, and Rocinante, optional | No terms stated on their cards. Base models under Apache 2.0 |
 | Illustrious XL v2.0 and v1.0 | CreativeML Open RAIL licenses, including use restrictions |
 | NoobAI-XL 1.1, optional | Fair AI Public License 1.0-SD, including use restrictions |
-| Orion, Rocinante-X and Rocinante, optional | No terms stated on their cards. Base models under Apache 2.0 |
 
 Details and obligations are in [Licensing](docs/licensing.md).
 
@@ -175,4 +172,4 @@ See [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md). All documentati
 
 ## Acknowledgements
 
-Lyrveil builds on the work of these projects: [KoboldCpp](https://github.com/LostRuins/koboldcpp) and KoboldAI Lite, [llama.cpp](https://github.com/ggml-org/llama.cpp) and GGML, [ComfyUI](https://github.com/Comfy-Org/ComfyUI), [Gemma 4](https://huggingface.co/google/gemma-4-26B-A4B-it) by Google, Orion, Rocinante-X and [Rocinante](https://huggingface.co/TheDrummer/Rocinante-12B-v1.1) by TheDrummer, the GGUF quantizations by bartowski, [Mistral Nemo](https://huggingface.co/mistralai/Mistral-Nemo-Base-2407) by Mistral AI, [Illustrious XL](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0) by OnomaAI Research, [NoobAI-XL](https://huggingface.co/Laxhar/noobai-XL-1.1) by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, and the Inter, Pixelify Sans and JetBrains Mono typefaces.
+Lyrveil builds on the work of these projects: [KoboldCpp](https://github.com/LostRuins/koboldcpp) and KoboldAI Lite, [llama.cpp](https://github.com/ggml-org/llama.cpp) and GGML, [ComfyUI](https://github.com/Comfy-Org/ComfyUI), Rocinante-X and [Rocinante](https://huggingface.co/TheDrummer/Rocinante-12B-v1.1) by TheDrummer, the GGUF quantizations by bartowski, [Mistral Nemo](https://huggingface.co/mistralai/Mistral-Nemo-Base-2407) by Mistral AI, [Illustrious XL](https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0) by OnomaAI Research, [NoobAI-XL](https://huggingface.co/Laxhar/noobai-XL-1.1) by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, and the Inter, Pixelify Sans and JetBrains Mono typefaces.

@@ -1,6 +1,6 @@
 # ADR 0024: Selectable model profiles with tier defaults
 
-Status: accepted (2026-11-05). Supersedes: none. Changes R-MOD-01, R-MOD-04 and R-MOD-06 at the owner's request of 2026-11-05.
+Status: accepted (2026-11-05). Supersedes: none. Changes R-MOD-01, R-MOD-04 and R-MOD-06 at the owner's request of 2026-11-05. Superseded in part by [ADR 0045](0045-drop-gemma-4-rocinante-x-default.md) (2026-11-25): the three Gemma 4 based text profiles left the catalog, and `rocinante-x-12b` is the default on every tier.
 
 ## Context
 The brief fixed one text model, Rocinante 12B v1.1, and one image model, Illustrious XL v1.0. On 2026-11-05 the owner asked to improve the chosen models where possible and to let the user choose them. Facts read from Hugging Face on 2026-11-05:

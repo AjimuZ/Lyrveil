@@ -136,7 +136,7 @@ tests ([Verifying GPU release](#verifying-gpu-release)). The abort of background
 Planning target for a full switch from LLM to image and back: under 150 seconds. P06 measures it with the default profiles.
 
 With 32 GB of RAM, the page cache usually still holds the text model's file when it reloads, so step 17 reads from memory
-rather than from disk. The mixture-of-experts profiles load more data than the 12B profiles, and P06 records both.
+rather than from disk. Both catalog text profiles are 12B models of about 7.5 GB, and P06 records the reload.
 
 A change of the active text profile uses the same states: the desired mode goes to `none`, the runtime stops and its
 release is verified, then the desired mode returns to `llm` and the runtime starts with the new launch file. See
@@ -291,8 +291,8 @@ Before any load:
 
 | Check | LLM | Image |
 | --- | --- | --- |
-| Hard requirement, free VRAM | `vram_required_mib` of the active text profile. Planning value 7000 for the 26B-A4B profiles and 6000 for the others | `vram.required_image_mib` = 6500 |
-| Preferred | `vram_preferred_mib` of the profile. Planning value 10000 for the 26B-A4B profiles and 9000 for the others. Below it the app warns of slower replies, because autofit keeps fewer weights on the GPU | Not applicable |
+| Hard requirement, free VRAM | `vram_required_mib` of the active text profile. Planning value 6000 for both catalog profiles | `vram.required_image_mib` = 6500 |
+| Preferred | `vram_preferred_mib` of the profile. Planning value 9000 for both catalog profiles. Below it the app warns of slower replies, because autofit keeps fewer weights on the GPU | Not applicable |
 
 When free VRAM is below the requirement, the state stays `IDLE` with `blocked_reason = GPU_INSUFFICIENT_VRAM`. The check repeats every 5 s for `vram.wait_seconds` (120). Then the waiting job fails with a message
 that names the numbers, and the next job can try. **External processes are never terminated.** The interface suggests closing other programs that use the card.
@@ -332,11 +332,13 @@ The launch settings are in `runtime/llm-launch.env` and `runtime/image-launch.en
 
 These launch levels are separate from model profiles. Each level derives from the active profile's context size:
 
-| Level | Context | Batch | GPU layers | Gemma 4 profiles | Mistral Nemo profiles |
-| --- | --- | --- | --- | --- | --- |
-| A, default | Profile value | 512 | Autofit | 16384 | 8192 |
-| B | Three quarters | 512 | Autofit | 12288 | 6144 |
-| C | Half | 256 | Autofit | 8192 | 4096 |
+| Level | Context | Batch | GPU layers | Mistral Nemo profiles |
+| --- | --- | --- | --- | --- |
+| A, default | Profile value | 512 | Autofit | 12288 |
+| B | Three quarters | 512 | Autofit | 8192 |
+| C | Half | 256 | Autofit | 6144 |
+
+Three quarters of 12288 is 9216, which the entrypoint does not allow, so level B rounds down to 8192.
 
 | Event | Action |
 | --- | --- |
@@ -387,22 +389,24 @@ Delivered in P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-ti
 
 ### Measuring and tuning
 
-The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4-26b-a4b`, `gemma-4-12b` and
-`rocinante-x-12b`, and the other profiles reuse the result of the profile with the same architecture:
+The P02 procedure, with the result in `docs/verification/`. Since
+[ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) it runs for `rocinante-x-12b`, and
+`rocinante-12b-v1.1` reuses its result, because it has the same architecture:
 
 1. Close other GPU programs and record the baseline.
 2. Load level A. Record used VRAM after load, RAM used by the container, and the peak VRAM during 20 generations.
 3. `margin = total - peak`.
 4. If the margin is under 512 MiB, make level B the default for that profile.
 5. If the margin is at least 1024 MiB, the profile's context may grow by one step, only if the margin after the
-   increase stays at least 1024 MiB. Gemma 4 grows to 24576, Mistral Nemo to 12288.
+   increase stays at least 1024 MiB. Mistral Nemo grew from 8192 to 12288 in GPU.3; the next step is 16384.
 6. Compare batch 256, 512, 1024 and 2048 on prompt processing speed. Keep 512 unless another value gains at least
-   20 % and the margin rule still holds. With experts in RAM, a larger batch may move fewer weights per token.
-7. **Speed rule for the mixture-of-experts default.** Over 20 replies of at least 200 tokens, the median generation
-   speed must be at least 15 tokens per second. The first token of a new 6000-token prompt must arrive within 20 s.
-   Compare AutoFit with `MOE_CPU_LAYERS` values 8, 12 and 16, and keep the fastest setting that meets the margin rule.
-   If no setting meets the speed rule, `gemma-4-12b` becomes the default on every tier
-   ([Model catalog](models.md#defaults-and-how-they-can-change)).
+   20 % and the margin rule still holds.
+7. **Speed rule for the default.** Over 20 replies of at least 200 tokens, the median generation speed must be at
+   least 15 tokens per second. The first token of a new 6000-token prompt must arrive within 20 s. For a
+   mixture-of-experts profile, compare AutoFit with `MOE_CPU_LAYERS` values 8, 12 and 16, keep the fastest setting
+   that meets the margin rule, and make the reduced default the default on every tier if none meets the speed rule.
+   Both catalog profiles are dense, so this comparison is not applicable since ADR 0045: `MOE_CPU_LAYERS` stays 0 and
+   the rule applies to level A of the default.
 8. **Memory mapping.** Load with `USE_MMAP` 0 and 1. Record RAM used by the container, reload time after an image
    job, and generation speed. Keep 1 for the profile if it saves at least 2 GiB of RAM or 20 % of reload time, and
    costs at most 5 % of speed.
@@ -410,27 +414,30 @@ The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4
    value only if it frees at least 256 MiB or allows the next context step, costs at most 5 % of speed, and the P04
    Italian protocol scores no lower. Until P04, `f16` stays ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
-Delivered in GPU.3: `tests/gpu/Tuning.Tests.ps1` in the `gpu` level measures steps 1 to 9 for the three profiles.
+Delivered in GPU.3: `tests/gpu/Tuning.Tests.ps1` in the `gpu` level measures steps 1 to 9.
 `scripts/lib/GpuTuning.psm1` computes the decisions from the measurements, and its unit tests cover the rules
 ([The `gpu` level](testing.md#the-gpu-level)). Each trial changes one lever of level A, so combinations of the kept
-values are not measured. The reference machine's result, 2026-11-25
-([evidence](verification/2026-11-25-gpu-tuning.md)):
+values are not measured. GPU.3 measured three profiles on the reference machine on 2026-11-25
+([evidence](verification/2026-11-25-gpu-tuning.md)); the two Gemma 4 rows are kept there as the record. The profile
+still in the catalog:
 
 | Profile | Default level | Context | Batch | `MOE_CPU_LAYERS` | `USE_MMAP` | `KV_QUANT` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `gemma-4-12b` | A | 24576 | 512 | 0 | 0 | `f16` |
-| `gemma-4-26b-a4b` | A | 24576 | 2048 | 0 (AutoFit) | 1 | `f16` |
 | `rocinante-x-12b` | A | 12288 | 512 | 0 | 0 | `f16` |
 
-The speed rule holds for `gemma-4-26b-a4b` with AutoFit: a median of 42.6 tokens per second and a first token of a
-6120-token prompt in 9.04 s. `MOE_CPU_LAYERS` 8, 12 and 16 ran at about 21 tokens per second. These values are not in
-`config/model-catalog.json` yet: P02.7 applies them.
+ADR 0045 applied these values to `config/model-catalog.json` for both Rocinante profiles. Since then the procedure
+plans only `rocinante-x-12b`, with no `MOE_CPU_LAYERS` trial, and its version is 2, so the records of the old level A
+are not reused. Version 2 ran on 2026-11-25 at the new level A
+([evidence](verification/2026-11-25-rocinante-default-gpu.md)): level A, batch 512, `USE_MMAP=0` and `f16` again, and
+T-GPU-14 passes at 12288 with 53.0 tokens per second and a first token in 2.22 s. Step 5 now allows 16384
+(1580 MiB of margin); the catalog keeps 12288 until the owner decides on a second step.
 
 P04 adds two measurements with real chat prompts from the consistency protocol, because they depend on the prompt
 layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
 
-- **SWA padding** for the Gemma 4 profiles: `SWA_PADDING` 0, 1024 and 2048. Keep the smallest value whose median
-  `last_process` is within 10 % of the best, while the margin rule and the speed rule still hold.
+- **SWA padding** for a `gemma4` profile: `SWA_PADDING` 0, 1024 and 2048. Keep the smallest value whose median
+  `last_process` is within 10 % of the best, while the margin rule and the speed rule still hold. Not applicable since
+  ADR 0045: no catalog profile uses sliding-window attention, so `SWA_PADDING` stays 0.
 - **SmartCache** on the target tier: `SMART_CACHE` 0 and 2. Use 2 if the median `last_process` of the first chat
   reply after a structured task falls by at least 50 %, and the container's peak RAM stays at least 4 GiB below the
   memory Docker sees.

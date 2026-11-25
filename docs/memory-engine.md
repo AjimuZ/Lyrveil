@@ -743,8 +743,9 @@ KoboldCpp's reuse is measured through `last_process` (R-10). The test does not c
 context window, where the budget decides what the prompt keeps.
 
 A reply therefore reprocesses the previous exchange and the new dynamic context, about 1,000 to 2,500
-tokens. Gemma 4 profiles keep a sliding-window cache, so KoboldCpp also replays up to 2,048 cached tokens
-when the reuse point lies beyond that cache. SWA padding and SmartCache are measured levers for this
+tokens. A `gemma4` custom profile keeps a sliding-window cache, so KoboldCpp also replays up to 2,048 cached tokens
+when the reuse point lies beyond that cache; the catalog profiles have no sliding window since
+[ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md). SmartCache is a measured lever for this
 ([Runtime contracts](runtime-contracts.md#flags)).
 
 P04 measures the prompt processing time with `last_process` from `/api/extra/perf`, for this layout and
@@ -804,7 +805,8 @@ for a single system text.
   measurements (P04.10).
 - **Prefix.** While the history fits whole, two replies share the stable text and the history byte for byte. Once the
   history is cut by the room left, its oldest turn moves with each reply, so the cache reuse ends at the stable text
-  for `gemma4` and `chatml` until the next checkpoint; P04.10 measures what that costs.
+  for `gemma4` and `chatml` until the next checkpoint (for `mistral_v3_tekken`, the default family, the stable text
+  already moves with the last turn); P04.10 measures what that costs.
 
 `tests/integration/test_context_builder.py` holds T-MEM-21; `tests/unit/test_context_builder.py` holds T-CON-11 and
 T-MOD-05 with the full context ([Testing](testing.md#memory)).

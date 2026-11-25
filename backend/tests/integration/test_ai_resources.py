@@ -68,7 +68,7 @@ def test_the_snapshot_joins_the_gpu_state_the_card_the_queue_and_the_launch_leve
     source = Source(status, VramReading(device_name="Fake GPU", total_mib=12282, used_mib=1489, free_mib=10793))
     client = client_for(settings, engine, tmp_path, source)
     (tmp_path / "llm-launch.env").write_text(
-        "MODEL_PROFILE=gemma-4-12b\nCONTEXT_SIZE=6144\nLEVEL=B\n", encoding="utf-8"
+        "MODEL_PROFILE=rocinante-x-12b\nCONTEXT_SIZE=8192\nLEVEL=B\n", encoding="utf-8"
     )
     write(engine, lambda connection: JobQueue().enqueue(connection, JobKind.CHAT_REPLY))
     # An image_request starts in its `prompt` stage, which needs the text model; only `render` needs the image mode.
@@ -89,10 +89,10 @@ def test_the_snapshot_joins_the_gpu_state_the_card_the_queue_and_the_launch_leve
     assert body["queue"]["by_mode"]["llm"] == {"queued": 1, "running": 0}
     assert body["queue"]["by_mode"]["image"] == {"queued": 1, "running": 0}
     assert body["model"] == {
-        "profile_id": "gemma-4-12b",
-        "display_name": "Gemma 4 12B",
+        "profile_id": "rocinante-x-12b",
+        "display_name": "Rocinante X 12B",
         "level": "B",
-        "context_size": 6144,
+        "context_size": 8192,
     }
 
 

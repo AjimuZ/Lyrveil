@@ -2,12 +2,15 @@
 #
 # Run only by "scripts\lyrveil.cmd test gpu", after Passthrough.Tests.ps1. For each profile of $script:ProfileRuns, in
 # order, it writes the level-A launch file of the catalog into lyrveil-gpu-test-data, starts the real lyrveil-llm, and:
-#   T-GPU-02 (gemma-4-12b, gemma-4-26b-a4b, rocinante-x-12b, docs/gpu-orchestration.md, Measuring and tuning): reads
-#     NVML before and after the load, the container's RAM from "docker stats", and the VRAM peak over a few
-#     generations, and applies the margin rule. rocinante-12b-v1.1 loads only because it is the one chatml profile.
+#   T-GPU-02 (both catalog text profiles, docs/gpu-orchestration.md, Measuring and tuning): reads NVML before and
+#     after the load, the container's RAM from "docker stats", and the VRAM peak over a few generations, and applies the
+#     margin rule. rocinante-12b-v1.1 takes the launch values GPU.3 decided for rocinante-x-12b, the same architecture,
+#     so this is where its margin at those values is checked.
 #   T-GPU-03: tokenizes the family's chat prompt of backend/tests/fixtures/tokenization/prompts.json and compares the
 #     identifiers with <family>.tokens.json, which it records when the file is missing (the first run, or a family whose
 #     fixture was deleted on purpose). backend/tests/unit/test_tokenization_fixtures.py ties both files to the formatter.
+#     No catalog profile is of the gemma4 family since ADR 0045, so gemma4.tokens.json, recorded with gemma-4-12b by
+#     GPU.2, is no longer compared here.
 #   T-GPU-04: streams a chat reply and checks the event stream and the token counts, then aborts a long generation.
 # Every request and measurement runs in the profile's BeforeAll, so the numbers are recorded even when a check fails.
 # test-results/gpu/text-profiles-<time>.json, ignored by Git, holds them all. Only one text runtime runs at a time, and
@@ -15,10 +18,8 @@
 
 BeforeDiscovery {
     $script:ProfileRuns = @(
-        @{ Id = 'gemma-4-12b'; Family = 'gemma4'; Measure = $true; Label = 'T-GPU-02' }
-        @{ Id = 'gemma-4-26b-a4b'; Family = 'gemma4'; Measure = $true; Label = 'T-GPU-02' }
         @{ Id = 'rocinante-x-12b'; Family = 'mistral_v3_tekken'; Measure = $true; Label = 'T-GPU-02' }
-        @{ Id = 'rocinante-12b-v1.1'; Family = 'chatml'; Measure = $false; Label = 'Setup' }
+        @{ Id = 'rocinante-12b-v1.1'; Family = 'chatml'; Measure = $true; Label = 'T-GPU-02' }
     )
 }
 
@@ -47,11 +48,10 @@ BeforeAll {
     # The identifiers that the control texts of each family must become (docs/runtime-contracts.md, Text model facts),
     # and the chatml markers, which are ordinary text in that tokenizer (ADR 0014).
     $script:ControlTokens = @{
-        gemma4            = @{ '<|turn>' = 105; '<turn|>' = 106; '<|channel>' = 100; '<channel|>' = 101 }
         mistral_v3_tekken = @{ '[INST]' = 3; '[/INST]' = 4; '</s>' = 2 }
         chatml            = @{}
     }
-    $script:PlainMarkers = @{ gemma4 = @(); mistral_v3_tekken = @(); chatml = @('<|im_start|>', '<|im_end|>') }
+    $script:PlainMarkers = @{ mistral_v3_tekken = @(); chatml = @('<|im_start|>', '<|im_end|>') }
 
     function Get-Field {
         # Returns the property Name of Value, or $null when Value is $null or has no such property, under strict mode.

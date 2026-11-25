@@ -34,27 +34,25 @@ it does not use the catalog, which is in the image since P02.1a.
 
 | Profile | Author | License | Base model and its license |
 | --- | --- | --- | --- |
-| `gemma-4-26b-a4b`, `gemma-4-12b` | Google | Apache 2.0 | |
-| `orion-26b-a4b` | TheDrummer, GGUF by bartowski | **Not stated** on either card | Gemma 4 26B-A4B, Apache 2.0 |
-| `rocinante-x-12b` | TheDrummer, GGUF by bartowski | **Not stated** on either card | Mistral Nemo Instruct 2407, Apache 2.0 |
+| `rocinante-x-12b`, the default text profile | TheDrummer, GGUF by bartowski | **Not stated** on either card | Mistral Nemo Instruct 2407, Apache 2.0 |
 | `rocinante-12b-v1.1` | TheDrummer with BeaverAI, GGUF by bartowski | Field `other`, **no terms given** | Mistral Nemo Base 2407, Apache 2.0 |
 | `illustrious-xl-v2.0` | OnomaAI Research | Card field `creativeml-openrail-m` | SDXL lineage |
 | `illustrious-xl-v1.0` | OnomaAI Research | CreativeML Open RAIL++-M, dated July 26, 2023 | SDXL Base 1.0 |
 | `noobai-xl-1.1` | Laxhar Dream Lab | Fair AI Public License 1.0-SD | Illustrious XL v0.1 |
 
-### Apache 2.0 profiles
-
-Use, modification and redistribution are allowed. A redistributor keeps the license and notices. Lyrveil does not
-redistribute the files.
+The Apache 2.0 Gemma 4 profiles (`gemma-4-26b-a4b`, `gemma-4-12b`) and `orion-26b-a4b` left the catalog on
+2026-11-25 ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)).
 
 ### Profiles with terms not stated
 
-For `orion-26b-a4b`, `rocinante-x-12b` and `rocinante-12b-v1.1`, the finetune's own terms are not stated. Therefore:
+For `rocinante-x-12b` and `rocinante-12b-v1.1`, the finetune's own terms are not stated. Their base models are under
+Apache 2.0. Therefore:
 
 - Lyrveil never redistributes the files. Users download them from their public upstream repositories.
 - The user is responsible for deciding whether their use is acceptable.
 - Any commercial use or redistribution needs clarification from the author first.
-- They are optional. The defaults are Apache 2.0.
+- Since ADR 0045 the default text profile is one of them, so no text profile with stated terms is in the catalog. The
+  license acceptance step of `scripts\lyrveil.cmd models` shows this before any download.
 
 ### Illustrious XL
 
@@ -134,8 +132,8 @@ Docker Desktop and the NVIDIA driver are prerequisites that the user installs. T
 
 ## Names
 
-KoboldCpp, ComfyUI, Gemma, Orion, Rocinante, Illustrious, NoobAI, Mistral, NVIDIA, CUDA, Docker and Angular are names of their owners, used only to describe compatibility. Lyrveil is not affiliated with them.
+KoboldCpp, ComfyUI, Gemma (named by the `gemma4` template family), Rocinante, Illustrious, NoobAI, Mistral, NVIDIA, CUDA, Docker and Angular are names of their owners, used only to describe compatibility. Lyrveil is not affiliated with them.
 
 ## Attribution
 
-The README acknowledges these projects: KoboldCpp and KoboldAI Lite, llama.cpp and GGML, ComfyUI, Gemma 4 by Google, Orion, Rocinante X and Rocinante by TheDrummer, the GGUF files by bartowski, Mistral Nemo by Mistral AI, Illustrious XL by OnomaAI Research, NoobAI-XL by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, Inter, Pixelify Sans and JetBrains Mono.
+The README acknowledges these projects: KoboldCpp and KoboldAI Lite, llama.cpp and GGML, ComfyUI, Rocinante X and Rocinante by TheDrummer, the GGUF files by bartowski, Mistral Nemo by Mistral AI, Illustrious XL by OnomaAI Research, NoobAI-XL by Laxhar Dream Lab, Stable Diffusion XL by Stability AI, Inter, Pixelify Sans and JetBrains Mono.

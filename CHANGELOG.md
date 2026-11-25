@@ -11,6 +11,18 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- The Gemma 4 text profiles are gone, and `rocinante-x-12b` is the default text model on both tiers (owner decision
+  of 2026-11-25, [ADR 0045](docs/decisions/0045-drop-gemma-4-rocinante-x-default.md)). `config/model-catalog.json`
+  no longer lists `gemma-4-26b-a4b`, `gemma-4-12b` or `orion-26b-a4b`; it holds `rocinante-x-12b` and
+  `rocinante-12b-v1.1`, both at the values GPU.3 measured for `rocinante-x-12b`: context 12288 (was 8192), batch 512,
+  no mmap, `f16` KV cache. A fresh setup downloads 14.42 GB on either tier. Replies, drafts, memories and summaries
+  are now prompted in the `mistral_v3_tekken` format, and replies use the `nemo` sampler values (temperature 0.8,
+  `top_k` 0, `min_p` 0.05, repetition penalty 1.05 over 512 tokens). The `gemma4` sampler preset is removed; the
+  `gemma4` prompt format stays for custom profiles, and **Aggiungi file locale** now proposes the Mistral format
+  first. The `gpu` level loads both Rocinante profiles and tunes `rocinante-x-12b` only, with no `MOE_CPU_LAYERS`
+  trial; its procedure version is 2, so earlier tuning results are not reused. On the reference machine both
+  profiles load at 12288 with about 2.2 GiB of VRAM to spare, and the default meets the speed rule at 53.0 tokens per
+  second ([docs/verification/2026-11-25-rocinante-default-gpu.md](docs/verification/2026-11-25-rocinante-default-gpu.md)).
 - Automated exit of the polish phase (P08.EXIT). The end-to-end specs of P08 and the unit specs written in P08.1 to
   P08.4 now run and pass with the `unit`, `e2e` and `lint` levels (`axe` on the ten screens, the keyboard walkthroughs,
   the layouts at 320, 640, 1024 and 1440 px and at 200 % zoom, the 10,000-message conversation and the 1,000-image

@@ -61,8 +61,8 @@ reference machine was measured at 32 GB on 2026-11-05.
 
 | ID | Requirement |
 | --- | --- |
-| R-MOD-01 | The text model is chosen by the user from a catalog of verified profiles. The default is Gemma 4 26B-A4B Q4_0 on the target tier and Gemma 4 12B Q4_0 on the reduced tier. The catalog also offers Orion 26B-A4B v1.1, Rocinante-X 12B v1 and the brief's original Rocinante 12B v1.1 Q4_K_M. |
-| R-MOD-02 | Initial text configuration: CUDA, optimized GPU offload, a context size set per profile (16384 tokens for Gemma 4, 8192 for the Mistral Nemo finetunes), streaming, configurable temperature with a per-profile starting value, the prompt format verified against each model's official template, DRY when available, configurable maximum reply length. |
+| R-MOD-01 | The text model is chosen by the user from a catalog of verified profiles. The default is Rocinante-X 12B v1 Q4_K_M on both tiers ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). The catalog also offers the brief's original Rocinante 12B v1.1 Q4_K_M. |
+| R-MOD-02 | Initial text configuration: CUDA, optimized GPU offload, a context size set per profile (12288 tokens for the Mistral Nemo finetunes, measured in GPU.3), streaming, configurable temperature with a per-profile starting value, the prompt format verified against each model's official template, DRY when available, configurable maximum reply length. |
 | R-MOD-03 | Parameters stay compatible with the available VRAM. Context, batch and offload are optimized after measuring real consumption. |
 | R-MOD-04 | The image model is chosen by the user from a catalog of SDXL checkpoints of the Illustrious family. The default is Illustrious XL v2.0 from `OnomaAIResearch/Illustrious-XL-v2.0`. The catalog also offers Illustrious XL v1.0 and NoobAI-XL 1.1. |
 | R-MOD-05 | Initial image settings: 1024x1024, vertical and horizontal resolutions, batch size 1, configurable seed, steps and CFG, SDXL workflow, positive and negative prompts, stored generation metadata. A second refinement pass at 1.5 times the size is the default quality preset. |

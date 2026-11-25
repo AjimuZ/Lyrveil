@@ -46,7 +46,7 @@ The frontend part of `lint` and `unit`, in [`scripts/lib/FrontendComponent.psm1`
 `tests/gpu/Tuning.Tests.ps1` with those trials (see [The `gpu` level](#the-gpu-level)):
 
 ```powershell
-.\scripts\lyrveil.cmd test gpu gemma-4-12b/A gemma-4-26b-a4b/moe-*
+.\scripts\lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/batch-*
 ```
 
 Every other level refuses arguments.
@@ -99,15 +99,17 @@ runtimes never run together. For the image runtime it checks the same request, m
 NVML shows more than 100 MiB in use for the CUDA context.
 
 `tests/gpu/TextProfiles.Tests.ps1` holds T-GPU-02 to T-GPU-04 (GPU.2,
-[evidence](verification/2026-11-25-gpu-text-profiles.md)). It runs after T-GPU-01 and loads `gemma-4-12b`,
-`gemma-4-26b-a4b`, `rocinante-x-12b` and, because it is the one `chatml` profile, `rocinante-12b-v1.1`, one at a time.
+[evidence](verification/2026-11-25-gpu-text-profiles.md)). It runs after T-GPU-01 and loads the two catalog text
+profiles, `rocinante-x-12b` and `rocinante-12b-v1.1`, one at a time. GPU.2 also loaded the three Gemma 4 based
+profiles, which left the catalog with [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md).
 For each it rewrites `runtime/llm-launch.env` in the test data volume with the catalog's level-A values (the profile's
 context, batch, mmap and KV cache type, `GPU_LAYERS=-1`, `LEVEL=A`), waits for the VRAM of the previous runtime to fall
 back, starts `lyrveil-llm` with a 240 s limit, and checks that `/api/v1/model` names the file, that
 `/api/extra/true_max_context_length` is the catalog context and that VRAM grew by more than 1 GiB. Every request runs
 before the checks, so the numbers are kept even when one fails.
 
-- **T-GPU-02**, for the three measured profiles: NVML before and after the load, the container's memory from
+- **T-GPU-02**, for both profiles (`rocinante-12b-v1.1` takes the values GPU.3 decided for `rocinante-x-12b`, so
+  this is where its margin at them is checked): NVML before and after the load, the container's memory from
   `docker stats` after the load and after the generations, and the VRAM peak that a background job samples every
   250 ms during 3 generations of 128 tokens (the procedure asks for 20; the run records how many ran). It applies the
   margin rule of [Measuring and tuning](gpu-orchestration.md#measuring-and-tuning) (`margin = total - peak`) and
@@ -115,8 +117,8 @@ before the checks, so the numbers are kept even when one fails.
   steps 6 to 9 (batch, speed rule, mmap, KV cache type).
 - **T-GPU-03**: tokenizes the family's chat prompt of
   [`backend/tests/fixtures/tokenization/prompts.json`](../backend/tests/fixtures/tokenization/prompts.json) with
-  `"special": false`. Each control text of `gemma4` and `mistral_v3_tekken` must become its documented identifier as
-  many times as it appears; the `chatml` markers must be several tokens each; with `"special": true` the identifiers
+  `"special": false`. Each control text of `mistral_v3_tekken` must become its documented identifier as many times as
+  it appears (the `gemma4` recording of GPU.2 stays as a fixture, but no catalog profile tokenizes it again); the `chatml` markers must be several tokens each; with `"special": true` the identifiers
   must be the same after a prefix (BOS). The identifiers must equal `<family>.tokens.json`, which the test records when
   the file is missing, with the prompt's SHA-256. `backend/tests/unit/test_tokenization_fixtures.py` checks that every
   fixture prompt, stop list and control list is exactly what the formatter gives, and that each recording names the
@@ -133,13 +135,15 @@ The results go to `test-results/gpu/text-profiles-<time>.json`, which Git ignore
 to [`docs/verification/2026-11-25-gpu-text-profiles.json`](verification/2026-11-25-gpu-text-profiles.json).
 
 `tests/gpu/Tuning.Tests.ps1` holds T-GPU-14 and steps 1 to 9 of
-[Measuring and tuning](gpu-orchestration.md#measuring-and-tuning) for `gemma-4-12b`, `gemma-4-26b-a4b` and
-`rocinante-x-12b` (GPU.3, [evidence](verification/2026-11-25-gpu-tuning.md)). It only measures.
+[Measuring and tuning](gpu-orchestration.md#measuring-and-tuning) for `rocinante-x-12b` (GPU.3,
+[evidence](verification/2026-11-25-gpu-tuning.md), which also measured the two Gemma 4 profiles that ADR 0045 later
+removed). It only measures.
 [`scripts/lib/GpuTuning.psm1`](../scripts/lib/GpuTuning.psm1) plans its trials and computes every decision from them:
 
 - **Trials.** Each trial is the catalog's level A with one lever changed and `LEVEL=CUSTOM`: `A` itself (20 replies
   and 2 long prompts), `context-<next>`, `batch-256`, `batch-1024` and `batch-2048` (the catalog batch is trial `A`),
-  `moe-8`, `moe-12` and `moe-16` for a profile with `"moe": true` (20 replies each), `mmap-0` and `mmap-1` (load, image
+  `moe-8`, `moe-12` and `moe-16` for a profile with `"moe": true` (20 replies each; no catalog profile since
+  ADR 0045), `mmap-0` and `mmap-1` (load, image
   job on `lyrveil-image`, then the measured reload), `kv-q8_0`, and `kv-q8_0-context-<next>`.
 - **Measurements.** NVML before and after the load, the ready time, `docker stats` after the load and after the
   workload, and the VRAM peak sampled every 250 ms. A reply is 200 tokens of the family's structured prompt with the
@@ -151,14 +155,15 @@ to [`docs/verification/2026-11-25-gpu-text-profiles.json`](verification/2026-11-
 - **Decisions.** Step 4 makes level B the default below 512 MiB of margin. Step 5 grows the context when both margins
   are at least 1024 MiB. Step 6 keeps the batch with the largest prompt-speed gain of at least 20 % over 512 that
   keeps 512 MiB. The speed rule (T-GPU-14, for the target default) needs a median of at least 15 tokens per second
-  over 20 replies of at least 200 tokens and a first token within 20 s. Step 7 keeps the fastest setting that meets
-  the margin and speed rules, or names `gemma-4-12b` as the default when none does. Step 8 keeps `USE_MMAP=1` for
+  over 20 replies of at least 200 tokens and a first token within 20 s; for a dense default it applies to trial `A`.
+  Step 7, for a mixture-of-experts profile only, keeps the fastest setting that meets the margin and speed rules, or
+  names the reduced default as the default of every tier when none does. Step 8 keeps `USE_MMAP=1` for
   2 GiB of RAM or 20 % of the reload saved at a speed cost of at most 5 %. Step 9 keeps `f16` until the P04 Italian
   protocol scores `q8_0` ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)) and reports whether `q8_0`
   qualifies on the measurements. A decision whose trial is missing stays undecided and is never guessed.
 - **Partial runs.** With selectors, a trial not selected comes from the newest earlier
   `test-results/gpu/tuning-<time>.json` of the same procedure version and GPU, if that record is `measured` or
-  `not_loaded` and lists no problem. The results file names the source of every trial. A decision that still lacks a
+  `not_loaded` and lists no problem. The version is 2 since ADR 0045 moved the level A of `rocinante-x-12b` to 12288. The results file names the source of every trial. A decision that still lacks a
   trial is skipped in such a run and fails in a full run.
 
 Each run writes `test-results/gpu/tuning-<time>.json`, which Git ignores. It holds the rules, the workload, every trial
@@ -853,7 +858,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | ID | Test | Phase |
 | --- | --- | --- |
 | T-GPU-01 | GPU passthrough in `lyrveil-llm` and `lyrveil-image`. `tests/gpu/Passthrough.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.1); passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)) | P02, P05 |
-| T-GPU-02 | `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b` load. VRAM and RAM measured, tuning rule applied. `tests/gpu/TextProfiles.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.2), with 3 generations for the peak instead of 20 and without steps 5 to 9 of the procedure; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
+| T-GPU-02 | The catalog text profiles load: `rocinante-x-12b` and `rocinante-12b-v1.1` since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md). VRAM and RAM measured, tuning rule applied. `tests/gpu/TextProfiles.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.2), with 3 generations for the peak instead of 20 and without steps 5 to 9 of the procedure; passed on the reference machine on 2026-11-25 for `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b` at their earlier catalog values ([evidence](verification/2026-11-25-gpu-text-profiles.md)); for both Rocinante profiles at 12288 the results file of 2026-11-25 records no problem and about 2210 MiB of margin, with the Pester summary of that run not seen ([evidence](verification/2026-11-25-rocinante-default-gpu.md)) | P02 |
 | T-GPU-03 | Tokenization fixture recorded for each template family. `tests/gpu/TextProfiles.Tests.ps1` (GPU.2), fixtures in `backend/tests/fixtures/tokenization/`; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
 | T-GPU-04 | Real streaming, token counts, abort. `tests/gpu/TextProfiles.Tests.ps1` (GPU.2), for every family; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
 | T-GPU-05 | Structured output with grammar on the real model | P03 |
@@ -865,7 +870,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-11 | No orphan process and full VRAM release after `stop.cmd` | P06 |
 | T-GPU-12 | Everything works with the network disconnected | P06 |
 | T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
-| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS`, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). `tests/gpu/Tuning.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.3), with steps 1 to 9 for the three measured profiles; passed on the reference machine on 2026-11-25 over twelve partial runs: AutoFit at 42.6 T/s and a first token in 9.04 s ([evidence](verification/2026-11-25-gpu-tuning.md)) | P02 |
+| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS` for a mixture-of-experts default, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). `tests/gpu/Tuning.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.3), with steps 1 to 9; since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) for `rocinante-x-12b`, the dense default. Passed on the reference machine on 2026-11-25 over twelve partial runs for the earlier default `gemma-4-26b-a4b`: AutoFit at 42.6 T/s and a first token in 9.04 s ([evidence](verification/2026-11-25-gpu-tuning.md)); passed again the same day for `rocinante-x-12b` at 12288 over three partial runs of procedure version 2: 53.0 T/s and a first token in 2.22 s ([evidence](verification/2026-11-25-rocinante-default-gpu.md)) | P02 |
 
 ### Quality
 

@@ -17,14 +17,13 @@ Windows ([ADR 0029](decisions/0029-windows-operation-with-docker-volumes.md)). R
 | NVIDIA driver | CUDA driver version at least 13.0, Windows driver only | Same | A Linux NVIDIA driver inside WSL2 |
 
 In the reduced tier, close other heavy programs during image generation. See [ADR 0027](decisions/0027-hardware-tiers-after-ram-upgrade.md).
-Each tier has its own default text profile ([Model catalog](models.md#defaults-and-how-they-can-change)).
+Both tiers have the same default text profile, `rocinante-x-12b` ([Model catalog](models.md#defaults-and-how-they-can-change)).
 
 ### Disk use
 
 | Item | Size |
 | --- | --- |
-| Default text model, target tier: `gemma-4-26B_q4_0-it.gguf` | 14.44 GB |
-| Default text model, reduced tier: `gemma-4-12b-it-qat-q4_0.gguf` | 6.98 GB |
+| Default text model, both tiers: `TheDrummer_Rocinante-X-12B-v1-Q4_K_M.gguf` | 7.48 GB |
 | Default image model: `Illustrious-XL-v2.0.safetensors` | 6.94 GB |
 | Each optional profile | Its size in the [catalog](models.md) |
 | KoboldCpp image | About 1.9 GB (1.89 GB measured on 2026-11-07) |
@@ -732,7 +731,7 @@ Volume lyrveil-data, mounted at /data in the backend
   backups/                   The newest 7 backups
   pre-restore-<time>/        db, media and runtime as they were before a restore, kept until you delete them
 Volume lyrveil-models, mounted read-only at /models in the backend
-  llm/                       Text model files, for example gemma-4-26B_q4_0-it.gguf
+  llm/                       Text model files, for example TheDrummer_Rocinante-X-12B-v1-Q4_K_M.gguf
   image/checkpoints/         Image checkpoints, for example Illustrious-XL-v2.0.safetensors
   .verified.json             Size, modification time and hash of each verified file
 Windows
@@ -851,7 +850,6 @@ the Windows folder.
 | Replies are slow | Partial GPU offload, low free VRAM | **Risorse AI** shows free VRAM and speed. Close GPU programs |
 | Level B or C in use | Earlier out-of-memory | Free VRAM, then return to level A in **Impostazioni > Modelli** |
 | `MODEL_FILE_MISSING` | The active profile's file was not downloaded or was moved | Run the command shown in **Impostazioni > Modelli**, or choose another profile |
-| Replies are slow with a 26B profile | Too little free VRAM, or too many experts in RAM | **Risorse AI** shows the speed. Close GPU programs, or choose `gemma-4-12b` |
 | State `ERROR` | Repeated failures | **Riprova** in **Risorse AI**, then `.\logs.cmd lyrveil-orchestrator` |
 | `RUNTIME_CONTAINER_MISSING` | Runtime containers removed | `.\setup.cmd` |
 | Black or broken image | VAE or model file problem | Regenerate. If it repeats, run `.\setup.cmd -VerifyModels` |

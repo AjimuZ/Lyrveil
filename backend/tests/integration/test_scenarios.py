@@ -245,5 +245,5 @@ async def test_nothing_from_one_conversation_reaches_the_context_of_another(engi
 
 
 def current_message(prompt: str) -> str:
-    """Returns the user message a `gemma4` reply prompt ends with: the text after its last message marker."""
-    return prompt.rsplit("[Messaggio di Utente]\n", 1)[1].split("<turn|>", 1)[0]
+    """Returns the user message a `mistral_v3_tekken` reply prompt ends with: the text after its last message marker."""
+    return prompt.rsplit("[Messaggio di Utente]\n", 1)[1].split("[/INST]", 1)[0]

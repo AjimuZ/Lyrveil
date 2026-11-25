@@ -143,20 +143,21 @@ def _utc_now() -> datetime:
 class ReplySettings:
     """What a reply request takes besides the chat.
 
-    P02 has no settings store yet, so the defaults are the documented ones: the `gemma4` family of the default text
-    profiles of both tiers, the `gemma4` chat preset of docs/prompting.md (Sampler presets), `llm.max_length` 400 and
-    the default user of docs/configuration.md. A sampler field left at None is not sent. `max_length` is the ceiling
-    of every length band: the request sends the character's band, capped by it.
+    P02 has no settings store yet, so the defaults are the documented ones: the `mistral_v3_tekken` family of
+    `rocinante-x-12b`, the default text profile of both tiers (ADR 0045), the `nemo` chat preset of docs/prompting.md
+    (Sampler presets), `llm.max_length` 400 and the default user of docs/configuration.md. A sampler field left at None
+    is not sent. `max_length` is the ceiling of every length band: the request sends the character's band, capped by it.
     """
 
-    template: TextTemplate = "gemma4"
+    template: TextTemplate = "mistral_v3_tekken"
     user: UserProfile = field(default_factory=UserProfile)
     max_length: int = 400
-    temperature: float | None = 1.0
+    temperature: float | None = 0.8
     top_p: float | None = 0.95
-    top_k: int | None = 64
-    min_p: float | None = 0.0
-    rep_pen: float | None = 1.0
+    top_k: int | None = 0
+    min_p: float | None = 0.05
+    rep_pen: float | None = 1.05
+    rep_pen_range: int | None = 512
     dry_multiplier: float | None = 0.8
     dry_base: float | None = 1.75
     dry_allowed_length: int | None = 2
@@ -285,6 +286,7 @@ def reply_request(assembly: Assembly, formatter: PromptFormatter, settings: Repl
         top_k=settings.top_k,
         min_p=settings.min_p,
         rep_pen=settings.rep_pen,
+        rep_pen_range=settings.rep_pen_range,
         dry_multiplier=settings.dry_multiplier,
         dry_base=settings.dry_base,
         dry_allowed_length=settings.dry_allowed_length,

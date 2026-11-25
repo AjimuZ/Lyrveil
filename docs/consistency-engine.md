@@ -290,7 +290,7 @@ lists of `prompts/<language>/`. `ChatInferenceService` runs them on every reply
 - **V2 and V3.** `TurnCutoff` ends the reply where one of these begins: control text of the template family, `[Contesto
   per` or `[Messaggio di` (V2), or a line that opens with the user's name and `:` (V3). It holds back only an end of the
   text that may still start one. The control texts are the stop sequences plus `<|channel>` and `<channel|>` for
-  `gemma4`, and `[/INST]` for `mistral_v3_tekken`. Everything after the cut is dropped, the runtime is asked to abort,
+  `gemma4` (since ADR 0045 only custom profiles use that family), and `[/INST]` for `mistral_v3_tekken`. Everything after the cut is dropped, the runtime is asked to abort,
   and the reply ends as if the runtime had stopped there, so N4 does not run. This drops what follows the control text
   instead of keeping it, because control text ends a turn.
 - **V4.** `content_guard.find_reply_violation` refuses a sentence that holds a sexual term together with a minor term,
@@ -352,7 +352,7 @@ corrections and a long topic change.
 | C4. Median reply length per band, and replies cut by N4 | Median within the band target, at most 10 % cut | Yes |
 | C5. Narration spans delivered for `nessuna` | 0. The raw tendency of the model is recorded | No |
 | C6. A profile change at message 60 | C1 and C4 still met after the change | Yes |
-| C7. Owner's blind test: which character wrote each of 20 replies | At least 80 %. Run on the default and the two roleplay profiles | No |
+| C7. Owner's blind test: which character wrote each of 20 replies | At least 80 %. Run on both catalog text profiles, `rocinante-x-12b` (the default) and `rocinante-12b-v1.1` ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)) | No |
 
 Each catalog profile gets one tuning round: first templates and examples, then samplers. A profile that
 still misses a hard target leaves the catalog through a new ADR. Its file can still be registered as a

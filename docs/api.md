@@ -106,7 +106,7 @@ did not answer, no launch file), and holds only enums, counts, MiB and profile n
   "vram": {"device_name": "NVIDIA GeForce RTX 4070", "total_mib": 12282, "used_mib": 1489, "free_mib": 10793},
   "queue": {"queued": 2, "running": 1, "by_mode": {"llm": {"queued": 2, "running": 1},
             "image": {"queued": 0, "running": 0}, "none": {"queued": 0, "running": 0}}},
-  "model": {"profile_id": "gemma-4-12b", "display_name": "Gemma 4 12B", "level": "A", "context_size": 16384}
+  "model": {"profile_id": "rocinante-x-12b", "display_name": "Rocinante X 12B", "level": "A", "context_size": 12288}
 }
 ```
 
@@ -548,7 +548,7 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
 | `GET /settings/models` | Catalog profiles and registered custom profiles, each with tier, license, size and local state (`verified`, `size_mismatch`, `missing`), the active profiles, the quality preset and the launch values. |
 | `PATCH /settings/models` | Changes the active profiles, the quality preset and runtime values. A text profile change is applied at the next load, or at once through `/settings/models/apply`. Refused with `MODEL_PROFILE_UNAVAILABLE`. |
 | `POST /settings/models/apply` | Reloads the text model with the current launch file. Waits for the running reply. Returns `202` with the job identifier. |
-| `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "gemma4"}`. The file must already be in its models folder. Starts the hash job and returns `202`. |
+| `POST /settings/models/custom` | Body `{"kind": "text", "file": "name.gguf", "template": "mistral_v3_tekken"}`; `template` is `gemma4`, `mistral_v3_tekken` or `chatml`. The file must already be in its models folder. Starts the hash job and returns `202`. |
 | `DELETE /settings/models/custom/{id}` | Removes the registration, never the file. Refused with `CONFLICT` while the profile is active. |
 | `POST /backups`, `GET /backups` | Create and list. Restore is `scripts\lyrveil.cmd restore`, because it stops services. |
 

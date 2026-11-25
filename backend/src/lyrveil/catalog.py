@@ -11,9 +11,11 @@ SCHEMA_VERSION = 1
 # Hardware tiers in increasing order of the memory they need (ADR 0027).
 TIERS: tuple[Literal["reduced"], Literal["target"]] = ("reduced", "target")
 Tier = Literal["reduced", "target"]
+# No catalog profile uses `gemma4` since ADR 0045; it stays for the custom profiles that name it (docs/prompting.md).
 TextTemplate = Literal["gemma4", "mistral_v3_tekken", "chatml"]
 # Sampler and image presets are defined in code, so a catalog cannot carry arbitrary parameters (docs/models.md).
-SamplerPreset = Literal["gemma4", "nemo", "generic"]
+# The `gemma4` preset left with the Gemma 4 profiles (ADR 0045): custom profiles always get `generic`.
+SamplerPreset = Literal["nemo", "generic"]
 ImagePreset = Literal["illustrious", "noobai"]
 # The preset of every custom profile, whatever its template family (docs/prompting.md, Sampler presets).
 CUSTOM_SAMPLER_PRESET: SamplerPreset = "generic"
@@ -134,6 +136,7 @@ class TextProfile(_Profile):
 
     @model_validator(mode="after")
     def _levers_fit_the_profile(self) -> Self:
+        # SWA padding serves only the sliding-window attention of the `gemma4` family, which no shipped profile uses.
         if self.swa_padding > 0 and self.template != "gemma4":
             raise ValueError("swa_padding above 0 is allowed only for a gemma4 profile")
         if self.smart_cache > 0 and self.min_tier != "target":

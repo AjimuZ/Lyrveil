@@ -331,6 +331,7 @@ Delivered in P02.3b: `prompts/formatter.py`, the [Prompt format](prompting.md#pr
 Since P02.5c `ChatInferenceService` renders replies with it; since P04.5 `ContextBuilder` fills the parts.
 
 - `formatter_for(family)` returns the formatter of a catalog `template`: `gemma4`, `mistral_v3_tekken` or `chatml`.
+  Since ADR 0045 no catalog profile uses `gemma4`; it stays for custom profiles.
 - `chat(parts, current_message)` and `proactive(parts, instruction)` take a `ChatParts`: the stable text, the
   history as `Turn` values, blocks 4, 5 and 9, the character's first name and the user's display name. They return
   `text` and `prefix`, the start of `text` that ends where the last user turn begins. For `gemma4` and `chatml` the
@@ -408,9 +409,12 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   selection is kept in memory as the chat's `previous_ids` for its next reply. The assembly is logged as
   `context_assembled`, counts only, and `context_over_budget` when even the parts never removed exceed the window.
   Until P04.5 the prompt was `context/minimal.py`, blocks 1 and 2 and the newest turns trimmed a quarter at a time.
-- `ReplySettings` holds the documented defaults while no settings store exists: the `gemma4` family, the `gemma4` chat
-  sampler preset, `max_length` 400 (`llm.max_length`, the cap of every length band) and the user `Utente`. Both tiers'
-  default text profiles are `gemma4`, so another active profile is not followed yet. `Worker.context` carries the
+- `ReplySettings` holds the documented defaults while no settings store exists: the `mistral_v3_tekken` family and
+  the `nemo` chat sampler preset of `rocinante-x-12b`, the default text profile of both tiers since
+  [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md), `max_length` 400 (`llm.max_length`, the cap of every
+  length band) and the user `Utente`. Another active profile is not followed yet. The structured services
+  (`CharacterCreatorService`, `MemoryExtractionService`, `SummaryService`) default to the same family, and the
+  composition root passes them `ReplySettings.template`. `Worker.context` carries the
   `context.*` budgets (`ContextSettings`).
 - Choices the documents did not fix: a crash or a shutdown in the middle of a reply ends its job at the next start
   instead of queuing it again, so the partial text the user saw is not silently replaced; a reply still `queued` when

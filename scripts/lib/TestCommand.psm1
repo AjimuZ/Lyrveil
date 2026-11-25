@@ -209,7 +209,7 @@ function Invoke-GpuTestLevel {
         }
         if ($problems.Length -gt 0) {
             foreach ($problem in $problems) { Write-Host $problem }
-            Write-Host "Test level 'gpu' takes trial selectors such as gemma-4-12b/A or gemma-4-26b-a4b/moe-*. Nothing ran."
+            Write-Host "Test level 'gpu' takes trial selectors such as rocinante-x-12b/A or rocinante-x-12b/batch-*. Nothing ran."
             return 1
         }
         $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @($script:TuningTestFile))

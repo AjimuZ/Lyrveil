@@ -117,7 +117,9 @@ class PromptFormatter(ABC):
 
 
 class Gemma4Formatter(PromptFormatter):
-    """`gemma4`: the official template with thinking off, ending with the empty thought channel."""
+    """`gemma4`: the official template with thinking off, ending with the empty thought channel.
+
+    No catalog profile uses it since ADR 0045. It stays for custom profiles registered with this family."""
 
     family: ClassVar[TextTemplate] = "gemma4"
     _end_sequences: ClassVar[tuple[str, ...]] = ("<turn|>", "<|turn>")

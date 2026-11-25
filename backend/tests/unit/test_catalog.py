@@ -38,22 +38,23 @@ def refused(document: dict[str, Any], fragment: str) -> None:
 
 def test_the_shipped_catalog_validates() -> None:
     catalog = load_catalog(find("config", CATALOG_NAME))
-    assert [profile.id for profile in catalog.text] == [
-        "gemma-4-26b-a4b",
-        "gemma-4-12b",
-        "orion-26b-a4b",
-        "rocinante-x-12b",
-        "rocinante-12b-v1.1",
-    ]
+    assert [profile.id for profile in catalog.text] == ["rocinante-x-12b", "rocinante-12b-v1.1"]
     assert [profile.id for profile in catalog.image] == ["illustrious-xl-v2.0", "illustrious-xl-v1.0", "noobai-xl-1.1"]
 
 
-def test_tier_defaults_follow_adr_0027() -> None:
+def test_tier_defaults_follow_adr_0045() -> None:
     catalog = load_catalog(find("config", CATALOG_NAME))
-    assert catalog.default_text("target").id == "gemma-4-26b-a4b"
-    assert catalog.default_text("reduced").id == "gemma-4-12b"
+    assert catalog.default_text("target").id == "rocinante-x-12b"
+    assert catalog.default_text("reduced").id == "rocinante-x-12b"
     assert catalog.default_image("target").id == "illustrious-xl-v2.0"
     assert catalog.default_image("reduced").id == "illustrious-xl-v2.0"
+
+
+def test_the_default_profile_runs_the_gpu3_launch_values() -> None:
+    profile = load_catalog(find("config", CATALOG_NAME)).default_text("target")
+    # docs/verification/2026-11-25-gpu-tuning.md, The decisions: level A, context 12288, batch 512, no mmap, f16.
+    assert (profile.context_size, profile.batch_size, profile.use_mmap, profile.kv_quant) == (12288, 512, False, "f16")
+    assert (profile.template, profile.sampler, profile.moe) == ("mistral_v3_tekken", "nemo", False)
 
 
 def documented_rows(section_title: str) -> dict[str, dict[str, str]]:
@@ -127,7 +128,7 @@ def test_repeated_identifiers_are_refused(document: dict[str, Any]) -> None:
 )
 def test_moving_revisions_are_refused(document: dict[str, Any], revision: str) -> None:
     profile = document["text"][0]
-    profile["url"] = f"https://huggingface.co/google/gemma-4-26B-A4B-it-qat/resolve/{revision}/{profile['file']}"
+    profile["url"] = f"https://huggingface.co/bartowski/Some-Model-GGUF/resolve/{revision}/{profile['file']}"
     refused(document, "text.0")
 
 
@@ -171,7 +172,14 @@ def test_invalid_size_and_hash_are_refused(document: dict[str, Any], field: str,
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("template", "alpaca"), ("sampler", "creative"), ("kv_quant", "q4_0"), ("context_size", 1000)],
+    [
+        ("template", "alpaca"),
+        ("sampler", "creative"),
+        # The preset of the Gemma 4 profiles, which ADR 0045 removed.
+        ("sampler", "gemma4"),
+        ("kv_quant", "q4_0"),
+        ("context_size", 1000),
+    ],
 )
 def test_unknown_templates_and_presets_are_refused(document: dict[str, Any], field: str, value: object) -> None:
     document["text"][0][field] = value
@@ -196,9 +204,11 @@ def test_invalid_swa_padding_is_refused(document: dict[str, Any], value: object)
 
 @pytest.mark.parametrize("padding", [1024, 2048])
 def test_swa_padding_is_allowed_for_gemma4_only(document: dict[str, Any], padding: int) -> None:
+    # No shipped profile is of the `gemma4` family since ADR 0045, so one is made from the first.
+    document["text"][0]["template"] = "gemma4"
     document["text"][0]["swa_padding"] = padding
     assert parse_catalog(document).text[0].swa_padding == padding
-    document["text"][3]["swa_padding"] = padding
+    document["text"][1]["swa_padding"] = padding
     refused(document, "swa_padding above 0 is allowed only for a gemma4 profile")
 
 
@@ -209,9 +219,11 @@ def test_invalid_smart_cache_is_refused(document: dict[str, Any], value: object)
 
 
 def test_smart_cache_is_allowed_on_a_target_tier_profile_only(document: dict[str, Any]) -> None:
-    document["text"][0]["smart_cache"] = 2
-    assert parse_catalog(document).text[0].smart_cache == 2
+    # The second profile is the default of no tier, so it can need the target tier.
+    document["text"][1]["min_tier"] = "target"
     document["text"][1]["smart_cache"] = 2
+    assert parse_catalog(document).text[1].smart_cache == 2
+    document["text"][0]["smart_cache"] = 2
     refused(document, "smart_cache 2 is allowed only for a target-tier profile")
 
 
@@ -225,7 +237,7 @@ def test_a_text_profile_without_a_minimum_tier_is_not_a_target_profile(document:
     "evidence",
     [
         "docs/verification/2026-11-20-italian-quality.md",
-        "docs/verification/gemma/summary.md",
+        "docs/verification/rocinante/summary.md",
     ],
 )
 def test_quality_evidence_under_docs_verification_is_accepted(document: dict[str, Any], evidence: str) -> None:
@@ -261,7 +273,7 @@ def test_a_missing_quality_evidence_field_is_refused(document: dict[str, Any]) -
 
 
 def test_two_defaults_for_one_tier_are_refused(document: dict[str, Any]) -> None:
-    document["text"][2]["default_tiers"] = ["target"]
+    document["text"][1]["default_tiers"] = ["target"]
     refused(document, "the target tier needs exactly one default text profile, found 2")
 
 
@@ -271,14 +283,13 @@ def test_two_default_images_for_one_tier_are_refused(document: dict[str, Any]) -
 
 
 def test_a_tier_without_a_default_is_refused(document: dict[str, Any]) -> None:
-    document["text"][1]["default_tiers"] = []
+    document["text"][0]["default_tiers"] = ["target"]
     refused(document, "the reduced tier needs exactly one default text profile, found 0")
 
 
 def test_a_default_above_its_minimum_tier_is_refused(document: dict[str, Any]) -> None:
-    document["text"][0]["default_tiers"] = ["reduced", "target"]
-    document["text"][1]["default_tiers"] = []
-    refused(document, "gemma-4-26b-a4b is the reduced default but needs the target tier")
+    document["text"][0]["min_tier"] = "target"
+    refused(document, "rocinante-x-12b is the reduced default but needs the target tier")
 
 
 def test_default_tiers_must_be_known_and_distinct(document: dict[str, Any]) -> None:
@@ -289,7 +300,7 @@ def test_default_tiers_must_be_known_and_distinct(document: dict[str, Any]) -> N
 
 
 def test_preferred_vram_below_the_requirement_is_refused(document: dict[str, Any]) -> None:
-    document["text"][0]["vram_preferred_mib"] = 6000
+    document["text"][0]["vram_preferred_mib"] = document["text"][0]["vram_required_mib"] - 1
     refused(document, "vram_preferred_mib must not be below vram_required_mib")
 
 
@@ -332,5 +343,5 @@ def test_custom_profiles_get_the_generic_preset(template: str) -> None:
 
 
 def test_the_generic_preset_is_a_valid_catalog_value(document: dict[str, Any]) -> None:
-    document["text"][3]["sampler"] = "generic"
-    assert parse_catalog(document).text[3].sampler == "generic"
+    document["text"][1]["sampler"] = "generic"
+    assert parse_catalog(document).text[1].sampler == "generic"

@@ -10,9 +10,9 @@ BeforeDiscovery {
     # A valid launch file, one KEY=VALUE line per key in the order of docs/configuration.md. Discovery only: the data
     # of the -ForEach cases below.
     $script:ValidLines = @(
-        'MODEL_PROFILE=gemma-4-26b-a4b'
+        'MODEL_PROFILE=rocinante-x-12b'
         'MODEL_FILE=test-model.gguf'
-        'CONTEXT_SIZE=16384'
+        'CONTEXT_SIZE=12288'
         'GPU_LAYERS=-1'
         'BATCH_SIZE=512'
         'MOE_CPU_LAYERS=0'
@@ -34,8 +34,9 @@ BeforeAll {
     # no new privileges, a read-only root and the tmpfs /tmp. "--network none" stands in for the internal network.
     $script:Hardening = @('run', '--rm', '--init', '--user', '10001:10001', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges:true', '--read-only', '--tmpfs', '/tmp', '--network', 'none')
-    # The reference launch file, whose model is gemma-4-26B_q4_0-it.gguf.
+    # The reference launch file, the default profile's level A.
     $script:ExampleLaunchText = [System.IO.File]::ReadAllText((Join-Path $script:RepositoryRoot 'config/examples/llm-launch.env'))
+    $script:ExampleModel = 'TheDrummer_Rocinante-X-12B-v1-Q4_K_M.gguf'
     # The flags of docs/runtime-contracts.md that the entrypoint passes.
     $script:ContractFlags = @('--model', '--usecuda', '--contextsize', '--gpulayers', '--batchsize', '--quantkv', '--moecpu',
         '--usemmap', '--swapadding', '--smartcache', '--host', '--port', '--skiplauncher', '--quiet')
@@ -184,10 +185,10 @@ Describe 'The unpacked launcher on a read-only root' {
 
 Describe 'The entrypoint' {
     It 'turns the example launch file into the documented command' {
-        $run = Invoke-Entrypoint -LaunchText $script:ExampleLaunchText -ModelFile 'gemma-4-26B_q4_0-it.gguf' -Argument @('--print-command')
+        $run = Invoke-Entrypoint -LaunchText $script:ExampleLaunchText -ModelFile $script:ExampleModel -Argument @('--print-command')
         $run.Status | Should -Be 0 -Because $run.Text
         ($run.Text -split "`n") -join ' ' |
-            Should -BeExactly ((Get-ExpectedCommand -Model 'gemma-4-26B_q4_0-it.gguf' -Context '16384' -Layers '-1' -Batch '512' -Kv 'f16') -join ' ')
+            Should -BeExactly ((Get-ExpectedCommand -Model $script:ExampleModel -Context '12288' -Layers '-1' -Batch '512' -Kv 'f16') -join ' ')
     }
 
     It 'adds the optional flags only when their keys ask for them' {
@@ -218,7 +219,7 @@ Describe 'The entrypoint' {
     }
 
     It 'exits 78 when the launch file is missing' {
-        $run = Invoke-Entrypoint -NoLaunchFile -ModelFile 'gemma-4-26B_q4_0-it.gguf'
+        $run = Invoke-Entrypoint -NoLaunchFile -ModelFile $script:ExampleModel
         $run.Status | Should -Be 78 -Because $run.Text
         $run.Text | Should -Match 'the launch file /run/lyrveil/llm-launch\.env is missing'
     }
@@ -230,7 +231,7 @@ Describe 'The entrypoint' {
     }
 
     It 'exits 64 for an unknown argument' {
-        $run = Invoke-Entrypoint -LaunchText $script:ExampleLaunchText -ModelFile 'gemma-4-26B_q4_0-it.gguf' -Argument @('--admin')
+        $run = Invoke-Entrypoint -LaunchText $script:ExampleLaunchText -ModelFile $script:ExampleModel -Argument @('--admin')
         $run.Status | Should -Be 64 -Because $run.Text
     }
 }

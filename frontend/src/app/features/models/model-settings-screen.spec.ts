@@ -17,7 +17,7 @@ function profile(id: string, overrides: Partial<ModelProfile> = {}): ModelProfil
     custom: false,
     state: 'verified',
     download_command: null,
-    template: 'gemma4',
+    template: 'mistral_v3_tekken',
     selectable: true,
     quality_evidence: null,
     ...overrides,

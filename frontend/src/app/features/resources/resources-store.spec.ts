@@ -47,7 +47,7 @@ function snapshot(state: string, queued = 0): Resources {
         none: { queued: 0, running: 0 },
       },
     },
-    model: { profile_id: 'gemma-4-12b', display_name: 'Gemma 4 12B', level: 'A', context_size: 16384 },
+    model: { profile_id: 'rocinante-x-12b', display_name: 'Rocinante X 12B', level: 'A', context_size: 12288 },
   };
 }
 

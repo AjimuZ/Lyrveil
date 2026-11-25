@@ -405,8 +405,8 @@ Describe 'The gpu level' {
     }
 
     It 'refuses a malformed trial selector before any GPU or Docker call' {
-        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'gemma-4-12b')
-        $run.Output | Should -Match "'gemma-4-12b' is not a trial selector"
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'rocinante-x-12b')
+        $run.Output | Should -Match "'rocinante-x-12b' is not a trial selector"
         $run.Output | Should -Match 'Nothing ran\.'
         $run.Output | Should -Not -Match 'reading GPU 0'
         $run.Output | Should -Not -Match 'fake-docker'
@@ -414,7 +414,7 @@ Describe 'The gpu level' {
     }
 
     It 'refuses trial selectors when the tuning plan cannot be read from the catalog' {
-        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'gemma-4-12b/A')
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'rocinante-x-12b/A')
         $run.Output | Should -Match 'The tuning plan could not be read'
         $run.Output | Should -Not -Match 'fake-docker'
         $run.Output | Should -Not -Match 'stand-in gpu test ran'
@@ -512,11 +512,11 @@ Describe 'The gpu level' {
 
     It 'gives the level-A launch lines that the backend writes for a catalog profile' {
         $textProfile = [pscustomobject]@{
-            id = 'gemma-4-12b'; file = 'g.gguf'; context_size = 16384; batch_size = 512; use_mmap = $false
+            id = 'rocinante-x-12b'; file = 'r.gguf'; context_size = 12288; batch_size = 512; use_mmap = $false
             kv_quant = 'f16'; swa_padding = 0; smart_cache = 0
         }
         Get-GpuLaunchLine -TextProfile $textProfile -Level A | Should -Be @(
-            'MODEL_PROFILE=gemma-4-12b', 'MODEL_FILE=g.gguf', 'CONTEXT_SIZE=16384', 'GPU_LAYERS=-1', 'BATCH_SIZE=512',
+            'MODEL_PROFILE=rocinante-x-12b', 'MODEL_FILE=r.gguf', 'CONTEXT_SIZE=12288', 'GPU_LAYERS=-1', 'BATCH_SIZE=512',
             'MOE_CPU_LAYERS=0', 'USE_MMAP=0', 'KV_QUANT=f16', 'SWA_PADDING=0', 'SMART_CACHE=0', 'LEVEL=A')
         (Get-GpuLaunchLine -TextProfile $textProfile)[-1] | Should -Be 'LEVEL=CUSTOM'
     }
