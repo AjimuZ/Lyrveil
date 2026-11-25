@@ -292,12 +292,19 @@ Before any load:
 | Check | LLM | Image |
 | --- | --- | --- |
 | Hard requirement, free VRAM | `vram_required_mib` of the active text profile. Planning value 6000 for both catalog profiles | `vram.required_image_mib` = 6500 |
-| Preferred | `vram_preferred_mib` of the profile. Planning value 9000 for both catalog profiles. Below it the app warns of slower replies, because autofit keeps fewer weights on the GPU | Not applicable |
+| Preferred | `vram_preferred_mib` of the profile. 9678 for both catalog profiles, measured in P02.7. Below it the app warns of slower replies, because autofit keeps fewer weights on the GPU | Not applicable |
 
 When free VRAM is below the requirement, the state stays `IDLE` with `blocked_reason = GPU_INSUFFICIENT_VRAM`. The check repeats every 5 s for `vram.wait_seconds` (120). Then the waiting job fails with a message
 that names the numbers, and the next job can try. **External processes are never terminated.** The interface suggests closing other programs that use the card.
 
 The defaults are planning values. After measuring, P02 and P05 set each requirement to the measured peak plus 5 %, and record the result in the catalog.
+
+Applied for text in P02.7 on 2026-11-25 ([evidence](verification/2026-11-25-p02-7-vram-tuning.md)): the footprint of
+`rocinante-x-12b` at level A, with every layer on the GPU, peaked at 9217 MiB above the 841 MiB baseline, so
+`vram_preferred_mib` is 9678 for both Rocinante profiles. That peak is the full-GPU footprint the preferred value
+describes. `vram_required_mib` keeps the planning value 6000: set to the same peak it would refuse the partial offload
+that autofit and launch levels B and C rely on, and no load with fewer layers on the GPU was measured. Whether the hard
+requirement should be the full peak is open for the owner. The image requirement is P05.
 
 Delivered in P06.2 ([ADR 0038](decisions/0038-vram-hold-in-the-orchestrator-wait-in-the-backend.md)):
 
@@ -430,7 +437,10 @@ plans only `rocinante-x-12b`, with no `MOE_CPU_LAYERS` trial, and its version is
 are not reused. Version 2 ran on 2026-11-25 at the new level A
 ([evidence](verification/2026-11-25-rocinante-default-gpu.md)): level A, batch 512, `USE_MMAP=0` and `f16` again, and
 T-GPU-14 passes at 12288 with 53.0 tokens per second and a first token in 2.22 s. Step 5 now allows 16384
-(1580 MiB of margin); the catalog keeps 12288 until the owner decides on a second step.
+(1580 MiB of margin); the catalog keeps 12288 until the owner decides on a second step. P02.7 measured every trial of
+version 2 again the same day ([evidence](verification/2026-11-25-p02-7-vram-tuning.md)): the same decisions, T-GPU-14
+passing with 53.1 tokens per second and 2.22 s, and the peak that sets the catalog's `vram_preferred_mib`
+([Verifying GPU release](#verifying-gpu-release)).
 
 P04 adds two measurements with real chat prompts from the consistency protocol, because they depend on the prompt
 layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):

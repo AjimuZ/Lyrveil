@@ -11,6 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- The VRAM tuning procedure ran on the reference machine (P02.7). `vram_preferred_mib` of both Rocinante profiles in
+  `config/model-catalog.json` is now 9678, the measured level-A peak of `rocinante-x-12b` (9217 MiB) plus 5 %;
+  `vram_required_mib` keeps 6000. The launch values stay as they were (level A, context 12288, batch 512, no mmap,
+  `f16`), and `rocinante-x-12b` stays the default after meeting the speed rule at 53.1 tokens per second with a first
+  token in 2.22 s
+  ([docs/verification/2026-11-25-p02-7-vram-tuning.md](docs/verification/2026-11-25-p02-7-vram-tuning.md)).
 - The Gemma 4 text profiles are gone, and `rocinante-x-12b` is the default text model on both tiers (owner decision
   of 2026-11-25, [ADR 0045](docs/decisions/0045-drop-gemma-4-rocinante-x-default.md)). `config/model-catalog.json`
   no longer lists `gemma-4-26b-a4b`, `gemma-4-12b` or `orion-26b-a4b`; it holds `rocinante-x-12b` and

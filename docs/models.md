@@ -1,6 +1,6 @@
 # Model catalog
 
-Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers, and 2026-11-25 to drop the Gemma 4 profiles and make `rocinante-x-12b` the default ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). Implementation: the catalog file and its validator are delivered (P02.1a), and so are the backend's text profile change and custom registration (P06.6a, [Delivered in P06.6a](#delivered-in-p066a)); the **Modelli** screen and the `models` command are delivered too (P06.6b, P01.6c). Not delivered: the image profile and quality choice, and the prompt template and sampler preset following the active text profile (see the "Not delivered" note under [Delivered in P06.6a](#delivered-in-p066a)). The measurements of P02.7, P04.10 and P05.8 have not run. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. GPU.2 and GPU.3 loaded the text profiles on the reference machine on 2026-11-25; figures marked as measured come from them, the others are estimates.
+Status: accepted (2026-11-05), revised 2026-11-06 for verified-profile evidence and cache levers, and 2026-11-25 to drop the Gemma 4 profiles and make `rocinante-x-12b` the default ([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). Implementation: the catalog file and its validator are delivered (P02.1a), and so are the backend's text profile change and custom registration (P06.6a, [Delivered in P06.6a](#delivered-in-p066a)); the **Modelli** screen and the `models` command are delivered too (P06.6b, P01.6c). Not delivered: the image profile and quality choice, and the prompt template and sampler preset following the active text profile (see the "Not delivered" note under [Delivered in P06.6a](#delivered-in-p066a)). The P02.7 tuning procedure ran on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-p02-7-vram-tuning.md)); the measurements of P04.10 and P05.8 have not run. Facts were read from the Hugging Face API, the model cards and the official chat templates on 2026-11-05. GPU.2 and GPU.3 loaded the text profiles on the reference machine on 2026-11-25; figures marked as measured come from them, the others are estimates.
 
 The user chooses the active text and image models from verified profiles ([ADR 0024](decisions/0024-selectable-model-profiles.md)). One text model serves every text task, and it never shares the GPU with the image model ([ADR 0005](decisions/0005-exclusive-gpu-by-container-lifecycle.md)).
 
@@ -53,7 +53,7 @@ Owner decision 2026-11-25: drop Gemma 4, `rocinante-x-12b` default ([ADR 0045](d
 
 Fixed rules:
 
-1. P02 measures the default with the [speed rule](gpu-orchestration.md#measuring-and-tuning). Measured on the reference machine on 2026-11-25 for `rocinante-x-12b` at its catalog context of 12288 (T-GPU-14): a median of 53.0 tokens per second and a first token in 2.22 s for a 6089-token prompt ([evidence](verification/2026-11-25-rocinante-default-gpu.md)). It is a dense model that fits in VRAM, so the rule's fallback for a mixture-of-experts default does not apply.
+1. P02 measures the default with the [speed rule](gpu-orchestration.md#measuring-and-tuning). Applied in P02.7 on the reference machine on 2026-11-25 for `rocinante-x-12b` at its catalog values, context 12288 (T-GPU-14): a median of 53.1 tokens per second over 20 replies and a first token in 2.22 s for a 6087-token prompt, so it stays the default on both tiers ([evidence](verification/2026-11-25-p02-7-vram-tuning.md); the DROP.1 run of the same day measured 53.0 and 2.22 s, [evidence](verification/2026-11-25-rocinante-default-gpu.md)). It is a dense model that fits in VRAM, so the rule's fallback for a mixture-of-experts default does not apply.
 2. P04 runs the [Italian quality protocol](prompting.md#italian-quality-protocol) on both text profiles. If the default misses a target and the other profile meets all of them, that profile becomes the default through a new ADR.
 3. P04 runs the [consistency protocol](consistency-engine.md#consistency-protocol) and the [extraction evaluation](consistency-engine.md#extraction-evaluation) on every catalog text profile. After one tuning round, a profile that misses a hard target leaves the catalog through a new ADR, and its file can still be registered as a custom profile. The default must pass the Italian protocol, the consistency protocol and the extraction evaluation ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)).
 4. P05 runs the [image grid](image-generation.md#default-parameters) on all three image profiles. The default changes only if another profile has fewer visible defects in the owner's blind review.
@@ -86,7 +86,7 @@ loads the catalog through the validator (`main.py`) and refuses to start on an e
       "context_size": 12288,
       "moe": false,
       "vram_required_mib": 6000,
-      "vram_preferred_mib": 9000,
+      "vram_preferred_mib": 9678,
       "sampler": "nemo",
       "use_mmap": false,
       "kv_quant": "f16",
@@ -213,7 +213,11 @@ Planning figures for the reference card with 10,600 MiB free at idle, with the m
 
 The KV figure is computed with 16-bit cache entries: 40 layers with 8 key-value heads of size 128, so 160 KiB per
 position. Measured on 2026-11-25 for `rocinante-x-12b` with about 850 MiB in use by other programs: a card peak of 9,412 MiB
-at 8192, and of 10,056 MiB at 12288, a margin of 2,226 MiB ([evidence](verification/2026-11-25-gpu-tuning.md)).
+at 8192, and of 10,056 MiB at 12288, a margin of 2,226 MiB ([evidence](verification/2026-11-25-gpu-tuning.md)). P02.7
+measured a peak of 10,058 MiB at 12288 over a baseline of 841 MiB, a footprint of 9,217 MiB; plus 5 % it gives the
+catalog's `vram_preferred_mib` of 9,678 for both Rocinante profiles. `vram_required_mib` keeps the planning value
+6,000, because no load with fewer layers on the GPU was measured
+([evidence](verification/2026-11-25-p02-7-vram-tuning.md)).
 
 - **SWA padding** ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)) serves only the
   sliding-window layers of the `gemma4` family, so it does not apply to the shipped profiles.

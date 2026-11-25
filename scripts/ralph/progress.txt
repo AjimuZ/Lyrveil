@@ -266,6 +266,7 @@
 - Under strict mode, index ordered dictionaries keyed by numbers with string keys: an integer index reads by position, not by key.
 - When a catalog change alters what an existing tuning record measured (for example level A's context), raise the ProcedureVersion in GpuTuning.psm1 so partial runs never mix old records into new decisions.
 - Tests that need a catalog shape the shipped file no longer has should derive a variant through model_dump(mode="json") plus parse_catalog, not depend on shipped profile indexes.
+- VRAM footprint for catalog values = card peak minus the baseline of the same trial (vram_before_mib), then plus 5 %, rounded up.
 
 ---
 
@@ -2582,4 +2583,14 @@ No prompt-injection attempts were found.
   - Run from 12288, step 5 of the procedure would grow rocinante-x-12b to 16384 (1580 MiB margin). The catalog keeps 12288 by owner decision; this is an open question in ADR 0045.
   - The default reply family lives in ReplySettings (chat_inference.py); main.py passes ReplySettings.template to the structured services. Tests that parse reply prompts split the current message on the family's end marker ([/INST] now).
   - After ADR 0045 no shipped catalog profile needs the target tier, so test_model_profiles builds a test-only target profile (with_target_only) to exercise the tier refusal.
+---
+
+## 2026-11-25T21:22:40Z - P02.7
+- Ran the version-2 VRAM tuning procedure for rocinante-x-12b on the reference RTX 4070 in three selector runs (`scripts/lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/context-16384`, `... batch-* kv-*`, `... mmap-*`). Pester results: 10/10, 12/12 and 10/10 passed, each run ending `test gpu: passed` with no test container or volume left. Get-GpuTuningDecision computed: level A (2224 MiB margin), context may grow to 16384 (1580 MiB margin), batch 512 (best gain +4.4 %), MOE_CPU_LAYERS 0 (dense, MoE comparison not applicable per ADR 0045), USE_MMAP 0 (saves 337.8 MiB), KV f16 (q8_0 costs 6.0 %). T-GPU-14 passes: median 53.1 T/s over 20 replies, first token 2.22 s for a 6087-token prompt. Wrote docs/verification/2026-11-25-p02-7-vram-tuning.md with every command and number. In config/model-catalog.json, vram_preferred_mib of both Rocinante profiles goes from 9000 to 9678: the level-A footprint (10058 - 841 = 9217 MiB) plus 5 %. vram_required_mib stays at 6000. Setting it to the same full-GPU peak would block the partial offload that autofit and levels B and C rely on, and no partial-offload load was measured; this is recorded as an open question for the owner. Catalog launch values are unchanged, and context stays 12288 per the open question in ADR 0045. Default rule 1 of docs/models.md was applied and recorded: rocinante-x-12b stays the default. Updated docs/models.md, docs/gpu-orchestration.md, docs/README.md and CHANGELOG.md. backend tests/unit/test_catalog.py passed (87 tests). The lint level was not run. T-GPU-01 to T-GPU-04 were not rerun; the rocinante-12b-v1.1 footprint (9213 MiB) comes from the DROP.1 text-profiles run of the same day.
+- Files changed: config/model-catalog.json, docs/verification/2026-11-25-p02-7-vram-tuning.md, docs/models.md, docs/gpu-orchestration.md, docs/README.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <path>` takes paths relative to each component (tests/unit/test_catalog.py), not backend/tests/...; a component without the path is skipped.
+  - Each selector run reuses the trials of earlier results files, so three runs in one task ({A, context-16384}, {batch-*, kv-*}, {mmap-*}) give a complete decision set in the last file; they took 174 s, 232 s and 207 s of Pester time.
+  - The catalog's VRAM values are not read at runtime yet: the orchestrator uses VramRequirements.llm_mib=6000 and the backend does not send profile values (P06.6). The preflight free-VRAM pass threshold (9000) is now below the measured preferred 9678 and was left unchanged.
+  - Open for the owner: whether vram_required_mib should be the full-GPU peak (9678) rather than the planning 6000, and whether rocinante-x-12b's context grows to 16384, which step 5 allows.
 ---
