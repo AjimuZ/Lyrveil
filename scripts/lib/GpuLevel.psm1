@@ -22,8 +22,9 @@ function Invoke-GpuNative {
     <#
     Runs Command with Argument, in Directory when one is given, and returns @{ Status; Output }. With Capture, Output
     holds the standard output lines and standard error goes to the console; otherwise everything goes to the console
-    and Output is empty. Never throws for a non-zero status; a command that is not on PATH returns status 127.
-    Not exported.
+    and Output is empty. InputText, when given, is written to the command's standard input; it must be ASCII, because
+    Windows PowerShell 5.1 encodes piped text with $OutputEncoding. Never throws for a non-zero status; a command that
+    is not on PATH returns status 127. Not exported.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -31,19 +32,23 @@ function Invoke-GpuNative {
         [string]$Directory = '',
         [Parameter(Mandatory = $true)] [string]$Command,
         [string[]]$Argument = @(),
+        [string]$InputText = $null,
         [switch]$Capture
     )
 
     if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
         return @{ Status = 127; Output = [string[]]@("The command '$Command' is not available.") }
     }
+    $hasInput = $PSBoundParameters.ContainsKey('InputText')
     # Windows PowerShell 5.1 may turn native standard error lines into error records, which 'Stop' would throw.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     if ($Directory) { Push-Location -LiteralPath $Directory }
     try {
         $lines = @()
-        if ($Capture) { $lines = @(& $Command @Argument | ForEach-Object { [string]$_ }) }
+        if ($Capture -and $hasInput) { $lines = @($InputText | & $Command @Argument | ForEach-Object { [string]$_ }) }
+        elseif ($Capture) { $lines = @(& $Command @Argument | ForEach-Object { [string]$_ }) }
+        elseif ($hasInput) { $InputText | & $Command @Argument | Out-Host }
         else { & $Command @Argument | Out-Host }
         $status = [int]$LASTEXITCODE
     }
@@ -135,18 +140,30 @@ function Wait-GpuMemoryBelow {
 function Invoke-GpuCompose {
     <#
     Runs "docker compose" for the test project in Root, with compose.yaml, tests/gpu/compose.gpu-test.yaml and the
-    "ai" profile, and returns @{ Status; Output } as Invoke-GpuNative does.
+    "ai" profile, and returns @{ Status; Output } as Invoke-GpuNative does, with InputText, when given, on its
+    standard input.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
         [string[]]$Argument = @(),
+        [string]$InputText = $null,
         [switch]$Capture
     )
 
-    $arguments = @('compose', '-p', $script:ProjectName) + $script:ComposeFiles + @('--profile', 'ai') + @($Argument)
+    $arguments = Get-GpuComposeArgument -Argument $Argument
+    if ($PSBoundParameters.ContainsKey('InputText')) {
+        return (Invoke-GpuNative -Directory $Root -Command 'docker' -Argument $arguments -InputText $InputText -Capture:$Capture)
+    }
     return (Invoke-GpuNative -Directory $Root -Command 'docker' -Argument $arguments -Capture:$Capture)
+}
+
+function Get-GpuComposeArgument {
+    # Returns the docker arguments of "docker compose" for the test project with Argument appended. Not exported.
+    param([string[]]$Argument = @())
+
+    return [string[]](@('compose', '-p', $script:ProjectName) + $script:ComposeFiles + @('--profile', 'ai') + @($Argument))
 }
 
 function Get-GpuTestProfile {
@@ -162,23 +179,62 @@ function Get-GpuTestProfile {
     $catalog = (Read-Utf8Text -Path (Join-Path $Root 'config\model-catalog.json')) | ConvertFrom-Json
     $smallest = @($catalog.text | Sort-Object -Property { [long]$_.bytes } | Select-Object -First 1)
     if ($smallest.Length -eq 0) { throw 'config/model-catalog.json has no text profile.' }
-    $chosen = $smallest[0]
-    if ($chosen.id -notmatch '^[a-z0-9][a-z0-9.-]{1,47}$' -or $chosen.file -notmatch '^[A-Za-z0-9._-]{1,128}\.gguf$') {
-        throw "The catalog text profile '$($chosen.id)' has an identifier or file name the launch file refuses."
+    return (Assert-GpuTestProfile -TextProfile $smallest[0])
+}
+
+function Get-GpuTestTextProfile {
+    <#
+    Returns the text profile Id of config/model-catalog.json, after the same checks as Get-GpuTestProfile. Throws when
+    the catalog is missing, has no such profile or names an invalid one.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Id
+    )
+
+    $catalog = (Read-Utf8Text -Path (Join-Path $Root 'config\model-catalog.json')) | ConvertFrom-Json
+    $found = @($catalog.text | Where-Object { $_.id -eq $Id })
+    if ($found.Length -ne 1) { throw "config/model-catalog.json has no text profile '$Id'." }
+    return (Assert-GpuTestProfile -TextProfile $found[0])
+}
+
+function Assert-GpuTestProfile {
+    # Returns TextProfile when its identifier and file name follow the patterns of the launch file, and throws
+    # otherwise, so no catalog value with a space or shell character reaches the shell of Write-GpuTestLaunchFile.
+    # Not exported.
+    param([Parameter(Mandatory = $true)] $TextProfile)
+
+    if ($TextProfile.id -notmatch '^[a-z0-9][a-z0-9.-]{1,47}$' -or $TextProfile.file -notmatch '^[A-Za-z0-9._-]{1,128}\.gguf$') {
+        throw "The catalog text profile '$($TextProfile.id)' has an identifier or file name the launch file refuses."
     }
-    return $chosen
+    return $TextProfile
 }
 
 function Get-GpuLaunchLine {
     <#
-    Returns the lines of the text runtime's launch file for TextProfile: every key of docs/configuration.md, a small
-    4096-token context and every layer on the GPU (GPU_LAYERS 99), so the model's weights must show up in VRAM. Not
-    exported.
+    Returns the lines of the text runtime's launch file for TextProfile, with every key of docs/configuration.md.
+    Level Custom, the default, gives a small 4096-token context and every layer on the GPU (GPU_LAYERS 99), so the
+    model's weights must show up in VRAM (T-GPU-01). Level A gives what the backend writes for a catalog profile at
+    level A (lyrveil/orchestration/launch_file.py): the profile's context, batch, mmap, KV cache type, SWA padding and
+    SmartCache, AutoFit (GPU_LAYERS -1) and no expert layer in RAM (T-GPU-02).
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
-    param([Parameter(Mandatory = $true)] $TextProfile)
+    param(
+        [Parameter(Mandatory = $true)] $TextProfile,
+        [ValidateSet('Custom', 'A')] [string]$Level = 'Custom'
+    )
 
+    if ($Level -eq 'A') {
+        $mmap = if ($TextProfile.use_mmap) { '1' } else { '0' }
+        return [string[]]@(
+            "MODEL_PROFILE=$($TextProfile.id)", "MODEL_FILE=$($TextProfile.file)", "CONTEXT_SIZE=$($TextProfile.context_size)",
+            'GPU_LAYERS=-1', "BATCH_SIZE=$($TextProfile.batch_size)", 'MOE_CPU_LAYERS=0', "USE_MMAP=$mmap",
+            "KV_QUANT=$($TextProfile.kv_quant)", "SWA_PADDING=$($TextProfile.swa_padding)",
+            "SMART_CACHE=$($TextProfile.smart_cache)", 'LEVEL=A')
+    }
     return [string[]]@(
         "MODEL_PROFILE=$($TextProfile.id)", "MODEL_FILE=$($TextProfile.file)", 'CONTEXT_SIZE=4096', 'GPU_LAYERS=99',
         'BATCH_SIZE=512', 'MOE_CPU_LAYERS=0', 'USE_MMAP=0', 'KV_QUANT=f16', 'SWA_PADDING=0', 'SMART_CACHE=0',
@@ -322,15 +378,58 @@ function Initialize-GpuTestData {
     $create = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument @(
         'volume', 'create', '--label', 'com.lyrveil.test=gpu', $script:DataVolume)
     if ($create.Status -ne 0) { return $false }
-    # The lines reach printf as separate arguments; they hold no space or shell character, which Get-GpuTestProfile
-    # checks for the catalog values. The script has no double quote, which Windows PowerShell 5.1 would pass unescaped.
-    $shellScript = "set -eu; umask 022; mkdir -p /data/runtime; printf '%s\n' `$@ > /data/runtime/llm-launch.env; " +
-        "printf '%s\n' RESERVE_VRAM_GB=1.5 > /data/runtime/image-launch.env"
+    return (Write-GpuTestLaunchFile -Root $Root -Line (Get-GpuLaunchLine -TextProfile $TextProfile) -WithImage)
+}
+
+function Write-GpuTestLaunchFile {
+    <#
+    Replaces runtime/llm-launch.env in the test data volume with Line, and with WithImage also writes
+    runtime/image-launch.env with the default RESERVE_VRAM_GB, mode 0644 under a 0755 folder, from a one-off container
+    of the built text runtime image with no network. Returns $true when the container succeeded, and $false, writing
+    nothing, when a line is not KEY=VALUE with a value of letters, digits, ".", "_" and "-" only. Not exported.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string[]]$Line,
+        [switch]$WithImage
+    )
+
+    # The lines reach printf as separate arguments, so none may hold a space or a shell character. The script has no
+    # double quote, which Windows PowerShell 5.1 would pass unescaped.
+    foreach ($entry in $Line) {
+        if ($entry -cnotmatch '^[A-Z_]+=[A-Za-z0-9._-]+$') {
+            Write-Host "  The launch line '$entry' is not KEY=VALUE with a plain value; nothing was written."
+            return $false
+        }
+    }
+    $shellScript = "set -eu; umask 022; mkdir -p /data/runtime; printf '%s\n' `$@ > /data/runtime/llm-launch.env"
+    if ($WithImage) { $shellScript += "; printf '%s\n' RESERVE_VRAM_GB=1.5 > /data/runtime/image-launch.env" }
     $write = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument (@(
             'run', '--rm', '--network', 'none', '--user', '0:0', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges:true', '--volume', "$($script:DataVolume):/data",
-            '--entrypoint', '/bin/sh', 'lyrveil/llm:gpu-test', '-c', $shellScript, 'sh') + (Get-GpuLaunchLine -TextProfile $TextProfile))
+            '--entrypoint', '/bin/sh', 'lyrveil/llm:gpu-test', '-c', $shellScript, 'sh') + $Line)
     return ($write.Status -eq 0)
+}
+
+function Set-GpuTestTextLaunch {
+    <#
+    Replaces the text runtime's launch file in the test data volume with the lines of Get-GpuLaunchLine for
+    TextProfile at Level, and returns $true when it was written. The text runtime reads it at its next start, so call
+    it while lyrveil-llm is removed.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] $TextProfile,
+        [ValidateSet('Custom', 'A')] [string]$Level = 'A'
+    )
+
+    if (-not $PSCmdlet.ShouldProcess($TextProfile.id, "Write the level $Level launch file")) { return $true }
+    $checked = Assert-GpuTestProfile -TextProfile $TextProfile
+    return (Write-GpuTestLaunchFile -Root $Root -Line (Get-GpuLaunchLine -TextProfile $checked -Level $Level))
 }
 
 function Get-RunningInstallationRuntime {
@@ -349,19 +448,20 @@ function Get-RunningInstallationRuntime {
 
 function Start-GpuTestRuntime {
     <#
-    Starts Service of the test project from its built image, without dependencies, and waits up to ten minutes for its
-    health check. Returns the exit status of "up --wait": 0 when the runtime is healthy. On failure it prints the last
-    60 log lines, which hold no prompt because the runtimes run quiet.
+    Starts Service of the test project from its built image, without dependencies, and waits up to TimeoutSecond, ten
+    minutes by default, for its health check. Returns the exit status of "up --wait": 0 when the runtime is healthy. On
+    failure it prints the last 60 log lines, which hold no prompt because the runtimes run quiet.
     #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([int])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
-        [Parameter(Mandatory = $true)] [string]$Service
+        [Parameter(Mandatory = $true)] [string]$Service,
+        [ValidateRange(10, 600)] [int]$TimeoutSecond = 600
     )
 
     if (-not $PSCmdlet.ShouldProcess($Service, 'Start the test runtime')) { return 0 }
-    $up = Invoke-GpuCompose -Root $Root -Argument @('up', '--detach', '--wait', '--wait-timeout', '600', '--no-deps', '--no-build', $Service)
+    $up = Invoke-GpuCompose -Root $Root -Argument @('up', '--detach', '--wait', '--wait-timeout', "$TimeoutSecond", '--no-deps', '--no-build', $Service)
     if ($up.Status -ne 0) {
         Write-Host "  $Service did not become healthy (exit $($up.Status)). Its last log lines:"
         $null = Invoke-GpuCompose -Root $Root -Argument @('logs', '--no-color', '--tail', '60', $Service)
@@ -434,6 +534,196 @@ function Invoke-GpuRuntimeRequest {
         catch { $body = $null }
     }
     return @{ Status = [int]$result.Status; Body = $body }
+}
+
+function ConvertTo-GpuRequestJson {
+    <#
+    Returns Body as compact JSON with every character above U+007F written as a \u escape, so the text is ASCII and
+    survives the standard input of a native command under Windows PowerShell 5.1 byte for byte.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)] [hashtable]$Body)
+
+    $json = ConvertTo-Json -InputObject $Body -Depth 8 -Compress
+    return [regex]::Replace($json, '[^\x00-\x7F]', { param($match) '\u{0:x4}' -f [int][char]$match.Value })
+}
+
+function Get-GpuTextRequestArgument {
+    # Returns the "exec" arguments that POST the JSON of standard input to Path of lyrveil-llm with curl, waiting at
+    # most TimeoutSecond. With Stream, curl writes every line as it arrives and does not fail on an HTTP error, so the
+    # caller sees the events and the body. Not exported.
+    param([string]$Path, [int]$TimeoutSecond, [switch]$Stream)
+
+    $mode = if ($Stream) { @('-sS', '-N') } else { @('-fsS') }
+    return [string[]](@('exec', '-T', 'lyrveil-llm', 'curl') + $mode + @('--max-time', "$TimeoutSecond",
+            '-H', 'Content-Type: application/json', '--data-binary', '@-', "http://127.0.0.1:5001$Path"))
+}
+
+function Invoke-GpuTextPost {
+    <#
+    Sends POST Path with Body as JSON to the KoboldCpp API of lyrveil-llm from inside its container and returns
+    @{ Status; Body }, where Body is the parsed JSON answer, or $null when the request failed or the answer is not JSON.
+    Status is curl's exit status: 0 for a 2xx answer, 22 for an HTTP error.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidatePattern('^/[A-Za-z0-9/_.-]*$')] [string]$Path,
+        [Parameter(Mandatory = $true)] [hashtable]$Body,
+        [int]$TimeoutSecond = 120
+    )
+
+    $result = Invoke-GpuCompose -Root $Root -Capture -InputText (ConvertTo-GpuRequestJson -Body $Body) `
+        -Argument (Get-GpuTextRequestArgument -Path $Path -TimeoutSecond $TimeoutSecond)
+    $parsed = $null
+    if ($result.Status -eq 0) {
+        try { $parsed = ($result.Output -join "`n") | ConvertFrom-Json }
+        catch { $parsed = $null }
+    }
+    return @{ Status = [int]$result.Status; Body = $parsed }
+}
+
+function Invoke-GpuTextStream {
+    <#
+    Sends Body to POST /api/extra/generate/stream of lyrveil-llm and reads the server-sent events as they arrive.
+    Returns @{ Status; Events; Abort; AbortSecond; Lines }: Status is curl's exit status; Events lists every "data:"
+    event in order as @{ Second; Token; FinishReason }, Second being the time since the request started, as this
+    process saw the line arrive; Lines counts every line read. With AbortAfter above 0, once that many token events
+    have arrived it sends POST /api/extra/abort with Body.genkey and keeps reading; Abort then holds that answer as
+    Invoke-GpuTextPost returns it, and AbortSecond the time it was sent. Abort is $null when no abort was sent.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [hashtable]$Body,
+        [int]$AbortAfter = 0,
+        [int]$TimeoutSecond = 180
+    )
+
+    $arguments = Get-GpuComposeArgument -Argument (Get-GpuTextRequestArgument -Path '/api/extra/generate/stream' -TimeoutSecond $TimeoutSecond -Stream)
+    $json = ConvertTo-GpuRequestJson -Body $Body
+    $events = New-Object System.Collections.Generic.List[object]
+    $state = @{ Tokens = 0; Abort = $null; AbortSecond = 0.0; Lines = 0 }
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    # KoboldCpp may send the tokens as UTF-8 text; decode them as such where the console allows it.
+    $previousEncoding = $null
+    try {
+        $previousEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+    }
+    catch { $previousEncoding = $null }
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    Push-Location -LiteralPath $Root
+    try {
+        # ForEach-Object runs each line as it arrives, not after the command ends, so the times are arrival times.
+        $json | & docker @arguments | ForEach-Object {
+            $arrival = $clock.Elapsed.TotalSeconds
+            $state.Lines++
+            $line = [string]$_
+            if ($line -notmatch '^data:\s*(\{.*\})\s*$') { return }
+            try { $data = $Matches[1] | ConvertFrom-Json }
+            catch { return }
+            $reason = Get-JsonProperty $data 'finish_reason'
+            $events.Add([pscustomobject]@{
+                    Second       = $arrival
+                    Token        = [string](Get-JsonProperty $data 'token')
+                    FinishReason = $reason
+                })
+            if ($null -eq $reason) { $state.Tokens++ }
+            if ($AbortAfter -gt 0 -and $null -eq $state.Abort -and $state.Tokens -ge $AbortAfter) {
+                $state.AbortSecond = $clock.Elapsed.TotalSeconds
+                $state.Abort = Invoke-GpuTextPost -Root $Root -Path '/api/extra/abort' -Body @{ genkey = $Body.genkey } -TimeoutSecond 20
+            }
+        }
+        $status = [int]$LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+        $ErrorActionPreference = $previous
+        if ($null -ne $previousEncoding) {
+            try { [Console]::OutputEncoding = $previousEncoding }
+            catch { Write-Verbose 'The console encoding could not be restored.' }
+        }
+    }
+    return @{ Status = $status; Events = $events.ToArray(); Abort = $state.Abort; AbortSecond = $state.AbortSecond; Lines = $state.Lines }
+}
+
+function Get-GpuTestContainerMemory {
+    <#
+    Returns the memory that "docker stats" reports in use by the container of Service in the test project, in MiB,
+    or -1 when the service has no container or Docker fails. It is the container's cgroup usage, page cache included.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Service
+    )
+
+    $id = @((Invoke-GpuCompose -Root $Root -Argument @('ps', '--quiet', $Service) -Capture).Output | Where-Object { $_.Trim() })
+    if ($id.Length -eq 0) { return -1.0 }
+    $stats = Invoke-GpuNative -Command 'docker' -Capture -Argument @('stats', '--no-stream', '--format', '{{.MemUsage}}', $id[0].Trim())
+    if ($stats.Status -ne 0) { return -1.0 }
+    return (ConvertFrom-DockerMemoryText -Text ($stats.Output -join ' '))
+}
+
+function ConvertFrom-DockerMemoryText {
+    <#
+    Returns the first amount of a "docker stats" memory text such as "4.5GiB / 23.47GiB" in MiB, or -1 when the text
+    does not start with an amount and a unit of B, kB, KiB, MB, MiB, GB or GiB.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$Text)
+
+    if ($Text -notmatch '^\s*([0-9]+(?:\.[0-9]+)?)\s*(B|kB|KiB|MB|MiB|GB|GiB)\b') { return -1.0 }
+    $amount = [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
+    $factor = @{ B = 1.0 / 1MB; kB = 1000.0 / 1MB; KiB = 1.0 / 1KB; MB = 1000000.0 / 1MB; MiB = 1.0; GB = 1000000000.0 / 1MB; GiB = 1024.0 }
+    return [math]::Round($amount * $factor[$Matches[2]], 1)
+}
+
+function Start-GpuMemorySampler {
+    <#
+    Starts a background job that reads the used memory of GPU 0 through NVML every 250 ms, and returns the job once its
+    first sample has arrived, or after 20 s. Pass the job to Stop-GpuMemorySampler, also on failure.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param()
+
+    if (-not $PSCmdlet.ShouldProcess('GPU 0', 'Sample the used memory')) { return $null }
+    $job = Start-Job -ScriptBlock {
+        while ($true) {
+            $line = @(& nvidia-smi '--id=0' '--query-gpu=memory.used' '--format=csv,noheader,nounits' 2>$null) | Select-Object -First 1
+            if ("$line" -match '^\s*(\d+)\s*$') { [int]$Matches[1] }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not $job.HasMoreData -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    return $job
+}
+
+function Stop-GpuMemorySampler {
+    <#
+    Stops and removes the job of Start-GpuMemorySampler and returns @{ PeakMiB; Samples }: the highest used memory it
+    read and the number of samples. PeakMiB is 0 when it read none.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([hashtable])]
+    param($Job)
+
+    if ($null -eq $Job) { return @{ PeakMiB = 0; Samples = 0 } }
+    if (-not $PSCmdlet.ShouldProcess('GPU 0', 'Stop sampling the used memory')) { return @{ PeakMiB = 0; Samples = 0 } }
+    Stop-Job -Job $Job
+    $values = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue | ForEach-Object { [int]$_ })
+    Remove-Job -Job $Job -Force
+    $peak = 0
+    foreach ($value in $values) { if ($value -gt $peak) { $peak = $value } }
+    return @{ PeakMiB = $peak; Samples = $values.Length }
 }
 
 function Invoke-GpuLevel {
@@ -528,5 +818,7 @@ function Invoke-GpuLevel {
 }
 
 Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample, Wait-GpuMemoryBelow, Invoke-GpuCompose,
-    Get-GpuTestProfile, Test-GpuTestConfiguration, Start-GpuTestRuntime, Remove-GpuTestRuntime, Get-GpuTestContainerFact,
-    Invoke-GpuRuntimeRequest
+    Get-GpuTestProfile, Get-GpuTestTextProfile, Get-GpuLaunchLine, Set-GpuTestTextLaunch, Test-GpuTestConfiguration,
+    Start-GpuTestRuntime, Remove-GpuTestRuntime, Get-GpuTestContainerFact, Invoke-GpuRuntimeRequest,
+    ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Get-GpuTestContainerMemory,
+    ConvertFrom-DockerMemoryText, Start-GpuMemorySampler, Stop-GpuMemorySampler

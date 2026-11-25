@@ -129,7 +129,10 @@ Stop sequences: `<|im_end|>`, `<|im_start|>`, `</s>`, and `\n{user_display_name}
 - A unit test renders two consecutive replies of one conversation and checks that they share the
   stable text and the history byte for byte, and that no old turn carries the frame (T-MOD-05).
 - The P02 exit check tokenizes one prompt per family with the real model and stores the identifiers as
-  a test fixture.
+  a test fixture. Delivered with GPU.2 as T-GPU-03: `backend/tests/fixtures/tokenization/` holds the prompts and the
+  recorded identifiers of the three families, and the control tokens came out as documented
+  ([evidence](verification/2026-11-25-gpu-text-profiles.md)). The comparison with the official Jinja templates has
+  not run.
 
 ## Sampler presets
 

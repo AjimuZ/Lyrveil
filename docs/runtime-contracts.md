@@ -79,11 +79,11 @@ Source facts used by the design:
 | `GET /api/v1/model` | Readiness and identity | `{"result": "koboldcpp/<model name>"}` |
 | `GET /api/extra/version` | Version check | Holds the string fields `result` and `version`. `version` must match the pinned release. |
 | `GET /api/extra/true_max_context_length` | Real context size | Used to size budgets after a fallback. |
-| `GET /api/extra/perf` | Monitoring | Includes `last_process`, `last_eval`, `last_token_count`, `stop_reason`, `queue`, `idle`, `uptime`. |
+| `GET /api/extra/perf` | Monitoring | Includes `last_process`, `last_eval`, `last_token_count`, `stop_reason`, `queue`, `idle`, `uptime`. Observed in T-GPU-04 (2026-11-25): `last_eval` behaves as milliseconds per generated token, not seconds (inferred from the stream timing, not read in the source); `stop_reason` was 1 for the end token, 2 for a stop sequence and 0 for `length` and for an aborted generation. |
 | `POST /api/extra/tokencount` | Tokenizer | Request `{"prompt": "...", "special": false}`. Response `{"value": N, "ids": [...], "prompt": "..."}`. `special` defaults to true and adds BOS. |
 | `POST /api/extra/generate/stream` | Streaming reply | Takes `GenerationInput`. SSE with `event: message` and JSON `data` holding `token` and `finish_reason`. `finish_reason` is null until the last event, which has an empty `token` and `stop`, `length` or `error`. The server then closes the connection. There is no `[DONE]`. |
 | `POST /api/v1/generate` | Structured tasks | Takes `GenerationInput`. Response `{"results": [{"text": "..."}]}`. |
-| `POST /api/extra/abort` | Cancel, preempt | Request `{"genkey": "..."}`. Response `{"success": "true", "done": "true"}`. Upstream states that it does not work with several queued requests. The lease guarantees one request at a time. |
+| `POST /api/extra/abort` | Cancel, preempt | Request `{"genkey": "..."}`. Response `{"success": "true", "done": "true"}`. Upstream states that it does not work with several queued requests. The lease guarantees one request at a time. Observed in T-GPU-04 (2026-11-25): the aborted stream closed within 0.4 s with `finish_reason` `length`. |
 
 ### GenerationInput fields used
 

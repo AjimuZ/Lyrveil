@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "parts": {
+    "stable_text": "Sei Giulia Rossi, 29 anni, libraia a Torino. Rispondi sempre in italiano, in prima persona, con frasi brevi.\nScrivi solo le parole e i gesti di Giulia.",
+    "history": [
+      {"role": "user", "text": "Ciao Giulia! Com'è andata la giornata in libreria?"},
+      {"role": "character", "text": "Ciao Anna! Bene, è arrivato un carico di romanzi e ho passato il pomeriggio a sistemarli. E tu?"}
+    ],
+    "state": "Il vostro rapporto: amiche da anni.\n",
+    "memories": "- [sicuro] Anna vive a Milano e lavora in un ospedale.",
+    "anchor": "Ricorda: sei Giulia Rossi e hai 29 anni.",
+    "character_first_name": "Giulia",
+    "user_display_name": "Anna"
+  },
+  "current_message": "Tutto bene, solo un po' stanca. Mi consigli un libro per il fine settimana?",
+  "structured": {
+    "system_text": "Sei una scrittrice. Scrivi sempre in italiano.",
+    "user_text": "Scrivi un racconto lungo, di almeno mille parole, su una libreria di Torino che apre solo di notte."
+  },
+  "families": {
+    "gemma4": {
+      "prompt": "<|turn>system\nSei Giulia Rossi, 29 anni, libraia a Torino. Rispondi sempre in italiano, in prima persona, con frasi brevi.\nScrivi solo le parole e i gesti di Giulia.<turn|>\n<|turn>user\nCiao Giulia! Com'è andata la giornata in libreria?<turn|>\n<|turn>model\nCiao Anna! Bene, è arrivato un carico di romanzi e ho passato il pomeriggio a sistemarli. E tu?<turn|>\n<|turn>user\n[Contesto per Giulia, non scritto da Anna]\nIl vostro rapporto: amiche da anni.\n- [sicuro] Anna vive a Milano e lavora in un ospedale.\nRicorda: sei Giulia Rossi e hai 29 anni.\n[Messaggio di Anna]\nTutto bene, solo un po' stanca. Mi consigli un libro per il fine settimana?<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+      "structured_prompt": "<|turn>system\nSei una scrittrice. Scrivi sempre in italiano.<turn|>\n<|turn>user\nScrivi un racconto lungo, di almeno mille parole, su una libreria di Torino che apre solo di notte.<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+      "stop_sequences": ["<turn|>", "<|turn>", "\nAnna:"],
+      "control_texts": ["<turn|>", "<|turn>", "<|channel>", "<channel|>"]
+    },
+    "mistral_v3_tekken": {
+      "prompt": "[INST]Ciao Giulia! Com'è andata la giornata in libreria?[/INST]Ciao Anna! Bene, è arrivato un carico di romanzi e ho passato il pomeriggio a sistemarli. E tu?</s>[INST]Sei Giulia Rossi, 29 anni, libraia a Torino. Rispondi sempre in italiano, in prima persona, con frasi brevi.\nScrivi solo le parole e i gesti di Giulia.\n\n[Contesto per Giulia, non scritto da Anna]\nIl vostro rapporto: amiche da anni.\n- [sicuro] Anna vive a Milano e lavora in un ospedale.\nRicorda: sei Giulia Rossi e hai 29 anni.\n[Messaggio di Anna]\nTutto bene, solo un po' stanca. Mi consigli un libro per il fine settimana?[/INST]",
+      "structured_prompt": "[INST]Sei una scrittrice. Scrivi sempre in italiano.\n\nScrivi un racconto lungo, di almeno mille parole, su una libreria di Torino che apre solo di notte.[/INST]",
+      "stop_sequences": ["</s>", "[INST]", "\nAnna:"],
+      "control_texts": ["</s>", "[INST]", "[/INST]"]
+    },
+    "chatml": {
+      "prompt": "<|im_start|>system\nSei Giulia Rossi, 29 anni, libraia a Torino. Rispondi sempre in italiano, in prima persona, con frasi brevi.\nScrivi solo le parole e i gesti di Giulia.<|im_end|>\n<|im_start|>user\nCiao Giulia! Com'è andata la giornata in libreria?<|im_end|>\n<|im_start|>assistant\nCiao Anna! Bene, è arrivato un carico di romanzi e ho passato il pomeriggio a sistemarli. E tu?<|im_end|>\n<|im_start|>user\n[Contesto per Giulia, non scritto da Anna]\nIl vostro rapporto: amiche da anni.\n- [sicuro] Anna vive a Milano e lavora in un ospedale.\nRicorda: sei Giulia Rossi e hai 29 anni.\n[Messaggio di Anna]\nTutto bene, solo un po' stanca. Mi consigli un libro per il fine settimana?<|im_end|>\n<|im_start|>assistant\n",
+      "structured_prompt": "<|im_start|>system\nSei una scrittrice. Scrivi sempre in italiano.<|im_end|>\n<|im_start|>user\nScrivi un racconto lungo, di almeno mille parole, su una libreria di Torino che apre solo di notte.<|im_end|>\n<|im_start|>assistant\n",
+      "stop_sequences": ["<|im_end|>", "<|im_start|>", "</s>", "\nAnna:"],
+      "control_texts": ["<|im_end|>", "<|im_start|>", "</s>"]
+    }
+  }
+}

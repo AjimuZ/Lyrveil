@@ -257,6 +257,9 @@
 - In Windows PowerShell 5.1, ConvertFrom-Json writes a JSON array as one object; assign it to a variable and return the variable so callers get the elements.
 - A function that returns an empty array gives the caller $null; when emptiness and failure must differ, return a hashtable such as @{ Known; Names }.
 - Under strict mode, read the JSON property named Count with $obj.PSObject.Properties['Count'].Value, because PowerShell adds an intrinsic Count to every object.
+- Send JSON to native commands from Windows PowerShell 5.1 through stdin with every non-ASCII character \u-escaped (ConvertTo-GpuRequestJson), so $OutputEncoding cannot corrupt it.
+- In hardware tests, run every request and measurement in BeforeAll, store them in a record, and assert in It blocks against a 'problems' list. The numbers then survive a failing check and go to a machine-readable results file.
+- Record-when-missing fixtures carry the SHA-256 of their input, so a pure unit test can detect a stale recording without the hardware.
 
 ---
 
@@ -2484,4 +2487,28 @@ docs/testing.md now describes the level. The results are in docs/verification/20
   - With a warm build cache, the gpu level (builds plus tests) fits in one 10-minute tool call. The image build re-ran its ComfyUI source stage, but the 4 GB dependency layer stayed cached.
   - Invoke-GpuLevel returns 2 for a skip. Invoke-LyrveilTest reports it as SKIPPED and exits 1. GpuLevel.psm1 and TestCommand.psm1 each define $script:SkippedStatus = 2, so the two must stay equal.
   - Later T-GPU tests can reuse the helpers that GpuLevel.psm1 exports: Get-GpuSample, Wait-GpuMemoryBelow, Start-GpuTestRuntime, Remove-GpuTestRuntime, Invoke-GpuRuntimeRequest and Get-GpuTestContainerFact. Add them as new tests/gpu/*.Tests.ps1 files.
+---
+
+## 2026-11-25T18:37:15Z - GPU.2
+- Added T-GPU-02 to T-GPU-04 to the gpu level in tests/gpu/TextProfiles.Tests.ps1, with new helpers in scripts/lib/GpuLevel.psm1. The test loads gemma-4-12b, gemma-4-26b-a4b, rocinante-x-12b and rocinante-12b-v1.1 (the one chatml profile) one at a time at catalog launch level A on the real RTX 4070.
+- T-GPU-02: reads VRAM through NVML, the VRAM peak sampled every 250 ms during 3 generations, and container RAM from docker stats, then applies the margin rule.
+- T-GPU-03: tokenizes one prompt per template family, checks the control-token IDs and records or compares fixtures in backend/tests/fixtures/tokenization/. A new backend unit test ties the fixtures to the prompt formatter.
+- T-GPU-04: checks the streamed events, the token counts and an abort of a long generation.
+
+Observed results:
+- `scripts/lyrveil.cmd test gpu` passed with 33 passed, 0 failed, 0 skipped and left no test container or volume.
+- The first run failed 29/4: a test defect read the abort answer from a hashtable through a property-only helper. It was fixed and rerun.
+- Margins: gemma-4-12b 3048 MiB, gemma-4-26b-a4b 885 MiB (1037 in the first run), rocinante-x-12b 2423 MiB. All stay at level A and A-01 holds.
+- The targeted backend run of test_tokenization_fixtures.py gave 7 passed.
+- `test lint` passed with 0 PSScriptAnalyzer findings and clean documentation checks.
+
+Not run: the three new Pester cases in tests/scripts/TestCommand.Tests.ps1. The tuning steps 5 to 9 and the 20-generation peak were not measured.
+- Files changed: scripts/lib/GpuLevel.psm1, tests/gpu/TextProfiles.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, backend/tests/fixtures/tokenization/prompts.json, backend/tests/fixtures/tokenization/gemma4.tokens.json, backend/tests/fixtures/tokenization/mistral_v3_tekken.tokens.json, backend/tests/fixtures/tokenization/chatml.tokens.json, backend/tests/unit/test_tokenization_fixtures.py, docs/testing.md, docs/verification/2026-11-25-gpu-text-profiles.md, docs/verification/2026-11-25-gpu-text-profiles.json, docs/README.md, docs/runtime-contracts.md, docs/prompting.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The full gpu level (build cache warm, T-GPU-01 plus four text profiles) took about 6 minutes; Pester reported 356 s for the tests. Adding more loads risks the 10-minute tool-call limit, and a killed run would skip the cleanup in the finally block.
+  - KoboldCpp 1.124.2: an aborted stream closes with finish_reason 'length' and perf stop_reason 0. perf.last_eval behaves as milliseconds per generated token (inferred). stop_reason 1 means the end token, 2 a stop sequence.
+  - Loads at level A with AutoFit: gemma-4-12b ~9.2 GiB VRAM, gemma-4-26b-a4b ~11.2-11.4 GiB VRAM with ~6.6-7.4 GiB RAM (experts in RAM), rocinante-x-12b ~9.6-9.9 GiB. The 26B margin is about 0.9-1.0 GiB, near the 1024 MiB line. Ready times were 35-75 s.
+  - BOS ids: gemma4 2, Mistral Nemo 1. tokencount 'special' only adds BOS; control tokens are always parsed.
+  - Invoke-GpuTextPost and Invoke-GpuTextStream return hashtables. A Get-Field/Get-JsonProperty helper based on PSObject.Properties cannot read their keys, so use .Key access.
+  - Fixtures tokens files are recorded by the gpu test only when missing. Delete one on purpose to re-record it after a formatter or prompt change; the backend unit test fails until then because the SHA-256 no longer matches.
 ---

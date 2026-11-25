@@ -31,6 +31,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-02 to T-GPU-04 in the `gpu` level (GPU.2). `tests/gpu/TextProfiles.Tests.ps1` loads `gemma-4-12b`,
+  `gemma-4-26b-a4b`, `rocinante-x-12b` and `rocinante-12b-v1.1` one at a time at launch level A on the real GPU,
+  measures VRAM, the VRAM peak and the container's RAM and applies the margin rule, tokenizes one chat prompt per
+  template family, streams a reply and aborts a long generation. The tokenizations are committed as fixtures in
+  `backend/tests/fixtures/tokenization/`, and a backend unit test ties them to the prompt formatter. Every run writes
+  its numbers to `test-results/gpu/`. All 33 cases passed on the reference machine; the 26B profile kept 885 MiB of
+  VRAM free at its peak, so it stays at level A. See
+  [docs/verification/2026-11-25-gpu-text-profiles.md](docs/verification/2026-11-25-gpu-text-profiles.md).
 - The `gpu` test level and T-GPU-01 (GPU.1). `scripts\lyrveil.cmd test gpu` builds the real text and image runtimes of
   `compose.yaml` with `:gpu-test` tags, starts them one after the other with the GPU in the project
   `lyrveil-gpu-test`, with its own data volume and the models volume read-only, samples VRAM with `nvidia-smi` and

@@ -478,6 +478,31 @@ Describe 'The gpu level' {
         $named | Should -Contain 'lyrveil-image sets container_name.'
         $named | Should -Contain 'lyrveil-image mounts a bind at /data.'
     }
+
+    It 'writes request bodies as ASCII JSON that keeps every character' {
+        $text = "Com'$([char]0x00E8) <|turn>`n$([char]0xD83D)$([char]0xDE00)"
+        $json = ConvertTo-GpuRequestJson -Body @{ prompt = $text }
+        $json | Should -Match '^[\x00-\x7F]*$'
+        ($json | ConvertFrom-Json).prompt | Should -BeExactly $text
+    }
+
+    It 'reads the memory amount of docker stats in MiB' {
+        ConvertFrom-DockerMemoryText -Text '4.5GiB / 23.47GiB' | Should -Be 4608
+        ConvertFrom-DockerMemoryText -Text '512MiB / 1GiB' | Should -Be 512
+        ConvertFrom-DockerMemoryText -Text '2GB / 8GB' | Should -Be 1907.3
+        ConvertFrom-DockerMemoryText -Text '-- / --' | Should -Be -1
+    }
+
+    It 'gives the level-A launch lines that the backend writes for a catalog profile' {
+        $textProfile = [pscustomobject]@{
+            id = 'gemma-4-12b'; file = 'g.gguf'; context_size = 16384; batch_size = 512; use_mmap = $false
+            kv_quant = 'f16'; swa_padding = 0; smart_cache = 0
+        }
+        Get-GpuLaunchLine -TextProfile $textProfile -Level A | Should -Be @(
+            'MODEL_PROFILE=gemma-4-12b', 'MODEL_FILE=g.gguf', 'CONTEXT_SIZE=16384', 'GPU_LAYERS=-1', 'BATCH_SIZE=512',
+            'MOE_CPU_LAYERS=0', 'USE_MMAP=0', 'KV_QUANT=f16', 'SWA_PADDING=0', 'SMART_CACHE=0', 'LEVEL=A')
+        (Get-GpuLaunchLine -TextProfile $textProfile)[-1] | Should -Be 'LEVEL=CUSTOM'
+    }
 }
 
 Describe 'Python component selection' {
