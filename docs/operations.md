@@ -696,6 +696,12 @@ Delivered in P05.1. Every stage starts from `python:3.12.16-slim-trixie`:
    13.0. `HOME` is `/tmp/comfy/home`, `TMPDIR` is `/tmp/comfy/tmp`, no bytecode is written at run time, and the user
    is `10001:10001`. The image holds no model: `models/checkpoints` has only the upstream placeholder file. The image
    measured 11.6 GB on 2026-11-07.
+   Since GPU.6 the stage also creates `/tmp/comfy`, the tmpfs mount point, with mode 1777 like `/tmp`. When a mount
+   point exists, the container runtime gives each new tmpfs its mode. Without it, the folder was created with 0755 at
+   the first start and kept with the container, so every later start of the same container got a root-owned tmpfs:
+   the entrypoint could not create its folders and exited 1, and the orchestrator reported `IMAGE_LOAD_FAILED` for
+   every image job once the container had run once. T-GPU-07 found it on 2026-11-25
+   ([evidence](verification/2026-11-25-gpu-mode-switches.md)).
 
 `entrypoint.sh` reads `/run/lyrveil/image-launch.env` as data, with the same rules as the text runtime's: every
 non-comment line is `KEY=VALUE`, `RESERVE_VRAM_GB` appears exactly once with a value of the
@@ -718,7 +724,8 @@ The argument `--cpu` appends ComfyUI's `--cpu`, for tests with no GPU; productio
 it. Any other or repeated argument exits 64.
 
 `tests/docker/ImageRuntime.Tests.ps1` starts the image with `--cpu` on a read-only root, with only the tmpfs
-`/tmp/comfy` and no network, and expects `GET /system_stats` to answer. Whether a GPU generation needs any other
+`/tmp/comfy` and no network, and expects `GET /system_stats` to answer. Since GPU.6 it also starts one container twice
+and expects `/tmp/comfy` to be writable, with mode 1777, at the second start. Whether a GPU generation needs any other
 writable path was checked by the first real generations (T-GPU-06, GPU.5): none did. A path a later version needs
 gets a tmpfs recorded in the Compose notes above.
 

@@ -90,6 +90,11 @@ COPY --chmod=0755 docker/image/entrypoint.sh /usr/local/bin/lyrveil-image-entryp
 RUN python -m compileall -q /opt/ComfyUI \
     && cuda="$(python -c 'import torch; print(torch.version.cuda or "none")')" \
     && case "${cuda}" in 13.0*) ;; *) echo "PyTorch is built for CUDA ${cuda}, expected 13.0" >&2; exit 1 ;; esac
+# The mount point of the tmpfs /tmp/comfy, with the mode of /tmp. When the mount point exists, the container runtime
+# gives each new tmpfs its mode; a missing one is created with 0755 at the first start and kept, so every later start of
+# the same container got a root-owned tmpfs the runtime's user could not write, and ComfyUI exited 1 (found by T-GPU-07,
+# since the orchestrator starts the same container for every image job).
+RUN mkdir /tmp/comfy && chmod 1777 /tmp/comfy
 WORKDIR /opt/ComfyUI
 USER 10001:10001
 EXPOSE 8188

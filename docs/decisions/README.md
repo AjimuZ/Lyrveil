@@ -49,3 +49,4 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0043](0043-windowed-message-list-without-cdk-virtual-scroll.md) | A windowed message list of our own instead of the CDK virtual scroll | Accepted |
 | [0044](0044-accept-certifi-pillow-and-tslib-licenses.md) | Accept certifi (MPL-2.0), pillow (MIT-CMU) and tslib (0BSD) | Accepted |
 | [0045](0045-drop-gemma-4-rocinante-x-default.md) | Drop the Gemma 4 profiles, Rocinante X 12B the default on every tier | Accepted |
+| [0046](0046-test-only-orchestrator-for-the-gpu-level.md) | A test-only orchestrator drives the gpu level's real runtimes | Accepted |

@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-06 to T-GPU-13) have not run. The `gpu` level exists (GPU.1), and its T-GPU-01 passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)); T-GPU-02 to T-GPU-04 (GPU.2) passed there on 2026-11-25 too ([evidence](verification/2026-11-25-gpu-text-profiles.md)), and so did T-GPU-05 (GPU.4, [evidence](verification/2026-11-25-gpu-structured-output.md)) and T-GPU-14 (P02.7, [evidence](verification/2026-11-25-p02-7-vram-tuning.md)). The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-10 to T-GPU-13) have not run. The `gpu` level exists (GPU.1), and its T-GPU-01 passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)); T-GPU-02 to T-GPU-04 (GPU.2) passed there on 2026-11-25 too ([evidence](verification/2026-11-25-gpu-text-profiles.md)), and so did T-GPU-05 (GPU.4, [evidence](verification/2026-11-25-gpu-structured-output.md)), T-GPU-06 (GPU.5, [evidence](verification/2026-11-25-gpu-image-profiles.md)), T-GPU-07 to T-GPU-09 (GPU.6, [evidence](verification/2026-11-25-gpu-mode-switches.md); T-GPU-07's ten round trips in two runs of five) and T-GPU-14 (P02.7, [evidence](verification/2026-11-25-p02-7-vram-tuning.md)). The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
 
 ## Levels
 
@@ -49,6 +49,7 @@ are trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildca
 
 ```powershell
 .\scripts\lyrveil.cmd test gpu StructuredOutput
+.\scripts\lyrveil.cmd test gpu ModeSwitch t-gpu-07 rounds-5
 .\scripts\lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/batch-*
 ```
 
@@ -70,13 +71,17 @@ this order:
    (`--query-gpu=index,name,memory.total,memory.used`). When `nvidia-smi` is missing, fails (as it does without an NVIDIA
    driver) or lists no GPU, it prints the reason and a skip message and returns the skip status before any Docker
    call. The command reports `SKIPPED` and exits 1: a skip is never a pass.
-2. It refuses to run, touching nothing, while a container named `lyrveil-llm` or `lyrveil-image` (an installation's
-   runtime) is running.
+2. It refuses to run, touching nothing, while a container named `lyrveil-llm`, `lyrveil-image` (an installation's
+   runtime) or `lyrveil-orchestrator` is running. Since GPU.6 the orchestrator counts too, because an installation's
+   orchestrator starts its runtime as soon as the card has room.
 3. It removes any earlier project `lyrveil-gpu-test` and the volume `lyrveil-gpu-test-data`. It resolves
    `compose.yaml` with [`tests/gpu/compose.gpu-test.yaml`](../tests/gpu/compose.gpu-test.yaml) and the `ai` profile, and
-   refuses to go on unless the project is `lyrveil-gpu-test` with only `lyrveil-llm` and `lyrveil-image`, both with
-   `:gpu-test` images, no `container_name` and no port, and only tmpfs mounts and read-only mounts of
-   `lyrveil-gpu-test-data` and `lyrveil-models`.
+   refuses to go on unless the project is `lyrveil-gpu-test` with only `lyrveil-llm`, `lyrveil-image`,
+   `lyrveil-orchestrator` and `lyrveil-backend`, all with `:gpu-test` images, no `container_name` and no port, and only
+   tmpfs mounts and read-only mounts of `lyrveil-gpu-test-data` and `lyrveil-models`. Two exceptions: the backend
+   mounts the test data volume writable at `/data`, and the orchestrator alone mounts the Docker socket. The
+   orchestrator and the backend must read no `env_file`, hold only the variables of the override and carry the level's
+   own control token, so the installation's `.env` never reaches them.
 4. It builds the two runtime images with the `:gpu-test` tag (the build cache makes later runs short). It creates
    `lyrveil-gpu-test-data` and writes `runtime/llm-launch.env` and `runtime/image-launch.env` into it, from a one-off
    container with no network. The text launch file names the catalog text profile with the smallest file, with
@@ -230,6 +235,60 @@ says. The results go to `test-results/gpu/image-profiles-<time>.json`, which Git
 `backend/tests/unit/test_gpu_image_probe.py`, in the `unit` level, checks the graphs against `build_workflow`, the
 percentile, and the rule at 45 s and just above, and without the default profile's times.
 
+`tests/gpu/ModeSwitch.Tests.ps1` holds T-GPU-07 to T-GPU-09 (GPU.6,
+[evidence](verification/2026-11-25-gpu-mode-switches.md)). It lets the real orchestrator move the GPU, with no script
+stopping or starting a runtime. Its orchestrator is the test-only stage `gpu-test-runtime` of `orchestrator/Dockerfile`
+([ADR 0046](decisions/0046-test-only-orchestrator-for-the-gpu-level.md)): the real control API, lifecycle manager,
+supervisor and NVML probe, with a gate that acts only on this project's two runtimes. The file builds that image and
+the backend's runtime image as `:gpu-test`, writes the level-A launch file of the default text profile
+(`rocinante-x-12b`), and creates the two runtime containers without starting them. It reaches the control API and the
+backend's REST API from inside their containers (`Invoke-GpuServiceApi`), as the network publishes no port. The items
+after the file name select parts: `t-gpu-07`, `t-gpu-08` and `t-gpu-09`, and `rounds-<n>` for fewer round trips. A
+part not selected is reported as skipped.
+
+- **T-GPU-09** runs first. The test starts its own container `lyrveil-gpu-test-vram-load` from the image runtime's
+  image, with no network and no capability, carrying the project's label. Its PyTorch allocates VRAM until at most
+  3072 MiB are free and holds it. Then the orchestrator starts and must:
+  - hold the text load in `IDLE` with `blocked_reason` `GPU_INSUFFICIENT_VRAM`, `required_mib` 6000 and a `free_mib`
+    within 512 MiB of NVML's free memory;
+  - after `PUT /v1/desired-mode image`, hold the image load the same way with 6500;
+  - still hold after 12 s, with neither runtime container ever started.
+  The load container must keep its PID, start time and zero restarts until the test removes it, by the id its own
+  start returned; nothing else is stopped. The text runtime must then load, after the recorded hold event.
+- **T-GPU-07** samples NVML every 250 ms and the `State.Running` flag of both runtime containers about every 300 ms in
+  background jobs, on one clock, while it runs the round trips (ten unless `rounds-<n>` asks for fewer). Each round
+  trip, all through the control API as the backend does it:
+  - asks for mode `image` and waits for `IMAGE_READY`;
+  - renders the 768 x 768, 8-step graph of `Get-GpuImageWorkflow` with the default image checkpoint under an image
+    lease. A fresh ComfyUI loads the checkpoint;
+  - asks for mode `llm`, waits for `LLM_READY` and generates 16 tokens under a text lease.
+  The checks:
+  - no container sample shows both runtimes running;
+  - NVML shows exactly one model phase per expected runtime, in order: text, then image and text for each round.
+    `Test-GpuExclusiveTimeline` of [`scripts/lib/GpuSwitches.psm1`](../scripts/lib/GpuSwitches.psm1) uses
+    hysteresis: a phase starts at 4096 MiB above the baseline and ends only at a sample within 1024 MiB of it, so two
+    models resident together would merge into one phase. Each phase must hold container samples of its own runtime
+    alone;
+  - the two container ids are the same before and after, so the switches only stopped and started them;
+  - every switch is timed from the orchestrator's events (`Get-GpuSwitchTime`): the stop with its verified release,
+    then the load of the other runtime. The planning target of 150 s for a full switch is recorded, not asserted.
+- **T-GPU-08** starts the backend on the test data volume, owned by 10001 as `setup.cmd` leaves a volume, beside the
+  test orchestrator. It loads the demo characters, opens a conversation and asks for a **Rapida** square image. Once
+  the orchestrator reports `GENERATING_IMAGE` under the image job's lease, it sends a text message with intent `text`.
+  The checks:
+  - the send answers 202 with the reply `queued`;
+  - the reply's `created_at` falls between the image lease's grant and its release in the orchestrator's events;
+  - the image completes;
+  - the reply completes with text, its job completes, and the events run in this order: image lease released, image
+    runtime stopped, text runtime ready, then the reply's first text lease.
+
+Since a full round trip takes about 54 s on the reference machine, ten of them and the setup take about 11 minutes.
+The results go to `test-results/gpu/mode-switches-<time>.json`, which Git ignores. The file also holds, for a state
+that is not reached, the last log lines of that runtime. `tests/scripts/GpuSwitches.Tests.ps1`, in the `unit` level,
+covers the phases at their limits, the check with both runtimes running, with two models resident together and with
+no runtime, and the switch times. `orchestrator/tests/unit/test_gpu_test_gate.py` checks that the test gate sends only
+the documented calls to the test project's containers and refuses an installation's.
+
 The Pester cases "The gpu level" in `tests/scripts/TestCommand.Tests.ps1`, in the `unit` level, check the wiring with
 stand-in `docker.cmd` and `nvidia-smi.cmd` first on `PATH` and a fixture test file: the skip without a GPU, with no
 Docker call and no pass; the order (removal, build, data volume, launch files, tests, removal); the removal after a
@@ -238,7 +297,9 @@ configuration check itself. Since GPU.2 they also check the ASCII request JSON, 
 level-A launch lines. Since GPU.3 they check that a malformed trial selector, or one the catalog's plan cannot
 serve, exits 1 before any GPU or Docker call. Since GPU.4 they check that a test file named as an argument runs alone,
 with the same cleanup. Since GPU.5 they check that identifiers after a file name reach that file as its `Select`
-parameter. They are written and have not run yet.
+parameter. Since GPU.6 their configuration holds the orchestrator and the backend, and they check the Docker socket
+outside the orchestrator, a writable models mount in the backend, another host mount, a variable from `.env`, another
+token and a missing service. They are written and have not run yet.
 
 ### The `docker` level
 
@@ -329,7 +390,9 @@ pytest joins it when a Docker test needs Python. The files:
   path files at the top of `site-packages`; its checkpoints folder holds only the upstream placeholder. With a
   read-only root, the 4 GiB tmpfs `/tmp/comfy`, no capabilities, `no-new-privileges` and no network, the entrypoint
   started with `--cpu` and the example launch file makes ComfyUI answer `GET /system_stats` with version `0.43.0`, a
-  `+cu130` PyTorch, the `cpu` device and the flags of [Runtime contracts](runtime-contracts.md). The entrypoint turns
+  `+cu130` PyTorch, the `cpu` device and the flags of [Runtime contracts](runtime-contracts.md). Since GPU.6 one
+  container started twice, as the orchestrator starts it for every image job, must create a folder in `/tmp/comfy` at
+  both starts and find its mode 1777 (written, not run yet). The entrypoint turns
   launch files into the documented command (`--print-command`), exits 78 for an unknown, invalid, off-step, repeated
   or missing key, a command substitution, Windows line endings, a line that is not `KEY=VALUE` and a missing launch
   file, and 64 for an unknown or repeated argument. It needs no GPU and no model. Since P05.3a it
@@ -922,9 +985,9 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-04 | Real streaming, token counts, abort. `tests/gpu/TextProfiles.Tests.ps1` (GPU.2), for every family; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
 | T-GPU-05 | Structured output with grammar on the real model. `tests/gpu/StructuredOutput.Tests.ps1` (GPU.4), the `character_draft` task on the default text profile; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-structured-output.md)) | P03 |
 | T-GPU-06 | ComfyUI start, real generation with each image profile, checkpoint load measured. `tests/gpu/ImageProfiles.Tests.ps1` (GPU.5), for every catalog image profile; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-image-profiles.md)) | P05 |
-| T-GPU-07 | Ten full switches. Container state and NVML samples never show both models | P06 |
-| T-GPU-08 | Text sent during real generation is answered after the switch | P06 |
-| T-GPU-09 | External VRAM use: blocked with reason, no process touched | P06 |
+| T-GPU-07 | Ten full switches. Container state and NVML samples never show both models. `tests/gpu/ModeSwitch.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.6), through the test-only orchestrator; ten round trips passed on the reference machine on 2026-11-25 in two runs of five, each full switch 41.7 to 43.7 s ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
+| T-GPU-08 | Text sent during real generation is answered after the switch. `tests/gpu/ModeSwitch.Tests.ps1` (GPU.6), with the real backend; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
+| T-GPU-09 | External VRAM use: blocked with reason, no process touched. `tests/gpu/ModeSwitch.Tests.ps1` (GPU.6), with a VRAM load the test starts and removes itself; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
 | T-GPU-10 | Real CUDA out-of-memory handled, by reducing available VRAM on purpose | P06 |
 | T-GPU-11 | No orphan process and full VRAM release after `stop.cmd` | P06 |
 | T-GPU-12 | Everything works with the network disconnected | P06 |

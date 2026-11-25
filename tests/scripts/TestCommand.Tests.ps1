@@ -349,6 +349,14 @@ Describe 'The gpu level' {
                     'lyrveil-image' = @{ image = 'lyrveil/image:gpu-test'; volumes = @(
                             @{ type = 'volume'; source = 'lyrveil-models'; target = '/opt/ComfyUI/models/checkpoints'; read_only = $true },
                             @{ type = 'tmpfs'; target = '/tmp/comfy' }) }
+                    'lyrveil-orchestrator' = @{ image = 'lyrveil/orchestrator:gpu-test'
+                        environment = @{ LYRVEIL_CONTROL_TOKEN = ('7e57a11c' * 8); LYRVEIL_LOG_LEVEL = 'INFO' }
+                        volumes = @(@{ type = 'bind'; source = '/var/run/docker.sock'; target = '/var/run/docker.sock' }) }
+                    'lyrveil-backend' = @{ image = 'lyrveil/backend:gpu-test'
+                        environment = @{ LYRVEIL_CONTROL_TOKEN = ('7e57a11c' * 8); LYRVEIL_LOG_LEVEL = 'INFO'; LYRVEIL_TZ = 'Europe/Rome' }
+                        volumes = @(
+                            @{ type = 'volume'; source = 'lyrveil-data'; target = '/data' },
+                            @{ type = 'volume'; source = 'lyrveil-models'; target = '/models'; read_only = $true }) }
                 }
                 volumes  = @{
                     'lyrveil-data'   = @{ name = 'lyrveil-gpu-test-data'; external = $true }
@@ -508,7 +516,7 @@ Describe 'The gpu level' {
     It 'refuses to run, touching nothing, while a runtime of an installation is running' {
         $env:FAKE_RUNNING_RUNTIME = '1'
         $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
-        $run.Output | Should -Match 'the runtime lyrveil-image of an installation is running'
+        $run.Output | Should -Match 'the container lyrveil-image of an installation is running'
         $run.Output | Should -Not -Match 'fake-docker'
         $run.ExitCode | Should -Not -Be 0
     }
@@ -525,6 +533,27 @@ Describe 'The gpu level' {
             })
         $named | Should -Contain 'lyrveil-image sets container_name.'
         $named | Should -Contain 'lyrveil-image mounts a bind at /data.'
+    }
+
+    It 'allows the Docker socket only to the orchestrator and keeps the .env and its token out of the test stack' {
+        $stack = Test-GpuTestConfiguration -Text (Get-GpuConfigurationJson {
+                param($c)
+                $c.services['lyrveil-backend'].volumes += @{ type = 'bind'; source = '/var/run/docker.sock'; target = '/var/run/docker.sock' }
+                $c.services['lyrveil-backend'].volumes[1].read_only = $false
+                $c.services['lyrveil-orchestrator'].volumes += @{ type = 'bind'; source = 'C:\Users'; target = '/host' }
+                $c.services['lyrveil-orchestrator'].environment.LYRVEIL_BACKUP_DIR = 'C:\Backups'
+                $c.services['lyrveil-backend'].environment.LYRVEIL_CONTROL_TOKEN = 'f' * 64
+                $c.services['lyrveil-backend'].env_file = @('.env')
+            })
+        $stack | Should -Contain 'lyrveil-backend mounts a bind at /var/run/docker.sock.'
+        $stack | Should -Contain "lyrveil-backend mounts 'lyrveil-models' writable at /models."
+        $stack | Should -Contain 'lyrveil-orchestrator mounts a bind at /host.'
+        $stack | Should -Contain 'lyrveil-orchestrator sets LYRVEIL_BACKUP_DIR, which the override does not.'
+        $stack | Should -Contain "lyrveil-backend does not carry the level's own control token."
+        $stack | Should -Contain 'lyrveil-backend reads an env_file.'
+        @($stack | Where-Object { $_ -match 'f{64}' }) | Should -BeNullOrEmpty
+        $missing = Test-GpuTestConfiguration -Text (Get-GpuConfigurationJson { param($c) $c.services.Remove('lyrveil-orchestrator') })
+        $missing | Should -Contain "The services are 'lyrveil-backend, lyrveil-image, lyrveil-llm', not 'lyrveil-backend, lyrveil-image, lyrveil-llm, lyrveil-orchestrator'."
     }
 
     It 'writes request bodies as ASCII JSON that keeps every character' {

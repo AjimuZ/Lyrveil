@@ -271,6 +271,11 @@
 - A command-line argument that may be either a file name or a selector is validated against a strict pattern (no '/' or '*') before it is used as a Git pathspec.
 - Put a gpu-level decision rule in a backend probe (backend/tests/gpu_probe/*.py) with unit tests, and have the Pester test send it the measured numbers, so no rule or threshold is copied into PowerShell.
 - Hand ComfyUI graphs from Python to PowerShell as compact ASCII JSON strings, not parsed objects, so Windows PowerShell 5.1 never re-serializes the graph's link arrays.
+- To test a container's restart behavior, start the same container twice (docker create, then start --attach twice). docker run --rm never exercises it, and the orchestrator always restarts the same container.
+- For a tmpfs mounted on a path that does not exist in the image, create the mount point in the image with the mode the non-root user needs (1777, as /tmp). As far as observed, an existing mount point's mode is applied to each new tmpfs, and a missing one is created 0755 at the first start and kept.
+- Test-only adapters go in test-only Dockerfile stages and subclass the production class. Production code gets no setting that selects them, as with fake-runtime and gpu-test-runtime.
+- Split long hardware tests into selectable parts so each run fits within the tool's time limit and always reaches its finally-block cleanup.
+- Judge GPU exclusivity on WSL2, where NVML lists no processes, from NVML memory phases with hysteresis plus container Running samples on one host clock.
 
 ---
 
@@ -2666,4 +2671,28 @@ Docs updated: the evidence file, testing.md, image-generation.md (measured times
   - On the RTX 4070, ComfyUI 0.43.0 starts in 5 to 8 s. SDXL square renders at the defaults take about 9.0 s for Rapida and 21 s for Alta. The Alta NVML peak was 11631 MiB for all three checkpoints, which suggests ComfyUI's memory management sets it; this was not investigated.
   - Checkpoint load times depend on the host's file cache: illustrious-xl-v2.0 loaded in 9.6 s on the first run and 7.0 s two minutes later.
   - Tuning.Tests.ps1's Invoke-GpuImageJob now goes through Invoke-GpuImageGraph and was not run again after the refactor.
+---
+
+## 2026-11-25T23:18:02Z - GPU.6
+- Added T-GPU-07 to T-GPU-09 as tests/gpu/ModeSwitch.Tests.ps1 in the gpu level. They run on a test-only orchestrator image (stage gpu-test-runtime of orchestrator/Dockerfile, ADR 0046): the real control API, lifecycle manager, supervisor and NVML probe, with a ContainerGate subclass that addresses only the lyrveil-gpu-test runtimes and refuses an installation's. T-GPU-08 adds the production backend image. The compose override puts both services in the ai profile with their own token and no env_file. The level's configuration check now covers four services (Docker socket only in the orchestrator, writable /data only in the backend, no .env variables, the level's own token), and the level refuses to run while an installation's orchestrator runs.
+
+Results on the RTX 4070:
+- T-GPU-09 passed. The test's own VRAM-load container held 8192 MiB. The orchestrator held the text and image loads in IDLE with GPU_INSUFFICIENT_VRAM (2800 MiB free, 6000 and 6500 required). The load kept its PID, start time and zero restarts until the test removed it by its own id. LLM_READY came 38.7 s later.
+- T-GPU-08 passed. A text sent during the real render of an image job was saved queued between the image lease's grant and release, then answered after the switch back.
+- T-GPU-07 passed with ten round trips in two runs of `rounds-5`. Full switches took 41.7 to 43.7 s against the 150 s target. No container sample showed both runtimes, and every NVML model phase was a single runtime ended by a release to the desktop baseline.
+- A final run of the final code with all three parts and rounds-2 passed 16 of 16.
+
+T-GPU-07 found a production bug: from the second start of the same lyrveil-image container, the tmpfs /tmp/comfy was not writable, so ComfyUI exited 1 and every image job after the container's first run ended with IMAGE_LOAD_FAILED. The fix in docker/image/Dockerfile creates /tmp/comfy with mode 1777, and a docker-level restart case was added. lint passes, and the new orchestrator unit test passed (8 of 8).
+
+Not observed: one ten-round run (the shell limit is 10 minutes, ten rounds take about 11), and the new Pester unit cases and the docker restart case (not run).
+- Files changed: orchestrator/tests/gpu_probe/gpu_test_orchestrator.py, orchestrator/tests/unit/test_gpu_test_gate.py, orchestrator/Dockerfile, docker/image/Dockerfile, tests/gpu/compose.gpu-test.yaml, tests/gpu/ModeSwitch.Tests.ps1, scripts/lib/GpuLevel.psm1, scripts/lib/GpuSwitches.psm1, tests/scripts/GpuSwitches.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, tests/docker/ImageRuntime.Tests.ps1, CHANGELOG.md, docs/testing.md, docs/gpu-orchestration.md, docs/operations.md, docs/risks.md, docs/README.md, docs/decisions/README.md, docs/decisions/0046-test-only-orchestrator-for-the-gpu-level.md, docs/verification/2026-11-25-gpu-mode-switches.md
+- **Learnings for future iterations:**
+  - One Bash call is capped at 10 minutes. Ten T-GPU-07 round trips plus setup take about 11, so run `scripts/lyrveil.cmd test gpu ModeSwitch t-gpu-07 rounds-5` twice. Never let a gpu run be cut off, or its cleanup never runs and the test orchestrator keeps the Docker socket.
+  - Parts of ModeSwitch.Tests.ps1 are selected with the items t-gpu-07, t-gpu-08, t-gpu-09 and rounds-<n>. Measured: t-gpu-09 alone about 2.5 min, t-gpu-08 alone about 4 min, rounds-5 about 7 min, all three parts with rounds-2 about 6.5 min.
+  - Measured on the RTX 4070: the KoboldCpp load of rocinante-x-12b at level A is 30.3 to 32.4 s, ComfyUI to healthy 6.3 to 10.3 s, a verified release 1.3 to 1.9 s, a full switch about 42 s. A fresh ComfyUI renders 768x768 with 8 steps, checkpoint included, in about 9 s.
+  - The orchestrator's NVML free memory reads about 270 MiB below total minus used from nvidia-smi (2800 against 3072).
+  - Invoke-GpuServiceApi reaches the control API (with the container's own token) and the backend's REST API (Host 127.0.0.1:8000, no Origin) through docker compose exec, sending Python on stdin.
+  - The image runtime only failed on restarts of the same container. Earlier GPU tests recreated it every time, so they never saw the bug.
+  - Not run yet: tests/scripts/GpuSwitches.Tests.ps1, the new configuration case in TestCommand.Tests.ps1 (unit level) and the restart case in ImageRuntime.Tests.ps1 (docker level).
+  - With the Italian locale, Write-Host -f prints decimals with commas. The results JSON stays invariant.
 ---

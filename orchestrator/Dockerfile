@@ -53,6 +53,20 @@ USER 10001:10001
 EXPOSE 8100
 CMD ["python", "-m", "fakes.fake_orchestrator"]
 
+# The orchestrator of the gpu level's mode switch tests only (tests/gpu/compose.gpu-test.yaml), tagged
+# "lyrveil/orchestrator:gpu-test": the runtime's packages and source plus orchestrator/tests/gpu_probe/
+# gpu_test_orchestrator.py, which serves the real control API over NVML with the container gate addressed to the
+# runtimes of the Compose project "lyrveil-gpu-test" and to no installation's. compose.yaml never names this stage and
+# the runtime stage copies nothing from it.
+FROM base AS gpu-test-runtime
+COPY --from=deps /app/.venv /app/.venv
+COPY orchestrator/src ./src
+COPY orchestrator/tests/gpu_probe/gpu_test_orchestrator.py ./gpu_probe/
+RUN python -m compileall -q src gpu_probe
+USER 10001:10001
+EXPOSE 8100
+CMD ["python", "gpu_probe/gpu_test_orchestrator.py"]
+
 # The image of compose.yaml, selected there with "target: runtime". It holds no tests, no fakes and no development
 # packages. Its command serves the control API over the Docker socket and NVML; the preflight runs as a one-off with
 # "python -m lyrveil_orchestrator.preflight". It stays the last stage, so a build without --target gets it.

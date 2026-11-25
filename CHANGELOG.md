@@ -47,8 +47,31 @@ an entry says "not yet run", the test was written and has not run.
   **Proposte** tab. The check is recorded in
   [docs/verification/2026-11-09-documentation-reconciliation.md](docs/verification/2026-11-09-documentation-reconciliation.md).
 
+### Fixed
+
+- Images after the first one no longer fail. The orchestrator starts the same `lyrveil-image` container for every
+  image job, and from its second start the container could not write its tmpfs `/tmp/comfy`: ComfyUI exited at once,
+  and after three tries the job ended with `IMAGE_LOAD_FAILED` and the GPU went back to text. The image runtime's
+  image now holds the mount point `/tmp/comfy` with the mode of `/tmp` (1777), so every start gets a writable tmpfs.
+  T-GPU-07 found it on the reference machine, where the switches then passed; `tests/docker/ImageRuntime.Tests.ps1`
+  now starts one container twice (written, not run yet). See
+  [docs/verification/2026-11-25-gpu-mode-switches.md](docs/verification/2026-11-25-gpu-mode-switches.md).
+
 ### Added
 
+- T-GPU-07 to T-GPU-09 in the `gpu` level (GPU.6). `tests/gpu/ModeSwitch.Tests.ps1` lets the real orchestrator move
+  the GPU between the real runtimes, through a test-only orchestrator image whose container gate acts only on the test
+  project's runtimes ([ADR 0046](docs/decisions/0046-test-only-orchestrator-for-the-gpu-level.md)), and adds the real
+  backend for T-GPU-08. T-GPU-09 starts its own container that holds VRAM: the orchestrator holds the text and the
+  image load in `IDLE` with `GPU_INSUFFICIENT_VRAM`, touches nothing, and loads the text model once the test removes
+  that container. T-GPU-07 runs round trips through the control API, each with a render and a reply, while NVML and
+  the container states are sampled. No sample showed both runtimes, and every model phase ended in a full release.
+  T-GPU-08 sends a text while a real image renders, and the backend answers it after the switch back. On the
+  reference machine all three passed, with ten round trips in two runs of five (`scripts\lyrveil.cmd test gpu
+  ModeSwitch t-gpu-07 rounds-5`, since ten take about 11 minutes): a full switch took 41.7 to 43.7 s against the
+  150 s target, 30 to 32 s of it the text model's load. The `gpu` level now also refuses to run while an
+  installation's orchestrator runs, and checks the orchestrator and the backend of its configuration. See
+  [docs/verification/2026-11-25-gpu-mode-switches.md](docs/verification/2026-11-25-gpu-mode-switches.md).
 - T-GPU-06 and the real-GPU part of T-IMG-14 in the `gpu` level (GPU.5). `tests/gpu/ImageProfiles.Tests.ps1` starts
   ComfyUI for each catalog image profile. It renders three **Rapida** and three **Alta** square images with the graphs
   that the backend's `render` stage builds, and measures the checkpoint load, the render time and the peak VRAM of

@@ -4,25 +4,42 @@
 # It keeps compose.yaml's runtimes as they are (GPU request, read-only root, mounts, health checks, internal network)
 # and changes only what would reach a real installation:
 #   - the data volume is "lyrveil-gpu-test-data", created and removed by the level, never "lyrveil-data";
-#   - the models volume stays the installation's "lyrveil-models", which both runtimes mount read-only, as in
+#   - the models volume stays the installation's "lyrveil-models", which every service mounts read-only, as in
 #     compose.yaml; the level refuses a configuration that mounts it writable;
 #   - every image is tagged ":gpu-test", so no build replaces the ":local" images of an installation;
 #   - container_name is reset, so the containers are "lyrveil-gpu-test-*" and never "lyrveil-llm" or "lyrveil-image";
-#   - the core services and the download tool get a profile that no command enables, so the project holds the two
-#     runtimes only.
+#   - the frontend and the download tool get a profile that no command enables.
+# The orchestrator and the backend join the "ai" profile for the mode switch tests (tests/gpu/ModeSwitch.Tests.ps1),
+# which alone builds and starts them:
+#   - the orchestrator is the test-only "gpu-test-runtime" stage of orchestrator/Dockerfile: the real control API,
+#     lifecycle manager and NVML probe, with a container gate that acts on this project's two runtimes only. The
+#     production gate would refuse them, and this one refuses an installation's;
+#   - neither reads the installation's .env: env_file is reset, and the control token below guards only this project's
+#     internal networks;
+#   - the backend is the production image under the ":gpu-test" tag, with the test data volume as its /data.
 services:
   lyrveil-frontend:
     profiles: !override [not-in-gpu-test]
     image: lyrveil/frontend:gpu-test
     container_name: !reset null
   lyrveil-backend:
-    profiles: !override [not-in-gpu-test]
+    profiles: !override [ai]
     image: lyrveil/backend:gpu-test
     container_name: !reset null
+    env_file: !reset []
+    environment:
+      LYRVEIL_CONTROL_TOKEN: "7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c"
+      LYRVEIL_TZ: Europe/Rome
+      LYRVEIL_LOG_LEVEL: INFO
   lyrveil-orchestrator:
-    profiles: !override [not-in-gpu-test]
+    profiles: !override [ai]
     image: lyrveil/orchestrator:gpu-test
+    build: {target: gpu-test-runtime}
     container_name: !reset null
+    env_file: !reset []
+    environment:
+      LYRVEIL_CONTROL_TOKEN: "7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c7e57a11c"
+      LYRVEIL_LOG_LEVEL: INFO
   lyrveil-models:
     profiles: !override [not-in-gpu-test]
     image: lyrveil/backend:gpu-test

@@ -1,4 +1,4 @@
-# Runs the gpu level against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives its tests NVML samples and the runtime APIs.
+# Runs the gpu level against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives its tests NVML samples, the runtime APIs and, for the mode switch tests, the control and backend APIs.
 
 Set-StrictMode -Version Latest
 
@@ -12,12 +12,29 @@ $script:ModelsVolume = 'lyrveil-models'
 $script:ComposeFiles = @('-f', 'compose.yaml', '-f', 'tests/gpu/compose.gpu-test.yaml')
 $script:Services = @('lyrveil-llm', 'lyrveil-image')
 
+# The services that only the mode switch tests build and start (tests/gpu/ModeSwitch.Tests.ps1): the test-only
+# orchestrator, whose gate acts on this project's runtimes alone, and the backend. The override gives both the control
+# token below and no env_file, so the installation's .env and its token never reach the test project.
+$script:StackServices = @('lyrveil-orchestrator', 'lyrveil-backend')
+$script:ControlToken = '7e57a11c' * 8
+$script:StackEnvironment = @{
+    'lyrveil-orchestrator' = @('LYRVEIL_CONTROL_TOKEN', 'LYRVEIL_LOG_LEVEL')
+    'lyrveil-backend'      = @('LYRVEIL_CONTROL_TOKEN', 'LYRVEIL_LOG_LEVEL', 'LYRVEIL_TZ')
+}
+# The only host path any service may mount: the Docker socket, for the orchestrator's gate.
+$script:DockerSocket = '/var/run/docker.sock'
+
+# The one-off container of T-GPU-09 that holds VRAM as another program would (Start-GpuVramLoad). It carries the
+# project's label, so the leftover check sees it.
+$script:VramLoadName = 'lyrveil-gpu-test-vram-load'
+
 # The backend's test stage, under a tag of this level only, where T-GPU-05 runs the backend's prompt, grammar and
 # validation, and T-GPU-06 its render graphs and preset rule (Initialize-GpuBackendProbe, Invoke-GpuBackendProbe).
 $script:BackendProbeImage = 'lyrveil/backend-test:gpu-test'
 
-# The container names of an installation's runtimes. The level refuses to start while one of them runs.
-$script:InstallationRuntimes = @('lyrveil-llm', 'lyrveil-image')
+# The container names of an installation that could use the GPU: its runtimes, and its orchestrator, which starts a
+# runtime by itself as soon as the card has room. The level refuses to start while one of them runs.
+$script:InstallationRuntimes = @('lyrveil-llm', 'lyrveil-image', 'lyrveil-orchestrator')
 
 # What Invoke-GpuLevel returns when the machine has no usable GPU: not 0, so a skip never reads as a pass.
 $script:SkippedStatus = 2
@@ -121,7 +138,8 @@ function Invoke-GpuNative {
 
 function Get-GpuTestSetting {
     <#
-    Returns the names the level uses: Project, DataVolume, ModelsVolume and Services. The tests compare mounts and
+    Returns the names the level uses: Project, DataVolume, ModelsVolume, Services (the two runtimes) and
+    StackServices (the orchestrator and the backend of the mode switch tests). The tests compare mounts and
     containers with them.
     #>
     [CmdletBinding()]
@@ -129,10 +147,11 @@ function Get-GpuTestSetting {
     param()
 
     return @{
-        Project      = $script:ProjectName
-        DataVolume   = $script:DataVolume
-        ModelsVolume = $script:ModelsVolume
-        Services     = [string[]]$script:Services
+        Project       = $script:ProjectName
+        DataVolume    = $script:DataVolume
+        ModelsVolume  = $script:ModelsVolume
+        Services      = [string[]]$script:Services
+        StackServices = [string[]]$script:StackServices
     }
 }
 
@@ -316,9 +335,12 @@ function Test-GpuTestConfiguration {
     <#
     Checks the JSON of "docker compose config --format json" for the test project and returns one message for every
     way it could reach a real installation, or none when it is safe to start: the project must be lyrveil-gpu-test and
-    hold exactly lyrveil-llm and lyrveil-image, with ":gpu-test" images, no container_name and no published port; every
-    mount must be a tmpfs or a named volume, and the only volumes may be lyrveil-gpu-test-data and lyrveil-models,
-    both mounted read-only.
+    hold exactly lyrveil-llm, lyrveil-image, lyrveil-orchestrator and lyrveil-backend, with ":gpu-test" images, no
+    container_name and no published port; every mount must be a tmpfs or a named volume, and the only volumes may be
+    lyrveil-gpu-test-data and lyrveil-models, both mounted read-only, except the backend's /data, which is the test
+    data volume. The only other mount allowed is the Docker socket, in the orchestrator alone. The orchestrator and the
+    backend must read no env_file, hold only the environment variables of the override, and carry the level's own
+    control token, so the installation's .env never reaches them.
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -348,7 +370,7 @@ function Test-GpuTestConfiguration {
     $services = Get-JsonProperty $config 'services'
     $serviceNames = @()
     if ($null -ne $services) { $serviceNames = @($services.PSObject.Properties | ForEach-Object { $_.Name } | Sort-Object) }
-    $expected = @($script:Services | Sort-Object)
+    $expected = @(@($script:Services) + @($script:StackServices) | Sort-Object)
     if (($serviceNames -join ',') -ne ($expected -join ',')) {
         $failures.Add("The services are '$($serviceNames -join ', ')', not '$($expected -join ', ')'.")
     }
@@ -364,15 +386,30 @@ function Test-GpuTestConfiguration {
             $type = Get-JsonProperty $mount 'type'
             $target = Get-JsonProperty $mount 'target'
             if ($type -eq 'tmpfs') { continue }
+            if ($type -eq 'bind' -and $serviceName -eq 'lyrveil-orchestrator' -and $target -eq $script:DockerSocket -and
+                [string](Get-JsonProperty $mount 'source') -match '^(?:[A-Za-z]:)?[\\/]+var[\\/]+run[\\/]+docker\.sock$') { continue }
             if ($type -ne 'volume') {
                 $failures.Add("${serviceName} mounts a $type at $target.")
                 continue
             }
             $source = [string](Get-JsonProperty $mount 'source')
             $volumeName = if ($volumes.ContainsKey($source)) { $volumes[$source] } else { $source }
+            $writableData = ($serviceName -eq 'lyrveil-backend' -and $volumeName -eq $script:DataVolume -and $target -eq '/data')
             if ($allowed -notcontains $volumeName) { $failures.Add("${serviceName} mounts the volume '$volumeName' at $target.") }
-            elseif ((Get-JsonProperty $mount 'read_only') -ne $true) {
+            elseif ((Get-JsonProperty $mount 'read_only') -ne $true -and -not $writableData) {
                 $failures.Add("${serviceName} mounts '$volumeName' writable at $target.")
+            }
+        }
+        if ($script:StackEnvironment.ContainsKey($serviceName)) {
+            if (@(Get-JsonProperty $service 'env_file').Where({ $null -ne $_ }).Count -gt 0) { $failures.Add("${serviceName} reads an env_file.") }
+            $environment = Get-JsonProperty $service 'environment'
+            $keys = @()
+            if ($null -ne $environment) { $keys = @($environment.PSObject.Properties | ForEach-Object { $_.Name }) }
+            foreach ($key in $keys) {
+                if ($script:StackEnvironment[$serviceName] -notcontains $key) { $failures.Add("${serviceName} sets $key, which the override does not.") }
+            }
+            if ([string](Get-JsonProperty $environment 'LYRVEIL_CONTROL_TOKEN') -cne $script:ControlToken) {
+                $failures.Add("${serviceName} does not carry the level's own control token.")
             }
         }
     }
@@ -512,7 +549,7 @@ function Set-GpuTestLaunchLine {
 function Get-RunningInstallationRuntime {
     <#
     Returns @{ Known; Names }: Known is $false when Docker cannot be asked, and Names lists the installation's runtime
-    containers that are running, empty when none is. Not exported.
+    and orchestrator containers that are running, empty when none is. Not exported.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -544,6 +581,24 @@ function Start-GpuTestRuntime {
         $null = Invoke-GpuCompose -Root $Root -Argument @('logs', '--no-color', '--tail', '60', $Service)
     }
     return [int]$up.Status
+}
+
+function Get-GpuTestServiceLog {
+    <#
+    Returns the last Tail lines of the log of Service in the test project, across every start of its container, as
+    "docker compose logs" gives them, or none when it has no container. For the record of a failed start: the runtimes
+    run quiet and the tests send only fixed test prompts.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Service,
+        [ValidateRange(1, 500)] [int]$Tail = 80
+    )
+
+    $logs = Invoke-GpuCompose -Root $Root -Capture -Argument @('logs', '--no-color', '--timestamps', '--tail', "$Tail", $Service)
+    return [string[]]@($logs.Output)
 }
 
 function Remove-GpuTestRuntime {
@@ -1013,13 +1068,267 @@ function Stop-GpuMemorySampler {
     return @{ PeakMiB = $peak; Samples = $values.Length }
 }
 
+function Initialize-GpuStackImage {
+    <#
+    Builds the images of the orchestrator and the backend of the test project, both tagged ":gpu-test": the test-only
+    gpu-test-runtime stage of orchestrator/Dockerfile and the backend's runtime stage. Returns $true when the build
+    succeeded. Only the mode switch tests start these services, so the level itself does not build them; Docker's
+    cache makes a build without changes take seconds.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    $build = Invoke-GpuCompose -Root $Root -Argument (@('build') + $script:StackServices)
+    return ($build.Status -eq 0)
+}
+
+function New-GpuTestRuntimeContainer {
+    <#
+    Creates the containers of lyrveil-llm and lyrveil-image in the test project without starting them, so the test
+    orchestrator can start and stop them as an installation's orchestrator does its own. Returns the exit status of
+    "up --no-start": 0 when both exist. Nothing starts, so no GPU memory is used.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([int])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    if (-not $PSCmdlet.ShouldProcess(($script:Services -join ', '), 'Create the runtime containers')) { return 0 }
+    return [int](Invoke-GpuCompose -Root $Root -Argument (@('up', '--no-start', '--no-deps', '--no-build') + $script:Services)).Status
+}
+
+function Set-GpuTestDataOwner {
+    <#
+    Makes UID and GID 10001, the backend's user, own the root of the test data volume, as setup.cmd does for an
+    installation's volumes, from a one-off container of the built text runtime image with no network and only
+    CAP_CHOWN. runtime/ and its launch files keep their owner, and the runtimes still mount them read-only. Returns
+    $true when the container succeeded.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([bool])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    if (-not $PSCmdlet.ShouldProcess($script:DataVolume, 'Give the volume root to 10001:10001')) { return $true }
+    $change = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument @(
+        'run', '--rm', '--network', 'none', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'CHOWN',
+        '--security-opt', 'no-new-privileges:true', '--volume', "$($script:DataVolume):/data",
+        '--entrypoint', 'chown', 'lyrveil/llm:gpu-test', '10001:10001', '/data')
+    return ($change.Status -eq 0)
+}
+
+# The client of Invoke-GpuServiceApi, run by the Python of the service's container from its standard input. It sends
+# one request and prints one ASCII JSON line with the HTTP status and the parsed answer. __AUTH__, __URL__, __METHOD__,
+# __TIMEOUT__ and __BODY__ are replaced, the body last.
+$script:ServiceApiClient = @'
+import json, os, urllib.error, urllib.request as request
+headers = {'Content-Type': 'application/json'}
+if __AUTH__:
+    headers['Authorization'] = 'Bearer ' + os.environ['LYRVEIL_CONTROL_TOKEN']
+body = r'''__BODY__'''
+call = request.Request('__URL__', data=body.encode() if body else None, method='__METHOD__', headers=headers)
+try:
+    answer = request.urlopen(call, timeout=__TIMEOUT__)
+    status, text = answer.status, answer.read().decode()
+except urllib.error.HTTPError as error:
+    status, text = error.code, error.read().decode()
+try:
+    parsed = json.loads(text) if text else None
+except ValueError:
+    parsed = None
+print(json.dumps({'http': status, 'body': parsed}))
+'@
+
+function Invoke-GpuServiceApi {
+    <#
+    Sends Method Path, with Body as JSON when given, to the HTTP API of Service from inside its container, because the
+    project's networks are internal and publish no port: the control API of lyrveil-orchestrator on port 8100, with
+    the bearer token that container holds, or the REST API of lyrveil-backend on port 8000, whose loopback Host the
+    backend accepts. Returns @{ Status; Http; Body }: Status is the exit status of the client, 0 when an answer came;
+    Http the HTTP status, 0 without an answer; Body the parsed JSON answer, or $null. Waits at most TimeoutSecond for
+    the answer, so a long poll needs more than its wait.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidateSet('lyrveil-orchestrator', 'lyrveil-backend')] [string]$Service,
+        [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')] [string]$Method = 'GET',
+        [Parameter(Mandatory = $true)] [ValidatePattern('^/[A-Za-z0-9/_.?=&%-]*$')] [string]$Path,
+        [hashtable]$Body = $null,
+        [ValidateRange(5, 120)] [int]$TimeoutSecond = 60
+    )
+
+    $json = ''
+    if ($null -ne $Body) { $json = ConvertTo-GpuRequestJson -Body $Body }
+    # The body goes into a raw triple-quoted Python string, which three quotes in a row would end.
+    if ($json.Contains("'''")) { throw 'The request body holds three single quotes in a row.' }
+    $orchestrator = ($Service -eq 'lyrveil-orchestrator')
+    $base = if ($orchestrator) { 'http://127.0.0.1:8100' } else { 'http://127.0.0.1:8000' }
+    $auth = if ($orchestrator) { 'True' } else { 'False' }
+    $client = $script:ServiceApiClient.Replace('__AUTH__', $auth).Replace('__URL__', "$base$Path").Replace('__METHOD__', $Method)
+    $client = $client.Replace('__TIMEOUT__', "$TimeoutSecond").Replace('__BODY__', $json)
+    $run = Invoke-GpuCompose -Root $Root -Capture -InputText $client -Argument @('exec', '-T', $Service, 'python', '-')
+    $parsed = $null
+    $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
+    if ($run.Status -eq 0 -and $last.Length -eq 1) {
+        try { $parsed = $last[0] | ConvertFrom-Json }
+        catch { $parsed = $null }
+    }
+    $http = [int](Get-JsonProperty $parsed 'http')
+    return @{ Status = [int]$run.Status; Http = $http; Body = (Get-JsonProperty $parsed 'body') }
+}
+
+function Start-GpuVramLoad {
+    <#
+    Starts the one-off container lyrveil-gpu-test-vram-load from the built image runtime image: its PyTorch allocates
+    GPU memory 256 MiB at a time until CUDA reports at most FreeMiB free, prints LYRVEIL_VRAM_HELD_MIB=<MiB> and holds
+    the memory until the container is removed, as another program on the card would (T-GPU-09). It has no network, a
+    read-only root and no capability, and carries the test project's label, so the leftover check sees it. Returns
+    @{ Status; Id }: the exit status of "docker run" and the new container's id, '' when it failed. Only
+    Stop-GpuVramLoad with that id ends it.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [ValidateRange(256, 65536)] [int]$FreeMiB = 3072
+    )
+
+    if (-not $PSCmdlet.ShouldProcess('GPU 0', 'Hold VRAM from another container')) { return @{ Status = 0; Id = '' } }
+    # One line with single quotes only, since Windows PowerShell 5.1 passes embedded double quotes unescaped. iter()
+    # with a sentinel allocates until the free memory reaches the limit.
+    $code = ("import time, torch; free = lambda: torch.cuda.mem_get_info()[0] >> 20; " +
+        "held = [torch.empty(268435456, dtype=torch.uint8, device='cuda') for _ in iter(lambda: free() > $FreeMiB, False)]; " +
+        "print('LYRVEIL_VRAM_HELD_MIB=%d' % (256 * len(held)), flush=True); time.sleep(86400)")
+    $run = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -Argument @(
+        'run', '--detach', '--name', $script:VramLoadName, '--label', "com.docker.compose.project=$script:ProjectName",
+        '--label', 'com.lyrveil.test=gpu', '--gpus', 'all', '--network', 'none', '--read-only', '--tmpfs', '/tmp',
+        '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true', '--user', '10001:10001', '--env', 'HOME=/tmp',
+        '--env', 'TMPDIR=/tmp', '--entrypoint', 'python', 'lyrveil/image:gpu-test', '-c', $code)
+    $id = @($run.Output | Where-Object { $_ -match '^[0-9a-f]{64}$' } | Select-Object -Last 1)
+    return @{ Status = [int]$run.Status; Id = $(if ($id.Length -eq 1) { [string]$id[0] } else { '' }) }
+}
+
+function Get-GpuVramLoad {
+    <#
+    Returns what Docker reports of the container Id of Start-GpuVramLoad: @{ Known; Running; Pid; StartedAt;
+    RestartCount; HeldMiB }, HeldMiB being the amount its log line reports, or 0 before that line. Known is $false,
+    with the rest empty, when Docker does not answer for it.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory = $true)] [ValidatePattern('^[0-9a-f]{12,64}$')] [string]$Id)
+
+    $state = @{ Known = $false; Running = $false; Pid = 0; StartedAt = ''; RestartCount = -1; HeldMiB = 0 }
+    $inspect = Invoke-GpuNative -Command 'docker' -Capture -Argument @('inspect', '--format', '{{json .State}} {{.RestartCount}}', $Id)
+    $line = @($inspect.Output | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if ($inspect.Status -ne 0 -or $line.Length -ne 1 -or $line[0] -notmatch '^(\{.*\})\s+(\d+)\s*$') { return $state }
+    $restarts = [int]$Matches[2]
+    try { $document = $Matches[1] | ConvertFrom-Json }
+    catch { return $state }
+    $state.Known = $true
+    $state.Running = ((Get-JsonProperty $document 'Running') -eq $true)
+    $state.Pid = [int](Get-JsonProperty $document 'Pid')
+    $state.StartedAt = [string](Get-JsonProperty $document 'StartedAt')
+    $state.RestartCount = $restarts
+    $logs = Invoke-GpuNative -Command 'docker' -Capture -Argument @('logs', '--tail', '20', $Id)
+    foreach ($entry in $logs.Output) {
+        if ($entry -match '^LYRVEIL_VRAM_HELD_MIB=(\d+)\s*$') { $state.HeldMiB = [int]$Matches[1] }
+    }
+    return $state
+}
+
+function Stop-GpuVramLoad {
+    <#
+    Removes the container Id of Start-GpuVramLoad, which frees its memory, and returns the exit status of "docker rm":
+    0 when it is gone. Only that id is named, so no other program is ever stopped.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([int])]
+    param([Parameter(Mandatory = $true)] [ValidatePattern('^[0-9a-f]{12,64}$')] [string]$Id)
+
+    if (-not $PSCmdlet.ShouldProcess($Id, 'Remove the VRAM load container')) { return 0 }
+    return [int](Invoke-GpuNative -Command 'docker' -Argument @('rm', '--force', $Id)).Status
+}
+
+function Start-GpuTimelineSampler {
+    <#
+    Starts two background jobs and returns @{ Memory; Containers; Count } for Stop-GpuTimelineSampler: one reads the
+    used memory of GPU 0 through NVML every 250 ms, the other the State.Running flag of each container of ContainerId
+    with one "docker inspect" about every 300 ms. Every sample carries the host's clock in Unix milliseconds, taken
+    after the reading, so the two series share one time line. Returns once both have a first sample, or after 20 s.
+    Pass the result to Stop-GpuTimelineSampler, also on failure.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory = $true)] [ValidatePattern('^[0-9a-f]{12,64}$')] [string[]]$ContainerId)
+
+    if (-not $PSCmdlet.ShouldProcess('GPU 0 and the runtime containers', 'Sample memory and state')) { return $null }
+    Add-GpuCommandLog -Line 'nvidia-smi --id=0 --query-gpu=memory.used --format=csv,noheader,nounits, every 250 ms in a background job, with the time'
+    Add-GpuCommandLog -Line "docker inspect --format '{{.State.Running}}' $($ContainerId -join ' '), every 300 ms in a background job, with the time"
+    $memory = Start-Job -ScriptBlock {
+        while ($true) {
+            $line = @(& nvidia-smi '--id=0' '--query-gpu=memory.used' '--format=csv,noheader,nounits' 2>$null) | Select-Object -First 1
+            $at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+            if ("$line" -match '^\s*(\d+)\s*$') { "$at $($Matches[1])" }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+    $containers = Start-Job -ScriptBlock {
+        # An array argument reaches a native command as one argument per item, in order.
+        $ids = [string[]]$using:ContainerId
+        while ($true) {
+            $flags = @(& docker inspect --format '{{.State.Running}}' $ids 2>$null | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+            $at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+            "$at $($flags -join ' ')"
+            Start-Sleep -Milliseconds 300
+        }
+    }
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not ($memory.HasMoreData -and $containers.HasMoreData) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    return @{ Memory = $memory; Containers = $containers; Count = $ContainerId.Length }
+}
+
+function Stop-GpuTimelineSampler {
+    <#
+    Stops and removes the jobs of Start-GpuTimelineSampler and returns @{ Memory; Containers }, both in time order:
+    Memory lists @{ At; UsedMiB } and Containers @{ At; Running }, Running holding one flag per container of the
+    sampler's ContainerId, in that order. A container sample in which Docker did not report every container is left
+    out. Both lists are empty for $null.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([hashtable])]
+    param($Sampler)
+
+    $result = @{ Memory = @(); Containers = @() }
+    if ($null -eq $Sampler) { return $result }
+    if (-not $PSCmdlet.ShouldProcess('GPU 0 and the runtime containers', 'Stop sampling')) { return $result }
+    $memory = New-Object System.Collections.Generic.List[object]
+    $containers = New-Object System.Collections.Generic.List[object]
+    foreach ($job in @($Sampler.Memory, $Sampler.Containers)) { Stop-Job -Job $job }
+    foreach ($line in @(Receive-Job -Job $Sampler.Memory -ErrorAction SilentlyContinue)) {
+        if ("$line" -match '^(\d+) (\d+)$') { $memory.Add([pscustomobject]@{ At = [double]$Matches[1]; UsedMiB = [int]$Matches[2] }) }
+    }
+    foreach ($line in @(Receive-Job -Job $Sampler.Containers -ErrorAction SilentlyContinue)) {
+        $parts = @("$line".Trim() -split '\s+')
+        if ($parts.Length -ne $Sampler.Count + 1 -or $parts[0] -notmatch '^\d+$') { continue }
+        $flags = @($parts | Select-Object -Skip 1)
+        if (@($flags | Where-Object { $_ -ne 'true' -and $_ -ne 'false' }).Length -gt 0) { continue }
+        $containers.Add([pscustomobject]@{ At = [double]$parts[0]; Running = [bool[]]@($flags | ForEach-Object { $_ -eq 'true' }) })
+    }
+    foreach ($job in @($Sampler.Memory, $Sampler.Containers)) { Remove-Job -Job $job -Force }
+    $result.Memory = $memory.ToArray()
+    $result.Containers = $containers.ToArray()
+    return $result
+}
+
 function Invoke-GpuLevel {
     <#
     Runs the gpu level for the Pester files File (repository-relative) through Runner, a script block called with the
     root, the files and Data (the parameters of the test files, $null for none) that returns 0 when the tests ran and
     passed. In order: it returns 1 when File is empty; returns
     2, the skip status, with a message when nvidia-smi finds no GPU, before any Docker call; returns 1 when an
-    installation's runtime is running or Docker cannot be asked, touching nothing. Otherwise it removes any earlier
+    installation's runtime or orchestrator is running or Docker cannot be asked, touching nothing. Otherwise it removes any earlier
     test project, refuses a resolved configuration that Test-GpuTestConfiguration rejects, builds the runtime images
     with ":gpu-test" tags, creates the test data volume with the launch files and runs the tests. Whatever happens
     after the first removal, also on failure or interruption, it removes the project and its data volume and returns
@@ -1053,7 +1362,7 @@ function Invoke-GpuLevel {
         return 1
     }
     if ($running.Names.Length -gt 0) {
-        Write-Host "  [FAIL] gpu: the runtime $($running.Names -join ' and ') of an installation is running. Stop Lyrveil first; this level never touches it."
+        Write-Host "  [FAIL] gpu: the container $($running.Names -join ' and ') of an installation is running. Stop Lyrveil first; this level never touches it."
         return 1
     }
     try { $textProfile = Get-GpuTestProfile -Root $Root }
@@ -1069,7 +1378,7 @@ function Invoke-GpuLevel {
         if (-not $ready) { Write-Host '  [FAIL] gpu: an earlier test project or its volume could not be removed' }
         if ($ready) {
             Write-Host 'GPU: checking the resolved configuration'
-            $config = Invoke-GpuCompose -Root $Root -Capture -Argument (@('config', '--format', 'json') + $script:Services)
+            $config = Invoke-GpuCompose -Root $Root -Capture -Argument (@('config', '--format', 'json') + $script:Services + $script:StackServices)
             $problems = @("docker compose config exited with status $($config.Status).")
             if ($config.Status -eq 0) { $problems = @(Test-GpuTestConfiguration -Text ($config.Output -join "`n")) }
             foreach ($problem in $problems) { Write-Host "         $problem" }
@@ -1112,4 +1421,6 @@ Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample
     ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Invoke-GpuTextTimed, Initialize-GpuBackendProbe,
     Invoke-GpuBackendProbe, Get-GpuImageWorkflow,
     Invoke-GpuImageJob, Invoke-GpuImageGraph, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
-    Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog
+    Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog, Initialize-GpuStackImage, New-GpuTestRuntimeContainer,
+    Set-GpuTestDataOwner, Invoke-GpuServiceApi, Start-GpuVramLoad, Get-GpuVramLoad, Stop-GpuVramLoad, Start-GpuTimelineSampler,
+    Stop-GpuTimelineSampler, Get-GpuTestServiceLog

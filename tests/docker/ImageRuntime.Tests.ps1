@@ -190,6 +190,23 @@ Describe 'ComfyUI in CPU mode on a read-only root' {
         $state.Options | Should -Match '^rw(,|$)'
         @($mounts | Where-Object Target -EQ '/tmp') | Should -BeNullOrEmpty -Because '/tmp itself stays read-only'
     }
+
+    It 'keeps /tmp/comfy writable when the same container starts again, as the orchestrator starts it for every image job' {
+        # The settings of Hardening without "run --rm", so the container outlives its first run. The command creates a
+        # folder as the entrypoint does; the second start failed with "Permission denied" before the image had its own
+        # /tmp/comfy (T-GPU-07).
+        $name = "lyrveil-image-test-restart-$PID"
+        $null = Invoke-Docker (@('create', '--name', $name) + @($script:Hardening | Select-Object -Skip 2) +
+            @('--entrypoint', 'bash', $script:Image, '-c', 'mkdir /tmp/comfy/output && stat -c %a /tmp/comfy'))
+        try {
+            $first = Invoke-DockerCapture @('start', '--attach', $name)
+            $second = Invoke-DockerCapture @('start', '--attach', $name)
+        }
+        finally { $null = Invoke-DockerCapture @('rm', '--force', $name) }
+        $first.Status | Should -Be 0 -Because $first.Text
+        $second.Status | Should -Be 0 -Because $second.Text
+        $second.Text.Trim() | Should -Be '1777'
+    }
 }
 
 Describe 'The tag vocabulary on the tokenizer of the pinned tree' {
