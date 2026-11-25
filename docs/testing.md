@@ -42,6 +42,13 @@ The frontend part of `lint` and `unit`, in [`scripts/lib/FrontendComponent.psm1`
 .\scripts\lyrveil.cmd test unit -k logs -x
 ```
 
+`gpu` takes trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildcards, and then runs only
+`tests/gpu/Tuning.Tests.ps1` with those trials (see [The `gpu` level](#the-gpu-level)):
+
+```powershell
+.\scripts\lyrveil.cmd test gpu gemma-4-12b/A gemma-4-26b-a4b/moe-*
+```
+
 Every other level refuses arguments.
 
 `all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
@@ -125,12 +132,49 @@ before the checks, so the numbers are kept even when one fails.
 The results go to `test-results/gpu/text-profiles-<time>.json`, which Git ignores; the passing run's file is copied
 to [`docs/verification/2026-11-25-gpu-text-profiles.json`](verification/2026-11-25-gpu-text-profiles.json).
 
+`tests/gpu/Tuning.Tests.ps1` holds T-GPU-14 and steps 1 to 9 of
+[Measuring and tuning](gpu-orchestration.md#measuring-and-tuning) for `gemma-4-12b`, `gemma-4-26b-a4b` and
+`rocinante-x-12b` (GPU.3, [evidence](verification/2026-11-25-gpu-tuning.md)). It only measures.
+[`scripts/lib/GpuTuning.psm1`](../scripts/lib/GpuTuning.psm1) plans its trials and computes every decision from them:
+
+- **Trials.** Each trial is the catalog's level A with one lever changed and `LEVEL=CUSTOM`: `A` itself (20 replies
+  and 2 long prompts), `context-<next>`, `batch-256`, `batch-1024` and `batch-2048` (the catalog batch is trial `A`),
+  `moe-8`, `moe-12` and `moe-16` for a profile with `"moe": true` (20 replies each), `mmap-0` and `mmap-1` (load, image
+  job on `lyrveil-image`, then the measured reload), `kv-q8_0`, and `kv-q8_0-context-<next>`.
+- **Measurements.** NVML before and after the load, the ready time, `docker stats` after the load and after the
+  workload, and the VRAM peak sampled every 250 ms. A reply is 200 tokens of the family's structured prompt with the
+  end token banned. Its speed is the generated tokens over curl's time. A long prompt is a new prompt of at least 6000
+  tokens, sized with `/api/extra/tokencount` and answered with one token, so its time is the time to the first token.
+  A `moe-*` trial stops early when the speed rule can no longer hold. That happens when more than half of its 20
+  replies are under 15 tokens per second, when a reply fails or is short, or when a long prompt fails or takes more
+  than 20 s.
+- **Decisions.** Step 4 makes level B the default below 512 MiB of margin. Step 5 grows the context when both margins
+  are at least 1024 MiB. Step 6 keeps the batch with the largest prompt-speed gain of at least 20 % over 512 that
+  keeps 512 MiB. The speed rule (T-GPU-14, for the target default) needs a median of at least 15 tokens per second
+  over 20 replies of at least 200 tokens and a first token within 20 s. Step 7 keeps the fastest setting that meets
+  the margin and speed rules, or names `gemma-4-12b` as the default when none does. Step 8 keeps `USE_MMAP=1` for
+  2 GiB of RAM or 20 % of the reload saved at a speed cost of at most 5 %. Step 9 keeps `f16` until the P04 Italian
+  protocol scores `q8_0` ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)) and reports whether `q8_0`
+  qualifies on the measurements. A decision whose trial is missing stays undecided and is never guessed.
+- **Partial runs.** With selectors, a trial not selected comes from the newest earlier
+  `test-results/gpu/tuning-<time>.json` of the same procedure version and GPU, if that record is `measured` or
+  `not_loaded` and lists no problem. The results file names the source of every trial. A decision that still lacks a
+  trial is skipped in such a run and fails in a full run.
+
+Each run writes `test-results/gpu/tuning-<time>.json`, which Git ignores. It holds the rules, the workload, every trial
+with its launch lines, commands and numbers, the reused trials, and the decisions. A full run takes about an hour.
+
+`tests/scripts/GpuTuning.Tests.ps1`, in the `unit` level, tests the plan, the selectors, the launch lines, the early
+stop, the trial summary and every decision at and around its thresholds, including records read back from JSON and
+the reuse of earlier results files.
+
 The Pester cases "The gpu level" in `tests/scripts/TestCommand.Tests.ps1`, in the `unit` level, check the wiring with
 stand-in `docker.cmd` and `nvidia-smi.cmd` first on `PATH` and a fixture test file: the skip without a GPU, with no
 Docker call and no pass; the order (removal, build, data volume, launch files, tests, removal); the removal after a
 failing test, a failed build and a refused configuration; the refusal while an installation's runtime runs; and the
 configuration check itself. Since GPU.2 they also check the ASCII request JSON, the `docker stats` amounts and the
-level-A launch lines. They are written and have not run yet.
+level-A launch lines. Since GPU.3 they check that a malformed trial selector, or one the catalog's plan cannot
+serve, exits 1 before any GPU or Docker call. They are written and have not run yet.
 
 ### The `docker` level
 
@@ -821,7 +865,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-11 | No orphan process and full VRAM release after `stop.cmd` | P06 |
 | T-GPU-12 | Everything works with the network disconnected | P06 |
 | T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
-| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS`, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md) | P02 |
+| T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS`, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). `tests/gpu/Tuning.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.3), with steps 1 to 9 for the three measured profiles; passed on the reference machine on 2026-11-25 over twelve partial runs: AutoFit at 42.6 T/s and a first token in 9.04 s ([evidence](verification/2026-11-25-gpu-tuning.md)) | P02 |
 
 ### Quality
 

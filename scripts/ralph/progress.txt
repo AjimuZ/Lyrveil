@@ -260,6 +260,10 @@
 - Send JSON to native commands from Windows PowerShell 5.1 through stdin with every non-ASCII character \u-escaped (ConvertTo-GpuRequestJson), so $OutputEncoding cannot corrupt it.
 - In hardware tests, run every request and measurement in BeforeAll, store them in a record, and assert in It blocks against a 'problems' list. The numbers then survive a failing check and go to a machine-readable results file.
 - Record-when-missing fixtures carry the SHA-256 of their input, so a pure unit test can detect a stale recording without the hardware.
+- PSScriptAnalyzer flags any function with a state-changing verb (New, Set, Remove, Start, Stop, Update) that lacks `SupportsShouldProcess`. Name Pester test helpers with `Get-`/`Write-` verbs, or add `SupportsShouldProcess`.
+- A Pester script parameter used only inside BeforeDiscovery/BeforeAll needs `[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '<name>', Justification = ...)]` on its param block to pass lint.
+- Keep the rules of a hardware measurement in a pure module that reads both ordered dictionaries and JSON-parsed objects (`Get-TuningValue`). The GPU test then only measures, and stored results can be re-decided and unit-tested without hardware.
+- Under strict mode, index ordered dictionaries keyed by numbers with string keys: an integer index reads by position, not by key.
 
 ---
 
@@ -2511,4 +2515,47 @@ Not run: the three new Pester cases in tests/scripts/TestCommand.Tests.ps1. The 
   - BOS ids: gemma4 2, Mistral Nemo 1. tokencount 'special' only adds BOS; control tokens are always parsed.
   - Invoke-GpuTextPost and Invoke-GpuTextStream return hashtables. A Get-Field/Get-JsonProperty helper based on PSObject.Properties cannot read their keys, so use .Key access.
   - Fixtures tokens files are recorded by the gpu test only when missing. Delete one on purpose to re-record it after a formatter or prompt change; the backend unit test fails until then because the SHA-256 no longer matches.
+---
+
+## 2026-11-25T20:21:09Z - GPU.3
+- The gpu level now measures the tuning procedure (steps 1 to 9) and T-GPU-14, and tested code makes every decision.
+
+What it consists of:
+- `tests/gpu/Tuning.Tests.ps1` does the measuring: one launch file per trial (level A with one lever changed), NVML, `docker stats`, a VRAM peak sampled every 250 ms, 200-token replies, new long prompts of at least 6000 tokens, and an image job before the mmap reloads.
+- `scripts/lib/GpuTuning.psm1` plans the trials and computes the decisions: default level, context step, batch, `MOE_CPU_LAYERS`, mmap, KV type, and the speed rule.
+- `scripts/lyrveil.cmd test gpu <profile>/<trial> ...` runs only the selected trials and reuses clean earlier results for the rest. Each run writes every command and number to `test-results/gpu/tuning-<time>.json`.
+
+**This session:**
+- Wrote `tests/scripts/GpuTuning.Tests.ps1`. It tests every rule at and around its thresholds, records read back from JSON, and the reuse of earlier results.
+- Added two `TestCommand.Tests.ps1` cases: a malformed selector, and one the catalog cannot serve, must exit 1 before any GPU or Docker call.
+- Ran the 11 remaining `gemma-4-26b-a4b` trials for real in 6 partial runs. All 6 ended with `test gpu: passed` and no test container or volume left. The first run removed a test container left by the earlier, interrupted session.
+- The last run (21:03) made every decision for all three profiles: 22 passed, 0 failed, 0 skipped.
+- **T-GPU-14 passes:** AutoFit has a median of 42.6 tokens per second and a first token of a 6120-token prompt in 9.04 s. `MOE_CPU_LAYERS` 8, 12 and 16 run at about 21 T/s, so `gemma-4-26b-a4b` stays the default.
+
+Decisions:
+
+| Profile | Level | Context | Batch | `MOE_CPU_LAYERS` | `USE_MMAP` | `KV_QUANT` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gemma-4-12b` | A | 24576 | 512 | 0 | 0 | `f16` (`q8_0` qualifies on the numbers, pending the P04 protocol) |
+| `gemma-4-26b-a4b` | A | 24576 | 2048 | 0 | 1 | `f16` |
+| `rocinante-x-12b` | A | 12288 | 512 | 0 | 0 | `f16` |
+
+**Checks:** `scripts/lyrveil.cmd test lint` failed once (PSScriptAnalyzer: the script parameter `Trial` looked unused). It passed after I added a suppression attribute with a stated reason.
+
+**Not run or unverified:**
+- `tests/scripts/GpuTuning.Tests.ps1` and the two new `TestCommand.Tests.ps1` cases: running Pester on one file was denied, and the `unit` level is left to the orchestrator.
+- No single full run: the whole level takes about an hour, over the 10-minute tool limit. T-GPU-01 to T-GPU-04 were not run again.
+- The earlier session's six runs: their results files exist, but their Pester summaries were not seen in this session.
+- Combinations of the kept values (for example 24576 context with batch 2048 and mmap 1 together) were not measured.
+- `config/model-catalog.json` is unchanged; applying the values is roadmap item P02.7.
+
+Docs updated: the testing guide, the GPU orchestration procedure (a "Delivered in GPU.3" note with the table), the model catalog's default rule, the docs index, the changelog, and a new evidence document. No prompt-injection attempts were found in the files read.
+- Files changed: scripts/lib/GpuTuning.psm1, scripts/lib/TestCommand.psm1, scripts/lib/GpuLevel.psm1, tests/gpu/Tuning.Tests.ps1, tests/scripts/GpuTuning.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/gpu-orchestration.md, docs/models.md, docs/README.md, docs/verification/2026-11-25-gpu-tuning.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The full tuning procedure takes about an hour, so run it in parts with selectors, each under the 10-minute tool limit. About 3 trials of the 26B profile fit per run, or 1 trial of `moe-*` (about 285 s each), or both 26B mmap trials (about 320 s). Builds with a warm cache add about 30 s.
+  - A run that is killed leaves its test container behind. The next run of the gpu level removes it in its first step, but the earlier run's results file is never written, because the AfterAll block did not run.
+  - KoboldCpp 1.124.2 with `GPU_LAYERS=-1` and `--moecpu` 8, 12 or 16 loaded only about 3.1 GiB of VRAM and kept about 15.5 GiB in RAM, running at about 21 T/s against 42.6 T/s for AutoFit. Under AutoFit, levers barely change the peak: `q8_0` freed only 10 MiB on the 26B profile.
+  - The ready time of `docker compose up --wait` has about 2 s resolution (health check `start_interval` 2s). For the 12B profiles both mmap reloads read the same time.
+  - `git status` and direct `powershell`/Pester calls are denied in this sandbox. Only `scripts/lyrveil.cmd test <level> [args]` runs, so new Pester unit files can only be checked by the orchestrator's `unit` level.
+  - P02.7 still has to apply the computed values to `config/model-catalog.json` and load each combination of kept values once (for example 26B at 24576 with batch 2048 and mmap 1).
 ---

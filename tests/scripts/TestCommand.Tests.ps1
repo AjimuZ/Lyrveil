@@ -404,6 +404,23 @@ Describe 'The gpu level' {
         $run.ExitCode | Should -Be 1
     }
 
+    It 'refuses a malformed trial selector before any GPU or Docker call' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'gemma-4-12b')
+        $run.Output | Should -Match "'gemma-4-12b' is not a trial selector"
+        $run.Output | Should -Match 'Nothing ran\.'
+        $run.Output | Should -Not -Match 'reading GPU 0'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.ExitCode | Should -Be 1
+    }
+
+    It 'refuses trial selectors when the tuning plan cannot be read from the catalog' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'gemma-4-12b/A')
+        $run.Output | Should -Match 'The tuning plan could not be read'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.Output | Should -Not -Match 'stand-in gpu test ran'
+        $run.ExitCode | Should -Be 1
+    }
+
     It 'clears, builds, prepares the data volume, runs the tests, then removes the project and the volume' {
         $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
         $out = $run.Output

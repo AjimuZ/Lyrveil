@@ -31,6 +31,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-14 and the measuring and tuning procedure in the `gpu` level (GPU.3). `tests/gpu/Tuning.Tests.ps1` runs
+  steps 1 to 9 on the real GPU for `gemma-4-12b`, `gemma-4-26b-a4b` and `rocinante-x-12b`: the margin rule, the
+  context step, batch 256 to 2048, the speed rule comparing AutoFit with `MOE_CPU_LAYERS` 8, 12 and 16, `USE_MMAP` 0
+  and 1 after an image job, and `KV_QUANT` `f16` and `q8_0`. `scripts/lib/GpuTuning.psm1` computes every decision
+  from the measurements and is unit-tested. `scripts\lyrveil.cmd test gpu <profile>/<trial> ...` runs only the
+  selected trials and reuses earlier results for the rest, so the hour-long procedure can run in parts. Every run
+  writes its commands and numbers to `test-results/gpu/tuning-<time>.json`. On the reference machine the speed rule
+  holds for the 26B default with AutoFit (42.6 tokens per second, first token in 9.04 s), so it stays the default. The
+  computed values (context 24576 for the Gemma 4 profiles and 12288 for `rocinante-x-12b`, batch 2048 and
+  `USE_MMAP=1` for the 26B profile) are not applied to the catalog yet. See
+  [docs/verification/2026-11-25-gpu-tuning.md](docs/verification/2026-11-25-gpu-tuning.md).
 - T-GPU-02 to T-GPU-04 in the `gpu` level (GPU.2). `tests/gpu/TextProfiles.Tests.ps1` loads `gemma-4-12b`,
   `gemma-4-26b-a4b`, `rocinante-x-12b` and `rocinante-12b-v1.1` one at a time at launch level A on the real GPU,
   measures VRAM, the VRAM peak and the container's RAM and applies the margin rule, tokenizes one chat prompt per

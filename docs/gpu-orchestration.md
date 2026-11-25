@@ -410,6 +410,22 @@ The P02 procedure, with the result in `docs/verification/`. It runs for `gemma-4
    value only if it frees at least 256 MiB or allows the next context step, costs at most 5 % of speed, and the P04
    Italian protocol scores no lower. Until P04, `f16` stays ([ADR 0030](decisions/0030-koboldcpp-efficiency-levers.md)).
 
+Delivered in GPU.3: `tests/gpu/Tuning.Tests.ps1` in the `gpu` level measures steps 1 to 9 for the three profiles.
+`scripts/lib/GpuTuning.psm1` computes the decisions from the measurements, and its unit tests cover the rules
+([The `gpu` level](testing.md#the-gpu-level)). Each trial changes one lever of level A, so combinations of the kept
+values are not measured. The reference machine's result, 2026-11-25
+([evidence](verification/2026-11-25-gpu-tuning.md)):
+
+| Profile | Default level | Context | Batch | `MOE_CPU_LAYERS` | `USE_MMAP` | `KV_QUANT` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gemma-4-12b` | A | 24576 | 512 | 0 | 0 | `f16` |
+| `gemma-4-26b-a4b` | A | 24576 | 2048 | 0 (AutoFit) | 1 | `f16` |
+| `rocinante-x-12b` | A | 12288 | 512 | 0 | 0 | `f16` |
+
+The speed rule holds for `gemma-4-26b-a4b` with AutoFit: a median of 42.6 tokens per second and a first token of a
+6120-token prompt in 9.04 s. `MOE_CPU_LAYERS` 8, 12 and 16 ran at about 21 tokens per second. These values are not in
+`config/model-catalog.json` yet: P02.7 applies them.
+
 P04 adds two measurements with real chat prompts from the consistency protocol, because they depend on the prompt
 layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
 

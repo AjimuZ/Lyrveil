@@ -10,6 +10,7 @@ Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuLevel.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'GpuTuning.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
@@ -29,8 +30,12 @@ $script:SkippedStatus = 2
 # "all" runs every level except gpu and quality, which need the reference hardware and are always explicit.
 $script:AllLevels = @('lint', 'unit', 'integration', 'e2e', 'docker')
 
-# Levels that accept arguments after their name, which they pass to pytest. Every other level refuses them.
-$script:ArgumentLevels = @('unit')
+# Levels that accept arguments after their name: unit passes them to pytest, and gpu takes them as the trials of the
+# tuning procedure to run. Every other level refuses them.
+$script:ArgumentLevels = @('unit', 'gpu')
+
+# The gpu test file that a trial selection runs alone.
+$script:TuningTestFile = 'tests/gpu/Tuning.Tests.ps1'
 
 function Write-CheckLine {
     # Prints one counted result and its failures. Not exported.
@@ -178,23 +183,56 @@ function Invoke-DockerLevel {
 function Invoke-GpuTestLevel {
     <#
     Runs the gpu level: Invoke-GpuLevel of GpuLevel.psm1 with the Pester files tests/gpu/*.Tests.ps1, run with the
-    pinned Pester against the real runtimes. Returns 0 only when they ran and passed and the test project is gone, 2
-    (the skip status) when the machine has no GPU, and 1 otherwise, also when the folder holds no test file. Not
-    exported.
+    pinned Pester against the real runtimes. With Argument, trial selectors "<profile>/<trial>" with "*" wildcards, it
+    runs only tests/gpu/Tuning.Tests.ps1 and only the trials they select, so the hour-long procedure can run in parts;
+    a selector that is malformed or selects no trial of the plan returns 1 before any GPU or Docker call. Returns 0
+    only when the tests ran and passed and the test project is gone, 2 (the skip status) when the machine has no GPU,
+    and 1 otherwise, also when there is no test file to run. Not exported.
     #>
-    param([string]$Root)
+    param([string]$Root, [string[]]$Argument = @())
 
-    $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/gpu/*.Tests.ps1'))
-    $runner = { param([string]$RunRoot, [string[]]$RunFile) Invoke-PesterUnitTest -Root $RunRoot -File $RunFile }
-    return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner)
+    $selection = [string[]]@($Argument | Where-Object { $_ })
+    $data = $null
+    if ($selection.Length -gt 0) {
+        $problems = @(Test-GpuTuningSelection -Pattern $selection)
+        if ($problems.Length -eq 0) {
+            try {
+                $catalog = (Read-Utf8Text -Path (Join-Path $Root 'config\model-catalog.json')) | ConvertFrom-Json
+                $plan = @(Get-GpuTuningPlan -Catalog $catalog)
+                $problems = @(Test-GpuTuningSelection -Plan $plan -Pattern $selection)
+                if ($problems.Length -gt 0) {
+                    $names = @($plan | ForEach-Object { "$($_.Profile)/$($_.Name)" })
+                    $problems += "The trials are: $($names -join ', ')."
+                }
+            }
+            catch { $problems = @("The tuning plan could not be read: $($_.Exception.Message)") }
+        }
+        if ($problems.Length -gt 0) {
+            foreach ($problem in $problems) { Write-Host $problem }
+            Write-Host "Test level 'gpu' takes trial selectors such as gemma-4-12b/A or gemma-4-26b-a4b/moe-*. Nothing ran."
+            return 1
+        }
+        $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @($script:TuningTestFile))
+        $data = @{ Trial = $selection }
+        Write-Host "GPU: only the tuning trials $($selection -join ' ') of $script:TuningTestFile"
+    }
+    else {
+        $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/gpu/*.Tests.ps1'))
+    }
+    $runner = {
+        param([string]$RunRoot, [string[]]$RunFile, [hashtable]$RunData)
+        Invoke-PesterUnitTest -Root $RunRoot -File $RunFile -Data $RunData
+    }
+    return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner -Data $data)
 }
 
 function Invoke-PesterUnitTest {
     <#
-    Runs the Pester test files File, repository-relative, with the pinned Pester. Returns 0 only when at least one
-    test ran and none failed, and 1 otherwise. Not exported.
+    Runs the Pester test files File, repository-relative, with the pinned Pester, passing Data, when given, as the
+    parameters of every file. Returns 0 only when at least one test ran and none failed, and 1 otherwise. Skipped
+    tests do not fail the run and are reported in the summary line. Not exported.
     #>
-    param([string]$Root, [string[]]$File)
+    param([string]$Root, [string[]]$File, [hashtable]$Data = $null)
 
     $files = @($File)
     $manifest = Install-PinnedModule -Name 'Pester' -Root $Root
@@ -202,7 +240,11 @@ function Invoke-PesterUnitTest {
     Get-Module Pester | Remove-Module -Force
     Import-Module $manifest -Force
     $configuration = New-PesterConfiguration
-    $configuration.Run.Path = [string[]]@($files | ForEach-Object { Join-Path $Root $_ })
+    $paths = [string[]]@($files | ForEach-Object { Join-Path $Root $_ })
+    if ($null -ne $Data) {
+        $configuration.Run.Container = @($paths | ForEach-Object { New-PesterContainer -Path $_ -Data $Data })
+    }
+    else { $configuration.Run.Path = $paths }
     $configuration.Run.PassThru = $true
     $configuration.Output.Verbosity = 'Detailed'
     $run = Invoke-Pester -Configuration $configuration
@@ -218,7 +260,8 @@ function Invoke-LyrveilTest {
     arguments, and returns the exit status: 0 when the level ran tests and all passed, 1 otherwise. An unknown or
     missing level, arguments for a level that takes none, and a level with no tests yet all return 1 with a
     message, so no level reports a pass without running tests. A level that cannot run on this machine, as gpu without
-    a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest.
+    a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest, and "gpu",
+    which takes trial selectors of the tuning procedure.
     "all" runs lint, unit, integration, e2e and docker, and passes only when each of them does.
     #>
     [CmdletBinding()]
@@ -241,7 +284,7 @@ function Invoke-LyrveilTest {
     }
     $extra = [string[]]@($given | Select-Object -Skip 1)
     if ($extra.Length -gt 0 -and $script:ArgumentLevels -notcontains $name) {
-        Write-Host "Test level '$name' takes no arguments. Only $($script:ArgumentLevels -join ', ') passes arguments to pytest."
+        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments) and gpu (tuning trials) take them."
         return 1
     }
 

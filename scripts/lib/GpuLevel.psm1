@@ -18,6 +18,60 @@ $script:InstallationRuntimes = @('lyrveil-llm', 'lyrveil-image')
 # What Invoke-GpuLevel returns when the machine has no usable GPU: not 0, so a skip never reads as a pass.
 $script:SkippedStatus = 2
 
+# The record of Open-GpuCommandLog: $null while closed, otherwise every native command since it opened, in order, as
+# @{ Line; Count }, a run of the same command being one entry with its count.
+$script:CommandLog = $null
+
+function Open-GpuCommandLog {
+    <#
+    Starts recording every native command that this module runs (docker, nvidia-smi), replacing any earlier record,
+    so a test can store the commands behind its numbers. Close-GpuCommandLog returns the record.
+    #>
+    [CmdletBinding()]
+    param()
+
+    $script:CommandLog = New-Object System.Collections.Generic.List[object]
+}
+
+function Close-GpuCommandLog {
+    <#
+    Returns the commands recorded since Open-GpuCommandLog, one line each in order, a run of the same command written
+    once with "(N times)", and stops recording. Returns none when no record was open.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+
+    if ($null -eq $script:CommandLog) { return [string[]]@() }
+    $lines = @($script:CommandLog | ForEach-Object { if ($_.Count -gt 1) { "$($_.Line) ($($_.Count) times)" } else { $_.Line } })
+    $script:CommandLog = $null
+    return [string[]]$lines
+}
+
+function Add-GpuCommandLog {
+    # Appends Line to the open command record, or counts it when it repeats the last entry. Does nothing while the
+    # record is closed. Not exported.
+    param([string]$Line)
+
+    if ($null -eq $script:CommandLog) { return }
+    if ($script:CommandLog.Count -gt 0 -and $script:CommandLog[$script:CommandLog.Count - 1].Line -ceq $Line) {
+        $script:CommandLog[$script:CommandLog.Count - 1].Count++
+        return
+    }
+    $script:CommandLog.Add(@{ Line = $Line; Count = 1 })
+}
+
+function Format-GpuCommandLine {
+    # Returns Command and Argument as one line, with an argument that holds a space or a quote in single quotes, and
+    # the size of InputText when there is one. Not exported.
+    param([string]$Command, [string[]]$Argument = @(), $InputText = $null)
+
+    $parts = @($Command) + @($Argument | ForEach-Object { if ("$_" -match "[\s'`"]") { "'" + ("$_" -replace "'", "''") + "'" } else { "$_" } })
+    $line = $parts -join ' '
+    if ($null -ne $InputText) { $line += " < standard input of $(([string]$InputText).Length) characters" }
+    return $line
+}
+
 function Invoke-GpuNative {
     <#
     Runs Command with Argument, in Directory when one is given, and returns @{ Status; Output }. With Capture, Output
@@ -40,6 +94,8 @@ function Invoke-GpuNative {
         return @{ Status = 127; Output = [string[]]@("The command '$Command' is not available.") }
     }
     $hasInput = $PSBoundParameters.ContainsKey('InputText')
+    $logged = if ($hasInput) { $InputText } else { $null }
+    Add-GpuCommandLog -Line (Format-GpuCommandLine -Command $Command -Argument $Argument -InputText $logged)
     # Windows PowerShell 5.1 may turn native standard error lines into error records, which 'Stop' would throw.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -432,6 +488,23 @@ function Set-GpuTestTextLaunch {
     return (Write-GpuTestLaunchFile -Root $Root -Line (Get-GpuLaunchLine -TextProfile $checked -Level $Level))
 }
 
+function Set-GpuTestLaunchLine {
+    <#
+    Replaces the text runtime's launch file in the test data volume with Line, the lines of a tuning trial, and returns
+    $true when it was written, or $false, writing nothing, when a line is not KEY=VALUE with a plain value. The
+    runtime's entrypoint still checks every key and value at its next start. Call it while lyrveil-llm is removed.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string[]]$Line
+    )
+
+    if (-not $PSCmdlet.ShouldProcess('runtime/llm-launch.env', 'Write the launch lines of a trial')) { return $true }
+    return (Write-GpuTestLaunchFile -Root $Root -Line $Line)
+}
+
 function Get-RunningInstallationRuntime {
     <#
     Returns @{ Known; Names }: Known is $false when Docker cannot be asked, and Names lists the installation's runtime
@@ -552,12 +625,132 @@ function ConvertTo-GpuRequestJson {
 function Get-GpuTextRequestArgument {
     # Returns the "exec" arguments that POST the JSON of standard input to Path of lyrveil-llm with curl, waiting at
     # most TimeoutSecond. With Stream, curl writes every line as it arrives and does not fail on an HTTP error, so the
-    # caller sees the events and the body. Not exported.
-    param([string]$Path, [int]$TimeoutSecond, [switch]$Stream)
+    # caller sees the events and the body. With Timed, curl adds a last line "LYRVEIL_SECONDS=<time_total>", its own
+    # time from the start of the request to the end of the answer, measured inside the container. Not exported.
+    param([string]$Path, [int]$TimeoutSecond, [switch]$Stream, [switch]$Timed)
 
-    $mode = if ($Stream) { @('-sS', '-N') } else { @('-fsS') }
+    # @() keeps a one-element answer of "if" an array, so += appends instead of joining strings.
+    $mode = @(if ($Stream) { '-sS', '-N' } else { '-fsS' })
+    if ($Timed) { $mode += @('-w', '\nLYRVEIL_SECONDS=%{time_total}\n') }
     return [string[]](@('exec', '-T', 'lyrveil-llm', 'curl') + $mode + @('--max-time', "$TimeoutSecond",
             '-H', 'Content-Type: application/json', '--data-binary', '@-', "http://127.0.0.1:5001$Path"))
+}
+
+function Invoke-GpuTextTimed {
+    <#
+    Sends POST Path with Body as JSON to the KoboldCpp API of lyrveil-llm, as Invoke-GpuTextPost does, and returns
+    @{ Status; Body; Seconds }: Status is curl's exit status (0 for a 2xx answer), Body the parsed JSON answer or $null,
+    and Seconds curl's time_total inside the container, from sending the request to the end of the answer, without the
+    start of "docker compose exec"; Seconds is 0 when curl reported no time.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidatePattern('^/[A-Za-z0-9/_.-]*$')] [string]$Path,
+        [Parameter(Mandatory = $true)] [hashtable]$Body,
+        [int]$TimeoutSecond = 180
+    )
+
+    $result = Invoke-GpuCompose -Root $Root -Capture -InputText (ConvertTo-GpuRequestJson -Body $Body) `
+        -Argument (Get-GpuTextRequestArgument -Path $Path -TimeoutSecond $TimeoutSecond -Timed)
+    $seconds = 0.0
+    $bodyLines = New-Object System.Collections.Generic.List[string]
+    foreach ($line in $result.Output) {
+        if ($line -match '^LYRVEIL_SECONDS=([0-9]+(?:\.[0-9]+)?)\s*$') {
+            $seconds = [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
+        }
+        else { $bodyLines.Add($line) }
+    }
+    $parsed = $null
+    if ($result.Status -eq 0) {
+        try { $parsed = ($bodyLines.ToArray() -join "`n") | ConvertFrom-Json }
+        catch { $parsed = $null }
+    }
+    return @{ Status = [int]$result.Status; Body = $parsed; Seconds = $seconds }
+}
+
+# The client of Invoke-GpuImageJob, run by the Python of lyrveil-image from its standard input. It submits the workflow
+# to ComfyUI, polls its history every half second and prints one JSON line. __WORKFLOW__ and __TIMEOUT__ are replaced.
+$script:ImageJobClient = @'
+import json, time, urllib.request as request
+workflow = json.loads(r'''__WORKFLOW__''')
+base = 'http://127.0.0.1:8188'
+start = time.time()
+body = json.dumps({'prompt': workflow}).encode()
+answer = request.urlopen(request.Request(base + '/prompt', data=body, headers={'Content-Type': 'application/json'}), timeout=30)
+prompt_id = json.load(answer)['prompt_id']
+status = 'timeout'
+while time.time() - start < __TIMEOUT__:
+    entry = json.load(request.urlopen(base + '/history/' + prompt_id, timeout=10)).get(prompt_id)
+    if entry:
+        state = entry.get('status') or {}
+        status = state.get('status_str') or 'unknown'
+        if state.get('completed') or status == 'error':
+            break
+    time.sleep(0.5)
+print(json.dumps({'prompt_id': prompt_id, 'status': status, 'seconds': round(time.time() - start, 2)}))
+'@
+
+function Get-GpuImageWorkflow {
+    <#
+    Returns the ComfyUI API workflow of one text-to-image job: CheckpointLoaderSimple with Checkpoint, a positive and a
+    negative CLIPTextEncode, an empty Width x Height latent, KSampler (euler, normal, cfg 5, Steps steps, Seed),
+    VAEDecode and SaveImage, which writes into the runtime's tmpfs.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [ValidatePattern('^[A-Za-z0-9._-]{1,128}\.safetensors$')] [string]$Checkpoint,
+        [int]$Width = 768,
+        [int]$Height = 768,
+        [int]$Steps = 8,
+        [long]$Seed = 1
+    )
+
+    return @{
+        '1' = @{ class_type = 'CheckpointLoaderSimple'; inputs = @{ ckpt_name = $Checkpoint } }
+        '2' = @{ class_type = 'CLIPTextEncode'; inputs = @{ text = 'a quiet bookshop at night, warm light, detailed illustration'; clip = @('1', 1) } }
+        '3' = @{ class_type = 'CLIPTextEncode'; inputs = @{ text = 'lowres, blurry'; clip = @('1', 1) } }
+        '4' = @{ class_type = 'EmptyLatentImage'; inputs = @{ width = $Width; height = $Height; batch_size = 1 } }
+        '5' = @{ class_type = 'KSampler'; inputs = @{
+                model = @('1', 0); positive = @('2', 0); negative = @('3', 0); latent_image = @('4', 0)
+                seed = $Seed; steps = $Steps; cfg = 5.0; sampler_name = 'euler'; scheduler = 'normal'; denoise = 1.0
+            }
+        }
+        '6' = @{ class_type = 'VAEDecode'; inputs = @{ samples = @('5', 0); vae = @('1', 2) } }
+        '7' = @{ class_type = 'SaveImage'; inputs = @{ images = @('6', 0); filename_prefix = 'lyrveil-gpu-test' } }
+    }
+}
+
+function Invoke-GpuImageJob {
+    <#
+    Runs the workflow of Get-GpuImageWorkflow for Checkpoint on the running lyrveil-image and waits up to
+    TimeoutSecond for ComfyUI to finish it. Returns @{ Status; Result }: Status is the exit status of the Python client
+    in the container, 0 when it ran to the end; Result the parsed last line, with prompt_id, status (ComfyUI's
+    status_str, such as "success" or "error", or "timeout") and seconds from the submission to the end, or $null.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Checkpoint,
+        [int]$Width = 768,
+        [int]$Height = 768,
+        [int]$Steps = 8,
+        [ValidateRange(10, 600)] [int]$TimeoutSecond = 240
+    )
+
+    $workflow = ConvertTo-GpuRequestJson -Body (Get-GpuImageWorkflow -Checkpoint $Checkpoint -Width $Width -Height $Height -Steps $Steps)
+    $client = $script:ImageJobClient.Replace('__WORKFLOW__', $workflow).Replace('__TIMEOUT__', "$TimeoutSecond")
+    $run = Invoke-GpuCompose -Root $Root -Capture -InputText $client -Argument @('exec', '-T', 'lyrveil-image', 'python', '-')
+    $parsed = $null
+    $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
+    if ($run.Status -eq 0 -and $last.Length -eq 1) {
+        try { $parsed = $last[0] | ConvertFrom-Json }
+        catch { $parsed = $null }
+    }
+    return @{ Status = [int]$run.Status; Result = $parsed }
 }
 
 function Invoke-GpuTextPost {
@@ -605,6 +798,7 @@ function Invoke-GpuTextStream {
 
     $arguments = Get-GpuComposeArgument -Argument (Get-GpuTextRequestArgument -Path '/api/extra/generate/stream' -TimeoutSecond $TimeoutSecond -Stream)
     $json = ConvertTo-GpuRequestJson -Body $Body
+    Add-GpuCommandLog -Line (Format-GpuCommandLine -Command 'docker' -Argument $arguments -InputText $json)
     $events = New-Object System.Collections.Generic.List[object]
     $state = @{ Tokens = 0; Abort = $null; AbortSecond = 0.0; Lines = 0 }
     $clock = [System.Diagnostics.Stopwatch]::StartNew()
@@ -695,6 +889,7 @@ function Start-GpuMemorySampler {
     param()
 
     if (-not $PSCmdlet.ShouldProcess('GPU 0', 'Sample the used memory')) { return $null }
+    Add-GpuCommandLog -Line 'nvidia-smi --id=0 --query-gpu=memory.used --format=csv,noheader,nounits, every 250 ms in a background job'
     $job = Start-Job -ScriptBlock {
         while ($true) {
             $line = @(& nvidia-smi '--id=0' '--query-gpu=memory.used' '--format=csv,noheader,nounits' 2>$null) | Select-Object -First 1
@@ -729,7 +924,8 @@ function Stop-GpuMemorySampler {
 function Invoke-GpuLevel {
     <#
     Runs the gpu level for the Pester files File (repository-relative) through Runner, a script block called with the
-    root and the files that returns 0 when the tests ran and passed. In order: it returns 1 when File is empty; returns
+    root, the files and Data (the parameters of the test files, $null for none) that returns 0 when the tests ran and
+    passed. In order: it returns 1 when File is empty; returns
     2, the skip status, with a message when nvidia-smi finds no GPU, before any Docker call; returns 1 when an
     installation's runtime is running or Docker cannot be asked, touching nothing. Otherwise it removes any earlier
     test project, refuses a resolved configuration that Test-GpuTestConfiguration rejects, builds the runtime images
@@ -742,7 +938,8 @@ function Invoke-GpuLevel {
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
         [string[]]$File = @(),
-        [Parameter(Mandatory = $true)] [scriptblock]$Runner
+        [Parameter(Mandatory = $true)] [scriptblock]$Runner,
+        [hashtable]$Data = $null
     )
 
     $files = [string[]]@($File | Where-Object { $_ })
@@ -799,7 +996,7 @@ function Invoke-GpuLevel {
             if (-not $ready) { Write-Host '  [FAIL] gpu: the test data volume could not be prepared' }
         }
         if ($ready) {
-            $status = [int](& $Runner $Root $files)
+            $status = [int](& $Runner $Root $files $Data)
             $label = if ($status -eq 0) { 'ok  ' } else { 'FAIL' }
             Write-Host "  [$label] gpu: tests (exit $status)"
         }
@@ -818,7 +1015,8 @@ function Invoke-GpuLevel {
 }
 
 Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample, Wait-GpuMemoryBelow, Invoke-GpuCompose,
-    Get-GpuTestProfile, Get-GpuTestTextProfile, Get-GpuLaunchLine, Set-GpuTestTextLaunch, Test-GpuTestConfiguration,
+    Get-GpuTestProfile, Get-GpuTestTextProfile, Get-GpuLaunchLine, Set-GpuTestTextLaunch, Set-GpuTestLaunchLine, Test-GpuTestConfiguration,
     Start-GpuTestRuntime, Remove-GpuTestRuntime, Get-GpuTestContainerFact, Invoke-GpuRuntimeRequest,
-    ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Get-GpuTestContainerMemory,
-    ConvertFrom-DockerMemoryText, Start-GpuMemorySampler, Stop-GpuMemorySampler
+    ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Invoke-GpuTextTimed, Get-GpuImageWorkflow,
+    Invoke-GpuImageJob, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
+    Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog
