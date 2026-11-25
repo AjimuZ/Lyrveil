@@ -203,6 +203,33 @@ cost has no threshold. The request time from curl is recorded too. The results, 
 `backend/tests/unit/test_gpu_structured_probe.py`, in the `unit` level, checks that the probe gives the job's prompt,
 repair prompt and grammar, and judges valid, non-JSON, underage and guard-refused drafts as the job does.
 
+`tests/gpu/ImageProfiles.Tests.ps1` holds T-GPU-06 and the real-GPU part of T-IMG-14 (GPU.5,
+[evidence](verification/2026-11-25-gpu-image-profiles.md)). Like T-GPU-05 it copies no backend value: in the
+backend's test stage, [`backend/tests/gpu_probe/image_presets.py`](../backend/tests/gpu_probe/image_presets.py) gives
+the graphs that the `render` stage builds (`build_workflow` with `ImageSettings.for_profile`) for a profile, a preset,
+an aspect and seeds. It also computes the preset rule from the measured times. For each catalog image profile, or only
+those named after the file name (`scripts\lyrveil.cmd test gpu ImageProfiles noobai-xl-1.1`), the test:
+
+- waits for the VRAM to fall back, starts `lyrveil-image` alone with a 180 s limit, records the ready time and checks
+  that `/system_stats` reports a `cuda` device;
+- renders the square **Rapida** graph with seeds 101 to 103, then the square **Alta** graph with seeds 201 to 203.
+  `Invoke-GpuImageGraph` submits each graph and polls the history every 0.5 s. It records the client's time,
+  ComfyUI's own execution time and the size from the saved PNG's header. Each render must end with status `success`
+  and one image at the preset's final size;
+- samples NVML every 250 ms in the background, separately for each preset, and records the peak, the peak over the
+  VRAM before the start and the margin `total - peak`;
+- measures the checkpoint load as the first render's time minus the median of the later **Rapida** renders;
+- removes the runtime and waits for its VRAM, also when a step fails.
+
+The rule (`rule_document`) takes the nearest-rank 95th percentile of each profile's **Alta** times, leaving out the
+first render after the start, which also loads the checkpoint. Each profile gets `alta` when that percentile is at
+most 45 s and `rapida` otherwise ([ADR 0026](decisions/0026-two-pass-image-rendering.md)). The default preset is the
+verdict of the target tier's default image profile, and `undecided` when that profile did not run. The test fails
+when a measured profile gets no verdict. A `rapida` verdict does not fail it: the default then changes as the rule
+says. The results go to `test-results/gpu/image-profiles-<time>.json`, which Git ignores.
+`backend/tests/unit/test_gpu_image_probe.py`, in the `unit` level, checks the graphs against `build_workflow`, the
+percentile, and the rule at 45 s and just above, and without the default profile's times.
+
 The Pester cases "The gpu level" in `tests/scripts/TestCommand.Tests.ps1`, in the `unit` level, check the wiring with
 stand-in `docker.cmd` and `nvidia-smi.cmd` first on `PATH` and a fixture test file: the skip without a GPU, with no
 Docker call and no pass; the order (removal, build, data volume, launch files, tests, removal); the removal after a
@@ -210,7 +237,8 @@ failing test, a failed build and a refused configuration; the refusal while an i
 configuration check itself. Since GPU.2 they also check the ASCII request JSON, the `docker stats` amounts and the
 level-A launch lines. Since GPU.3 they check that a malformed trial selector, or one the catalog's plan cannot
 serve, exits 1 before any GPU or Docker call. Since GPU.4 they check that a test file named as an argument runs alone,
-with the same cleanup. They are written and have not run yet.
+with the same cleanup. Since GPU.5 they check that identifiers after a file name reach that file as its `Select`
+parameter. They are written and have not run yet.
 
 ### The `docker` level
 
@@ -796,7 +824,7 @@ the server order of simultaneous jobs (the backend and orchestrator tests cover 
 | T-IMG-11 | Out of memory leads to a tiled retry of the same preset, then one **Rapida** try. The stored preset is the one that produced the file. In `backend/tests/integration/test_image_oom.py` (P06.4), through the scheduler with a fake ComfyUI that runs out of memory: **Alta**, tiled **Alta**, then tiled **Rapida**, each after an `oom` release, with the same seed, stored as `rapida` with `sdxl_base_tiled.v2.json`; a failed **Rapida** try that is not retried; and a **Rapida** request with its tiled retry only | Integration | P06 |
 | T-IMG-12 | Restart in each stage resumes without duplicates. In `backend/tests/integration/test_image_restart.py` (P06.5): the backend process dies in `prompt` (scene generation), in `render` (after its first progress message), and in `persist` before and after its commit; a second process runs the startup recovery and the remaining stages, and the chat holds one image message with its caption, one `generated_images` row, one original, one thumbnail and no staged file, with the seed and preset of the request | Integration | P06 |
 | T-IMG-13 | Contextual mode off by default. A proposal needs a valid event and acceptance. In `backend/tests/integration/test_image_modes.py` (P05.5a): with the setting off no job is queued and no proposal stored; a decision is stored only when it says `propose`, has a scene that passes the content guard and names a live message of an active chat, and then `image.proposed` is published; only an acceptance queues an `image_request` (once), a rejection queues nothing, and an answer after 24 hours is refused. The model step that writes the decision is not covered: it does not exist yet | Integration | P05 |
-| T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied. The unit part is `backend/tests/unit/test_workflows.py` (P05.2b) | Unit, real GPU | P05 |
+| T-IMG-14 | **Alta** and **Rapida** build the documented graphs: node classes, links, shared seed, final sizes, `ckpt_name` from the profile only, tiled variants. On real hardware, render time and peak VRAM per preset are recorded and the preset rule applied. The unit part is `backend/tests/unit/test_workflows.py` (P05.2b). The real-GPU part is `tests/gpu/ImageProfiles.Tests.ps1` (GPU.5), with the rule in `backend/tests/gpu_probe/image_presets.py`; on the reference machine on 2026-11-25 **Alta** took 21.06 s at the 95th percentile for every profile, so it stays the default ([evidence](verification/2026-11-25-gpu-image-profiles.md)) | Unit, real GPU | P05 |
 | T-IMG-15 | The identity segment of the positive prompt is byte-identical for scenes written by every template family, and follows the fixed order, age band and caps. In `backend/tests/unit/test_visual_consistency.py`, with one scene per template family written by hand (P05.3b) | Unit | P05 |
 | T-IMG-16 | Sanitizer: weights, escapes, `embedding:`, brackets and commas in tags are neutralized. Every vocabulary entry passes it unchanged, and its token count matches ComfyUI's tokenizer. The advanced dialog refuses `embedding:` and weights outside 0.5 to 1.5. The unit part is `backend/tests/unit/test_tag_vocabulary.py`, the tokenizer match is in `tests/docker/ImageRuntime.Tests.ps1` (P05.3a) | Unit, Docker | P05 |
 | T-IMG-17 | `ImageScene` grammar limits `outfit` to the wardrobe, and drops `scene` when `clothing` is locked. `auto` maps each framing to its size, and **Alta** sizes are multiples of 8. Invalid output leads to the fallback scene. In `backend/tests/unit/test_image_scene.py` (P05.4a) | Unit | P05 |
@@ -893,7 +921,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-03 | Tokenization fixture recorded for each template family. `tests/gpu/TextProfiles.Tests.ps1` (GPU.2), fixtures in `backend/tests/fixtures/tokenization/`; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
 | T-GPU-04 | Real streaming, token counts, abort. `tests/gpu/TextProfiles.Tests.ps1` (GPU.2), for every family; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-text-profiles.md)) | P02 |
 | T-GPU-05 | Structured output with grammar on the real model. `tests/gpu/StructuredOutput.Tests.ps1` (GPU.4), the `character_draft` task on the default text profile; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-structured-output.md)) | P03 |
-| T-GPU-06 | ComfyUI start, real generation with each image profile, checkpoint load measured | P05 |
+| T-GPU-06 | ComfyUI start, real generation with each image profile, checkpoint load measured. `tests/gpu/ImageProfiles.Tests.ps1` (GPU.5), for every catalog image profile; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-image-profiles.md)) | P05 |
 | T-GPU-07 | Ten full switches. Container state and NVML samples never show both models | P06 |
 | T-GPU-08 | Text sent during real generation is answered after the switch | P06 |
 | T-GPU-09 | External VRAM use: blocked with reason, no process touched | P06 |

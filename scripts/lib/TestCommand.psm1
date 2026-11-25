@@ -185,7 +185,9 @@ function Invoke-GpuTestLevel {
     Runs the gpu level: Invoke-GpuLevel of GpuLevel.psm1 with the Pester files tests/gpu/*.Tests.ps1, run with the
     pinned Pester against the real runtimes. When every argument is the name of a test file of tests/gpu without
     ".Tests.ps1" (letters, digits and hyphens, such as StructuredOutput), only those files run, so one test can run
-    without the hour-long tuning procedure. Otherwise the arguments are trial selectors "<profile>/<trial>" with "*"
+    without the hour-long tuning procedure. When the first argument names such a file and the others are identifiers
+    (lower-case letters, digits, dots and hyphens, such as noobai-xl-1.1), that file runs alone with them as its
+    Select parameter, which the file must declare. Otherwise the arguments are trial selectors "<profile>/<trial>" with "*"
     wildcards: it runs only tests/gpu/Tuning.Tests.ps1 and only the trials they select, so the procedure can run in
     parts; a selector that is malformed or selects no trial of the plan returns 1 before any GPU or Docker call. Returns 0
     only when the tests ran and passed and the test project is gone, 2 (the skip status) when the machine has no GPU,
@@ -200,10 +202,23 @@ function Invoke-GpuTestLevel {
     if ($selection.Length -gt 0 -and @($selection | Where-Object { $_ -cnotmatch '^[A-Za-z0-9-]+$' }).Length -eq 0) {
         $named = [string[]]@($selection | ForEach-Object { Get-RepositoryFile -Root $Root -Pattern @("tests/gpu/$_.Tests.ps1") })
     }
+    # A first argument that names a test file, followed by item identifiers such as catalog profile ids (lower case,
+    # with dots), runs that file alone with the items as its Select parameter, such as "ImageProfiles noobai-xl-1.1".
+    $first = [string[]]@()
+    $items = [string[]]@($selection | Select-Object -Skip 1)
+    if ($selection.Length -gt 1 -and $selection[0] -cmatch '^[A-Za-z0-9-]+$' -and
+        @($items | Where-Object { $_ -cnotmatch '^[a-z0-9][a-z0-9.-]{1,47}$' }).Length -eq 0) {
+        $first = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @("tests/gpu/$($selection[0]).Tests.ps1"))
+    }
     if ($selection.Length -gt 0 -and $named.Length -eq $selection.Length) {
         # Every argument names a test file of tests/gpu, such as StructuredOutput: those files run alone, in that order.
         $files = $named
         Write-Host "GPU: only $($files -join ', ')"
+    }
+    elseif ($first.Length -eq 1) {
+        $files = $first
+        $data = @{ Select = $items }
+        Write-Host "GPU: only $($files[0]), for $($items -join ' ')"
     }
     elseif ($selection.Length -gt 0) {
         $problems = @(Test-GpuTuningSelection -Pattern $selection)

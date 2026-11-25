@@ -379,6 +379,12 @@ Describe 'The gpu level' {
                 "Describe 'other gpu test' {",
                 "    It 'runs' { Write-Host 'other gpu test ran' }",
                 '}', '') -join "`n")
+        Write-FixtureFile $script:GpuRepository 'tests/gpu/Selected.Tests.ps1' (@(
+                'param([string[]]$Select = @())',
+                'BeforeAll { $script:Seen = @($Select) -join "," }',
+                "Describe 'selected gpu test' {",
+                '    It "runs" { Write-Host "selected gpu test ran for [$script:Seen]" }',
+                '}', '') -join "`n")
         Invoke-FixtureGit $script:GpuRepository @('add', '-A')
         $script:SavedGpuPath = $env:PATH
         $env:PATH = "$script:GpuBin;$env:PATH"
@@ -455,6 +461,16 @@ Describe 'The gpu level' {
         $run.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
             Should -BeGreaterThan $run.Output.IndexOf('stand-in gpu test ran')
         $run.Output | Should -Match 'test gpu: passed'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'runs one test file for the items that follow its name, with the same cleanup' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'Selected', 'noobai-xl-1.1', 'illustrious-xl-v2.0')
+        $run.Output | Should -Match 'GPU: only tests/gpu/Selected\.Tests\.ps1, for noobai-xl-1\.1 illustrious-xl-v2\.0'
+        $run.Output | Should -Match 'selected gpu test ran for \[noobai-xl-1\.1,illustrious-xl-v2\.0\]'
+        $run.Output | Should -Not -Match 'stand-in gpu test ran'
+        $run.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
+            Should -BeGreaterThan $run.Output.IndexOf('selected gpu test ran')
         $run.ExitCode | Should -Be 0
     }
 

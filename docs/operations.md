@@ -599,7 +599,8 @@ Notes:
 - When a runtime needs a writable path under read-only root, P02 and P05 add a tmpfs and record it here. The text
   runtime needs only `/tmp` without a GPU (P02.1); its first model load in P02 confirms that with a GPU. The image
   runtime needs only `/tmp/comfy` in CPU mode (P05.1): its image points `HOME` and `TMPDIR` there, and `/tmp` itself
-  stays read-only. Its first GPU generation (T-GPU-06) confirms that with a GPU.
+  stays read-only. Its first GPU generations (T-GPU-06, GPU.5, 2026-11-25) confirmed that with a GPU: 18 renders,
+  with each catalog checkpoint, needed no other writable path.
 - The volume subpaths `llm/`, `image/checkpoints/` and `runtime/` must exist when a runtime container starts. Setup
   builds the runtime images and creates their containers without starting them.
 - `compose.test.yaml` (delivered in P01.8b) replaces the runtimes with the fakes of `tests/fakes/` and has no `gpus`
@@ -718,8 +719,8 @@ it. Any other or repeated argument exits 64.
 
 `tests/docker/ImageRuntime.Tests.ps1` starts the image with `--cpu` on a read-only root, with only the tmpfs
 `/tmp/comfy` and no network, and expects `GET /system_stats` to answer. Whether a GPU generation needs any other
-writable path is checked by the first real generation (T-GPU-06); a path it needs gets a tmpfs recorded in the Compose
-notes above.
+writable path was checked by the first real generations (T-GPU-06, GPU.5): none did. A path a later version needs
+gets a tmpfs recorded in the Compose notes above.
 
 ## Data layout
 

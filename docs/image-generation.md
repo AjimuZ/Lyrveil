@@ -1,7 +1,7 @@
 # Image generation
 
 Status: accepted (2026-11-01), revised 2026-11-05 for image profiles and two-pass rendering, and 2026-11-06 for the
-structured identity, scenes and captions. Implementation (2026-11-09): delivered in P05 and P06 and passed by their automated exits, which use the fake text model and the fake ComfyUI. A real image has not been rendered by the stack yet: the hardware part (P05.EXIT-HW) and the measurements of P05.8 are pending. The "Not delivered" notes below name what is still missing, such as the `image_proposal` job handler, the lightbox in the conversation and the regeneration route.
+structured identity, scenes and captions. Implementation (2026-11-09): delivered in P05 and P06 and passed by their automated exits, which use the fake text model and the fake ComfyUI. A real image has not been rendered by the stack yet: the hardware part (P05.EXIT-HW) and the measurements of P05.8 are pending. ComfyUI itself rendered the backend's graphs on the GPU in GPU.5 (T-GPU-06, the render times and peaks of T-IMG-14), driven by a test client rather than the backend. The "Not delivered" notes below name what is still missing, such as the `image_proposal` job handler, the lightbox in the conversation and the regeneration route.
 
 Images are normal messages. The text model writes a structured scene and a caption, code builds the prompt, ComfyUI
 renders it, and the backend stores the result independently of the runtime. The GPU hand-over is described in
@@ -496,8 +496,19 @@ Second pass of **Alta**:
 | Sampler, scheduler | `dpmpp_2m`, `karras` | Allowlist | A non-ancestral sampler keeps the first pass's structure |
 | CFG, seed, prompts | Same as the first pass | | |
 
-Times are estimates until P05 measures them. The [preset rule](decisions/0026-two-pass-image-rendering.md) keeps
-**Alta** as the default if the 95th percentile of the render stage is at most 45 s.
+The [preset rule](decisions/0026-two-pass-image-rendering.md) keeps **Alta** as the default if the 95th percentile of
+the render stage is at most 45 s. The planning times above were estimates. Measured on the reference machine on
+2026-11-25 (T-GPU-06, T-IMG-14, [evidence](verification/2026-11-25-gpu-image-profiles.md)), square at the default
+settings, with the checkpoint loaded:
+
+| Profile | Rapida | Alta | Alta p95 | Peak VRAM, Rapida / Alta | Checkpoint load |
+| --- | --- | --- | --- | --- | --- |
+| `illustrious-xl-v2.0` | 9.0 s | 21.1 s | 21.06 s | 10479 / 11631 MiB | 7.0 s |
+| `illustrious-xl-v1.0` | 9.0 s | 21.1 s | 21.06 s | 10511 / 11631 MiB | 9.7 s |
+| `noobai-xl-1.1` | 9.0 s | 21.1 s | 21.06 s | 10575 / 11631 MiB | 10.7 s |
+
+The peaks are NVML's for the whole 12282 MiB card, the desktop's 856 MiB included. The rule, computed by
+`backend/tests/gpu_probe/image_presets.py` from three **Alta** renders per profile, keeps **Alta** as the default.
 
 ### Measured levers
 
@@ -563,7 +574,8 @@ text, so a prompt cannot change the graph.
 - If PAG is adopted, new workflow versions insert `PerturbedAttentionGuidance` between node 1 and the first `KSampler`. The
   versions in this table stay valid for stored images.
 - Delivered in P05.2b: the four files exist, and `lyrveil.images.workflows` builds them ([Backend](backend.md#workflow-templates)).
-  T-IMG-14 passes at the unit level; render time and VRAM per preset are not measured yet.
+  T-IMG-14 passes at the unit level. Render time and VRAM per preset were measured on the reference machine in GPU.5
+  ([Quality presets](#quality-presets)), with the untiled files only.
 - Lyrveil only submits its own files. The API offers no way to send a custom workflow.
 - `/system_stats` is read at readiness and `comfyui_version` is stored with each image.
 

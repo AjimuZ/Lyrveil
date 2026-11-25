@@ -49,6 +49,15 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-06 and the real-GPU part of T-IMG-14 in the `gpu` level (GPU.5). `tests/gpu/ImageProfiles.Tests.ps1` starts
+  ComfyUI for each catalog image profile. It renders three **Rapida** and three **Alta** square images with the graphs
+  that the backend's `render` stage builds, and measures the checkpoint load, the render time and the peak VRAM of
+  each preset. `backend/tests/gpu_probe/image_presets.py` gives the graphs and computes the preset rule of ADR 0026
+  from the times, with unit tests. `scripts\lyrveil.cmd test gpu ImageProfiles <profile id>...` runs it for some
+  profiles only. On the reference machine every render succeeded at its final size. **Rapida** took 9.0 s and
+  **Alta** 21.1 s for each profile, the checkpoint load 7.0 to 10.7 s, and the **Alta** peak was 11631 of
+  12282 MiB. **Alta** stays the default quality preset. See
+  [docs/verification/2026-11-25-gpu-image-profiles.md](docs/verification/2026-11-25-gpu-image-profiles.md).
 - T-GPU-05 in the `gpu` level (GPU.4). `tests/gpu/StructuredOutput.Tests.ps1` loads the default text profile,
   `rocinante-x-12b`, at launch level A on the real GPU. It generates three character drafts with the `character_draft`
   job's prompt, GBNF grammar and request values, and judges each output with the job's own validation. The prompt,

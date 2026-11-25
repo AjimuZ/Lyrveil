@@ -13,7 +13,7 @@ $script:ComposeFiles = @('-f', 'compose.yaml', '-f', 'tests/gpu/compose.gpu-test
 $script:Services = @('lyrveil-llm', 'lyrveil-image')
 
 # The backend's test stage, under a tag of this level only, where T-GPU-05 runs the backend's prompt, grammar and
-# validation (Initialize-GpuBackendProbe, Invoke-GpuBackendProbe).
+# validation, and T-GPU-06 its render graphs and preset rule (Initialize-GpuBackendProbe, Invoke-GpuBackendProbe).
 $script:BackendProbeImage = 'lyrveil/backend-test:gpu-test'
 
 # The container names of an installation's runtimes. The level refuses to start while one of them runs.
@@ -691,24 +691,25 @@ function Initialize-GpuBackendProbe {
 
 function Invoke-GpuBackendProbe {
     <#
-    Runs Action of backend/tests/gpu_probe/structured_task.py ("prompt" or "check") with Body as its JSON request, in
-    a new container of the image of Initialize-GpuBackendProbe, and returns @{ Status; Body }: the container's exit
-    status and the parsed JSON line it printed, or $null. The container has no network, a read-only root and no
-    capability, carries the test project's label, so the level's leftover check would see it, and is removed when it
-    exits.
+    Runs Action of the probe backend/tests/gpu_probe/<Probe>.py with Body as its JSON request, in a new container of
+    the image of Initialize-GpuBackendProbe, and returns @{ Status; Body }: the container's exit status and the parsed
+    JSON line it printed, or $null. structured_task (T-GPU-05) takes "prompt" and "check"; image_presets (T-GPU-06,
+    T-IMG-14) takes "workflow" and "rule". The container has no network, a read-only root and no capability, carries
+    the test project's label, so the level's leftover check would see it, and is removed when it exits.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
-        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check')] [string]$Action,
+        [ValidateSet('structured_task', 'image_presets')] [string]$Probe = 'structured_task',
+        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check', 'workflow', 'rule')] [string]$Action,
         [Parameter(Mandatory = $true)] [hashtable]$Body
     )
 
     $run = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -InputText (ConvertTo-GpuRequestJson -Body $Body) -Argument @(
         'run', '--rm', '-i', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
         '--label', "com.docker.compose.project=$script:ProjectName", $script:BackendProbeImage,
-        'python', 'tests/gpu_probe/structured_task.py', $Action)
+        'python', "tests/gpu_probe/$Probe.py", $Action)
     $parsed = $null
     $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
     if ($run.Status -eq 0 -and $last.Length -eq 1) {
@@ -718,10 +719,12 @@ function Invoke-GpuBackendProbe {
     return @{ Status = [int]$run.Status; Body = $parsed }
 }
 
-# The client of Invoke-GpuImageJob, run by the Python of lyrveil-image from its standard input. It submits the workflow
-# to ComfyUI, polls its history every half second and prints one JSON line. __WORKFLOW__ and __TIMEOUT__ are replaced.
+# The client of Invoke-GpuImageGraph, run by the Python of lyrveil-image from its standard input. It submits the
+# workflow to ComfyUI, polls its history every half second, reads the PNG header of the first saved image through
+# /view, and prints one JSON line. execution_seconds comes from ComfyUI's own execution_start and execution_success
+# timestamps (milliseconds), so it holds no polling delay. __WORKFLOW__ and __TIMEOUT__ are replaced.
 $script:ImageJobClient = @'
-import json, time, urllib.request as request
+import json, struct, time, urllib.parse, urllib.request as request
 workflow = json.loads(r'''__WORKFLOW__''')
 base = 'http://127.0.0.1:8188'
 start = time.time()
@@ -729,6 +732,7 @@ body = json.dumps({'prompt': workflow}).encode()
 answer = request.urlopen(request.Request(base + '/prompt', data=body, headers={'Content-Type': 'application/json'}), timeout=30)
 prompt_id = json.load(answer)['prompt_id']
 status = 'timeout'
+entry = None
 while time.time() - start < __TIMEOUT__:
     entry = json.load(request.urlopen(base + '/history/' + prompt_id, timeout=10)).get(prompt_id)
     if entry:
@@ -737,7 +741,26 @@ while time.time() - start < __TIMEOUT__:
         if state.get('completed') or status == 'error':
             break
     time.sleep(0.5)
-print(json.dumps({'prompt_id': prompt_id, 'status': status, 'seconds': round(time.time() - start, 2)}))
+seconds = round(time.time() - start, 2)
+stamps = {}
+images = []
+if entry:
+    for message in (entry.get('status') or {}).get('messages') or []:
+        if isinstance(message, list) and len(message) == 2 and isinstance(message[1], dict) and 'timestamp' in message[1]:
+            stamps[message[0]] = message[1]['timestamp']
+    for output in (entry.get('outputs') or {}).values():
+        images.extend(output.get('images') or [])
+execution = None
+if 'execution_start' in stamps and 'execution_success' in stamps:
+    execution = round((stamps['execution_success'] - stamps['execution_start']) / 1000.0, 2)
+width = height = 0
+if images:
+    first = images[0]
+    query = urllib.parse.urlencode({'filename': first.get('filename', ''), 'subfolder': first.get('subfolder', ''), 'type': first.get('type', 'output')})
+    head = request.urlopen(base + '/view?' + query, timeout=30).read(24)
+    if head[:8] == b'\x89PNG\r\n\x1a\n':
+        width, height = struct.unpack('>II', head[16:24])
+print(json.dumps({'prompt_id': prompt_id, 'status': status, 'seconds': seconds, 'execution_seconds': execution, 'images': len(images), 'width': width, 'height': height}))
 '@
 
 function Get-GpuImageWorkflow {
@@ -774,9 +797,7 @@ function Get-GpuImageWorkflow {
 function Invoke-GpuImageJob {
     <#
     Runs the workflow of Get-GpuImageWorkflow for Checkpoint on the running lyrveil-image and waits up to
-    TimeoutSecond for ComfyUI to finish it. Returns @{ Status; Result }: Status is the exit status of the Python client
-    in the container, 0 when it ran to the end; Result the parsed last line, with prompt_id, status (ComfyUI's
-    status_str, such as "success" or "error", or "timeout") and seconds from the submission to the end, or $null.
+    TimeoutSecond for ComfyUI to finish it. Returns what Invoke-GpuImageGraph returns.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -790,7 +811,30 @@ function Invoke-GpuImageJob {
     )
 
     $workflow = ConvertTo-GpuRequestJson -Body (Get-GpuImageWorkflow -Checkpoint $Checkpoint -Width $Width -Height $Height -Steps $Steps)
-    $client = $script:ImageJobClient.Replace('__WORKFLOW__', $workflow).Replace('__TIMEOUT__', "$TimeoutSecond")
+    return (Invoke-GpuImageGraph -Root $Root -WorkflowJson $workflow -TimeoutSecond $TimeoutSecond)
+}
+
+function Invoke-GpuImageGraph {
+    <#
+    Runs WorkflowJson, a ComfyUI API workflow as ASCII JSON text (such as a graph of the image_presets probe), on the
+    running lyrveil-image and waits up to TimeoutSecond for ComfyUI to finish it. Returns @{ Status; Result }: Status
+    is the exit status of the Python client in the container, 0 when it ran to the end; Result the parsed last line, or
+    $null, with prompt_id, status (ComfyUI's status_str, such as "success" or "error", or "timeout"), seconds from the
+    submission to the end as the client saw it (polled every half second), execution_seconds from ComfyUI's own
+    timestamps ($null when it reported none), images (the number saved) and width and height of the first saved PNG
+    (0 when none was read). The image stays in the runtime's tmpfs and is never copied out.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidatePattern('^[\x20-\x7E]+$')] [string]$WorkflowJson,
+        [ValidateRange(10, 600)] [int]$TimeoutSecond = 240
+    )
+
+    # The text goes into a raw triple-quoted Python string, which three quotes in a row would end.
+    if ($WorkflowJson.Contains("'''")) { throw 'The workflow JSON holds three single quotes in a row.' }
+    $client = $script:ImageJobClient.Replace('__WORKFLOW__', $WorkflowJson).Replace('__TIMEOUT__', "$TimeoutSecond")
     $run = Invoke-GpuCompose -Root $Root -Capture -InputText $client -Argument @('exec', '-T', 'lyrveil-image', 'python', '-')
     $parsed = $null
     $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
@@ -1067,5 +1111,5 @@ Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample
     Start-GpuTestRuntime, Remove-GpuTestRuntime, Get-GpuTestContainerFact, Invoke-GpuRuntimeRequest,
     ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Invoke-GpuTextTimed, Initialize-GpuBackendProbe,
     Invoke-GpuBackendProbe, Get-GpuImageWorkflow,
-    Invoke-GpuImageJob, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
+    Invoke-GpuImageJob, Invoke-GpuImageGraph, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
     Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog

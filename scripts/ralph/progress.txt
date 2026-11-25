@@ -269,6 +269,8 @@
 - VRAM footprint for catalog values = card peak minus the baseline of the same trial (vram_before_mib), then plus 5 %, rounded up.
 - Gpu-level tests take prompts, grammars and validation from the backend at runtime (a probe in the backend test image), never from copies, so they cannot drift from the product.
 - A command-line argument that may be either a file name or a selector is validated against a strict pattern (no '/' or '*') before it is used as a Git pathspec.
+- Put a gpu-level decision rule in a backend probe (backend/tests/gpu_probe/*.py) with unit tests, and have the Pester test send it the measured numbers, so no rule or threshold is copied into PowerShell.
+- Hand ComfyUI graphs from Python to PowerShell as compact ASCII JSON strings, not parsed objects, so Windows PowerShell 5.1 never re-serializes the graph's link arrays.
 
 ---
 
@@ -2621,4 +2623,47 @@ Docs updated: docs/testing.md (the gpu level section and the T-GPU-05 row, marke
   - PSScriptAnalyzer fails on non-ASCII text in a .ps1 file without a BOM. Keep Italian test strings in Pester files ASCII-only.
   - Without the grammar, rocinante-x-12b writes an explanatory sentence after the JSON and uses enum values such as 'a volte' instead of 'a_volte'. The grammar is what makes structured tasks parse.
   - Only character_draft has run on the GPU. Memory extraction, summaries, proactive decisions, image scenes and visual translation have not, and neither has rocinante-12b-v1.1 (chatml).
+---
+
+## 2026-11-25T21:58:32Z - GPU.5
+- T-GPU-06 and the real-GPU part of T-IMG-14 now exist and pass on the RTX 4070. `scripts/lyrveil.cmd test gpu ImageProfiles` ran 16 tests: 16 passed, 0 failed, in 338 s, and no container or volume was left behind. An earlier run with only illustrious-xl-v2.0 passed 8 of 8.
+
+What the test does, for each catalog image profile (illustrious-xl-v2.0, illustrious-xl-v1.0, noobai-xl-1.1):
+- starts lyrveil-image alone;
+- renders 3 Rapida and 3 Alta square images, using the graphs the backend's render stage builds;
+- checks each image's status and its size from the PNG header;
+- samples NVML every 250 ms for each preset;
+- measures the checkpoint load as the first render's time minus the median of the later ones.
+
+The preset rule lives in backend/tests/gpu_probe/image_presets.py. It takes the nearest-rank 95th percentile of the Alta times and keeps Alta when that is at most 45 s (ADR 0026). backend/tests/unit/test_gpu_image_probe.py tests it: 11 passed, run alone.
+
+Results on this machine:
+- Every render succeeded at its final size.
+- Rapida took about 9.0 s and Alta 21.06 s (p95) for every profile.
+- The checkpoint load took 7.0, 9.7 and 10.7 s.
+- The Rapida peak was 10479 to 10575 MiB. The Alta peak was 11631 MiB for every profile, out of 12282 MiB, with the desktop's 856 MiB included.
+- The rule keeps Alta as the default.
+
+The results file is test-results/gpu/image-profiles-20261125-224856.json. Git ignores it, so it was not copied into the repository; the evidence file holds every number.
+
+Other changes:
+- `test gpu <File> <id>...` now runs one file with the ids as its Select parameter.
+- Invoke-GpuBackendProbe takes a -Probe parameter, and the new Invoke-GpuImageGraph submits a full graph and returns ComfyUI's execution time and the image size.
+
+The lint level passed.
+
+Not run or unverified:
+- The new Pester case for the selector in TestCommand.Tests.ps1 (it belongs to the unit level).
+- Tuning.Tests.ps1, whose Invoke-GpuImageJob now goes through the refactored client.
+- The backend's own ImageGenerationService, the tiled workflows, aspects other than square, an Alta render as the first one after a start, and any look at the images.
+
+Docs updated: the evidence file, testing.md, image-generation.md (measured times table), risks.md (A-04, A-05, A-13), operations.md, docs/README.md and CHANGELOG.md.
+- Files changed: backend/tests/gpu_probe/image_presets.py, backend/tests/unit/test_gpu_image_probe.py, tests/gpu/ImageProfiles.Tests.ps1, scripts/lib/GpuLevel.psm1, scripts/lib/TestCommand.psm1, tests/scripts/TestCommand.Tests.ps1, docs/verification/2026-11-25-gpu-image-profiles.md, docs/testing.md, docs/image-generation.md, docs/risks.md, docs/operations.md, docs/README.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test gpu ImageProfiles` takes about 6 minutes for all three image profiles (about 2 minutes each). `test gpu ImageProfiles <profile id>...` runs only those profiles.
+  - `test gpu <File> <id>...` passes the ids as the Select parameter of that one file. The file must declare `param([string[]]$Select = @())`.
+  - Invoke-GpuBackendProbe now takes -Probe structured_task|image_presets. Invoke-GpuImageGraph submits any ASCII JSON ComfyUI graph and returns the client's seconds, ComfyUI's execution_seconds (from the history timestamps, in ms), the number of images and the PNG width and height read through /view.
+  - On the RTX 4070, ComfyUI 0.43.0 starts in 5 to 8 s. SDXL square renders at the defaults take about 9.0 s for Rapida and 21 s for Alta. The Alta NVML peak was 11631 MiB for all three checkpoints, which suggests ComfyUI's memory management sets it; this was not investigated.
+  - Checkpoint load times depend on the host's file cache: illustrious-xl-v2.0 loaded in 9.6 s on the first run and 7.0 s two minutes later.
+  - Tuning.Tests.ps1's Invoke-GpuImageJob now goes through Invoke-GpuImageGraph and was not run again after the refactor.
 ---
