@@ -9,6 +9,7 @@ Import-Module (Join-Path $PSScriptRoot 'PinnedTools.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PythonComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'GpuLevel.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
@@ -17,9 +18,13 @@ $script:Runners = [ordered]@{
     integration = 'Invoke-IntegrationLevel'
     e2e         = 'Invoke-EndToEndLevel'
     docker      = 'Invoke-DockerLevel'
-    gpu         = $null
+    gpu         = 'Invoke-GpuTestLevel'
     quality     = $null
 }
+
+# The status a runner returns when its level cannot run on this machine, as gpu without a GPU. It is reported as
+# skipped, and the command still exits 1, because no test ran.
+$script:SkippedStatus = 2
 
 # "all" runs every level except gpu and quality, which need the reference hardware and are always explicit.
 $script:AllLevels = @('lint', 'unit', 'integration', 'e2e', 'docker')
@@ -170,6 +175,20 @@ function Invoke-DockerLevel {
     return (Invoke-PesterUnitTest -Root $Root -File $files)
 }
 
+function Invoke-GpuTestLevel {
+    <#
+    Runs the gpu level: Invoke-GpuLevel of GpuLevel.psm1 with the Pester files tests/gpu/*.Tests.ps1, run with the
+    pinned Pester against the real runtimes. Returns 0 only when they ran and passed and the test project is gone, 2
+    (the skip status) when the machine has no GPU, and 1 otherwise, also when the folder holds no test file. Not
+    exported.
+    #>
+    param([string]$Root)
+
+    $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/gpu/*.Tests.ps1'))
+    $runner = { param([string]$RunRoot, [string[]]$RunFile) Invoke-PesterUnitTest -Root $RunRoot -File $RunFile }
+    return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner)
+}
+
 function Invoke-PesterUnitTest {
     <#
     Runs the Pester test files File, repository-relative, with the pinned Pester. Returns 0 only when at least one
@@ -198,7 +217,8 @@ function Invoke-LyrveilTest {
     Runs "test <level> [arguments]" for the repository at Root, where Argument holds the level and then its
     arguments, and returns the exit status: 0 when the level ran tests and all passed, 1 otherwise. An unknown or
     missing level, arguments for a level that takes none, and a level with no tests yet all return 1 with a
-    message, so no level reports a pass without running tests. Only "unit" takes arguments, which go to pytest.
+    message, so no level reports a pass without running tests. A level that cannot run on this machine, as gpu without
+    a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest.
     "all" runs lint, unit, integration, e2e and docker, and passes only when each of them does.
     #>
     [CmdletBinding()]
@@ -243,9 +263,14 @@ function Invoke-LyrveilTest {
         }
     }
 
-    $failedLevels = @($statuses.Keys | Where-Object { $statuses[$_] -ne 0 })
+    $failedLevels = @($statuses.Keys | Where-Object { $statuses[$_] -ne 0 -and $statuses[$_] -ne $script:SkippedStatus })
+    $skippedLevels = @($statuses.Keys | Where-Object { $statuses[$_] -eq $script:SkippedStatus })
     if ($failedLevels.Length -gt 0) {
         Write-Host "test ${name}: FAILED ($($failedLevels -join ', '))"
+        return 1
+    }
+    if ($skippedLevels.Length -gt 0) {
+        Write-Host "test ${name}: SKIPPED ($($skippedLevels -join ', ')). No test ran, so it did not pass."
         return 1
     }
     Write-Host "test ${name}: passed"

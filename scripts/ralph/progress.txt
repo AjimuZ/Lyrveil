@@ -253,6 +253,10 @@
 - Record license exceptions as exact package+license pairs in scripts/notices/policy.json, each backed by an ADR, so a changed license string fails again.
 - When changing a base image, change its tag and digest together in every Dockerfile that uses it.
 - In PowerShell, -or and -and have equal precedence; parenthesize mixed conditions or use intermediate variables.
+- Windows PowerShell 5.1 passes embedded double quotes to native commands unescaped, so shell scripts given to `docker run ... sh -c` must use only single quotes; pass values as separate positional arguments.
+- In Windows PowerShell 5.1, ConvertFrom-Json writes a JSON array as one object; assign it to a variable and return the variable so callers get the elements.
+- A function that returns an empty array gives the caller $null; when emptiness and failure must differ, return a hashtable such as @{ Known; Names }.
+- Under strict mode, read the JSON property named Count with $obj.PSObject.Properties['Count'].Value, because PowerShell adds an intrinsic Count to every object.
 
 ---
 
@@ -2446,4 +2450,38 @@ Findings that are real gaps in the code, now documented as they are (I changed n
 - **Learnings for future iterations:**
   - The gallery screenshot shows tall red placeholder tiles, which the README caption notes as stretched synthetic images.
   - The 1.0-delivered statement stays with P09.4b until the hardware acceptance P09.5.
+---
+
+## 2026-11-25T18:04:23Z - GPU.1
+- The `gpu` test level now runs real tests, and T-GPU-01 passed on this machine's RTX 4070. `scripts/lyrveil.cmd test gpu` ran to the end: Pester 5.7.1 reported 11 passed, 0 failed, 0 skipped, then "test gpu: passed" with exit 0.
+
+How the level works (scripts/lib/GpuLevel.psm1, called from TestCommand.psm1):
+1. **No GPU:** it reads GPU 0 with nvidia-smi first. If nvidia-smi is missing, fails or lists no GPU, it prints the reason and stops before any Docker call. The command then prints "test gpu: SKIPPED (gpu). No test ran" and exits 1, so a skip never counts as a pass.
+2. **Installation running:** it refuses to start, touching nothing, while an installation's `lyrveil-llm` or `lyrveil-image` is running.
+3. **Setup:** it removes any earlier `lyrveil-gpu-test` project and its volume. It then checks the resolved Compose configuration and refuses to go on unless only the two runtimes are present, with `:gpu-test` images, no container_name, no port, and only its own data volume and `lyrveil-models`, both read-only. Next it builds the images, creates `lyrveil-gpu-test-data` and writes both launch files into it from a container with no network.
+4. **Tests and cleanup:** it runs tests/gpu/*.Tests.ps1. Whatever happens, it then removes the project and the data volume and fails if anything is left.
+
+The override file is tests/gpu/compose.gpu-test.yaml.
+
+What T-GPU-01 (tests/gpu/Passthrough.Tests.ps1) observed:
+- **Text runtime:** it started healthy with the GPU request and with gemma-4-12b fully on the GPU. Its only volumes were the test volume and the models, both read-only, and a write to `/models/llm` failed. `/api/v1/model` named the model, the log named the RTX 4070, and VRAM went from 845 to 8791 MiB.
+- **Image runtime:** it started only after the text runtime was removed and its VRAM had dropped back. It was healthy with the same GPU request, had the same read-only mounts and also refused a write. `/system_stats` reported a cuda device named RTX 4070 with 12281.5 MiB, against 12282 MiB from NVML. VRAM went from 836 to 988 MiB.
+- **Cleanup:** the level reported nothing left behind. Afterwards the installation's `lyrveil-llm` and `lyrveil-image` were still in the Created state, as before the run.
+
+`test lint` passed: PSScriptAnalyzer found 0 problems in 30 scripts, and the documentation checks were clean.
+
+Not verified:
+- I did not run the new Pester wiring tests ("The gpu level" in tests/scripts/TestCommand.Tests.ps1). They cover the skip, the order of steps, cleanup after a failed test, build or configuration, the refusal while an installation runs, and the configuration check, using stand-in docker and nvidia-smi. The `unit` level runs them.
+- The skip has not been seen on a machine without a GPU; only the stand-in test covers it.
+- The image runtime's VRAM margin is small: +152 MiB against a 100 MiB minimum.
+
+docs/testing.md now describes the level. The results are in docs/verification/2026-11-25-gpu-level.md, and CHANGELOG.md and the docs index are updated.
+- Files changed: scripts/lib/GpuLevel.psm1, scripts/lib/TestCommand.psm1, tests/gpu/compose.gpu-test.yaml, tests/gpu/Passthrough.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/verification/2026-11-25-gpu-level.md, docs/README.md, docs/architecture.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The runtime network is internal, so tests reach the KoboldCpp and ComfyUI APIs through `docker compose exec -T`: curl in lyrveil-llm, python -c in lyrveil-image.
+  - KoboldCpp's /api/v1/model returns `koboldcpp/<file name without .gguf>`; its log names the CUDA device even with --quiet; ComfyUI's /system_stats lists the device as `cuda:0 NVIDIA GeForce RTX 4070 : cudaMallocAsync`.
+  - Observed VRAM on the RTX 4070: gemma-4-12b with GPU_LAYERS=99 and a 4096 context used about 7.9 GiB; an idle ComfyUI used about 150 MiB.
+  - With a warm build cache, the gpu level (builds plus tests) fits in one 10-minute tool call. The image build re-ran its ComfyUI source stage, but the 4 GB dependency layer stayed cached.
+  - Invoke-GpuLevel returns 2 for a skip. Invoke-LyrveilTest reports it as SKIPPED and exits 1. GpuLevel.psm1 and TestCommand.psm1 each define $script:SkippedStatus = 2, so the two must stay equal.
+  - Later T-GPU tests can reuse the helpers that GpuLevel.psm1 exports: Get-GpuSample, Wait-GpuMemoryBelow, Start-GpuTestRuntime, Remove-GpuTestRuntime, Invoke-GpuRuntimeRequest and Get-GpuTestContainerFact. Add them as new tests/gpu/*.Tests.ps1 files.
 ---

@@ -31,6 +31,13 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The `gpu` test level and T-GPU-01 (GPU.1). `scripts\lyrveil.cmd test gpu` builds the real text and image runtimes of
+  `compose.yaml` with `:gpu-test` tags, starts them one after the other with the GPU in the project
+  `lyrveil-gpu-test`, with its own data volume and the models volume read-only, samples VRAM with `nvidia-smi` and
+  checks their HTTP APIs, then removes the project and its volume, also on failure. It refuses to start while an
+  installation's runtime runs. Without a GPU it prints a skip message and exits 1, so a skip never reads as a pass.
+  T-GPU-01 passed for `lyrveil-llm` and `lyrveil-image` on the reference machine. See
+  [docs/verification/2026-11-25-gpu-level.md](docs/verification/2026-11-25-gpu-level.md).
 - Demo screenshot script (P08.5). `npm run screenshots` in `tests/e2e` regenerates the README screenshots from the demo
   characters and synthetic data, and refuses to save a screen that shows a home path, an e-mail address or a token.
   See [Demo screenshots](docs/screenshots.md).

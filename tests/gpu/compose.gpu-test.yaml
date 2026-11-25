@@ -1,0 +1,38 @@
+# Override of compose.yaml for the gpu level (scripts/lib/GpuLevel.psm1), which starts the real text and image runtimes
+# with the GPU, one after the other, in the project "lyrveil-gpu-test":
+#   docker compose -p lyrveil-gpu-test -f compose.yaml -f tests/gpu/compose.gpu-test.yaml --profile ai config
+# It keeps compose.yaml's runtimes as they are (GPU request, read-only root, mounts, health checks, internal network)
+# and changes only what would reach a real installation:
+#   - the data volume is "lyrveil-gpu-test-data", created and removed by the level, never "lyrveil-data";
+#   - the models volume stays the installation's "lyrveil-models", which both runtimes mount read-only, as in
+#     compose.yaml; the level refuses a configuration that mounts it writable;
+#   - every image is tagged ":gpu-test", so no build replaces the ":local" images of an installation;
+#   - container_name is reset, so the containers are "lyrveil-gpu-test-*" and never "lyrveil-llm" or "lyrveil-image";
+#   - the core services and the download tool get a profile that no command enables, so the project holds the two
+#     runtimes only.
+services:
+  lyrveil-frontend:
+    profiles: !override [not-in-gpu-test]
+    image: lyrveil/frontend:gpu-test
+    container_name: !reset null
+  lyrveil-backend:
+    profiles: !override [not-in-gpu-test]
+    image: lyrveil/backend:gpu-test
+    container_name: !reset null
+  lyrveil-orchestrator:
+    profiles: !override [not-in-gpu-test]
+    image: lyrveil/orchestrator:gpu-test
+    container_name: !reset null
+  lyrveil-models:
+    profiles: !override [not-in-gpu-test]
+    image: lyrveil/backend:gpu-test
+  lyrveil-llm:
+    image: lyrveil/llm:gpu-test
+    container_name: !reset null
+  lyrveil-image:
+    image: lyrveil/image:gpu-test
+    container_name: !reset null
+
+volumes:
+  lyrveil-data: {external: true, name: lyrveil-gpu-test-data}
+  lyrveil-models: {external: true, name: lyrveil-models}

@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (the `gpu` level, T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-01 to T-GPU-14) have not run. The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-02 to T-GPU-14) have not run. The `gpu` level exists (GPU.1), and its T-GPU-01 passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)). The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
 
 ## Levels
 
@@ -12,7 +12,7 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 | Contract | Schemathesis on OpenAPI (the backend's, in `backend/tests/integration/test_contract.py`, run by the `integration` level and the `python` CI job); recorded runtime fixtures are planned | Any machine | No |
 | End-to-end | Playwright with `compose.test.yaml` and fakes | Any machine with Docker | No |
 | Docker | Pester and pytest against the real Compose project | Docker | Partly |
-| GPU | pytest with real runtimes and models | Reference machine | Yes |
+| GPU | Pester with the real runtimes, models and NVML (`nvidia-smi`) | Reference machine | Yes |
 | Quality | Italian, consistency, extraction and image identity protocols, image grid, with human review | Reference machine | Yes |
 
 ## Commands
@@ -48,7 +48,54 @@ Every other level refuses arguments.
 
 `integration` builds the test stage of each component that has a `tests/integration` folder, today the backend and the orchestrator, and runs `pytest tests/integration` in it, without network access. The backend's tests use SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in. The orchestrator's tests run the control API in process through Starlette's test client, with a fake GPU probe.
 
-Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. See [The `docker` level](#the-docker-level). Today `gpu` and `quality` have no tests, so they exit 1.
+Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. See [The `docker` level](#the-docker-level). `gpu` runs the Pester files `tests/gpu/*.Tests.ps1` against the real runtimes; without a GPU it prints `Test level 'gpu' skipped` and `test gpu: SKIPPED (gpu)` and exits 1. See [The `gpu` level](#the-gpu-level). Today `quality` has no tests, so it exits 1.
+
+### The `gpu` level
+
+Delivered with GPU.1 ([evidence](verification/2026-11-25-gpu-level.md)).
+[`scripts/lib/GpuLevel.psm1`](../scripts/lib/GpuLevel.psm1) runs it from Windows with Docker and the pinned Pester, in
+this order:
+
+1. It fails when `tests/gpu/` holds no `*.Tests.ps1` file. It then reads GPU 0 through NVML with `nvidia-smi`
+   (`--query-gpu=index,name,memory.total,memory.used`). When `nvidia-smi` is missing, fails (as it does without an NVIDIA
+   driver) or lists no GPU, it prints the reason and a skip message and returns the skip status before any Docker
+   call. The command reports `SKIPPED` and exits 1: a skip is never a pass.
+2. It refuses to run, touching nothing, while a container named `lyrveil-llm` or `lyrveil-image` (an installation's
+   runtime) is running.
+3. It removes any earlier project `lyrveil-gpu-test` and the volume `lyrveil-gpu-test-data`. It resolves
+   `compose.yaml` with [`tests/gpu/compose.gpu-test.yaml`](../tests/gpu/compose.gpu-test.yaml) and the `ai` profile, and
+   refuses to go on unless the project is `lyrveil-gpu-test` with only `lyrveil-llm` and `lyrveil-image`, both with
+   `:gpu-test` images, no `container_name` and no port, and only tmpfs mounts and read-only mounts of
+   `lyrveil-gpu-test-data` and `lyrveil-models`.
+4. It builds the two runtime images with the `:gpu-test` tag (the build cache makes later runs short). It creates
+   `lyrveil-gpu-test-data` and writes `runtime/llm-launch.env` and `runtime/image-launch.env` into it, from a one-off
+   container with no network. The text launch file names the catalog text profile with the smallest file, with
+   `CONTEXT_SIZE=4096` and `GPU_LAYERS=99`; the image launch file has the default `RESERVE_VRAM_GB=1.5`.
+5. It runs the Pester files of `tests/gpu/`.
+6. In a `finally` block, whatever happened after step 3, it runs `down --volumes --remove-orphans` for the project,
+   removes `lyrveil-gpu-test-data`, and fails if a container with the project's label or a volume named
+   `lyrveil-gpu-test*` is left.
+
+The override keeps the runtimes of `compose.yaml` as they are (GPU request, read-only root, mounts, health checks,
+internal network) and mounts the installation's `lyrveil-models` read-only, as `compose.yaml` does. Every command names
+the project with `-p`. The level never touches `lyrveil-data`, a running Lyrveil, the `:local` images or the backup
+folder. The runtime network publishes no port, so the tests reach the HTTP APIs with `docker compose exec`: `curl` in
+`lyrveil-llm`, Python in `lyrveil-image`.
+
+`tests/gpu/Passthrough.Tests.ps1` holds T-GPU-01. It starts `lyrveil-llm`, waits for its health check, and checks the
+GPU request (`DeviceRequests` with count -1 and capability `gpu`), that the only volumes are the test data volume and
+the models, both read-only, and that a write into `/models/llm` fails. It checks that `GET /api/v1/model` names the
+model of the launch file, that the log names the host GPU, and that NVML shows at least half of the model file in VRAM.
+It then removes the text runtime, waits up to 60 s for the VRAM to fall back, and starts `lyrveil-image`, so the two
+runtimes never run together. For the image runtime it checks the same request, mounts and refused write, that
+`GET /system_stats` reports a `cuda` device with the host GPU's name and its memory within 128 MiB of NVML's, and that
+NVML shows more than 100 MiB in use for the CUDA context.
+
+The Pester cases "The gpu level" in `tests/scripts/TestCommand.Tests.ps1`, in the `unit` level, check the wiring with
+stand-in `docker.cmd` and `nvidia-smi.cmd` first on `PATH` and a fixture test file: the skip without a GPU, with no
+Docker call and no pass; the order (removal, build, data volume, launch files, tests, removal); the removal after a
+failing test, a failed build and a refused configuration; the refusal while an installation's runtime runs; and the
+configuration check itself. They are written and have not run yet.
 
 ### The `docker` level
 
@@ -726,7 +773,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 
 | ID | Test | Phase |
 | --- | --- | --- |
-| T-GPU-01 | GPU passthrough in `lyrveil-llm` and `lyrveil-image` | P02, P05 |
+| T-GPU-01 | GPU passthrough in `lyrveil-llm` and `lyrveil-image`. `tests/gpu/Passthrough.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.1); passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)) | P02, P05 |
 | T-GPU-02 | `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b` load. VRAM and RAM measured, tuning rule applied | P02 |
 | T-GPU-03 | Tokenization fixture recorded for each template family | P02 |
 | T-GPU-04 | Real streaming, token counts, abort | P02 |

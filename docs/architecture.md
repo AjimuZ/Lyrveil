@@ -186,7 +186,7 @@ lyrveil/
   workflows/comfyui/     API-format ComfyUI workflows
   config/                model-catalog.json, and examples/ with launch files for reference only
   scripts/               lyrveil.ps1, lyrveil.cmd, the PowerShell modules in lib/, and ci/ checks
-  tests/                 End-to-end (e2e/), Docker (docker/), script (scripts/) and fakes (fakes/); the GPU and quality tests are planned
+  tests/                 End-to-end (e2e/), Docker (docker/), GPU (gpu/), script (scripts/) and fakes (fakes/); the quality tests are planned
   docs/                  This documentation
   setup.cmd start.cmd stop.cmd restart.cmd status.cmd logs.cmd   Entry points
   compose.yaml           Service definitions: the three core services, the two runtimes and the one-shot download tool

@@ -310,6 +310,176 @@ Describe 'The e2e level' {
     }
 }
 
+Describe 'The gpu level' {
+    # Stand-ins for nvidia-smi and docker, first on PATH. nvidia-smi reports one GPU, or fails with FAKE_NVIDIA_EXIT as
+    # it does without a driver. docker prints the arguments of every call except "ps" and "volume ls", which list
+    # nothing (or a running runtime of an installation with FAKE_RUNNING_RUNTIME); it answers "config" with the file
+    # FAKE_CONFIG and fails "build" with FAKE_BUILD_EXIT. The fixture's tests/gpu file passes, or fails with
+    # FAKE_GPU_TEST_FAIL, so these cases check the skip, the order of the steps and the cleanup without Docker or a GPU.
+    BeforeAll {
+        Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\GpuLevel.psm1') -Force
+        $script:PreviousGpuTools = $env:LYRVEIL_TOOLS_DIR
+        if (-not $env:LYRVEIL_TOOLS_DIR) { $env:LYRVEIL_TOOLS_DIR = Join-Path $script:RepositoryRoot '.tools' }
+        $script:GpuBin = Join-Path $TestDrive 'fake-gpu-bin'
+        Write-FixtureFile $script:GpuBin 'nvidia-smi.cmd' (@(
+                '@echo off',
+                'if defined FAKE_NVIDIA_EXIT echo NVIDIA-SMI has failed because it could not communicate with the NVIDIA driver.',
+                'if defined FAKE_NVIDIA_EXIT exit /b %FAKE_NVIDIA_EXIT%',
+                'echo 0, NVIDIA Stand-in GPU, 12282, 512',
+                'exit /b 0', '') -join "`r`n")
+        Write-FixtureFile $script:GpuBin 'docker.cmd' (@(
+                '@echo off',
+                'if "%1"=="ps" if defined FAKE_RUNNING_RUNTIME echo lyrveil-image',
+                'if "%1"=="ps" exit /b 0',
+                'if "%1"=="volume" if "%2"=="ls" exit /b 0',
+                'for %%a in (%*) do if "%%a"=="config" (type "%FAKE_CONFIG%" & exit /b 0)',
+                'echo fake-docker %*',
+                'for %%a in (%*) do if "%%a"=="build" if defined FAKE_BUILD_EXIT exit /b %FAKE_BUILD_EXIT%',
+                'exit /b 0', '') -join "`r`n")
+
+        function Get-GpuConfigurationJson {
+            # Returns the JSON of a resolved test configuration that the level accepts, changed by Change when given.
+            param([scriptblock]$Change)
+            $config = @{
+                name     = 'lyrveil-gpu-test'
+                services = @{
+                    'lyrveil-llm'   = @{ image = 'lyrveil/llm:gpu-test'; volumes = @(
+                            @{ type = 'volume'; source = 'lyrveil-models'; target = '/models/llm'; read_only = $true },
+                            @{ type = 'volume'; source = 'lyrveil-data'; target = '/run/lyrveil'; read_only = $true }) }
+                    'lyrveil-image' = @{ image = 'lyrveil/image:gpu-test'; volumes = @(
+                            @{ type = 'volume'; source = 'lyrveil-models'; target = '/opt/ComfyUI/models/checkpoints'; read_only = $true },
+                            @{ type = 'tmpfs'; target = '/tmp/comfy' }) }
+                }
+                volumes  = @{
+                    'lyrveil-data'   = @{ name = 'lyrveil-gpu-test-data'; external = $true }
+                    'lyrveil-models' = @{ name = 'lyrveil-models'; external = $true }
+                }
+            }
+            if ($Change) { & $Change $config }
+            return ($config | ConvertTo-Json -Depth 8)
+        }
+
+        $script:GoodConfig = Join-Path $TestDrive 'gpu-config-good.json'
+        Write-FixtureFile $TestDrive 'gpu-config-good.json' (Get-GpuConfigurationJson)
+        $script:WritableConfig = Join-Path $TestDrive 'gpu-config-writable.json'
+        Write-FixtureFile $TestDrive 'gpu-config-writable.json' (Get-GpuConfigurationJson {
+                param($c) $c.services['lyrveil-llm'].volumes[0].read_only = $false })
+
+        $script:GpuRepository = Initialize-FixtureRepository 'cli-gpu' -WithScripts
+        Write-FixtureFile $script:GpuRepository 'config/model-catalog.json' (
+            '{"text": [{"id": "big-model", "file": "big.gguf", "bytes": 200}, {"id": "small-model", "file": "small.gguf", "bytes": 100}]}')
+        Write-FixtureFile $script:GpuRepository 'tests/gpu/StandIn.Tests.ps1' (@(
+                "Describe 'stand-in gpu test' {",
+                "    It 'runs' {",
+                "        Write-Host 'stand-in gpu test ran'",
+                '        $env:FAKE_GPU_TEST_FAIL | Should -BeNullOrEmpty',
+                '    }',
+                '}', '') -join "`n")
+        Invoke-FixtureGit $script:GpuRepository @('add', '-A')
+        $script:SavedGpuPath = $env:PATH
+        $env:PATH = "$script:GpuBin;$env:PATH"
+        $script:Project = 'compose -p lyrveil-gpu-test -f compose.yaml -f tests/gpu/compose.gpu-test.yaml --profile ai'
+    }
+
+    AfterAll {
+        $env:PATH = $script:SavedGpuPath
+        Remove-Item Env:FAKE_NVIDIA_EXIT, Env:FAKE_RUNNING_RUNTIME, Env:FAKE_CONFIG, Env:FAKE_BUILD_EXIT, Env:FAKE_GPU_TEST_FAIL -ErrorAction SilentlyContinue
+        if ($null -eq $script:PreviousGpuTools) { Remove-Item Env:LYRVEIL_TOOLS_DIR -ErrorAction SilentlyContinue }
+        else { $env:LYRVEIL_TOOLS_DIR = $script:PreviousGpuTools }
+    }
+
+    BeforeEach {
+        Remove-Item Env:FAKE_NVIDIA_EXIT, Env:FAKE_RUNNING_RUNTIME, Env:FAKE_BUILD_EXIT, Env:FAKE_GPU_TEST_FAIL -ErrorAction SilentlyContinue
+        $env:FAKE_CONFIG = $script:GoodConfig
+    }
+
+    It 'skips with a clear message, touches no Docker and never passes when no GPU is present' {
+        $env:FAKE_NVIDIA_EXIT = '9'
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $run.Output | Should -Match "Test level 'gpu' skipped: nvidia-smi exited with status 9"
+        $run.Output | Should -Match 'test gpu: SKIPPED \(gpu\)\. No test ran'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.Output | Should -Not -Match 'stand-in gpu test ran'
+        $run.Output | Should -Not -Match 'test gpu: passed'
+        $run.ExitCode | Should -Be 1
+    }
+
+    It 'clears, builds, prepares the data volume, runs the tests, then removes the project and the volume' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $out = $run.Output
+        $firstDown = $out.IndexOf("fake-docker $script:Project down --volumes --remove-orphans")
+        $build = $out.IndexOf("fake-docker $script:Project build lyrveil-llm lyrveil-image")
+        $create = $out.IndexOf('fake-docker volume create --label com.lyrveil.test=gpu lyrveil-gpu-test-data')
+        $launch = $out.IndexOf('MODEL_FILE=small.gguf')
+        $tests = $out.IndexOf('stand-in gpu test ran')
+        $lastDown = $out.LastIndexOf("fake-docker $script:Project down --volumes --remove-orphans")
+        $lastVolume = $out.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data')
+        @($firstDown, $build, $create, $launch, $tests) | Should -Not -Contain -1
+        $build | Should -BeGreaterThan $firstDown
+        $create | Should -BeGreaterThan $build
+        $launch | Should -BeGreaterThan $create
+        $tests | Should -BeGreaterThan $launch
+        $lastDown | Should -BeGreaterThan $tests
+        $lastVolume | Should -BeGreaterThan $lastDown
+        $out | Should -Match 'lyrveil-gpu-test-data:/data --entrypoint /bin/sh lyrveil/llm:gpu-test'
+        $out | Should -Match 'test gpu: passed'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'removes the project and the volume and fails when a test fails' {
+        $env:FAKE_GPU_TEST_FAIL = '1'
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $run.Output | Should -Match 'FAIL\] gpu: tests \(exit 1\)'
+        $run.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
+            Should -BeGreaterThan $run.Output.IndexOf('stand-in gpu test ran')
+        $run.Output | Should -Match 'test gpu: FAILED \(gpu\)'
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'runs no test and still removes everything when the images do not build' {
+        $env:FAKE_BUILD_EXIT = '1'
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $run.Output | Should -Match 'the runtime images did not build \(exit 1\)'
+        $run.Output | Should -Not -Match 'stand-in gpu test ran'
+        $run.Output | Should -Not -Match 'volume create'
+        $run.Output.LastIndexOf("fake-docker $script:Project down --volumes") |
+            Should -BeGreaterThan $run.Output.IndexOf("fake-docker $script:Project build")
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'builds and starts nothing when the configuration mounts the models writable' {
+        $env:FAKE_CONFIG = $script:WritableConfig
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $run.Output | Should -Match "lyrveil-llm mounts 'lyrveil-models' writable at /models/llm"
+        $run.Output | Should -Not -Match "$([regex]::Escape($script:Project)) build"
+        $run.Output | Should -Not -Match 'stand-in gpu test ran'
+        $run.Output | Should -Match 'fake-docker volume rm --force lyrveil-gpu-test-data'
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'refuses to run, touching nothing, while a runtime of an installation is running' {
+        $env:FAKE_RUNNING_RUNTIME = '1'
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $run.Output | Should -Match 'the runtime lyrveil-image of an installation is running'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.ExitCode | Should -Not -Be 0
+    }
+
+    It 'accepts only the test volumes, mounted read-only, in the resolved configuration' {
+        Test-GpuTestConfiguration -Text (Get-GpuConfigurationJson) | Should -BeNullOrEmpty
+        $real = Test-GpuTestConfiguration -Text (Get-GpuConfigurationJson { param($c) $c.volumes['lyrveil-data'].name = 'lyrveil-data' })
+        $real | Should -Contain "The configuration names the volume 'lyrveil-data'."
+        $real | Should -Contain "lyrveil-llm mounts the volume 'lyrveil-data' at /run/lyrveil."
+        $named = Test-GpuTestConfiguration -Text (Get-GpuConfigurationJson {
+                param($c)
+                $c.services['lyrveil-image'].container_name = 'lyrveil-image'
+                $c.services['lyrveil-image'].volumes += @{ type = 'bind'; source = 'C:\data'; target = '/data' }
+            })
+        $named | Should -Contain 'lyrveil-image sets container_name.'
+        $named | Should -Contain 'lyrveil-image mounts a bind at /data.'
+    }
+}
+
 Describe 'Python component selection' {
     # A stand-in docker.cmd, first on PATH, prints its arguments and succeeds, so these cases check only which
     # component runs pytest and with what, without Docker.
