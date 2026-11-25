@@ -1034,18 +1034,19 @@
     {
       "id": "P02.7",
       "title": "Run the VRAM tuning procedure on the reference machine",
-      "description": "Run the procedure of docs/gpu-orchestration.md (Measuring and tuning) with the speed rule and the efficiency levers of ADR 0030, for `gemma-4-26b-a4b`, `gemma-4-12b` and `rocinante-x-12b`.",
+      "description": "Run the procedure of docs/gpu-orchestration.md (Measuring and tuning) with the speed rule and the efficiency levers of ADR 0030 for rocinante-x-12b and rocinante-12b-v1.1, the text profiles left after the owner dropped Gemma 4 (DROP.1).",
       "acceptanceCriteria": [
         "A dated file in `docs/verification/` records every command and measured number of the procedure.",
-        "T-GPU-14 passes or its result is recorded: the speed rule for the default profile, AutoFit against `MOE_CPU_LAYERS` 8, 12 and 16, and the efficiency levers.",
+        "T-GPU-14 passes or its result is recorded: the speed rule for the default profile rocinante-x-12b and the efficiency levers; the MoE comparison of AutoFit against `MOE_CPU_LAYERS` is recorded as not applicable per the DROP.1 ADR.",
         "The catalog's VRAM values are updated from the measurements, and the default rule of docs/models.md is applied and recorded."
       ],
       "priority": 44,
       "passes": false,
-      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.\nSupervisor, 2026-11-25: the owner has prepared the machine. `scripts\\lyrveil.cmd models -List` shows all eight catalog models present and verified, including gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b. GPU: RTX 4070 12 GB, about 0.9 GB used by the Windows desktop only (no compute process). Run the procedure now; block only on a command that was really refused.\nSupervisor, 2026-11-25: the gpu level did not exist, so this task now depends on GPU.1 to GPU.3, which implement it. Once they pass, run the procedure through `scripts/lyrveil.cmd test gpu` (allowlisted) and write the dated verification file and the catalog updates from its results. The machine is ready: all models present and verified, GPU free apart from the Windows desktop.",
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.\nSupervisor, 2026-11-25: the owner has prepared the machine. `scripts\\lyrveil.cmd models -List` shows all eight catalog models present and verified, including gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b. GPU: RTX 4070 12 GB, about 0.9 GB used by the Windows desktop only (no compute process). Run the procedure now; block only on a command that was really refused.\nSupervisor, 2026-11-25: the gpu level did not exist, so this task now depends on GPU.1 to GPU.3, which implement it. Once they pass, run the procedure through `scripts/lyrveil.cmd test gpu` (allowlisted) and write the dated verification file and the catalog updates from its results. The machine is ready: all models present and verified, GPU free apart from the Windows desktop.\nSupervisor, 2026-11-25: the owner dropped Gemma 4 (see DROP.1). Only rocinante-x-12b (default) and rocinante-12b-v1.1 remain; the SWA padding measurement applies only to Gemma and is not applicable.",
       "dependsOn": [
         "P02.EXIT",
-        "GPU.3"
+        "GPU.3",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -1070,7 +1071,8 @@
       "dependsOn": [
         "P02.7",
         "GPU.2",
-        "GPU.3"
+        "GPU.3",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -1410,7 +1412,8 @@
       "dependsOn": [
         "P03.EXIT",
         "P02.EXIT-HW",
-        "GPU.4"
+        "GPU.4",
+        "DROP.1"
       ],
       "taskType": "bug_complex",
       "source": {
@@ -1760,18 +1763,19 @@
       "title": "Run the quality, consistency and extraction protocols on the catalog profiles",
       "description": "Run the Italian quality protocol of docs/prompting.md, the consistency protocol and the extraction evaluation of docs/consistency-engine.md, with the SWA padding and SmartCache measurements of docs/gpu-orchestration.md, and apply the verified-profile rule of ADR 0034.",
       "acceptanceCriteria": [
-        "T-QLT-01 meets its targets on the default profile, `orion-26b-a4b` and `rocinante-x-12b`, or the tuning and repeat are recorded, including the owner's ratings and blind test.",
+        "T-QLT-01 meets its targets on the default profile rocinante-x-12b and on rocinante-12b-v1.1, or the tuning and repeat are recorded, including the owner's ratings and blind test.",
         "T-QLT-05 and T-QLT-06 meet their hard targets on every profile that stays in the catalog.",
         "The verified-profile rule is applied and `quality_evidence` is recorded in the catalog, with the evidence in a dated file. The P04 section of the roadmap marks the phase done."
       ],
       "priority": 74,
       "passes": false,
-      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, scarica tutti i profili testo (models -All) e dai i tuoi voti e il test alla cieca dei protocolli di qualità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
+      "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, scarica tutti i profili testo (models -All) e dai i tuoi voti e il test alla cieca dei protocolli di qualità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.\nSupervisor, 2026-11-25: the owner dropped Gemma 4 (see DROP.1). Only rocinante-x-12b (default) and rocinante-12b-v1.1 remain; the SWA padding measurement applies only to Gemma and is not applicable.",
       "dependsOn": [
         "P04.EXIT",
         "P02.EXIT-HW",
         "QLT.1",
-        "QLT.2"
+        "QLT.2",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2082,7 +2086,8 @@
         "P05.EXIT",
         "P02.EXIT-HW",
         "GPU.5",
-        "QLT.3"
+        "QLT.3",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2106,7 +2111,8 @@
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-01/06 e verifica AC-07, AC-13, AC-14.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.8",
-        "GPU.5"
+        "GPU.5",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2321,7 +2327,8 @@
         "P06.EXIT",
         "P05.EXIT-HW",
         "GPU.6",
-        "GPU.7"
+        "GPU.7",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2688,7 +2695,8 @@
         "P06.EXIT-HW",
         "GPU.8",
         "QLT.1",
-        "QLT.2"
+        "QLT.2",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2827,7 +2835,8 @@
         "P03.EXIT-HW",
         "P05.EXIT-HW",
         "P06.EXIT-HW",
-        "P08.EXIT-HW"
+        "P08.EXIT-HW",
+        "DROP.1"
       ],
       "taskType": "bug_complex",
       "source": {
@@ -2935,7 +2944,8 @@
       "passes": false,
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
-        "GPU.1"
+        "GPU.1",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2956,7 +2966,8 @@
       "passes": false,
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
-        "GPU.1"
+        "GPU.1",
+        "DROP.1"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2977,7 +2988,8 @@
       "passes": false,
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
-        "GPU.1"
+        "GPU.1",
+        "DROP.1"
       ],
       "taskType": "problem_very_complex",
       "source": {
@@ -2998,7 +3010,8 @@
       "passes": false,
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
-        "GPU.6"
+        "GPU.6",
+        "DROP.1"
       ],
       "taskType": "problem_very_complex",
       "source": {
@@ -3019,7 +3032,8 @@
       "passes": false,
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
-        "GPU.6"
+        "GPU.6",
+        "DROP.1"
       ],
       "taskType": "feature_multi_component",
       "source": {
@@ -3039,9 +3053,10 @@
       ],
       "priority": 128,
       "passes": false,
-      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.\nSupervisor, 2026-11-25: the owner dropped Gemma 4 (see DROP.1). Only rocinante-x-12b (default) and rocinante-12b-v1.1 remain; the SWA padding measurement applies only to Gemma and is not applicable.",
       "dependsOn": [
-        "GPU.1"
+        "GPU.1",
+        "DROP.1"
       ],
       "taskType": "problem_very_complex",
       "source": {
@@ -3053,16 +3068,17 @@
     {
       "id": "QLT.2",
       "title": "T-QLT-01 generation and blind rating sheet",
-      "description": "Automate the Italian quality protocol of docs/prompting.md (T-QLT-01): generate the protocol replies for the default profile, orion-26b-a4b and rocinante-x-12b, compute the automatic metrics, and produce an anonymized, shuffled blind rating sheet for the owner plus a command that imports the ratings and applies the targets.",
+      "description": "Automate the Italian quality protocol of docs/prompting.md (T-QLT-01): generate the protocol replies for rocinante-x-12b (the default) and rocinante-12b-v1.1, compute the automatic metrics, and produce an anonymized, shuffled blind rating sheet for the owner plus a command that imports the ratings and applies the targets.",
       "acceptanceCriteria": [
         "A quality-level run produces the replies, the automatic metrics and a blind rating sheet that hides the profile names.",
         "Importing a filled sheet computes the T-QLT-01 verdict per profile; the import and the verdict are covered by tests with synthetic ratings."
       ],
       "priority": 129,
       "passes": false,
-      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.\nSupervisor, 2026-11-25: the owner dropped Gemma 4 (see DROP.1). Only rocinante-x-12b (default) and rocinante-12b-v1.1 remain; the SWA padding measurement applies only to Gemma and is not applicable.",
       "dependsOn": [
-        "QLT.1"
+        "QLT.1",
+        "DROP.1"
       ],
       "taskType": "feature_multi_component",
       "source": {
@@ -3084,7 +3100,8 @@
       "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
         "GPU.5",
-        "QLT.1"
+        "QLT.1",
+        "DROP.1"
       ],
       "taskType": "feature_multi_component",
       "source": {
@@ -3110,6 +3127,27 @@
         "path": "scripts/lib/Setup.psm1",
         "section": "Models",
         "line": "Stale message at the Models step."
+      }
+    },
+    {
+      "id": "DROP.1",
+      "title": "Remove the Gemma 4 profiles and make rocinante-x-12b the default",
+      "description": "Apply the owner decision to drop Gemma 4: remove gemma-4-26b-a4b, gemma-4-12b and orion-26b-a4b from config/model-catalog.json, make rocinante-x-12b the default text profile on every tier, and update code, tests and documentation that name them, recorded in a new ADR.",
+      "acceptanceCriteria": [
+        "A new ADR records the owner decision: the three Gemma 4 based profiles leave the catalog, rocinante-x-12b becomes the default text profile on both tiers, and the MoE-only parts of the P02 procedure (MOE_CPU_LAYERS comparison, AutoFit vs CPU expert layers, SWA padding for Gemma) are recorded as not applicable; earlier ADRs that chose Gemma are marked superseded where they did.",
+        "config/model-catalog.json holds only the two Rocinante text profiles and the three image profiles, with exactly one default text profile per tier (rocinante-x-12b), and its launch values come from the GPU.3 measurements; the backend validation and the `models` command accept it.",
+        "Code, tests and docs no longer require a Gemma profile: the gpu level (T-GPU-02 to T-GPU-04, GPU.3 tuning), the tokenization fixtures, backend and frontend tests, e2e specs, README and docs/models.md, prompting.md, gpu-orchestration.md and consistency-engine.md; any `gemma4` sampler or template code left unused is removed or justified in the ADR.",
+        "`scripts\\lyrveil.cmd test gpu` passes on this machine with the two Rocinante profiles, and `test lint` passes."
+      ],
+      "priority": 119,
+      "passes": false,
+      "notes": "Owner decision, 2026-11-25: Gemma 4 no longer convinces the owner. Remove every Gemma 4 based text profile (gemma-4-26b-a4b, gemma-4-12b and the Gemma 4 finetune orion-26b-a4b) and make rocinante-x-12b the default text profile on every tier. The supervisor already deleted the three Gemma files from the `lyrveil-models` volume; only rocinante-x-12b and rocinante-12b-v1.1 remain on disk. GPU.3 measured rocinante-x-12b at level A with context 12288, batch 512, MOE_CPU_LAYERS 0, USE_MMAP 0, KV_QUANT f16 (margin about 2.4 GB on the RTX 4070); see its evidence file.\nShell: only allowlisted commands, each run alone; read files with Read and Grep. The full gpu level takes about an hour: run a targeted subset while you work and the whole level once at the end.",
+      "dependsOn": [],
+      "taskType": "refactor_architectural",
+      "source": {
+        "path": "docs/models.md",
+        "section": "Defaults and how they can change",
+        "line": "Owner decision 2026-11-25: drop Gemma 4, rocinante-x-12b default."
       }
     }
   ]
