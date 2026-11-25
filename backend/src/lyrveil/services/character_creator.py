@@ -61,6 +61,31 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class DraftBlockedError(OutputRejectedError):
+    """The content guard refused the text of a draft's card. `detail` is the guard's Italian reason."""
+
+
+def check_draft(raw: dict[str, Any], base: CharacterCard | None) -> CharacterCard:
+    """Returns the card that `raw`, a parsed draft output, proposes over `base` (None for a new character), with what
+    `base` locks kept.
+
+    Raises OutputRejectedError with an Italian detail that names fields, never values, when the draft or its card is
+    invalid (an age under 18 among them), and its subclass DraftBlockedError when the content guard refused the card's
+    text. The draft job's validation and the gpu level's T-GPU-05 both judge outputs here.
+    """
+    try:
+        draft = CharacterDraft.model_validate(raw)
+    except ValidationError as error:
+        raise OutputRejectedError(describe_error(error)) from None
+    try:
+        card = validate_card(draft_to_raw_card(draft, base))
+    except ValidationFailedError as error:
+        raise OutputRejectedError(error.detail) from None
+    except ContentPolicyBlockedError as error:
+        raise DraftBlockedError(error.detail) from None
+    return card if base is None else keep_locked(base, card)
+
+
 class CharacterCreatorService:
     """Queues drafts on `engine` and, with a `runtime`, runs them as the JobHandler of `character_draft`.
 
@@ -150,17 +175,10 @@ class CharacterCreatorService:
 
         def validate(raw: dict[str, Any]) -> CharacterCard:
             try:
-                draft = CharacterDraft.model_validate(raw)
-            except ValidationError as error:
-                raise OutputRejectedError(describe_error(error)) from None
-            try:
-                card = validate_card(draft_to_raw_card(draft, base))
-            except ValidationFailedError as error:
-                raise OutputRejectedError(error.detail) from None
-            except ContentPolicyBlockedError as error:
+                return check_draft(raw, base)
+            except DraftBlockedError as error:
                 blocked.add(error.detail)
-                raise OutputRejectedError(error.detail) from None
-            return card if base is None else keep_locked(base, card)
+                raise
 
         try:
             result = await generate_structured(

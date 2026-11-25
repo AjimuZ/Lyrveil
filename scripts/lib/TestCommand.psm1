@@ -183,9 +183,11 @@ function Invoke-DockerLevel {
 function Invoke-GpuTestLevel {
     <#
     Runs the gpu level: Invoke-GpuLevel of GpuLevel.psm1 with the Pester files tests/gpu/*.Tests.ps1, run with the
-    pinned Pester against the real runtimes. With Argument, trial selectors "<profile>/<trial>" with "*" wildcards, it
-    runs only tests/gpu/Tuning.Tests.ps1 and only the trials they select, so the hour-long procedure can run in parts;
-    a selector that is malformed or selects no trial of the plan returns 1 before any GPU or Docker call. Returns 0
+    pinned Pester against the real runtimes. When every argument is the name of a test file of tests/gpu without
+    ".Tests.ps1" (letters, digits and hyphens, such as StructuredOutput), only those files run, so one test can run
+    without the hour-long tuning procedure. Otherwise the arguments are trial selectors "<profile>/<trial>" with "*"
+    wildcards: it runs only tests/gpu/Tuning.Tests.ps1 and only the trials they select, so the procedure can run in
+    parts; a selector that is malformed or selects no trial of the plan returns 1 before any GPU or Docker call. Returns 0
     only when the tests ran and passed and the test project is gone, 2 (the skip status) when the machine has no GPU,
     and 1 otherwise, also when there is no test file to run. Not exported.
     #>
@@ -193,7 +195,17 @@ function Invoke-GpuTestLevel {
 
     $selection = [string[]]@($Argument | Where-Object { $_ })
     $data = $null
-    if ($selection.Length -gt 0) {
+    # A file name has no "/" or "*", so no trial selector is ever read as one, nor a name as a Git pathspec glob.
+    $named = [string[]]@()
+    if ($selection.Length -gt 0 -and @($selection | Where-Object { $_ -cnotmatch '^[A-Za-z0-9-]+$' }).Length -eq 0) {
+        $named = [string[]]@($selection | ForEach-Object { Get-RepositoryFile -Root $Root -Pattern @("tests/gpu/$_.Tests.ps1") })
+    }
+    if ($selection.Length -gt 0 -and $named.Length -eq $selection.Length) {
+        # Every argument names a test file of tests/gpu, such as StructuredOutput: those files run alone, in that order.
+        $files = $named
+        Write-Host "GPU: only $($files -join ', ')"
+    }
+    elseif ($selection.Length -gt 0) {
         $problems = @(Test-GpuTuningSelection -Pattern $selection)
         if ($problems.Length -eq 0) {
             try {
@@ -261,7 +273,7 @@ function Invoke-LyrveilTest {
     missing level, arguments for a level that takes none, and a level with no tests yet all return 1 with a
     message, so no level reports a pass without running tests. A level that cannot run on this machine, as gpu without
     a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest, and "gpu",
-    which takes trial selectors of the tuning procedure.
+    which takes the names of its test files or trial selectors of the tuning procedure.
     "all" runs lint, unit, integration, e2e and docker, and passes only when each of them does.
     #>
     [CmdletBinding()]
@@ -284,7 +296,7 @@ function Invoke-LyrveilTest {
     }
     $extra = [string[]]@($given | Select-Object -Skip 1)
     if ($extra.Length -gt 0 -and $script:ArgumentLevels -notcontains $name) {
-        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments) and gpu (tuning trials) take them."
+        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments) and gpu (test files or tuning trials) take them."
         return 1
     }
 

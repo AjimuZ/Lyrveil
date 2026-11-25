@@ -49,6 +49,18 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-05 in the `gpu` level (GPU.4). `tests/gpu/StructuredOutput.Tests.ps1` loads the default text profile,
+  `rocinante-x-12b`, at launch level A on the real GPU. It generates three character drafts with the `character_draft`
+  job's prompt, GBNF grammar and request values, and judges each output with the job's own validation. The prompt,
+  grammar and checks come from the backend's test stage through `backend/tests/gpu_probe/structured_task.py`, so the
+  test copies none of them. A refused draft would get the job's one repair. The draft is then generated once without
+  the grammar, to measure the grammar's speed cost. `scripts\lyrveil.cmd test gpu <file name>`, such as
+  `test gpu StructuredOutput`, now runs only that test file of `tests/gpu`. On the reference machine every draft was
+  valid JSON with the schema's keys, and the job accepted each at the first attempt, in 10.3 to 11.3 s. The grammar
+  cost 3.3 % of the generation speed (49.4 against 51.1 tokens per second). Without the grammar the model added a
+  sentence after the JSON, so the output did not parse. The draft check that the job runs is now a function of its
+  own, `check_draft`, with no change in behavior. See
+  [docs/verification/2026-11-25-gpu-structured-output.md](docs/verification/2026-11-25-gpu-structured-output.md).
 - T-GPU-14 and the measuring and tuning procedure in the `gpu` level (GPU.3). `tests/gpu/Tuning.Tests.ps1` runs
   steps 1 to 9 on the real GPU for `gemma-4-12b`, `gemma-4-26b-a4b` and `rocinante-x-12b`: the margin rule, the
   context step, batch 256 to 2048, the speed rule comparing AutoFit with `MOE_CPU_LAYERS` 8, 12 and 16, `USE_MMAP` 0

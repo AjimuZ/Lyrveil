@@ -267,6 +267,8 @@
 - When a catalog change alters what an existing tuning record measured (for example level A's context), raise the ProcedureVersion in GpuTuning.psm1 so partial runs never mix old records into new decisions.
 - Tests that need a catalog shape the shipped file no longer has should derive a variant through model_dump(mode="json") plus parse_catalog, not depend on shipped profile indexes.
 - VRAM footprint for catalog values = card peak minus the baseline of the same trial (vram_before_mib), then plus 5 %, rounded up.
+- Gpu-level tests take prompts, grammars and validation from the backend at runtime (a probe in the backend test image), never from copies, so they cannot drift from the product.
+- A command-line argument that may be either a file name or a selector is validated against a strict pattern (no '/' or '*') before it is used as a Git pathspec.
 
 ---
 
@@ -2593,4 +2595,30 @@ No prompt-injection attempts were found.
   - Each selector run reuses the trials of earlier results files, so three runs in one task ({A, context-16384}, {batch-*, kv-*}, {mmap-*}) give a complete decision set in the last file; they took 174 s, 232 s and 207 s of Pester time.
   - The catalog's VRAM values are not read at runtime yet: the orchestrator uses VramRequirements.llm_mib=6000 and the backend does not send profile values (P06.6). The preflight free-VRAM pass threshold (9000) is now below the measured preferred 9678 and was left unchanged.
   - Open for the owner: whether vram_required_mib should be the full-GPU peak (9678) rather than the planning 6000, and whether rocinante-x-12b's context grows to 16384, which step 5 allows.
+---
+
+## 2026-11-25T21:38:08Z - GPU.4
+- T-GPU-05 is now a test in the gpu level, and it passed on the reference machine (RTX 4070). `scripts/lyrveil.cmd test gpu StructuredOutput` gave Pester 9 passed, 0 failed, 0 skipped, then `test gpu: passed`, and no test container or volume was left. The test loads the default text profile, rocinante-x-12b (mistral_v3_tekken), at launch level A with context 12288. It then generates three Italian character drafts with the character_draft job's own prompt, GBNF grammar (13 rules), max_length 1500 and temperature 0.4. All three were valid JSON with the schema's four top-level keys, and the job's validation accepted each at the first attempt. They took 11.31, 10.30 and 10.39 s for 545, 506 and 513 tokens, against the job's 180 s limit. The grammar cost 3.3 % of generation speed: 49.4 tokens per second with it, 51.1 without. Without the grammar, the model added an Italian sentence after the JSON and used an invalid enum value, so the output did not parse.
+
+How it works:
+- The test copies nothing from the backend. It builds the backend test stage under its own tag, `lyrveil/backend-test:gpu-test`, and runs the new `backend/tests/gpu_probe/structured_task.py` in containers with no network, a read-only root and no capabilities. The probe supplies the prompt, the repair prompt and the grammar, and judges each output with the job's own check.
+- That check is now its own function, `check_draft`, in character_creator.py, with the same behavior. It raises `DraftBlockedError`, a subclass of `OutputRejectedError`, when the content guard refuses a draft.
+- `scripts/lyrveil.cmd test gpu <FileName>` now runs only that file of tests/gpu. Without it, `test gpu` would also run the hour-long tuning procedure, which does not fit one session.
+
+Checks:
+- The lint level passed after fixes.
+- The probe's unit test passed (7 tests).
+- The new Pester case for the file selector, in tests/scripts/TestCommand.Tests.ps1, was not run. It belongs to the unit level, which the orchestrator runs.
+- Integration tests for the refactored draft handler were not run.
+
+Docs updated: docs/testing.md (the gpu level section and the T-GPU-05 row, marked delivered with evidence), a new evidence file, docs/README.md, docs/risks.md (A-09) and CHANGELOG.md. The results JSON stays in test-results/gpu, which Git ignores, and was not copied into the repository.
+- Files changed: backend/src/lyrveil/services/character_creator.py, backend/tests/gpu_probe/structured_task.py, backend/tests/unit/test_gpu_structured_probe.py, scripts/lib/GpuLevel.psm1, scripts/lib/TestCommand.psm1, tests/gpu/StructuredOutput.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/verification/2026-11-25-gpu-structured-output.md, docs/README.md, docs/risks.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test gpu <FileName>` (for example StructuredOutput or TextProfiles) now runs one tests/gpu file alone with the full preparation and cleanup. A bare `test gpu` also runs the hour-long Tuning.Tests.ps1, which does not fit a 10-minute tool call.
+  - A gpu test can run backend code with Initialize-GpuBackendProbe and Invoke-GpuBackendProbe (GpuLevel.psm1). They build backend/Dockerfile's test stage as lyrveil/backend-test:gpu-test and run a script from backend/tests/gpu_probe/ with JSON on stdin and one ASCII JSON line on stdout. Use them so a test never copies prompts, grammars or validation rules.
+  - The host Python cannot be used (pydantic and the like are denied). Generate backend-derived data at runtime in the test image, not as hand-written fixtures.
+  - Pester 5 does not carry BeforeDiscovery variables into BeforeAll at run time; put per-item work in a Describe -ForEach block's own BeforeAll.
+  - PSScriptAnalyzer fails on non-ASCII text in a .ps1 file without a BOM. Keep Italian test strings in Pester files ASCII-only.
+  - Without the grammar, rocinante-x-12b writes an explanatory sentence after the JSON and uses enum values such as 'a volte' instead of 'a_volte'. The grammar is what makes structured tasks parse.
+  - Only character_draft has run on the GPU. Memory extraction, summaries, proactive decisions, image scenes and visual translation have not, and neither has rocinante-12b-v1.1 (chatml).
 ---

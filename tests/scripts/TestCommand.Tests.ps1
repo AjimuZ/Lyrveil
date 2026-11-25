@@ -375,6 +375,10 @@ Describe 'The gpu level' {
                 '        $env:FAKE_GPU_TEST_FAIL | Should -BeNullOrEmpty',
                 '    }',
                 '}', '') -join "`n")
+        Write-FixtureFile $script:GpuRepository 'tests/gpu/Other.Tests.ps1' (@(
+                "Describe 'other gpu test' {",
+                "    It 'runs' { Write-Host 'other gpu test ran' }",
+                '}', '') -join "`n")
         Invoke-FixtureGit $script:GpuRepository @('add', '-A')
         $script:SavedGpuPath = $env:PATH
         $env:PATH = "$script:GpuBin;$env:PATH"
@@ -440,6 +444,17 @@ Describe 'The gpu level' {
         $lastVolume | Should -BeGreaterThan $lastDown
         $out | Should -Match 'lyrveil-gpu-test-data:/data --entrypoint /bin/sh lyrveil/llm:gpu-test'
         $out | Should -Match 'test gpu: passed'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'runs only the test file an argument names, with the same steps and cleanup' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'StandIn')
+        $run.Output | Should -Match 'GPU: only tests/gpu/StandIn\.Tests\.ps1'
+        $run.Output | Should -Match 'stand-in gpu test ran'
+        $run.Output | Should -Not -Match 'other gpu test ran'
+        $run.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
+            Should -BeGreaterThan $run.Output.IndexOf('stand-in gpu test ran')
+        $run.Output | Should -Match 'test gpu: passed'
         $run.ExitCode | Should -Be 0
     }
 

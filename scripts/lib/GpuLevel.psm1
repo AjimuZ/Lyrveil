@@ -12,6 +12,10 @@ $script:ModelsVolume = 'lyrveil-models'
 $script:ComposeFiles = @('-f', 'compose.yaml', '-f', 'tests/gpu/compose.gpu-test.yaml')
 $script:Services = @('lyrveil-llm', 'lyrveil-image')
 
+# The backend's test stage, under a tag of this level only, where T-GPU-05 runs the backend's prompt, grammar and
+# validation (Initialize-GpuBackendProbe, Invoke-GpuBackendProbe).
+$script:BackendProbeImage = 'lyrveil/backend-test:gpu-test'
+
 # The container names of an installation's runtimes. The level refuses to start while one of them runs.
 $script:InstallationRuntimes = @('lyrveil-llm', 'lyrveil-image')
 
@@ -670,6 +674,50 @@ function Invoke-GpuTextTimed {
     return @{ Status = [int]$result.Status; Body = $parsed; Seconds = $seconds }
 }
 
+function Initialize-GpuBackendProbe {
+    <#
+    Builds the test stage of backend/Dockerfile with the tag lyrveil/backend-test:gpu-test, its own, so the image the
+    unit level uses is never replaced, and returns $true when the build succeeded. Docker's cache makes a build without
+    changes take seconds. Invoke-GpuBackendProbe runs the backend's code in it.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    $build = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument @(
+        'build', '--quiet', '--file', 'backend/Dockerfile', '--target', 'test', '--tag', $script:BackendProbeImage, '.')
+    return ($build.Status -eq 0)
+}
+
+function Invoke-GpuBackendProbe {
+    <#
+    Runs Action of backend/tests/gpu_probe/structured_task.py ("prompt" or "check") with Body as its JSON request, in
+    a new container of the image of Initialize-GpuBackendProbe, and returns @{ Status; Body }: the container's exit
+    status and the parsed JSON line it printed, or $null. The container has no network, a read-only root and no
+    capability, carries the test project's label, so the level's leftover check would see it, and is removed when it
+    exits.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check')] [string]$Action,
+        [Parameter(Mandatory = $true)] [hashtable]$Body
+    )
+
+    $run = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -InputText (ConvertTo-GpuRequestJson -Body $Body) -Argument @(
+        'run', '--rm', '-i', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+        '--label', "com.docker.compose.project=$script:ProjectName", $script:BackendProbeImage,
+        'python', 'tests/gpu_probe/structured_task.py', $Action)
+    $parsed = $null
+    $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
+    if ($run.Status -eq 0 -and $last.Length -eq 1) {
+        try { $parsed = $last[0] | ConvertFrom-Json }
+        catch { $parsed = $null }
+    }
+    return @{ Status = [int]$run.Status; Body = $parsed }
+}
+
 # The client of Invoke-GpuImageJob, run by the Python of lyrveil-image from its standard input. It submits the workflow
 # to ComfyUI, polls its history every half second and prints one JSON line. __WORKFLOW__ and __TIMEOUT__ are replaced.
 $script:ImageJobClient = @'
@@ -1017,6 +1065,7 @@ function Invoke-GpuLevel {
 Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample, Wait-GpuMemoryBelow, Invoke-GpuCompose,
     Get-GpuTestProfile, Get-GpuTestTextProfile, Get-GpuLaunchLine, Set-GpuTestTextLaunch, Set-GpuTestLaunchLine, Test-GpuTestConfiguration,
     Start-GpuTestRuntime, Remove-GpuTestRuntime, Get-GpuTestContainerFact, Invoke-GpuRuntimeRequest,
-    ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Invoke-GpuTextTimed, Get-GpuImageWorkflow,
+    ConvertTo-GpuRequestJson, Invoke-GpuTextPost, Invoke-GpuTextStream, Invoke-GpuTextTimed, Initialize-GpuBackendProbe,
+    Invoke-GpuBackendProbe, Get-GpuImageWorkflow,
     Invoke-GpuImageJob, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
     Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog
