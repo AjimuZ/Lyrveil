@@ -1042,9 +1042,10 @@
       ],
       "priority": 44,
       "passes": false,
-      "notes": "BLOCKED: The procedure cannot run from this session. (1) `scripts/lyrveil.cmd test gpu` ran and failed: \"Test level 'gpu' has no tests yet. Nothing ran, so it cannot pass.\" The `gpu` runner in scripts/lib/TestCommand.psm1 is `$null`, so T-GPU-14 and the other GPU tests are not implemented. (2) To measure directly, I ran `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv` for the baseline (step 1), and the shell refused it. Every later step also needs commands outside the allowlist: starting the KoboldCpp runtime with each launch file (`docker compose up` / `docker run`), sampli\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.\nSupervisor, 2026-11-25: the owner has prepared the machine. `scripts\\lyrveil.cmd models -List` shows all eight catalog models present and verified, including gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b. GPU: RTX 4070 12 GB, about 0.9 GB used by the Windows desktop only (no compute process). Run the procedure now; block only on a command that was really refused.",
+      "notes": "Set aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. `rocinante-x-12b` is not a default: download it with `scripts\\lyrveil.cmd models -Model rocinante-x-12b`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.\nSupervisor, 2026-11-25: the owner has prepared the machine. `scripts\\lyrveil.cmd models -List` shows all eight catalog models present and verified, including gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b. GPU: RTX 4070 12 GB, about 0.9 GB used by the Windows desktop only (no compute process). Run the procedure now; block only on a command that was really refused.\nSupervisor, 2026-11-25: the gpu level did not exist, so this task now depends on GPU.1 to GPU.3, which implement it. Once they pass, run the procedure through `scripts/lyrveil.cmd test gpu` (allowlisted) and write the dated verification file and the catalog updates from its results. The machine is ready: all models present and verified, GPU free apart from the Windows desktop.",
       "dependsOn": [
-        "P02.EXIT"
+        "P02.EXIT",
+        "GPU.3"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -1067,7 +1068,9 @@
       "passes": false,
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per i test gpu e la chat lunga in italiano.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
-        "P02.7"
+        "P02.7",
+        "GPU.2",
+        "GPU.3"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -1406,7 +1409,8 @@
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai il collaudo manuale con un avatar caricato (AC-01..AC-06, AC-08..AC-10, AC-16).\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P03.EXIT",
-        "P02.EXIT-HW"
+        "P02.EXIT-HW",
+        "GPU.4"
       ],
       "taskType": "bug_complex",
       "source": {
@@ -1765,7 +1769,9 @@
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, scarica tutti i profili testo (models -All) e dai i tuoi voti e il test alla cieca dei protocolli di qualità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Every catalog text profile is needed: `scripts\\lyrveil.cmd models -All`. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P04.EXIT",
-        "P02.EXIT-HW"
+        "P02.EXIT-HW",
+        "QLT.1",
+        "QLT.2"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2074,7 +2080,9 @@
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU, e fai la revisione alla cieca della griglia immagini e delle coppie di identità.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P05.EXIT",
-        "P02.EXIT-HW"
+        "P02.EXIT-HW",
+        "GPU.5",
+        "QLT.3"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2097,7 +2105,8 @@
       "passes": false,
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-01/06 e verifica AC-07, AC-13, AC-14.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
-        "P05.8"
+        "P05.8",
+        "GPU.5"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2310,7 +2319,9 @@
       "notes": "BLOCKED: waiting for a person: Scarica i modelli con .\\setup.cmd accettando le licenze, chiudi gli altri programmi che usano la GPU; poi unblock per T-GPU-07..12 e verifica AC-15, AC-18, AC-19 con i tempi misurati.\nSet aside at setup for the owner: it needs the real models, downloaded with `.\\setup.cmd` after accepting their licences, other GPU programs closed, and for quality protocols the owner's own ratings. After the owner has done that, `unblock` it and a session runs `scripts/lyrveil.cmd test gpu` and the procedure. Run the levels the exit names with `scripts/lyrveil.cmd test <level>` and record skips and failures as such, never as passes. Fix a failure that lies within this phase; a failure that needs another phase or a person is a block. Add evidence links under an \"Evidence:\" list in the phase section, as P00 does, and never edit an item line: the orchestrator ticks items by their exact text. Shell (from the supervising session, 2026-11-07): Bash is allowed, but only for the commands in your allowlist, each run alone. `cd ... && cat ...` and other compound or file-viewing commands are denied: read files with the Read and Grep tools. Allowed and needed: `scripts/lyrveil.cmd test <level> [args]`, `docker build ...` (the build has network access, so it can regenerate a lock), `docker compose build ...`, `npm ...`, `node --test <file>`. After a change to a pyproject.toml, regenerate its lock yourself with `docker build -f <backend|orchestrator>/Dockerfile --target lockfile --output type=local,dest=<backend|orchestrator> .`, never by hand. Run the checks before reporting; block only after an allowed command was really refused.",
       "dependsOn": [
         "P06.EXIT",
-        "P05.EXIT-HW"
+        "P05.EXIT-HW",
+        "GPU.6",
+        "GPU.7"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2674,7 +2685,10 @@
       "dependsOn": [
         "P08.EXIT",
         "P04.10",
-        "P06.EXIT-HW"
+        "P06.EXIT-HW",
+        "GPU.8",
+        "QLT.1",
+        "QLT.2"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -2844,6 +2858,259 @@
         "line": "P09.6 Tag `v1.0.0` and publish the release."
       },
       "effort": "medium"
+    },
+    {
+      "id": "GPU.1",
+      "title": "Implement the gpu test level and T-GPU-01",
+      "description": "Fill the `gpu` level of scripts/lib/TestCommand.psm1 with a harness that starts the real runtimes of compose.yaml with GPU access in a separate test project, samples VRAM through NVML (nvidia-smi), talks to the runtime HTTP APIs, and implements T-GPU-01 (GPU passthrough in lyrveil-llm and lyrveil-image), as docs/testing.md describes.",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test gpu` runs real tests on a GPU machine and exits with a clear skip message (never a pass) when no GPU is present.",
+        "T-GPU-01 passes for `lyrveil-llm` and `lyrveil-image` on this machine, and the level always removes its containers and test volumes, also on failure; the models volume is mounted read-only.",
+        "The wiring of the level (order, skip, cleanup) is covered by Pester tests with stand-in commands in the `unit` level, and docs/testing.md describes the level."
+      ],
+      "priority": 120,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.2",
+      "title": "T-GPU-02 to T-GPU-04 in the gpu level",
+      "description": "Add T-GPU-02 (load gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b, measure VRAM and RAM), T-GPU-03 (tokenization fixture recorded for each template family) and T-GPU-04 (real streaming, token counts, abort) to the gpu level.",
+      "acceptanceCriteria": [
+        "T-GPU-02, T-GPU-03 and T-GPU-04 are implemented as gpu-level tests and pass on this machine, or the failing measurement is recorded with its numbers.",
+        "The tokenization fixtures are committed for each template family, and the measured VRAM and RAM are written to a machine-readable results file of the run.",
+        "docs/testing.md lists the tests as delivered with their evidence."
+      ],
+      "priority": 121,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.1"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.3",
+      "title": "T-GPU-14 and the measuring and tuning procedure as a gpu-level measurement",
+      "description": "Automate the procedure of docs/gpu-orchestration.md (Measuring and tuning, steps 1 to 9) and T-GPU-14: margin rule, context step, batch comparison, the speed rule comparing AutoFit with MOE_CPU_LAYERS 8, 12 and 16, USE_MMAP 0/1 and KV_QUANT f16/q8_0 (ADR 0030), for the three P02 profiles.",
+      "acceptanceCriteria": [
+        "A gpu-level run measures every step of the procedure for gemma-4-26b-a4b, gemma-4-12b and rocinante-x-12b and writes every command and number to a results file.",
+        "T-GPU-14 evaluates the speed rule for the default profile (median of 20 replies of at least 200 tokens, first token of a 6000-token prompt) and reports pass or fail with the numbers.",
+        "The decisions of the procedure (default level, context step, batch, MOE_CPU_LAYERS, mmap, KV type) are computed from the measurements by tested code, not by hand."
+      ],
+      "priority": 122,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.2"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.4",
+      "title": "T-GPU-05 in the gpu level",
+      "description": "Add T-GPU-05: structured output with grammar on the real default text model.",
+      "acceptanceCriteria": [
+        "T-GPU-05 is a gpu-level test and passes on this machine, or its failure is recorded with the output.",
+        "docs/testing.md lists it as delivered with its evidence."
+      ],
+      "priority": 123,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.1"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.5",
+      "title": "T-GPU-06 and the per-preset image measurement in the gpu level",
+      "description": "Add T-GPU-06 (ComfyUI starts and generates with each image profile, checkpoint load measured) and the real-GPU measurement of T-IMG-14 (render time and peak VRAM per preset for each image profile).",
+      "acceptanceCriteria": [
+        "T-GPU-06 passes on this machine for illustrious-xl-v2.0, illustrious-xl-v1.0 and noobai-xl-1.1, with checkpoint load time measured.",
+        "Render time and peak VRAM per preset and per image profile are written to a results file, and the preset rule of docs/image-generation.md is computed from them by tested code."
+      ],
+      "priority": 124,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.1"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.6",
+      "title": "T-GPU-07 to T-GPU-09 in the gpu level",
+      "description": "Add T-GPU-07 (ten full text/image switches, container state and NVML samples never show both models), T-GPU-08 (text sent during real generation is answered after the switch) and T-GPU-09 (external VRAM use blocks with a reason and no process is touched).",
+      "acceptanceCriteria": [
+        "T-GPU-07, T-GPU-08 and T-GPU-09 are gpu-level tests and pass on this machine, with the switch times recorded.",
+        "T-GPU-09 creates its external VRAM load itself and never stops a process it did not start."
+      ],
+      "priority": 125,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.1"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.7",
+      "title": "T-GPU-10 to T-GPU-12 in the gpu level",
+      "description": "Add T-GPU-10 (real CUDA out-of-memory handled by reducing available VRAM on purpose), T-GPU-11 (no orphan process and full VRAM release after stop.cmd) and T-GPU-12 (everything works with the network disconnected).",
+      "acceptanceCriteria": [
+        "T-GPU-10 and T-GPU-11 are gpu-level tests and pass on this machine.",
+        "T-GPU-12 runs the stack with no external network access by an automated means (for example an internal-only network), passes, and docs/testing.md says plainly which part, if any, still needs a manual unplug."
+      ],
+      "priority": 126,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.6"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "GPU.8",
+      "title": "T-GPU-13 two-hour session driver",
+      "description": "Add T-GPU-13 as an opt-in gpu-level test: a two-hour session with 20 images and 3 conversations, driven automatically, with VRAM, RAM, errors and latency recorded.",
+      "acceptanceCriteria": [
+        "An explicit option of the gpu level runs T-GPU-13 for two hours with 20 images and 3 conversations and writes its samples and verdict to a results file; the normal gpu run does not include it.",
+        "A shortened mode of the same driver is covered by a test, and docs/testing.md documents both."
+      ],
+      "priority": 127,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.6"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "QLT.1",
+      "title": "Implement the quality level with T-QLT-05 and T-QLT-06",
+      "description": "Fill the `quality` level with the automated parts: the consistency protocol (T-QLT-05) with the SWA padding and SmartCache measurements, and the extraction evaluation (T-QLT-06) of docs/consistency-engine.md, on any catalog text profile.",
+      "acceptanceCriteria": [
+        "`scripts\\lyrveil.cmd test quality` runs T-QLT-05 and T-QLT-06 on a chosen text profile and on every catalog profile, with scores against the hard targets written to a results file.",
+        "The SWA padding (0, 1024, 2048) and SmartCache (0, 2) measurements run and their decision rules are computed by tested code.",
+        "The wiring is covered by tests in the `unit` level, and docs/testing.md describes the level."
+      ],
+      "priority": 128,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.1"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "QLT.2",
+      "title": "T-QLT-01 generation and blind rating sheet",
+      "description": "Automate the Italian quality protocol of docs/prompting.md (T-QLT-01): generate the protocol replies for the default profile, orion-26b-a4b and rocinante-x-12b, compute the automatic metrics, and produce an anonymized, shuffled blind rating sheet for the owner plus a command that imports the ratings and applies the targets.",
+      "acceptanceCriteria": [
+        "A quality-level run produces the replies, the automatic metrics and a blind rating sheet that hides the profile names.",
+        "Importing a filled sheet computes the T-QLT-01 verdict per profile; the import and the verdict are covered by tests with synthetic ratings."
+      ],
+      "priority": 129,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "QLT.1"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "QLT.3",
+      "title": "T-QLT-02 and T-QLT-07 image grid and blind identity pairs",
+      "description": "Automate the image default grid (T-QLT-02) and the image identity protocol with its measured levers (T-QLT-07) of docs/image-generation.md: generate the grids and the blind pairs and a review sheet for the owner, plus a command that imports the review and applies the default rule.",
+      "acceptanceCriteria": [
+        "A quality-level run generates the grid for each image profile and the identity pairs with the measured levers (PAG, identity weight, tall and wide sizes), and a blind review sheet.",
+        "Importing a filled review computes the verdicts and the default rule; the import is covered by tests with synthetic answers."
+      ],
+      "priority": 130,
+      "passes": false,
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "dependsOn": [
+        "GPU.5",
+        "QLT.1"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "FIX.1",
+      "title": "Correct the stale Models message of setup.cmd",
+      "description": "setup.cmd still prints that the model catalog is not in the image yet (P02.1a), although P02.1a is delivered and the models are downloaded by `scripts\\lyrveil.cmd models`.",
+      "acceptanceCriteria": [
+        "The Models step of setup.cmd no longer mentions P02.1a and points to `scripts\\lyrveil.cmd models` (and `-List`), matching the README.",
+        "The Pester tests of setup cover the new message and pass."
+      ],
+      "priority": 131,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "scripts/lib/Setup.psm1",
+        "section": "Models",
+        "line": "Stale message at the Models step."
+      }
     }
   ]
 }
