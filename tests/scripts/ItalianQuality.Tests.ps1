@@ -67,7 +67,7 @@ BeforeAll {
                 $index = if ($count.ContainsKey($slot)) { $count[$slot] } else { 0 }
                 $count[$slot] = $index + 1
                 if ($item.kind -eq 'naturalness') {
-                    $values = if ($Rating.ContainsKey($item.profile)) { @($Rating[$item.profile]) } else { @(4) }
+                    $values = @(if ($Rating.ContainsKey($item.profile)) { $Rating[$item.profile] } else { 4 })
                     $lines.Add("Rating: $($values[$index % $values.Length])")
                 }
                 else {
@@ -277,7 +277,7 @@ Describe 'Get-ItalianBlindSheet' {
     }
 
     It 'refuses a run with no reply to sample' {
-        { Get-ItalianBlindSheet -ReplyByProfile @{ 'profile-alpha' = @() } -CharacterName $script:Names } | Should -Throw 'No profile has a complete reply'
+        { Get-ItalianBlindSheet -ReplyByProfile @{ 'profile-alpha' = @() } -CharacterName $script:Names } | Should -Throw 'No profile has a complete reply*'
     }
 }
 

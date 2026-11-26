@@ -65,7 +65,7 @@ Describe 'ConvertFrom-DockerTopText' {
 }
 
 Describe 'ConvertFrom-GpuHostProcessText' {
-    It 'reads "<pid> <command line>" lines and leaves out the others' {
+    It 'reads pid and command line pairs and leaves out the other lines' {
         $processes = @(ConvertFrom-GpuHostProcessText -Line @('27904 /opt/koboldcpp/koboldcpp-launcher --model /models/llm/a.gguf', 'Traceback (most recent call last):', ''))
         $processes.Length | Should -Be 1
         $processes[0].Pid | Should -Be 27904
@@ -188,10 +188,10 @@ Describe 'ConvertFrom-GpuEventLog and Get-GpuDrainEvent' {
         $prefix = 'lyrveil-orchestrator-1  | 2026-11-26T18:32:42.81Z 2026-11-26 18:32:42,816 INFO lyrveil_orchestrator.lifecycle '
         $script:Log = @(
             'lyrveil-orchestrator-1  | INFO:     127.0.0.1:40000 - "GET /v1/state HTTP/1.1" 200 OK',
-            $prefix + '{"seq": 19, "at": "2026-11-26T18:32:35.318+00:00", "from": "GENERATING_TEXT", "to": "LLM_READY", "reason": "lease released", "job_id": "j", "code": null, "details": {}}',
-            $prefix + '{"seq": 20, "at": "2026-11-26T18:32:42.816+00:00", "from": "LLM_READY", "to": "UNLOADING_LLM", "reason": "drain", "job_id": null, "code": null, "details": {}}',
-            $prefix + '{"seq": 21, "at": "2026-11-26T18:32:44.147+00:00", "from": "UNLOADING_LLM", "to": "IDLE", "reason": "release verified", "job_id": null, "code": null, "details": {"exit_code": 143}}',
-            $prefix + '{"seq": 22, "at": broken')
+            ($prefix + '{"seq": 19, "at": "2026-11-26T18:32:35.318+00:00", "from": "GENERATING_TEXT", "to": "LLM_READY", "reason": "lease released", "job_id": "j", "code": null, "details": {}}'),
+            ($prefix + '{"seq": 20, "at": "2026-11-26T18:32:42.816+00:00", "from": "LLM_READY", "to": "UNLOADING_LLM", "reason": "drain", "job_id": null, "code": null, "details": {}}'),
+            ($prefix + '{"seq": 21, "at": "2026-11-26T18:32:44.147+00:00", "from": "UNLOADING_LLM", "to": "IDLE", "reason": "release verified", "job_id": null, "code": null, "details": {"exit_code": 143}}'),
+            ($prefix + '{"seq": 22, "at": broken'))
     }
 
     It 'reads every event of the log and leaves out the other lines' {

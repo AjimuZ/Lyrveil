@@ -70,8 +70,11 @@ test('the profiles show tier, licence and state, a profile is chosen and applied
 });
 
 // The tier of the e2e machine is whatever the host reports, so this test rewrites the response of the settings call to
-// a reduced machine with one missing file. That makes the "above the tier" and "to download" cases always present,
-// instead of depending on the host; the real backend still answers every other call.
+// a reduced machine with one missing file. The catalog has no text profile that needs the full tier, so the response
+// also gets one such profile, copied from a catalog profile. That makes the "above the tier" and "to download" cases
+// always present, instead of depending on the host or on the catalog; the real backend still answers every other call.
+const ABOVE_TIER_NAME = 'Profilo e2e di livello Completo';
+
 test('a profile above the machine tier or without its file cannot be chosen and shows how to get it', async ({ page }) => {
   const command = '.\\scripts\\lyrveil.cmd models -Model e2e';
   await page.route('**/api/v1/settings/models', async (route) => {
@@ -83,25 +86,27 @@ test('a profile above the machine tier or without its file cannot be chosen and 
     const body = await response.json();
     body.tier = 'reduced';
     const active = body.active.text;
-    body.text = body.text.map((profile) => {
-      if (profile.id === active) {
-        return profile;
-      }
-      return profile.min_tier === 'target'
-        ? { ...profile, selectable: false }
-        : { ...profile, state: 'missing', selectable: true, download_command: command };
+    const template = body.text.find((profile) => profile.id !== active);
+    body.text = body.text.map((profile) =>
+      profile.id === active ? profile : { ...profile, state: 'missing', selectable: true, download_command: command },
+    );
+    body.text.push({
+      ...template,
+      id: 'e2e-above-tier',
+      display_name: ABOVE_TIER_NAME,
+      min_tier: 'target',
+      state: 'missing',
+      selectable: false,
     });
     await route.fulfill({ response, json: body });
   });
 
   const settings = await (await page.request.get('/api/v1/settings/models')).json();
-  const above = settings.text.find((profile) => profile.min_tier === 'target' && profile.id !== settings.active.text);
   const missing = settings.text.find((profile) => profile.min_tier === 'reduced' && profile.id !== settings.active.text);
-  expect(above, 'the catalog has a full-tier text profile that is not active').toBeDefined();
   expect(missing, 'the catalog has a reduced-tier text profile that is not active').toBeDefined();
 
   await page.goto('/settings/models');
-  const aboveRow = card(page, above.display_name);
+  const aboveRow = card(page, ABOVE_TIER_NAME);
   await expect(aboveRow).toContainText('Serve un computer di livello Completo');
   await expect(aboveRow.getByRole('button', { name: 'Usa questo modello' })).toBeDisabled();
 

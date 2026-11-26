@@ -132,7 +132,7 @@ Describe 'Get-ImageReviewSheet' {
         $blind.Sheet | Should -Not -Match 'big|small|clip|cfg|denoise|pag|identity-weight|baseline|landscape'
         $blind.Sheet | Should -Match '(?m)^Sheet: [0-9a-f]{12}$'
         $blind.Sheet | Should -Match '(?m)^# Lyrveil image quality: blind review sheet'
-        @($blind.Files | Where-Object { $_.Name -notmatch '^[GIPW]\d\d(-[AB])?\.jpg$' }).Length | Should -Be 0
+        @($blind.Files | Where-Object { $_.Name -notmatch '^[GIPW]\d{2,}(-[AB])?\.jpg$' }).Length | Should -Be 0
     }
 
     It 'has one G item per grid render, one I item per identity render and a pair per PAG render and weight pair' {
@@ -286,9 +286,10 @@ Describe 'Get-ImageVerdict: the grid and the default rule (T-QLT-02)' {
         $verdict.grid['big'].parameters['denoise'].decision | Should -Be 'denoise-0.35'
         $verdict.grid['big'].parameters['clip_skip'].decision | Should -Be 'keep'
         $verdict.grid['big'].parameters['cfg'].variants['cfg-4.5'].defect_rate | Should -Be 0.2
-        $just = (Get-TestVerdict @{ DefectCount = @{ 'big|default' = 3; 'big|cfg-7' = 2 } }).Verdict
+        # An alternative that is not listed has no defective image, so cfg-4.5 is held at the default's rate to leave cfg-7 alone.
+        $just = (Get-TestVerdict @{ DefectCount = @{ 'big|default' = 3; 'big|cfg-7' = 2; 'big|cfg-4.5' = 3 } }).Verdict
         $just.grid['big'].parameters['cfg'].decision | Should -Be 'cfg-7'
-        $below = (Get-TestVerdict @{ DefectCount = @{ 'big|default' = 3; 'big|cfg-7' = 3 } }).Verdict
+        $below = (Get-TestVerdict @{ DefectCount = @{ 'big|default' = 3; 'big|cfg-7' = 3; 'big|cfg-4.5' = 3 } }).Verdict
         $below.grid['big'].parameters['cfg'].decision | Should -Be 'keep'
     }
 

@@ -105,7 +105,7 @@ function Get-ImageReviewSheet {
     against its baseline, answered "Style change:"). A pair puts the lever's image on a random side. Files lists each
     image the sheet shows as @{ Name; Source } (Name is relative to the sheet's folder, under images/).
 
-    Key is the only record of what each id is: protocol, version, sheet_id (a hash of the sheet, which Read-ImageReview
+    Key is the only record of what each id is: protocol, version, sheet_id (a hash of the sheet and of the id-to-render mapping, which Read-ImageReview
     checks), mode, seed, evidence, default_profile, profiles and items (id, kind, profile, variant, character, scene,
     seed, aspect, and for a pair lever_side and the lever image's render seconds). evidence is 'protocol' when Mode is Full
     and Planned cells all rendered, and 'smoke' otherwise. The same Seed and input give the same sheet. Throws when no cell
@@ -203,8 +203,13 @@ function Get-ImageReviewSheet {
     if ($items.Count -eq 0) { throw 'No rendered cell gives an item of the review sheet.' }
 
     $text = $body.ToString()
+    # The shuffle changes which render stands behind each opaque id but not the sheet's text, so the id also hashes the
+    # id-to-render mapping: a key of another run or seed must not pass for this sheet's key.
+    $mapping = (@($items | ForEach-Object {
+                "$($_.id)|$($_.profile)|$($_.variant)|$($_.character)|$($_.scene)|$($_.seed)|$($_.aspect)|$(if ($_.Contains('lever_side')) { $_.lever_side } else { '' })"
+            }) -join "`n")
     $hash = [System.Security.Cryptography.SHA256]::Create()
-    try { $digest = $hash.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text)) }
+    try { $digest = $hash.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text + "`n" + $mapping)) }
     finally { $hash.Dispose() }
     $sheetId = (($digest | Select-Object -First 6 | ForEach-Object { $_.ToString('x2') }) -join '')
     $head = @(
