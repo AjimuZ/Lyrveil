@@ -59,6 +59,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-11 and T-GPU-12 in the `gpu` level (GPU.7), in `tests/gpu/Resilience.Tests.ps1`
+  (`scripts\lyrveil.cmd test gpu Resilience`). T-GPU-12 checks that the backend, the orchestrator and both runtimes
+  join only internal networks and publish no port. In each container a probe finds no default route, no connection
+  to `1.1.1.1:443` and no public name. The stack then answers a text, renders an image and answers again on the real
+  GPU. T-GPU-11 runs the code of `stop.cmd` on the test project. The GPU is drained with its release verified, every
+  container exits with status 143, the Docker VM's process table keeps none of their processes, and NVML returns to
+  the desktop's baseline. Both passed on the reference machine. The frontend, the browser and a start with the
+  host's network disconnected still need one manual check. T-GPU-10 (a real out-of-memory at load) is written in the
+  same file but cannot pass on Windows yet: the NVIDIA driver falls back to shared system memory, so no allocation
+  fails. Until the owner decides (GPU.7b), its cases are reported as skipped with that reason and never as passed. See
+  [docs/verification/2026-11-26-gpu-resilience.md](docs/verification/2026-11-26-gpu-resilience.md).
 - T-GPU-07 to T-GPU-09 in the `gpu` level (GPU.6). `tests/gpu/ModeSwitch.Tests.ps1` lets the real orchestrator move
   the GPU between the real runtimes, through a test-only orchestrator image whose container gate acts only on the test
   project's runtimes ([ADR 0046](docs/decisions/0046-test-only-orchestrator-for-the-gpu-level.md)), and adds the real

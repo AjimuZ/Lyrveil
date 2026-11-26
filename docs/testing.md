@@ -50,6 +50,7 @@ are trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildca
 ```powershell
 .\scripts\lyrveil.cmd test gpu StructuredOutput
 .\scripts\lyrveil.cmd test gpu ModeSwitch t-gpu-07 rounds-5
+.\scripts\lyrveil.cmd test gpu Resilience
 .\scripts\lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/batch-*
 ```
 
@@ -288,6 +289,51 @@ that is not reached, the last log lines of that runtime. `tests/scripts/GpuSwitc
 covers the phases at their limits, the check with both runtimes running, with two models resident together and with
 no runtime, and the switch times. `orchestrator/tests/unit/test_gpu_test_gate.py` checks that the test gate sends only
 the documented calls to the test project's containers and refuses an installation's.
+
+`tests/gpu/Resilience.Tests.ps1` holds T-GPU-10 to T-GPU-12 (GPU.7,
+[evidence](verification/2026-11-26-gpu-resilience.md)). It prepares the same stack as `ModeSwitch.Tests.ps1`: the
+test-only orchestrator, the backend, the level-A launch file of `rocinante-x-12b` and the two runtime containers. The
+items after the file name select parts: `t-gpu-12` and `t-gpu-11` run in that order, because T-GPU-11 stops the stack;
+without items both run. `t-gpu-10` runs only alone (`scripts\lyrveil.cmd test gpu Resilience t-gpu-10`).
+
+- **T-GPU-12** starts the text runtime and the backend and records, for the backend, the orchestrator and both
+  runtimes, the networks Docker reports (each must be internal) and the published ports (none). In each running
+  container a probe reads the routing tables and tries one TCP connection to `1.1.1.1:443` and one lookup of
+  `example.com`: no default route, no connection and no resolved name are allowed. The probe uses Python, or the shell
+  with `curl` and `getent` in `lyrveil-llm`, which has no Python; the image runtime is probed while it runs for an
+  image job. A one-off container on Docker's default bridge is the control and must show a default route. The stack
+  must then answer a text through the backend, render a **Rapida** square image and answer again after the switch
+  back. **What still needs a manual unplug:** the test covers the backend, the orchestrator and both runtimes on the
+  real GPU with no route out. It does not cover the frontend and the browser (the frontend joins the edge network to
+  publish `127.0.0.1:4200` and is not part of the test project), nor Windows, WSL2, Docker Desktop and `start.cmd`
+  with the network adapter disconnected. For AC-18 that remains one manual check on the reference machine: disconnect
+  the network, run `start.cmd`, open the app, send a message and ask for an image.
+- **T-GPU-11** runs `Invoke-LyrveilStop`, the code of `stop.cmd`, on the test project, with an env file that does
+  not exist (so Compose reads `.env.example`, never the installation's `.env`) and a backup folder in Pester's test
+  drive. The test data volume has no installation label, so the backup copy is refused with a warning and that folder
+  is never created; any other warning fails. Before the stop it lists the processes of every running container with
+  `docker top`, and a one-off container in the Docker VM's PID namespace (`--pid host`, no network, no capability,
+  user 10001, reading command lines only) must see each container's processes and the KoboldCpp program. After the
+  stop the same probe must see none of them and no KoboldCpp or ComfyUI process. The checks:
+  - the stop exits 0, and the orchestrator's log holds the drain, `UNLOADING_LLM` with reason `drain` then `IDLE` with
+    `release verified`;
+  - every container that ran is `exited` with an exit code, none was killed for memory, and none starts again in the
+    next 10 s;
+  - NVML's memory in use falls within 60 s to less than the run's baseline plus 128 MiB.
+- **T-GPU-10** forces a load too large for the memory left free: its own VRAM load (the container of T-GPU-09) leaves
+  at most 6912 MiB free, above the orchestrator's 6000, and the launch file is level A with `GPU_LAYERS=99`,
+  `CONTEXT_SIZE=24576` and `BATCH_SIZE=2048`, with `runtime/` owned by 10001 so the backend can lower it. It expects
+  `LLM_LOAD_FAILED` with `oom`, the launch file at level B, a level-B load that answers, and its VRAM load untouched.
+  **Pending GPU.7b:** on this machine the NVIDIA driver on Windows falls back to shared system memory, so no
+  allocation fails (CUDA reported 11090 MiB free while the load held 4352 MiB, and the load placed 11924 MiB of
+  buffers on CUDA0). In every run that does not select `t-gpu-10` its five cases are reported as skipped with that
+  reason, never as passed.
+
+The results go to `test-results/gpu/resilience-<time>.json`, which Git ignores. `tests/scripts/GpuResilience.Tests.ps1`,
+in the `unit` level, covers the readers of `docker top`, the process probe, the route probe and the orchestrator's log,
+and the judges of [`scripts/lib/GpuResilience.psm1`](../scripts/lib/GpuResilience.psm1): an orphan, a reused PID, a
+service the probe never saw, a container that started again, a network that is not internal, a published port, a
+default route and an incomplete probe. They are written and have not run yet.
 
 The Pester cases "The gpu level" in `tests/scripts/TestCommand.Tests.ps1`, in the `unit` level, check the wiring with
 stand-in `docker.cmd` and `nvidia-smi.cmd` first on `PATH` and a fixture test file: the skip without a GPU, with no
@@ -988,9 +1034,9 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-07 | Ten full switches. Container state and NVML samples never show both models. `tests/gpu/ModeSwitch.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.6), through the test-only orchestrator; ten round trips passed on the reference machine on 2026-11-25 in two runs of five, each full switch 41.7 to 43.7 s ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
 | T-GPU-08 | Text sent during real generation is answered after the switch. `tests/gpu/ModeSwitch.Tests.ps1` (GPU.6), with the real backend; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
 | T-GPU-09 | External VRAM use: blocked with reason, no process touched. `tests/gpu/ModeSwitch.Tests.ps1` (GPU.6), with a VRAM load the test starts and removes itself; passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-mode-switches.md)) | P06 |
-| T-GPU-10 | Real CUDA out-of-memory handled, by reducing available VRAM on purpose | P06 |
-| T-GPU-11 | No orphan process and full VRAM release after `stop.cmd` | P06 |
-| T-GPU-12 | Everything works with the network disconnected | P06 |
+| T-GPU-10 | Real CUDA out-of-memory handled, by reducing available VRAM on purpose. `tests/gpu/Resilience.Tests.ps1` (GPU.7), run alone with the item `t-gpu-10`; **pending GPU.7b**: on Windows the driver's shared-memory fallback means no allocation fails on the reference machine, so its cases are reported as skipped in every other run ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
+| T-GPU-11 | No orphan process and full VRAM release after `stop.cmd`. `tests/gpu/Resilience.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.7), the code of `stop.cmd` on the test project; passed on the reference machine on 2026-11-26 ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
+| T-GPU-12 | Everything works with the network disconnected. `tests/gpu/Resilience.Tests.ps1` (GPU.7): the backend, the orchestrator and both runtimes on internal networks only, probed for routes, connections and lookups, answering and rendering on the real GPU; passed on the reference machine on 2026-11-26. The frontend, the browser and a start with the host's network disconnected still need a manual unplug ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
 | T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
 | T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS` for a mixture-of-experts default, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). `tests/gpu/Tuning.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.3), with steps 1 to 9; since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) for `rocinante-x-12b`, the dense default. Passed on the reference machine on 2026-11-25 over twelve partial runs for the earlier default `gemma-4-26b-a4b`: AutoFit at 42.6 T/s and a first token in 9.04 s ([evidence](verification/2026-11-25-gpu-tuning.md)); passed again the same day for `rocinante-x-12b` at 12288 over three partial runs of procedure version 2: 53.0 T/s and a first token in 2.22 s ([evidence](verification/2026-11-25-rocinante-default-gpu.md)) | P02 |
 

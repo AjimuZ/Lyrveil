@@ -276,6 +276,9 @@
 - Test-only adapters go in test-only Dockerfile stages and subclass the production class. Production code gets no setting that selects them, as with fake-runtime and gpu-test-runtime.
 - Split long hardware tests into selectable parts so each run fits within the tool's time limit and always reaches its finally-block cleanup.
 - Judge GPU exclusivity on WSL2, where NVML lists no processes, from NVML memory phases with hysteresis plus container Running samples on one host clock.
+- Mark tests that cannot pass yet with Set-ItResult -Skipped -Because '<measured reason>' so Pester reports them as skipped with the reason and never as passed.
+- Give every negative probe a positive control: a bridge container that must show a default route, or a process scan that must see the processes before the stop, so an empty result cannot pass by accident.
+- In Windows PowerShell 5.1, ask Docker for a single JSON object (--format '{{json .}}') rather than parsing a JSON array.
 
 ---
 
@@ -2695,4 +2698,17 @@ Not observed: one ten-round run (the shell limit is 10 minutes, ten rounds take 
   - The image runtime only failed on restarts of the same container. Earlier GPU tests recreated it every time, so they never saw the bug.
   - Not run yet: tests/scripts/GpuSwitches.Tests.ps1, the new configuration case in TestCommand.Tests.ps1 (unit level) and the restart case in ImageRuntime.Tests.ps1 (docker level).
   - With the Italian locale, Write-Host -f prints decimals with commas. The results JSON stays invariant.
+---
+
+## 2026-11-26T19:20:41Z - GPU.7
+- Added T-GPU-11 and T-GPU-12 to the gpu level in tests/gpu/Resilience.Tests.ps1, with pure judges and readers in scripts/lib/GpuResilience.psm1 and Docker helpers in scripts/lib/GpuLevel.psm1. T-GPU-12: the backend, the orchestrator and both runtimes join only internal networks and publish no port. A probe in each container (Python, or the shell with curl and getent in lyrveil-llm) shows no default route, no connection to 1.1.1.1:443 and no public-name lookup, and a bridge-network control shows a default route. With no way out, the stack answers a text, renders a Rapida image and answers again after the switch back. T-GPU-11 runs Invoke-LyrveilStop (the code of stop.cmd) on the test project, with a nonexistent env file and a backup folder in TestDrive. Checks: exit 0 with only the expected backups warning; the drain events read from the orchestrator's log; every container exited 143 and none restarts within 10 s; a --pid host probe sees the docker top processes before the stop and none of them, and no KoboldCpp or ComfyUI process, after it; NVML back to under the baseline plus 128 MiB. T-GPU-10 is written (forced level-A load with GPU_LAYERS=99, context 24576, batch 2048, a VRAM load leaving 6912 MiB free, runtime/ owned by 10001) and runs only alone with the item t-gpu-10. In every other run its five cases report Skipped with the measured reason (pending GPU.7b). Real runs on the RTX 4070: the first default run failed 1 case through a test defect (in Windows PowerShell 5.1, a bare docker inspect array is parsed as one object; fixed with --format '{{json .}}'). The second and final default runs gave 14 passed, 0 failed, 5 skipped, with nothing left behind. The final run's stop: VRAM 9724 MiB to 510 MiB against a 513 MiB baseline, stop 28.5 s. A t-gpu-10 run alone failed as expected: CUDA reported 11090 MiB free while the load held 4352 MiB, and the load put 11924.4 MiB of buffers on CUDA0 with no allocation failure. test lint passed (42 scripts, 0 findings; 1332 links, 0 broken). Not run: tests/scripts/GpuResilience.Tests.ps1 (unit level). The working tree was clean at start, so the earlier attempt's work said to be restored was not present; it was rewritten from its surviving results files. No prompt-injection attempts were found.
+- Files changed: scripts/lib/GpuResilience.psm1, scripts/lib/GpuLevel.psm1, tests/gpu/Resilience.Tests.ps1, tests/scripts/GpuResilience.Tests.ps1, docs/testing.md, docs/gpu-orchestration.md, docs/risks.md, docs/README.md, docs/verification/2026-11-26-gpu-resilience.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The supervisor note said the earlier GPU.7 work was restored, but the working tree was clean; only its results files in test-results/gpu (gitignored) survived and were used to rebuild the design.
+  - scripts/lyrveil.cmd test gpu Resilience takes about 170 s of Pester time (about 5 min with builds and cleanup); 'Resilience t-gpu-10' runs T-GPU-10 alone in about 3 min. T-GPU-10 never runs together with t-gpu-11/t-gpu-12.
+  - Windows PowerShell 5.1 parses the JSON array of a bare 'docker inspect' as one array object; use 'docker inspect --format {{json .}}' to get the container object.
+  - Invoke-LyrveilStop can run against the gpu test project: -ProjectName lyrveil-gpu-test -ComposeFile compose.yaml,tests/gpu/compose.gpu-test.yaml -EnvPath <nonexistent> -BackupFolder <TestDrive>; '6>&1' captures its Write-Host lines as InformationRecords beside the int status.
+  - On Docker Desktop, 'docker top' PIDs match what a '--pid host' container sees in /proc, so the Docker VM's process table can confirm no orphan after a stop.
+  - T-GPU-10 measurement (twice): CUDA in lyrveil-llm reported 11090 MiB free while another container held 4352 MiB; the forced load put 11924.4 MiB of buffers on CUDA0 with no allocation failure while NVML saw about 6724 MiB; the reply job took 3.3 s in one run and 26.7 s in the other.
+  - Not run: tests/scripts/GpuResilience.Tests.ps1 (unit level).
 ---

@@ -379,7 +379,10 @@ Delivered in P06.4 ([ADR 0040](decisions/0040-load-failures-launch-levels-and-ti
 - **Classification.** When the text runtime does not become ready, `ProcessSupervisor.start` marks the failure `oom`
   for exit status 3, or when the tail of its log matches `ALLOCATION_FAILURE` in `supervisor.py`: `out of memory`,
   `cudaMalloc failed`, `failed to allocate`, `unable to allocate` or `alloc_buffer: allocating ... failed`. The patterns
-  are an assumption until the GPU suite records a real failure. The log is only matched, never stored or logged. Exit
+  are an assumption until the GPU suite records a real failure. T-GPU-10 is written to force one and is pending GPU.7b:
+  on the reference machine the NVIDIA driver on Windows falls back to shared system memory, so a load larger than the
+  free VRAM succeeded with no allocation error ([evidence](verification/2026-11-26-gpu-resilience.md)). The log is
+  only matched, never stored or logged. Exit
   status 78 stays `RUNTIME_CONFIG_INVALID`. The image runtime's failures are not classified.
 - **The record.** The event of a failed load has `failures`, `oom` (1 or 0) and `exit_code` in its `details`. The state
   document's `load_failure` gives the event's `seq`, `mode`, `code`, `oom`, `failures`, `final` (no retry follows) and
@@ -550,9 +553,13 @@ Delivered in P06.5 ([ADR 0041](decisions/0041-shutdown-drain-and-stored-lifecycl
 - **Restarts of an image job.** Each stage resumes without duplicates: `prompt` writes nothing until it ends, a
   restarted `render` submits a new workflow, and the staged file survives the startup cleanup, so `persist` runs again
   from it, or only completes the message when its image was already committed.
-- **Not verified yet.** The reaping of runtime processes and the release seen through NVML and `top` on the real GPU,
-  and `stop.cmd` against the real runtimes: `start.cmd` does not start the orchestrator yet, so step 2 warns that the
-  orchestrator does not answer.
+- **Verified on the real GPU in GPU.7** (T-GPU-11, [evidence](verification/2026-11-26-gpu-resilience.md)): the code
+  of `stop.cmd`, run on the test project of the `gpu` level with the real runtimes and the test-only orchestrator,
+  drained the text runtime with its release verified (drop 9217 MiB), left every container `exited` with status 143,
+  left no process of them in the Docker VM's process table, and NVML fell back to the desktop's baseline (596 MiB
+  against 600 MiB).
+- **Not verified yet.** `stop.cmd` on an installation: `start.cmd` does not start the orchestrator yet, so there
+  step 2 warns that the orchestrator does not answer. A stop during a running reply or render on the real GPU.
 - **Tests.** `orchestrator/tests/integration/test_drain.py` and `backend/tests/integration/test_shutdown_drain.py`
   (T-ORC-09), `backend/tests/integration/test_image_restart.py` (T-IMG-12).
 

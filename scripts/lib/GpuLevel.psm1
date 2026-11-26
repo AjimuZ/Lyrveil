@@ -1,4 +1,4 @@
-# Runs the gpu level against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives its tests NVML samples, the runtime APIs and, for the mode switch tests, the control and backend APIs.
+# Runs the gpu level against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives its tests NVML samples, the runtime APIs, the control and backend APIs, and the process, route and network probes of the stop and offline tests.
 
 Set-StrictMode -Version Latest
 
@@ -1101,19 +1101,239 @@ function Set-GpuTestDataOwner {
     <#
     Makes UID and GID 10001, the backend's user, own the root of the test data volume, as setup.cmd does for an
     installation's volumes, from a one-off container of the built text runtime image with no network and only
-    CAP_CHOWN. runtime/ and its launch files keep their owner, and the runtimes still mount them read-only. Returns
-    $true when the container succeeded.
+    CAP_CHOWN. runtime/ and its launch files keep their owner, and the runtimes still mount them read-only. With
+    WithRuntime, runtime/ and both launch files go to 10001 too, as when the backend wrote them itself, so the backend
+    can lower the launch level (T-GPU-10); the level's own writer, root without DAC_OVERRIDE, can then no longer
+    replace them. Returns $true when the container succeeded.
     #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([bool])]
-    param([Parameter(Mandatory = $true)] [string]$Root)
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [switch]$WithRuntime
+    )
 
     if (-not $PSCmdlet.ShouldProcess($script:DataVolume, 'Give the volume root to 10001:10001')) { return $true }
-    $change = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument @(
-        'run', '--rm', '--network', 'none', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'CHOWN',
-        '--security-opt', 'no-new-privileges:true', '--volume', "$($script:DataVolume):/data",
-        '--entrypoint', 'chown', 'lyrveil/llm:gpu-test', '10001:10001', '/data')
+    $paths = @('/data')
+    if ($WithRuntime) { $paths += @('/data/runtime', '/data/runtime/llm-launch.env', '/data/runtime/image-launch.env') }
+    $change = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument (@(
+            'run', '--rm', '--network', 'none', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'CHOWN',
+            '--security-opt', 'no-new-privileges:true', '--volume', "$($script:DataVolume):/data",
+            '--entrypoint', 'chown', 'lyrveil/llm:gpu-test', '10001:10001') + $paths)
     return ($change.Status -eq 0)
+}
+
+function Read-GpuTestLaunchFile {
+    <#
+    Returns @{ Status; Line }: the exit status of a one-off container of the built text runtime image, with no network
+    and the test data volume read-only, that prints runtime/llm-launch.env, and the file's lines, empty when it failed.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    $read = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -Argument @(
+        'run', '--rm', '--network', 'none', '--read-only', '--user', '10001:10001', '--cap-drop', 'ALL',
+        '--security-opt', 'no-new-privileges:true', '--label', "com.docker.compose.project=$script:ProjectName",
+        '--volume', "$($script:DataVolume):/data:ro", '--entrypoint', 'cat', 'lyrveil/llm:gpu-test', '/data/runtime/llm-launch.env')
+    $lines = if ($read.Status -eq 0) { [string[]]@($read.Output | Where-Object { $_.Trim() }) } else { [string[]]@() }
+    return @{ Status = [int]$read.Status; Line = $lines }
+}
+
+function Get-GpuTestContainerId {
+    # Returns the id of the container of Service in the test project, running or not, or '' when it has none or
+    # Docker fails. Not exported.
+    param([string]$Root, [string]$Service)
+
+    $id = @((Invoke-GpuCompose -Root $Root -Argument @('ps', '--all', '--quiet', $Service) -Capture).Output | Where-Object { $_.Trim() })
+    if ($id.Length -eq 0) { return '' }
+    return $id[0].Trim()
+}
+
+function Get-GpuTestServiceTop {
+    <#
+    Returns @{ Status; Line }: the exit status and the output lines of "docker top" for the container of Service in
+    the test project, which lists its processes with the PIDs of the Docker VM (ConvertFrom-DockerTopText of
+    GpuResilience.psm1 reads them). Status is 1, with no line, when the service has no container; "docker top" fails
+    for a container that is not running.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Service
+    )
+
+    $id = Get-GpuTestContainerId -Root $Root -Service $Service
+    if (-not $id) { return @{ Status = 1; Line = [string[]]@() } }
+    $top = Invoke-GpuNative -Command 'docker' -Capture -Argument @('top', $id)
+    return @{ Status = [int]$top.Status; Line = [string[]]@($top.Output) }
+}
+
+# The host process probe of Invoke-GpuHostProcessProbe, run by Python from its standard input in a container that
+# shares the Docker VM's PID namespace. It reads only /proc/<pid>/cmdline, which every user may read, and prints
+# "<pid> <command line>" for each PID named as an argument and for each process of a runtime program, whatever started
+# it. __PATTERN__ is replaced by the Python tuple of the runtime patterns.
+$script:HostProcessProbe = @'
+import os, sys
+wanted = set(int(argument) for argument in sys.argv[1:])
+patterns = __PATTERN__
+for name in sorted(os.listdir('/proc'), key=lambda entry: (len(entry), entry)):
+    if not name.isdigit():
+        continue
+    try:
+        with open('/proc/' + name + '/cmdline', 'rb') as handle:
+            raw = handle.read()
+    except OSError:
+        continue
+    command = ' '.join(part.decode('ascii', 'replace') for part in raw.split(b'\0') if part)
+    if command and (int(name) in wanted or any(pattern in command for pattern in patterns)):
+        print(name + ' ' + command)
+'@
+
+function Invoke-GpuHostProcessProbe {
+    <#
+    Lists processes of the Docker VM from a one-off container of the built image runtime image that shares the VM's
+    PID namespace (--pid host), with no network, a read-only root, no capability and the user 10001, carrying the test
+    project's label. Returns @{ Status; Line }: the container's exit status and one line "<pid> <command line>" for
+    every running process whose PID is in ProcessId and for every process whose command line holds one of Pattern,
+    the runtime programs (ConvertFrom-GpuHostProcessText of GpuResilience.psm1 reads them). It reads command lines only
+    and signals nothing, so no process is ever touched.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [AllowEmptyCollection()] [int[]]$ProcessId = @(),
+        [Parameter(Mandatory = $true)] [ValidatePattern('^[A-Za-z0-9/._-]+$')] [string[]]$Pattern
+    )
+
+    $tuple = '(' + (($Pattern | ForEach-Object { "'$_'" }) -join ', ') + ',)'
+    $code = $script:HostProcessProbe.Replace('__PATTERN__', $tuple)
+    $run = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -InputText $code -Argument (@(
+            'run', '--rm', '-i', '--pid', 'host', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+            '--security-opt', 'no-new-privileges:true', '--user', '10001:10001', '--label', "com.docker.compose.project=$script:ProjectName",
+            '--label', 'com.lyrveil.test=gpu', '--env', 'HOME=/tmp', '--entrypoint', 'python', 'lyrveil/image:gpu-test', '-') +
+        [string[]]@($ProcessId | ForEach-Object { "$_" }))
+    return @{ Status = [int]$run.Status; Line = [string[]]@($run.Output) }
+}
+
+# The route probe of Invoke-GpuRouteProbe, in two forms with the same output: "route:" and "route6:" before each line
+# of the routing tables, then "connect=connected" or "connect=unreachable" for a TCP connection to 1.1.1.1:443 within
+# 3 s, then "resolve=resolved" or "resolve=unresolved" for the public name example.com. The shell form is for
+# lyrveil-llm, which has curl but no Python; curl's status 7 (no connection) and 28 (timeout) mean unreachable. It has
+# no double quote, which Windows PowerShell 5.1 would pass unescaped.
+$script:RouteProbeShell = 'sed s/^/route:/ /proc/net/route; [ -r /proc/net/ipv6_route ] && sed s/^/route6:/ /proc/net/ipv6_route; ' +
+    'curl -s -o /dev/null --connect-timeout 3 --max-time 5 http://1.1.1.1:443/; c=$?; ' +
+    'if [ $c -eq 7 ] || [ $c -eq 28 ]; then echo connect=unreachable; else echo connect=connected; fi; ' +
+    'if getent hosts example.com > /dev/null 2>&1; then echo resolve=resolved; else echo resolve=unresolved; fi'
+$script:RouteProbePython = @'
+import os, socket
+for name, path in (('route', '/proc/net/route'), ('route6', '/proc/net/ipv6_route')):
+    if os.path.exists(path):
+        for line in open(path):
+            print(name + ':' + ' '.join(line.split()))
+probe = socket.socket()
+probe.settimeout(3)
+print('connect=' + ('connected' if probe.connect_ex(('1.1.1.1', 443)) == 0 else 'unreachable'))
+try:
+    socket.getaddrinfo('example.com', 443)
+    print('resolve=resolved')
+except OSError:
+    print('resolve=unresolved')
+'@
+
+function Invoke-GpuRouteProbe {
+    <#
+    Runs the route probe inside the running container of Service with "docker compose exec" and returns @{ Status;
+    Line }: the exit status and the probe's lines (ConvertFrom-GpuRouteProbe of GpuResilience.psm1 reads them). The
+    only traffic it may send is one TCP connection attempt to 1.1.1.1:443 and one lookup of example.com, which on an
+    internal network fail at once. The container must be running.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [ValidateSet('lyrveil-llm', 'lyrveil-image', 'lyrveil-orchestrator', 'lyrveil-backend')] [string]$Service
+    )
+
+    if ($Service -eq 'lyrveil-llm') {
+        $run = Invoke-GpuCompose -Root $Root -Capture -Argument @('exec', '-T', $Service, '/bin/sh', '-c', $script:RouteProbeShell)
+    }
+    else {
+        $run = Invoke-GpuCompose -Root $Root -Capture -InputText $script:RouteProbePython -Argument @('exec', '-T', $Service, 'python', '-')
+    }
+    return @{ Status = [int]$run.Status; Line = [string[]]@($run.Output) }
+}
+
+function Invoke-GpuRouteControl {
+    <#
+    Prints the routing tables of a one-off container of the built text runtime image on Docker's default bridge
+    network, which has a route out, as the control of the route probe: the same "route:" and "route6:" lines, and no
+    connection is attempted. The container has a read-only root, no capability, the user 10001 and the test project's
+    label. Returns @{ Status; Line }.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory = $true)] [string]$Root)
+
+    $run = Invoke-GpuNative -Directory $Root -Command 'docker' -Capture -Argument @(
+        'run', '--rm', '--network', 'bridge', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+        '--user', '10001:10001', '--label', "com.docker.compose.project=$script:ProjectName", '--entrypoint', '/bin/sh',
+        'lyrveil/llm:gpu-test', '-c', 'sed s/^/route:/ /proc/net/route; [ -r /proc/net/ipv6_route ] && sed s/^/route6:/ /proc/net/ipv6_route; true')
+    return @{ Status = [int]$run.Status; Line = [string[]]@($run.Output) }
+}
+
+function Get-GpuTestNetworkFact {
+    <#
+    Returns what Docker reports of the networks of the container of Service in the test project, running or not:
+    @{ Service; Known; Networks; Published; NetworkMode }. Networks lists @{ Name; Internal } for each network it
+    joins, Internal coming from "docker network inspect"; Published lists every port binding to the host, from both
+    its live ports and its HostConfig, as "<port> on <address>:<host port>". Known is $false, with the lists empty,
+    when it has no container or Docker fails.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Root,
+        [Parameter(Mandatory = $true)] [string]$Service
+    )
+
+    $fact = @{ Service = $Service; Known = $false; Networks = @(); Published = [string[]]@(); NetworkMode = '' }
+    $id = Get-GpuTestContainerId -Root $Root -Service $Service
+    if (-not $id) { return $fact }
+    # One object, not the array that a bare "docker inspect" prints, which Windows PowerShell 5.1 would parse as a
+    # single array object.
+    $inspect = Invoke-GpuNative -Command 'docker' -Capture -Argument @('inspect', '--format', '{{json .}}', $id)
+    if ($inspect.Status -ne 0) { return $fact }
+    try { $container = ($inspect.Output -join "`n") | ConvertFrom-Json }
+    catch { return $fact }
+    $settings = Get-JsonProperty $container 'NetworkSettings'
+    $hostConfig = Get-JsonProperty $container 'HostConfig'
+    $networks = New-Object System.Collections.Generic.List[object]
+    $joined = Get-JsonProperty $settings 'Networks'
+    if ($null -ne $joined) {
+        foreach ($entry in $joined.PSObject.Properties) {
+            $flag = Invoke-GpuNative -Command 'docker' -Capture -Argument @('network', 'inspect', '--format', '{{.Internal}}', $entry.Name)
+            $networks.Add(@{ Name = $entry.Name; Internal = ($flag.Status -eq 0 -and ($flag.Output -join '').Trim() -eq 'true') })
+        }
+    }
+    $published = New-Object System.Collections.Generic.List[string]
+    foreach ($map in @((Get-JsonProperty $settings 'Ports'), (Get-JsonProperty $hostConfig 'PortBindings'))) {
+        if ($null -eq $map) { continue }
+        foreach ($entry in $map.PSObject.Properties) {
+            foreach ($binding in @($entry.Value)) {
+                if ($null -eq $binding) { continue }
+                $line = "$($entry.Name) on $(Get-JsonProperty $binding 'HostIp'):$(Get-JsonProperty $binding 'HostPort')"
+                if (-not $published.Contains($line)) { $published.Add($line) }
+            }
+        }
+    }
+    $fact.Known = $true
+    $fact.Networks = $networks.ToArray()
+    $fact.Published = [string[]]$published.ToArray()
+    $fact.NetworkMode = [string](Get-JsonProperty $hostConfig 'NetworkMode')
+    return $fact
 }
 
 # The client of Invoke-GpuServiceApi, run by the Python of the service's container from its standard input. It sends
@@ -1423,4 +1643,5 @@ Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample
     Invoke-GpuImageJob, Invoke-GpuImageGraph, Get-GpuTestContainerMemory, ConvertFrom-DockerMemoryText, Start-GpuMemorySampler,
     Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog, Initialize-GpuStackImage, New-GpuTestRuntimeContainer,
     Set-GpuTestDataOwner, Invoke-GpuServiceApi, Start-GpuVramLoad, Get-GpuVramLoad, Stop-GpuVramLoad, Start-GpuTimelineSampler,
-    Stop-GpuTimelineSampler, Get-GpuTestServiceLog
+    Stop-GpuTimelineSampler, Get-GpuTestServiceLog, Read-GpuTestLaunchFile, Get-GpuTestServiceTop, Invoke-GpuHostProcessProbe,
+    Invoke-GpuRouteProbe, Invoke-GpuRouteControl, Get-GpuTestNetworkFact
