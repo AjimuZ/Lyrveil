@@ -136,6 +136,18 @@ Describe 'Get-QualityConsistencyPlan' {
         }
     }
 
+    It 'carries each character question frequency, as the backend demo cards hold it, and refuses an unknown one' {
+        $plan = Get-QualityConsistencyPlan -Document $script:ScriptDocument -Mode Short
+        @($plan.Characters | ForEach-Object { $_.QuestionFrequency }) | Should -Be @('a_volte', 'a_volte', 'spesso')
+        $demo = [System.IO.File]::ReadAllText((Join-Path $script:RepositoryRoot 'backend\src\lyrveil\services\demo_characters.py'))
+        $cards = [regex]::Matches($demo, '"first_name": "(\w+)"|"question_frequency": "(\w+)"')
+        $order = @($cards | ForEach-Object { if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value } })
+        ($order -join ',') | Should -Be 'Nerea,a_volte,Ilario,a_volte,Tessa,spesso'
+        $broken = $script:ScriptDocument | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        $broken.characters[0].question_frequency = 'sempre'
+        { Get-QualityConsistencyPlan -Document $broken -Mode Short } | Should -Throw "*unknown question frequency 'sempre'*"
+    }
+
     It 'refuses a character without 12 probes and too few shared messages' {
         $broken = $script:ScriptDocument | ConvertTo-Json -Depth 8 | ConvertFrom-Json
         $broken.characters[1].probes = @($broken.characters[1].probes | Select-Object -First 11)

@@ -27,6 +27,7 @@ Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image 
 .\scripts\lyrveil.cmd test docker
 .\scripts\lyrveil.cmd test gpu
 .\scripts\lyrveil.cmd test quality
+.\scripts\lyrveil.cmd test quality-rating test-results\quality\italian-full-<time>\sheet.md
 .\scripts\lyrveil.cmd test all
 ```
 
@@ -69,9 +70,13 @@ profile; without a file name it runs both files:
 .\scripts\lyrveil.cmd test quality Consistency short rocinante-x-12b # the smoke mode of T-QLT-05
 ```
 
+`quality-rating` takes the path of the owner's filled blind sheet of T-QLT-01 and, optionally, the folder that holds
+its `key.json` and `metrics.json` (the sheet's own folder by default). It needs no GPU or Docker; see
+[T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import).
+
 Every other level refuses arguments.
 
-`all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
+`all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu`, `quality` and `quality-rating`, which need the hardware or the owner's sheet and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
 
 `integration` builds the test stage of each component that has a `tests/integration` folder, today the backend and the orchestrator, and runs `pytest tests/integration` in it, without network access. The backend's tests use SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in. The orchestrator's tests run the control API in process through Starlette's test client, with a fake GPU probe.
 
@@ -414,8 +419,10 @@ passed; it needs two hours of the GPU, and its host RAM limit may be the first c
 Delivered with QLT.1 for the automated parts of P04's quality exit: T-QLT-05, the
 [consistency protocol](consistency-engine.md#consistency-protocol) with the SmartCache and SWA padding measurements of
 [ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md), and T-QLT-06, the
-[extraction evaluation](consistency-engine.md#extraction-evaluation). T-QLT-01, T-QLT-07 and C7, the owner's blind
-test, need human review and are not part of it.
+[extraction evaluation](consistency-engine.md#extraction-evaluation). Delivered with QLT.2: the generation, the
+automatic metrics and the blind sheet of T-QLT-01, with the `quality-rating` level that imports the owner's ratings
+(see [T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import)). T-QLT-07 and C7, the owner's blind test, need human
+review and are not part of it.
 
 `Invoke-QualityTestLevel` of [`scripts/lib/TestCommand.psm1`](../scripts/lib/TestCommand.psm1) runs
 `tests/quality/*.Tests.ps1` through `Invoke-GpuLevel` of [`scripts/lib/GpuLevel.psm1`](../scripts/lib/GpuLevel.psm1),
@@ -507,16 +514,65 @@ the 5 expected items were found: the model returned no memory for four windows a
 the window does not show, which the job drops. **The full protocols have not run on either profile**, so T-QLT-05 and
 T-QLT-06 are not passed, and the extraction result is a finding for the P04 tuning round.
 
+#### T-QLT-01: generation, blind sheet and import
+
+The [Italian quality protocol](prompting.md#italian-quality-protocol) asks for three demo characters, scripted
+conversations of at least 120 messages with time jumps, corrections and a long topic change, automatic metrics, and the
+owner's rating. Those conversations are the ones of T-QLT-05 (`tests/quality/consistency/script.json`), so
+`Consistency.Tests.ps1` is also the **generation** of T-QLT-01 and runs nothing twice: `test quality` and `test quality
+Consistency` (on the profiles named, both catalog profiles by default) leave
+`test-results/quality/italian-<mode>-<time>/` beside the consistency results. `tests/quality/italian/`, once planned
+for the protocol's own scripts, is not needed. The script gives each character its `question_frequency`, which must
+match the demo card as the band and narration do.
+
+[`scripts/lib/ItalianQuality.psm1`](../scripts/lib/ItalianQuality.psm1) computes everything from the recorded replies of
+the main conversations (the change conversation of C6 starts on another profile):
+
+- **M1**, the share of replies without a V8 hit. V8 is the backend's stop-word check, and it reads only replies of at
+  least 8 words, so a shorter reply counts as Italian. At least 98 %.
+- **M2**, the V9 hits (the calque and artifact list, with its opening and repetition rules) per 100 replies. At most 1.
+- **M3**, from the texts: the share of replies whose first three words equal those of one of the 10 previous replies of
+  the same conversation. At most 5 %.
+- **M4**, per character, the share of replies with a question mark against an expected value from the card's
+  `question_frequency` (`raramente` 0.10, `a_volte` 0.30, `spesso` 0.50; the protocol does not give numbers, so these
+  are this module's reading). Every character must be within 20 points.
+
+`sheet.md` is the owner's file. It mixes, in one random order per part, the replies sampled for every selected profile:
+**Part 1** holds 30 replies per profile to rate from 1 to 5 for naturalness (M5), each with the character and the user
+message; **Part 2** holds 20 replies per profile (the same number per character, no reply twice) whose author the
+owner names among the three characters (M6), with the reply alone. Items have opaque ids (`N01`, `A01`), so the sheet
+holds no profile name; `key.json` beside it records the profile and character of each id and is not to be opened
+before the rating. A run that has fewer replies than the samples ask for (the short mode) is marked `smoke`, and
+identity probe replies, which answer a scripted question, are used only to fill a sample that nothing else can. M6 takes
+at most half of a character's replies so that M5 keeps some. `metrics.json` holds M1 to M4 per profile.
+
+`scripts\lyrveil.cmd test quality-rating <sheet.md>` reads the filled sheet (`Rating: 4`, `Author: Nerea`) with
+`Read-ItalianRating`, checks it against the key (the sheet's id, unknown or repeated ids, a rating outside 1 to 5, an
+author who is no character) and applies the targets with `Get-ItalianVerdict`, per profile: M5, the average rating, at
+least 4; M6, the share attributed to the right character, at least 80 %; and M1 to M4 from `metrics.json`. A profile is
+`met`, `missed`, or `incomplete` when a value is blank or a metric is missing: nothing is guessed. It prints the verdict,
+writes `verdict.json` beside the key, and exits 0 only when the sheet read without a problem and every profile is `met`.
+A verdict from a `smoke` sheet says it is no evidence.
+
+**Result so far.** Only the generation of the short mode has run on the real stack: `test quality Consistency short
+rocinante-x-12b` on 2026-11-26 wrote the sheet, the key and `metrics.json` and left nothing behind
+([evidence](verification/2026-11-26-quality-level.md)). No owner has rated a sheet, and no full run has been made, so
+**T-QLT-01 has no verdict** and is not passed. Importing the unfilled real sheet exited 1 and reported all its items
+blank, as it must.
+
 The results go to `test-results/quality/consistency-<mode>-<time>.json` and `test-results/quality/extraction-<mode>-<time>.json`,
 which Git ignores: every reply with its text, probe verdict, length and checks, every score against its target, every
 trial and decision, and every extraction output with its verdict.
 `tests/scripts/QualityLevel.Tests.ps1`, in the `unit` level, covers the arguments, the plan built from the real script,
 the probe and narration readers, every score at and just past its target, the trial launch lines and the SmartCache and
-SWA padding rules. `backend/tests/unit/test_gpu_extraction_probe.py` checks that the probe gives the job's prompt and
+SWA padding rules. `tests/scripts/ItalianQuality.Tests.ps1` covers M1 to M4 at and past their targets, the blind sheet
+(sample sizes, no profile name, mixing, a fixed seed, probe fill), the import of a filled sheet and the verdict, on
+synthetic replies and ratings. `backend/tests/unit/test_gpu_extraction_probe.py` checks that the probe gives the job's prompt and
 repair prompt, refuses what the job refuses, applies guard 1, drops what the job drops, scores each target at its
 threshold, and that the fixture holds 40 valid windows. The cases "The gpu level" of `tests/scripts/TestCommand.Tests.ps1`
 also cover `test quality`: both files with their items and the cleanup, one named file, a refused argument before any
-GPU or Docker call, and the skip without a GPU.
+GPU or Docker call, and the skip without a GPU; and `test quality-rating`, with its usage and an import that passes and
+one that fails on a blank sheet.
 
 ### The `docker` level
 
@@ -721,8 +777,8 @@ tests/
   docker/
   gpu/
   quality/           Consistency.Tests.ps1 (T-QLT-05), Extraction.Tests.ps1 (T-QLT-06)
-  quality/consistency/   script.json, the scripted conversations of T-QLT-05
-  quality/italian/   planned
+  quality/consistency/   script.json, the scripted conversations of T-QLT-05 and T-QLT-01
+  quality/italian/   not used: T-QLT-01 reads the replies of the consistency conversations
   quality/images/    planned
 ```
 

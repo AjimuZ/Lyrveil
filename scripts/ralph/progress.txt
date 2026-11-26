@@ -287,6 +287,9 @@
 - PSScriptAnalyzer's ShouldProcess rule also flags New-/Set-/Start- helper functions inside test files. Name such helpers with Get- or Invoke-.
 - When piping a possibly-$null value into ForEach-Object, filter with Where-Object { $null -ne $_ } first: $null | ForEach-Object runs the block once.
 - For GPU quality checks, reuse the backend's own code through a probe in the backend test stage (stdin JSON in, one ASCII JSON line out), so the test never copies prompts, grammars or validation rules.
+- A shared module (ItalianQuality.psm1) holds all the logic and the Pester test files only drive and assert. This keeps the real-stack file thin and the synthetic unit tests complete.
+- A blind rating artefact is a sheet with opaque ids plus a separate key file, bound by a hash id that the importer checks. A blank or invalid answer makes a profile 'incomplete', never a guessed value.
+- Use a non-state-changing verb (Get-) for pure builders, to avoid the PSUseShouldProcess lint rule. Keep non-ASCII out of PowerShell test files, because Windows PowerShell 5.1 reads BOM-less files as ANSI.
 
 ---
 
@@ -2773,4 +2776,17 @@ The full protocols have not run on either profile. Lint passes; the 15 new probe
   - Both quality files hand runtime/ of the test volume to UID 10001 (Set-GpuTestDataOwner -WithRuntime) and write launch files with Set-GpuTestLaunchLine -AsBackendUser. After that handover the root writer can no longer replace the files, so any new file in the shared test volume must do the same.
   - Replies vary between runs, so a short-mode score is a smoke result, not a stable score.
   - The Bash tool here denies 'python -c' and piped commands. Read results files with the Grep and Read tools.
+---
+
+## 2026-11-26T20:44:36Z - QLT.2
+- T-QLT-01 generation, blind sheet and import are in place, but the new Pester unit tests have not run and no profile has a T-QLT-01 verdict. The scripted conversations of T-QLT-05 are also the T-QLT-01 scripts, so Consistency.Tests.ps1 now writes test-results/quality/italian-<mode>-<time>/. That folder holds metrics.json (M1 to M4 per profile), sheet.md and key.json. The sheet is blind: opaque ids N01/A01, both profiles mixed, 30 naturalness and 20 authorship replies per profile. key.json records which profile wrote each id. The new `test quality-rating <sheet.md>` level imports the filled sheet. It prints a per-profile verdict (met, missed or incomplete, never a guessed rating), writes verdict.json and exits 0 only when every profile is met. I added question_frequency to script.json, because M4 needs an expected question rate from the card (my reading: raramente 0.10, a_volte 0.30, spesso 0.50). Real run: `test quality Consistency short rocinante-x-12b` on the RTX 4070 took 301.8 s. It wrote the sheet, key and metrics, and the test project and volume were removed afterwards. Pester gave 6 passed and 2 failed. One failure is T-QLT-05's hard targets (HardPassed false). The other is the new M4 case (M4 failed on 12 probe-only replies, so a smoke result). Importing the unfilled real sheet exited 1 and listed all 12 items as blank. After that run I changed the sampler so authorship takes at most half of a character's replies (Part 1 had come out empty); that edit has only been through lint, not another real run. `test lint` passes with 0 PSScriptAnalyzer findings. The Pester files (ItalianQuality.Tests.ps1, the new QualityLevel and TestCommand cases) could not be run alone, since the unit level always runs the whole suite. They are written against synthetic ratings and have never executed. SWA padding is not applicable after ADR 0045.
+- Files changed: scripts/lib/ItalianQuality.psm1, scripts/lib/QualityLevel.psm1, scripts/lib/TestCommand.psm1, tests/quality/Consistency.Tests.ps1, tests/quality/consistency/script.json, tests/scripts/ItalianQuality.Tests.ps1, tests/scripts/QualityLevel.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/prompting.md, docs/verification/2026-11-26-quality-level.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Not run: tests/scripts/ItalianQuality.Tests.ps1, the new case in QualityLevel.Tests.ps1 and the two quality-rating cases in TestCommand.Tests.ps1. The orchestrator's unit run is their first execution, so a failure there is likely in those files. Pester 5 / Windows PowerShell 5.1 pitfalls were desk-checked, not observed.
+  - The Bash tool here only allows scripts/lyrveil.cmd test <level>. It denies sed, powershell.exe and direct Pester calls, so a single Pester file cannot be run in-session.
+  - The short mode has only identity-probe replies, so its blind sheet shows names and places and M4 fails on it. That is expected and the result is no evidence. Only the full run, about 1 to 2 hours per profile, gives usable M1 to M4 and a sheet for the owner.
+  - The owner's flow: run `test quality` (or `test quality Consistency`) for both profiles, fill in test-results/quality/italian-full-<time>/sheet.md without opening key.json, then run `scripts\lyrveil.cmd test quality-rating <sheet.md>`.
+  - The expected question rates for M4 (0.10, 0.30, 0.50 for raramente, a_volte, spesso) are this task's reading of the protocol, which gives no numbers. The owner may want to confirm them.
+  - A short-mode reply from rocinante-x-12b contained the literal word 'Utente' where a user name should be. It is worth a look in the P04 tuning round.
+  - Both catalog profiles are mixed in one sheet only when both are selected in the same run. A single-profile run gives a single-profile sheet.
 ---

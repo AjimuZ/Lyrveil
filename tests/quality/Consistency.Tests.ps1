@@ -11,6 +11,12 @@
 # conversation directly on lyrveil-llm, each after the extraction prompt of a T-QLT-06 window, with SMART_CACHE 0 and 2.
 # QualityLevel.psm1, which the unit level covers, computes every score and decision.
 # test-results/quality/consistency-<mode>-<time>.json, ignored by Git, holds every reply, score, trial and decision.
+#
+# The same replies are the generation of T-QLT-01 (the Italian quality protocol of docs/prompting.md): its scripts are
+# these three conversations. ItalianQuality.psm1, which the unit level covers, computes M1 to M4 for each profile and
+# builds one blind sheet that mixes the sampled replies of every profile; test-results/quality/italian-<mode>-<time>/
+# holds sheet.md (for the owner), key.json (which profile wrote each id), metrics.json and, once the owner's ratings
+# are imported with "scripts\lyrveil.cmd test quality-rating <sheet.md>", verdict.json.
 
 # Pester passes Select, the items after the level in "test quality", to BeforeAll, which the analyzer does not follow.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Select', Justification = 'Read in BeforeAll.')]
@@ -20,6 +26,7 @@ BeforeAll {
     Set-StrictMode -Version Latest
     $script:Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     Import-Module (Join-Path $script:Root 'scripts\lib\GpuLevel.psm1') -Force
+    Import-Module (Join-Path $script:Root 'scripts\lib\ItalianQuality.psm1') -Force
     Import-Module (Join-Path $script:Root 'scripts\lib\QualityLevel.psm1') -Force
     $script:Utf8 = New-Object System.Text.UTF8Encoding $false
     $script:Card = Get-GpuSample
@@ -32,6 +39,13 @@ BeforeAll {
     $scriptText = [System.IO.File]::ReadAllText((Join-Path $script:Root 'tests\quality\consistency\script.json'), $script:Utf8)
     $script:Plan = Get-QualityConsistencyPlan -Document ($scriptText | ConvertFrom-Json) -Mode $script:Selection.Mode
     $script:ResultFile = Join-Path $script:Root ('test-results\quality\consistency-{0}-{1}.json' -f $script:Plan.Mode.ToLowerInvariant(), $script:StartedAt.ToString('yyyyMMdd-HHmmss'))
+    $script:ItalianFolder = Join-Path $script:Root ('test-results\quality\italian-{0}-{1}' -f $script:Plan.Mode.ToLowerInvariant(), $script:StartedAt.ToString('yyyyMMdd-HHmmss'))
+    # What the blind sheet's second part tells the owner about each demo character (docs/character-system.md, Demo characters).
+    $script:CharacterNote = @{
+        Nerea  = 'cartographer in a port city; informal, dry irony'
+        Ilario = 'night-train conductor and amateur astronomer; polite, measured, long sentences'
+        Tessa  = 'apprentice alchemist and part-time barista; very informal, lively, short bursts'
+    }
     $script:Timeout = @{ Ready = 420; Reply = 300; Job = 600 }
     $script:Record = [ordered]@{
         selection = [string[]]@($Select); mode = $script:Plan.Mode; profiles_selected = $script:Selection.Profiles
@@ -40,6 +54,7 @@ BeforeAll {
             change_character = $script:Plan.ChangeCharacter; smart_cache_pairs = $script:Plan.SmartCachePairs
         }
         timeouts = $script:Timeout; preparation = [ordered]@{}; profiles = [ordered]@{}; smart_cache = [ordered]@{}; swa_padding = [ordered]@{}
+        italian = [ordered]@{ test = 'T-QLT-01'; folder = $script:ItalianFolder; metrics = [ordered]@{}; written = $false }
     }
     $script:Problems = New-Object System.Collections.Generic.List[string]
     $script:Characters = @{}
@@ -368,9 +383,10 @@ print(json.dumps({row[0]: {'seq': row[1], 'status': row[2], 'checks': json.loads
                 $id = $script:Characters[$character.FirstName]
                 if (-not $id) { $script:Problems.Add("The demo character $($character.FirstName) was not loaded."); continue }
                 $communication = Get-Field (Get-Field (Invoke-Backend -Path "/api/v1/characters/$id").Body 'card') 'communication'
-                $cards[$character.FirstName] = [ordered]@{ band = Get-Field $communication 'message_length'; narration = Get-Field $communication 'narration' }
-                if ($cards[$character.FirstName].band -ne $character.Band -or $cards[$character.FirstName].narration -ne $character.Narration) {
-                    $script:Problems.Add("The card of $($character.FirstName) no longer matches the script's band and narration.")
+                $cards[$character.FirstName] = [ordered]@{ band = Get-Field $communication 'message_length'; narration = Get-Field $communication 'narration'; question_frequency = Get-Field $communication 'question_frequency' }
+                $card = $cards[$character.FirstName]
+                if ($card.band -ne $character.Band -or $card.narration -ne $character.Narration -or $card.question_frequency -ne $character.QuestionFrequency) {
+                    $script:Problems.Add("The card of $($character.FirstName) no longer matches the script's band, narration and question frequency.")
                 }
             }
             $prep.cards = $cards
@@ -426,6 +442,32 @@ print(json.dumps({row[0]: {'seq': row[1], 'status': row[2], 'checks': json.loads
         $score = $entry.score
         Write-Host ("    {0}: hard targets {1}; C1 {2}/{3}, C2 {4} per 200, C4 {5}, C6 {6}" -f $profileId, $(if ($score.HardPassed) { 'met' } else { 'MISSED' }), $score.C1.correct, $score.C1.probes, $score.C2.per_200, $score.C4.passed, $score.C6.passed)
     }
+
+    # T-QLT-01 reads the replies of these same conversations (the protocol's three demo characters, time jumps,
+    # corrections and a long topic change): M1 to M4 are computed for each profile, and one blind sheet mixes the
+    # sampled replies of every profile selected, so the owner rates M5 and M6 without knowing the profile.
+    try {
+        $frequency = @{}
+        foreach ($character in $script:Plan.Characters) { $frequency[$character.FirstName] = $character.QuestionFrequency }
+        $metrics = @{}
+        foreach ($profileId in @($replies.Keys)) {
+            $metrics[$profileId] = Get-ItalianMetricScore -ProfileId $profileId -Reply $replies[$profileId] -QuestionFrequency $frequency
+            $script:Record.italian.metrics[$profileId] = $metrics[$profileId]
+            $m = $metrics[$profileId]
+            Write-Host ("    {0}: T-QLT-01 automatic metrics {1}; M1 {2}, M2 {3} per 100, M3 {4}, M4 {5}" -f $profileId, $(if ($m.automatic_passed) { 'met' } else { 'MISSED' }), $m.M1.italian_rate, $m.M2.per_100, $m.M3.rate, $m.M4.passed)
+        }
+        if ($metrics.Count -gt 0) {
+            $names = [string[]]@($script:Plan.Characters | ForEach-Object { $_.FirstName })
+            $blind = Get-ItalianBlindSheet -ReplyByProfile $replies -CharacterName $names -CharacterNote $script:CharacterNote -Seed (Get-Random -Maximum 1000000) -Mode $script:Plan.Mode
+            $paths = Write-ItalianArtifact -Folder $script:ItalianFolder -Blind $blind -Metric $metrics
+            $script:Record.italian.written = $true
+            $script:Record.italian.sheet = $paths.Sheet
+            $script:Record.italian.evidence = $blind.Key.evidence
+            $script:Record.italian.items = $blind.Key.items.Count
+            Write-Host "    T-QLT-01 blind sheet: $($paths.Sheet)"
+        }
+    }
+    catch { $script:Problems.Add("The T-QLT-01 artifacts could not be written: $($_.Exception.Message)") }
 }
 
 AfterAll {
@@ -478,6 +520,24 @@ Describe 'T-QLT-05: the consistency protocol' {
             $missed = @(@('C1', 'C2', 'C4', 'C6') | Where-Object { -not $score[$_].passed })
             $missed | Should -BeNullOrEmpty -Because "$profileId must meet every hard target"
             $score.HardPassed | Should -BeTrue
+        }
+    }
+
+    It 'writes the T-QLT-01 metrics and a blind sheet that names no profile' {
+        $script:Record.italian.written | Should -BeTrue -Because 'the sheet, key and metrics of T-QLT-01 must be written'
+        $sheet = [System.IO.File]::ReadAllText((Join-Path $script:ItalianFolder 'sheet.md'), $script:Utf8)
+        foreach ($profileId in $script:Selection.Profiles) {
+            $script:Record.italian.metrics[$profileId] | Should -Not -BeNullOrEmpty -Because "$profileId must have T-QLT-01 metrics"
+            $sheet | Should -Not -Match ([regex]::Escape($profileId)) -Because 'the sheet is blind'
+        }
+    }
+
+    It 'meets the automatic targets M1 to M4 of T-QLT-01 on every selected profile' {
+        foreach ($profileId in $script:Selection.Profiles) {
+            $metrics = $script:Record.italian.metrics[$profileId]
+            $metrics | Should -Not -BeNullOrEmpty -Because "$profileId must have T-QLT-01 metrics"
+            $missed = @(@('M1', 'M2', 'M3', 'M4') | Where-Object { -not $metrics[$_].passed })
+            $missed | Should -BeNullOrEmpty -Because "$profileId must meet M1 to M4; the owner's M5 and M6 come from the blind sheet"
         }
     }
 

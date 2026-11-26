@@ -1,5 +1,5 @@
 {
-  "description": "T-QLT-05 (docs/consistency-engine.md, Consistency protocol): the scripted conversation of each demo character. Every character gets the shared messages in order on the message numbers that are not probes, and its own 12 identity probes in four-question blocks ending at messages 10, 60 and 120 (the short mode keeps the first block alone). Probe fragments are folded: lowercase, no accents. A probe answer is correct when it holds one 'expect' fragment and no 'reject' fragment; probes of the same topic for one character take the same fragments. 'band' and 'narration' must match the demo card the backend loads.",
+  "description": "T-QLT-05 (docs/consistency-engine.md, Consistency protocol): the scripted conversation of each demo character. Every character gets the shared messages in order on the message numbers that are not probes, and its own 12 identity probes in four-question blocks ending at messages 10, 60 and 120 (the short mode keeps the first block alone). Probe fragments are folded: lowercase, no accents. A probe answer is correct when it holds one 'expect' fragment and no 'reject' fragment; probes of the same topic for one character take the same fragments. 'band', 'narration' and 'question_frequency' must match the demo card the backend loads. T-QLT-01 (docs/prompting.md, Italian quality protocol) reads the replies of the same conversations.",
   "version": 1,
   "change_character": "Nerea",
   "characters": [
@@ -7,6 +7,7 @@
       "first_name": "Nerea",
       "band": "brevi",
       "narration": "nessuna",
+      "question_frequency": "a_volte",
       "probes": [
         {"topic": "name", "question": "A proposito, come ti chiami, di nome e cognome?", "expect": ["nerea"]},
         {"topic": "age", "question": "E quanti anni hai?", "expect": ["27", "ventisette"]},
@@ -26,6 +27,7 @@
       "first_name": "Ilario",
       "band": "lunghi",
       "narration": "leggera",
+      "question_frequency": "a_volte",
       "probes": [
         {"topic": "name", "question": "A proposito, come si chiama, di nome e cognome?", "expect": ["ilario"]},
         {"topic": "age", "question": "Posso chiederle quanti anni ha?", "expect": ["41", "quarantun"]},
@@ -45,6 +47,7 @@
       "first_name": "Tessa",
       "band": "brevissimi",
       "narration": "nessuna",
+      "question_frequency": "spesso",
       "probes": [
         {"topic": "name", "question": "A proposito, come ti chiami, di nome e cognome?", "expect": ["tessa"]},
         {"topic": "age", "question": "E quanti anni hai?", "expect": ["23", "ventitre"]},

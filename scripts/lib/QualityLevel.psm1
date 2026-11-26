@@ -151,10 +151,10 @@ function Get-QualityConsistencyPlan {
     <#
     Returns the plan of T-QLT-05 in Mode (Full or Short) from Document, tests/quality/consistency/script.json parsed:
     Mode, Messages, ProbeEnds, ChangeAt, SmartCachePairs, ChangeCharacter, and Characters, each with FirstName, Band,
-    Narration and Steps. Steps holds one entry per user message, numbered from 1: the four probes of a block occupy the
+    Narration, QuestionFrequency (the card's, "a_volte" when the script gives none) and Steps. Steps holds one entry per user message, numbered from 1: the four probes of a block occupy the
     numbers ending at each probe end, in the script's order, and the shared messages fill the other numbers in order.
     Each step is @{ Number; Kind; Text; Topic; Expect; Reject }, Kind being "probe" or the shared message's kind.
-    Throws when a character has not exactly 12 probes, a probe has no expected fragment, a band is unknown, the change
+    Throws when a character has not exactly 12 probes, a probe has no expected fragment, a band or a question frequency is unknown, the change
     character is not a character of the script, or the shared messages are too few for the mode.
     #>
     [CmdletBinding()]
@@ -183,6 +183,10 @@ function Get-QualityConsistencyPlan {
         $probes = @($character.probes)
         if ($probes.Length -ne $script:ProbesPerCharacter) { throw "$name has $($probes.Length) probes; the protocol asks $script:ProbesPerCharacter." }
         if (-not $script:BandTarget.ContainsKey([string]$character.band)) { throw "$name has the unknown band '$($character.band)'." }
+        # Optional in a script; the card's own default is "a_volte".
+        $frequency = 'a_volte'
+        if ($character.PSObject.Properties['question_frequency']) { $frequency = [string]$character.question_frequency }
+        if (@('raramente', 'a_volte', 'spesso') -cnotcontains $frequency) { throw "$name has the unknown question frequency '$frequency'." }
         $steps = New-Object System.Collections.Generic.List[object]
         $next = 0
         for ($number = 1; $number -le $shape.Messages; $number++) {
@@ -200,7 +204,7 @@ function Get-QualityConsistencyPlan {
                 $steps.Add(@{ Number = $number; Kind = [string]$message.kind; Text = [string]$message.text; Topic = ''; Expect = [string[]]@(); Reject = [string[]]@() })
             }
         }
-        $characters.Add(@{ FirstName = $name; Band = [string]$character.band; Narration = [string]$character.narration; Steps = $steps.ToArray() })
+        $characters.Add(@{ FirstName = $name; Band = [string]$character.band; Narration = [string]$character.narration; QuestionFrequency = $frequency; Steps = $steps.ToArray() })
     }
     $change = [string]$Document.change_character
     if (@($characters | Where-Object { $_.FirstName -ceq $change }).Length -ne 1) { throw "The change character '$change' is not a character of the script." }

@@ -59,6 +59,16 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-QLT-01, the Italian quality protocol, as a generation and an import (QLT.2). The conversations of T-QLT-05 are its
+  scripts, so `scripts\lyrveil.cmd test quality` (or `test quality Consistency`) now also writes
+  `test-results/quality/italian-<mode>-<time>/`: `metrics.json` with the automatic metrics M1 to M4 for each profile,
+  `sheet.md`, a blind rating sheet that mixes 30 replies to rate for naturalness (M5) and 20 whose author the owner names
+  (M6) per profile under opaque ids, and `key.json`, which says which profile wrote each id.
+  `scripts\lyrveil.cmd test quality-rating <sheet.md>` imports the filled sheet, applies the targets per profile
+  (`met`, `missed` or `incomplete`, never a guessed rating), writes `verdict.json` and exits 0 only when every profile is
+  met. The import and the verdict are covered by unit tests on synthetic ratings, which have not run yet. Only the short
+  mode of the generation has run, on `rocinante-x-12b`; no owner has rated a sheet, so T-QLT-01 has no verdict (see
+  [docs/testing.md](docs/testing.md#t-qlt-01-generation-blind-sheet-and-import)).
 - The `quality` level (QLT.1). `scripts\lyrveil.cmd test quality` no longer exits with "no tests yet". It runs T-QLT-05
   (`tests/quality/Consistency.Tests.ps1`) and T-QLT-06 (`tests/quality/Extraction.Tests.ps1`) on every catalog text
   profile, or on the profiles named, as in `test quality rocinante-x-12b`, with the gpu level's preparation, skip and

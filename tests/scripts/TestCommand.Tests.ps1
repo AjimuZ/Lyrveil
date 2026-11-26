@@ -231,6 +231,49 @@ Describe 'scripts\lyrveil.cmd test' {
         $run.Output | Should -Match "Test level 'integration' has no tests yet"
         $run.ExitCode | Should -Not -Be 0
     }
+
+    It 'quality-rating names its usage and runs nothing without a sheet' {
+        $run = Invoke-EntryPoint $script:RepositoryRoot @('test', 'quality-rating')
+        $run.Output | Should -Match 'Usage: scripts\\lyrveil.cmd test quality-rating <filled sheet.md>'
+        $run.Output | Should -Match 'Nothing ran'
+        $run.ExitCode | Should -Be 1
+    }
+
+    It 'quality-rating imports a filled blind sheet, prints the verdict per profile and exits by it' {
+        Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\ItalianQuality.psm1') -Force
+        $replies = New-Object System.Collections.Generic.List[object]
+        foreach ($character in @('Nerea', 'Ilario', 'Tessa')) {
+            foreach ($number in 1..40) {
+                $replies.Add(@{ Conversation = 'main'; Character = $character; Number = $number; Kind = 'chat'; Status = 'complete'; Question = "Domanda $number"; Text = "Risposta numero $number di $character." })
+            }
+        }
+        $blind = Get-ItalianBlindSheet -ReplyByProfile @{ 'small-model' = $replies.ToArray() } -CharacterName @('Nerea', 'Ilario', 'Tessa') -Seed 3
+        $passing = @{ M1 = @{ passed = $true }; M2 = @{ passed = $true }; M3 = @{ passed = $true }; M4 = @{ passed = $true } }
+        $folder = Join-Path $TestDrive 'rating-cli'
+        $paths = Write-ItalianArtifact -Folder $folder -Blind $blind -Metric @{ 'small-model' = $passing }
+        $byId = @{}
+        foreach ($item in $blind.Key.items) { $byId[$item.id] = $item }
+        $current = ''
+        $filled = foreach ($line in ($blind.Sheet -split '\r?\n')) {
+            if ($line -match '^### ([NA]\d+)') { $current = $Matches[1] }
+            if ($current -and $line -match '^Rating:\s*$') { 'Rating: 5' }
+            elseif ($current -and $line -match '^Author:\s*$') { "Author: $($byId[$current].character)" }
+            else { $line }
+        }
+        [System.IO.File]::WriteAllText($paths.Sheet, ($filled -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        $run = Invoke-EntryPoint $script:RepositoryRoot @('test', 'quality-rating', $paths.Sheet)
+        $run.Output | Should -Match 'small-model: met'
+        $run.Output | Should -Match 'Verdict: .*verdict\.json'
+        $run.Output | Should -Match 'test quality-rating: passed'
+        $run.ExitCode | Should -Be 0
+
+        [System.IO.File]::WriteAllText($paths.Sheet, $blind.Sheet, (New-Object System.Text.UTF8Encoding($false)))
+        $blank = Invoke-EntryPoint $script:RepositoryRoot @('test', 'quality-rating', $paths.Sheet)
+        $blank.Output | Should -Match 'small-model: incomplete'
+        $blank.Output | Should -Match 'N01 was left blank'
+        $blank.Output | Should -Match 'test quality-rating: FAILED'
+        $blank.ExitCode | Should -Be 1
+    }
 }
 
 Describe 'The e2e level' {

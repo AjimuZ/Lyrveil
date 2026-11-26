@@ -11,30 +11,33 @@ Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuLevel.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuTuning.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ItalianQuality.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'QualityLevel.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
-    lint        = 'Invoke-LintLevel'
-    unit        = 'Invoke-UnitLevel'
-    integration = 'Invoke-IntegrationLevel'
-    e2e         = 'Invoke-EndToEndLevel'
-    docker      = 'Invoke-DockerLevel'
-    gpu         = 'Invoke-GpuTestLevel'
-    quality     = 'Invoke-QualityTestLevel'
+    lint             = 'Invoke-LintLevel'
+    unit             = 'Invoke-UnitLevel'
+    integration      = 'Invoke-IntegrationLevel'
+    e2e              = 'Invoke-EndToEndLevel'
+    docker           = 'Invoke-DockerLevel'
+    gpu              = 'Invoke-GpuTestLevel'
+    quality          = 'Invoke-QualityTestLevel'
+    'quality-rating' = 'Invoke-QualityRatingLevel'
 }
 
 # The status a runner returns when its level cannot run on this machine, as gpu without a GPU. It is reported as
 # skipped, and the command still exits 1, because no test ran.
 $script:SkippedStatus = 2
 
-# "all" runs every level except gpu and quality, which need the reference hardware and are always explicit.
+# "all" runs every level except gpu and quality, which need the reference hardware and are always explicit, and
+# quality-rating, which needs the owner's filled sheet.
 $script:AllLevels = @('lint', 'unit', 'integration', 'e2e', 'docker')
 
 # Levels that accept arguments after their name: unit passes them to pytest, gpu takes them as the trials of the
-# tuning procedure to run, and quality as its test files, "short" and the text profiles to run on. Every other level
-# refuses them.
-$script:ArgumentLevels = @('unit', 'gpu', 'quality')
+# tuning procedure to run, quality as its test files, "short" and the text profiles to run on, and quality-rating as
+# the path of the owner's filled sheet. Every other level refuses them.
+$script:ArgumentLevels = @('unit', 'gpu', 'quality', 'quality-rating')
 
 # The gpu test file that a trial selection runs alone.
 $script:TuningTestFile = 'tests/gpu/Tuning.Tests.ps1'
@@ -305,6 +308,36 @@ function Invoke-QualityTestLevel {
     return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner -Data $data -Level 'quality')
 }
 
+function Invoke-QualityRatingLevel {
+    <#
+    Runs the quality-rating level: imports the owner's filled blind sheet of T-QLT-01 (Italian quality protocol) with
+    Invoke-ItalianRating of ItalianQuality.psm1 and prints the verdict per profile. Argument is the path of the sheet,
+    sheet.md of a test-results/quality/italian-<mode>-<time> folder, and optionally the folder that holds its key.json
+    and metrics.json when it is not the sheet's own; a relative path that names nothing from the current location is
+    tried from Root. It needs no GPU or Docker. Returns 0 only when the sheet read without
+    a problem and every profile met M1 to M6, and 1 otherwise, also without or with too many arguments. Not exported.
+    #>
+    param([string]$Root, [string[]]$Argument = @())
+
+    $given = @($Argument | Where-Object { $_ })
+    if ($given.Length -lt 1 -or $given.Length -gt 2) {
+        Write-Host "Usage: scripts\lyrveil.cmd test quality-rating <filled sheet.md> [folder of key.json and metrics.json]. Nothing ran."
+        return 1
+    }
+    # A relative path that names nothing from the current location is tried from the repository root, where the
+    # results live under test-results/quality.
+    $paths = @($given | ForEach-Object {
+            if (-not [System.IO.Path]::IsPathRooted($_) -and -not (Test-Path -LiteralPath $_) -and (Test-Path -LiteralPath (Join-Path $Root $_))) { Join-Path $Root $_ }
+            else { $_ }
+        })
+    $folder = ''
+    if ($paths.Length -eq 2) { $folder = $paths[1] }
+    $result = Invoke-ItalianRating -SheetPath $paths[0] -Folder $folder
+    foreach ($problem in $result.Problems) { Write-Host "  $problem" }
+    if ($result.VerdictPath) { Write-Host "Verdict: $($result.VerdictPath)" }
+    return [int]$result.Status
+}
+
 function Invoke-PesterUnitTest {
     <#
     Runs the Pester test files File, repository-relative, with the pinned Pester, passing Data, when given, as the
@@ -340,8 +373,9 @@ function Invoke-LyrveilTest {
     missing level, arguments for a level that takes none, and a level with no tests yet all return 1 with a
     message, so no level reports a pass without running tests. A level that cannot run on this machine, as gpu without
     a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest, "gpu",
-    which takes the names of its test files or trial selectors of the tuning procedure, and "quality", which takes the
-    names of its test files, "short" and catalog text profiles.
+    which takes the names of its test files or trial selectors of the tuning procedure, "quality", which takes the
+    names of its test files, "short" and catalog text profiles, and "quality-rating", which takes the path of the
+    owner's filled sheet.
     "all" runs lint, unit, integration, e2e and docker, and passes only when each of them does.
     #>
     [CmdletBinding()]
@@ -364,7 +398,7 @@ function Invoke-LyrveilTest {
     }
     $extra = [string[]]@($given | Select-Object -Skip 1)
     if ($extra.Length -gt 0 -and $script:ArgumentLevels -notcontains $name) {
-        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments), gpu (test files or tuning trials) and quality (test files, short and text profiles) take them."
+        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments), gpu (test files or tuning trials), quality (test files, short and text profiles) and quality-rating (a filled sheet) take them."
         return 1
     }
 

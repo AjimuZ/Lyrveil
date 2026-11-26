@@ -6,7 +6,9 @@ voice fields. Implementation: partial. Delivered in P02.3b: `PromptFormatter` fo
 and the length bands of a reply ([System blocks](#system-blocks)). Reconciled on 2026-11-09: the prompts of the character
 draft, the memory extraction, the summaries, the image scene, the visual profile translation and the
 proactive message are delivered as Python modules in `backend/src/lyrveil/prompts/`, with the Italian pattern lists as
-text files in `prompts/it/`. The Italian quality protocol (T-QLT-01) has not run on a real model.
+text files in `prompts/it/`. The Italian quality protocol (T-QLT-01) has not run on a real model: its generation, metrics
+and blind sheet are automated ([Testing](testing.md#t-qlt-01-generation-blind-sheet-and-import)), and only the short
+smoke mode of the generation has run, so no profile has a verdict.
 
 **Not delivered: `PromptTemplateService` and the `.j2` files.** The design below loads versioned Jinja2 templates from
 `backend/src/lyrveil/prompts/<language>/`. The code does not: Jinja2 is not a dependency, and the template listings in this
@@ -518,8 +520,11 @@ modello` and `in quanto ai`: `come modello di vita` and `in quanto ai prezzi` ar
 
 ### Italian quality protocol
 
-P04 runs it once and P08 repeats it. Scripts are in `tests/quality/italian/` and use three original demo
-characters with different registers.
+P04 runs it once and P08 repeats it. The scripts are the conversations of `tests/quality/consistency/script.json`, which
+the consistency protocol shares, and use three original demo characters with different registers. How the metrics are
+read from the replies, how the blind sheet is built and how the ratings are imported is in
+[Testing](testing.md#t-qlt-01-generation-blind-sheet-and-import); M4's expected value is taken from the card's
+`question_frequency` (`raramente` 0.10, `a_volte` 0.30, `spesso` 0.50 of the replies).
 
 1. For each character, run a scripted conversation of at least 120 messages, including time jumps,
    corrections and a long topic change.

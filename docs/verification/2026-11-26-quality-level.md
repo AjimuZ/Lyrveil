@@ -88,7 +88,38 @@ validator allows it only for `min_tier` `target` (`catalog_allows_2` false).
 - The full T-QLT-06 (40 windows) on either profile, and the plain `scripts\lyrveil.cmd test quality`, which runs both
   files on both profiles.
 - `rocinante-12b-v1.1` as the measured profile. It served only as the first profile of the C6 conversation here.
-- C7, T-QLT-01 and T-QLT-07, which need the owner.
+- C7 and T-QLT-07, which need the owner. T-QLT-01 needs the owner too: see below.
 - The Pester unit tests `tests/scripts/QualityLevel.Tests.ps1` and the new cases of `tests/scripts/TestCommand.Tests.ps1`.
   The orchestrator's `unit` run is their first. `backend/tests/unit/test_gpu_extraction_probe.py` passed (15 tests,
   `scripts/lyrveil.cmd test unit tests/unit/test_gpu_extraction_probe.py`).
+
+## T-QLT-01 generation and blind sheet (QLT.2)
+
+**What ran, on 2026-11-26.** `scripts/lyrveil.cmd test lint` passed (PSScriptAnalyzer 51 files, 0 findings). Then
+`scripts/lyrveil.cmd test quality Consistency short rocinante-x-12b` ran the new generation code on the RTX 4070 in
+301.8 s. Pester reported 6 passed and 2 failed. Both failures are findings about the model on a smoke run, not defects
+of the harness: the hard targets of T-QLT-05 were `MISSED` (`HardPassed` false), and the new case on M1 to M4 failed on
+M4, because the 12 replies of the short mode answer the four scripted identity probes of each character, which hold
+almost no question (Nerea 0 of 4 against 0.30, Ilario 1 of 4, Tessa 0 of 4 against 0.50). M1 was 1.0, M2 had 0 hits and
+M3 had no repeated lead. The project and the data volume were removed (`no container or volume of the test project is
+left`), and the GPU memory was released.
+
+**What it produced.** `test-results/quality/italian-short-20261126-213600/` with `sheet.md`, `key.json` and
+`metrics.json`; the sheet named no profile and listed the three characters. The first version of the sheet put all 12
+probe replies in Part 2 and none in Part 1, because the authorship sample took everything. The sampler now gives M6 at
+most half of a character's replies; this was fixed after that run and **has not run on the real stack again**, only in
+the unit tests, which have not run (below). With the probe replies, the sheet shows names and places, so it is a pipeline
+check and no test of M6.
+
+**What the import did.** `scripts/lyrveil.cmd test quality-rating` on that unfilled sheet read the key and the metrics
+from JSON, printed `incomplete` for the profile with 12 of 12 answers missing, listed every blank id, wrote
+`verdict.json` and exited 1. No filled sheet was imported: no owner has rated one, and no rating was invented to
+exercise the import on the real files.
+
+**Not run.** The unit tests `tests/scripts/ItalianQuality.Tests.ps1`, the new case in
+`tests/scripts/QualityLevel.Tests.ps1` and the two `quality-rating` cases in `tests/scripts/TestCommand.Tests.ps1`: the
+`unit` level runs every Pester file together, and was left to the orchestrator. They are written against synthetic
+replies and ratings (boundaries of M1 to M4, M5 average 4.0 and 3.97, M6 at 16 and 15 of 20, blank values, a wrong
+sheet id, two profiles). Also not run: the full generation on either profile (T-QLT-05's 120-message conversations, about
+an hour or two per profile), the owner's rating, and so any T-QLT-01 verdict. The SWA padding measurement does not apply
+to the catalog after ADR 0045.
