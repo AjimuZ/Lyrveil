@@ -273,6 +273,12 @@ Describe 'Setup run twice against a test project (T-DCK-06, T-DCK-13)' {
         $script:First.Text | Should -Match 'lyrveil-llm, lyrveil-image created, not started'
     }
 
+    It 'points the Models step to lyrveil.cmd models and does not mention P02.1a' {
+        $script:First.Text | Should -Match 'scripts\\lyrveil\.cmd models'
+        $script:First.Text | Should -Match 'lyrveil\.cmd models -List'
+        $script:First.Text | Should -Not -Match 'P02\.1a'
+    }
+
     It 'succeeds on the second run and repeats nothing' {
         $script:Second.Status | Should -Be 0 -Because $script:Second.Text
         $script:Second.Text | Should -Match 'present, left unchanged'

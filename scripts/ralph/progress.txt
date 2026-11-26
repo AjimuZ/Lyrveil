@@ -2832,3 +2832,11 @@ The full protocols have not run on either profile. Lint passes; the 15 new probe
   - ComfyUI caches node outputs: a grid render that differs only in the second pass's denoise reuses the first pass, so its time is shorter (11.5 s against 21 s). Do not use such renders as timing evidence. PAG renders are not cached, since the PAG node changes the first pass.
   - PowerShell 5.1 pitfalls: do not read a dictionary key named like a real member (Values, Keys, Count) with dot access; the output key was renamed from values to variants for that reason. Keep the plan JSON per section, since ConvertFrom-Json in 5.1 limits strings to about 2 MB.
 ---
+
+## 2026-11-26T21:11:02Z - FIX.1
+- The Models step of setup now points to `scripts\lyrveil.cmd models` and `models -List`, and no longer mentions P02.1a. This attempt added the missing CHANGELOG entry under Fixed. The message edit in scripts/lib/Setup.psm1 and the Pester test in tests/docker/Setup.Tests.ps1 were already in the working tree from the earlier attempt. I did not run any test, so the new test is unverified. The `-AcceptModelLicenses` and `-VerifyModels` refusal messages in Setup.psm1 still mention P02.1a, and I left them alone because the task covers only the Models step.
+- Files changed: scripts/lib/Setup.psm1, tests/docker/Setup.Tests.ps1, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The Setup Pester test is in tests/docker/Setup.Tests.ps1 and was not run in this session.
+  - The -AcceptModelLicenses and -VerifyModels refusal messages in PlannedOptions in Setup.psm1 still mention P02.1a. Consider whether they are stale too.
+---

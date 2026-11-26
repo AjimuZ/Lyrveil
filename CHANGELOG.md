@@ -49,6 +49,9 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Fixed
 
+- The Models step of `setup.cmd` no longer says the model catalog is not in the image yet (P02.1a). It now points to
+  `scripts\lyrveil.cmd models` to accept the licenses and download the models, and to `scripts\lyrveil.cmd models -List`
+  to see the catalog. `tests/docker/Setup.Tests.ps1` checks the new message (written, not run by me).
 - Images after the first one no longer fail. The orchestrator starts the same `lyrveil-image` container for every
   image job, and from its second start the container could not write its tmpfs `/tmp/comfy`: ComfyUI exited at once,
   and after three tries the job ended with `IMAGE_LOAD_FAILED` and the GPU went back to text. The image runtime's
