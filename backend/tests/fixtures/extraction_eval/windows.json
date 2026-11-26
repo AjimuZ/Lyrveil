@@ -1,0 +1,397 @@
+{
+  "description": "T-QLT-06 (docs/consistency-engine.md, Extraction evaluation): 40 synthetic windows of original text with the items each should yield. Keyword fragments are folded: lowercase, no accents. 'kinds' lists the right kind first and any equally right one after it; 'provenance' is the one guard 1 stores; 'inferences' are what a window only implies, which must never be stored as stated.",
+  "user_name": "Marco",
+  "windows": [
+    {
+      "id": "w01",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 41, "author": "user", "text": "Ti devo dare una notizia: da lunedì comincio a lavorare come infermiere all'ospedale di Novara."},
+        {"seq": 42, "author": "character", "text": "Infermiere? Allora le mie mappe ti serviranno per non perderti nei corridoi."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["infermier"]]}]
+    },
+    {
+      "id": "w02",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 12, "author": "user", "text": "Non sopporto il caffè, bevo solo tè verde, la mattina e la sera."},
+        {"seq": 13, "author": "character", "text": "Allora, se mi permette, le farò trovare del tè verde alla prossima fermata."}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["te verde"]]}]
+    },
+    {
+      "id": "w03",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 7, "author": "user", "text": "Ho deciso: a marzo mi iscrivo a un corso di ceramica."},
+        {"seq": 8, "author": "character", "text": "NOOO che bello!! mi fai una tazza storta per il mio bancone?"}
+      ],
+      "expected": [{"kinds": ["decision", "user_fact"], "provenance": "stated", "all": [["ceramic"]]}],
+      "inferences": [{"all": [["artist", "creativ"]]}]
+    },
+    {
+      "id": "w04",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 60, "author": "user", "text": "Domani ho il colloquio per il posto in biblioteca, ti racconto com'è andata."},
+        {"seq": 61, "author": "character", "text": "Ok, in bocca al lupo. E portati un ombrello, qui piove sempre quando uno è nervoso."}
+      ],
+      "expected": [{"kinds": ["open_thread", "user_fact"], "provenance": "stated", "all": [["colloqui"]]}]
+    },
+    {
+      "id": "w05",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 30, "author": "user", "text": "Le chiedo una cortesia: non mi parli più di mio fratello, è un argomento che mi fa stare male."},
+        {"seq": 31, "author": "character", "text": "Ha la mia parola. Non tornerò sull'argomento."}
+      ],
+      "expected": [{"kinds": ["boundary"], "provenance": "stated", "all": [["fratell"]]}]
+    },
+    {
+      "id": "w06",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 15, "author": "user", "text": "Da oggi voglio che tu abbia trent'anni, non ventitré."},
+        {"seq": 16, "author": "character", "text": "trenta?? ok ma poco dai, mi sento già vecchia 😂"}
+      ],
+      "expected": [{"kinds": ["identity_candidate"], "provenance": "stated", "all": [["trent", "30"]]}]
+    },
+    {
+      "id": "w07",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 80, "author": "user", "text": "Stasera ceno dai miei suoceri, augurami buona fortuna."},
+        {"seq": 81, "author": "character", "text": "Buona fortuna. Se serve una via di fuga, ti disegno una mappa."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["suocer"]]}],
+      "inferences": [{"all": [["spos", "moglie", "marito", "matrimonio"]]}]
+    },
+    {
+      "id": "w08",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 50, "author": "user", "text": "Lei ha mai visto un'aurora dal treno?"},
+        {"seq": 51, "author": "character", "text": "Una volta sola, dodici anni fa, sopra il valico di Alta Pieve. Fermai il convoglio per due minuti, e nessuno protestò."}
+      ],
+      "expected": [{"kinds": ["character_fact", "narrative_event"], "provenance": "fictional", "all": [["auror"]]}]
+    },
+    {
+      "id": "w09",
+      "character": "Tessa Moravi",
+      "existing": ["Vive a Bologna."],
+      "messages": [
+        {"seq": 90, "author": "user", "text": "Novità: mi sono trasferito a Padova la settimana scorsa!"},
+        {"seq": 91, "author": "character", "text": "PADOVA?! devi portarmi i biscotti tipici, giuro!"}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["padova"]]}]
+    },
+    {
+      "id": "w10",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 33, "author": "user", "text": "Ti prometto che sabato ti porto al faro vecchio, quello che non è su nessuna mappa."},
+        {"seq": 34, "author": "character", "text": "Lo segno sul calendario. Se non vieni, lo disegno lo stesso, ma storto."}
+      ],
+      "expected": [{"kinds": ["promise"], "provenance": "stated", "all": [["faro"]]}]
+    },
+    {
+      "id": "w11",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 20, "author": "user", "text": "Adoro i treni a vapore, da bambino passavo le domeniche al museo ferroviario."},
+        {"seq": 21, "author": "character", "text": "Allora abbiamo qualcosa in comune, signore. I treni a vapore hanno una voce che i convogli nuovi non hanno più."}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["vapore"]]}]
+    },
+    {
+      "id": "w12",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 44, "author": "user", "text": "Ho dormito tre ore, il piccolo ha pianto tutta la notte. E alle otto ero già in farmacia a lavorare."},
+        {"seq": 45, "author": "character", "text": "noooo 😭 ti preparo un caffè triplo, offre la casa!"}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["farmaci"]]}],
+      "inferences": [{"all": [["figli", "bambin", "neonat", "padre", "genitor"]]}]
+    },
+    {
+      "id": "w13",
+      "character": "Nerea Falchi",
+      "existing": ["Ha un cane di nome Otto."],
+      "messages": [
+        {"seq": 70, "author": "user", "text": "Scusa, mi sono spiegato male l'altra volta: Otto non è un cane, è il mio pappagallo."},
+        {"seq": 71, "author": "character", "text": "Un pappagallo. Questo spiega perché abbaiava così male."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["pappagall"]]}]
+    },
+    {
+      "id": "w14",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 65, "author": "user", "text": "Ho preso una decisione: l'anno prossimo farò il viaggio in treno fino a Lisbona."},
+        {"seq": 66, "author": "character", "text": "Una scelta che approvo con tutto il cuore. Le preparerò un elenco delle coincidenze."}
+      ],
+      "expected": [{"kinds": ["decision", "user_fact"], "provenance": "stated", "all": [["lisbona"]]}]
+    },
+    {
+      "id": "w15",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 25, "author": "user", "text": "Mi piacerebbe che d'ora in poi ti chiamassi Viola, invece di Tessa."},
+        {"seq": 26, "author": "character", "text": "Viola?? suona da pozione lilla... ci penso!! ✨"}
+      ],
+      "expected": [{"kinds": ["identity_candidate"], "provenance": "stated", "all": [["viola"]]}]
+    },
+    {
+      "id": "w16",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 101, "author": "user", "text": "Mia sorella Giulia si sposa a giugno, e io sarò il testimone."},
+        {"seq": 102, "author": "character", "text": "Testimone. Quindi tocca a te non perdere gli anelli. Ti presto la mia bussola."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["giulia", "sorella"]]}]
+    },
+    {
+      "id": "w17",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 77, "author": "user", "text": "Ogni notte mi sveglio alle tre e non riesco più a dormire. Oggi in ufficio sbagliavo tutto."},
+        {"seq": 78, "author": "character", "text": "Mi dispiace sinceramente. A quell'ora, se mi permette, io conto i vagoni."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["svegli", "dorm", "insonn"]]}],
+      "inferences": [{"all": [["stress", "ansi", "depress", "preoccup"]]}]
+    },
+    {
+      "id": "w18",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 52, "author": "user", "text": "Odio la cannella, mi fa venire la nausea solo l'odore."},
+        {"seq": 53, "author": "character", "text": "ok ok niente cannella giuro!! la tolgo anche dal bancone"}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["cannella"]]}]
+    },
+    {
+      "id": "w19",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 110, "author": "user", "text": "*Ti porgo la mappa che abbiamo trovato nel faro.* Guarda, c'è un'isola che non esiste."},
+        {"seq": 111, "author": "character", "text": "Esiste eccome. Solo che compare con la bassa marea. Domani all'alba ci andiamo."}
+      ],
+      "expected": [{"kinds": ["narrative_event", "character_fact"], "provenance": "fictional", "all": [["isola"]]}]
+    },
+    {
+      "id": "w20",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 88, "author": "user", "text": "Le prometto che la prossima settimana le porto il mio vecchio cannocchiale."},
+        {"seq": 89, "author": "character", "text": "Lo aspetterò con la pazienza di un orario invernale."}
+      ],
+      "expected": [{"kinds": ["promise"], "provenance": "stated", "all": [["cannocchial"]]}]
+    },
+    {
+      "id": "w21",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 3, "author": "user", "text": "Piacere, sono Marco! Faccio il fornaio a Verona, quindi mi alzo alle quattro."},
+        {"seq": 4, "author": "character", "text": "FORNAIO?! allora sei il mio eroe, io a quell'ora dormo ancora 😴"}
+      ],
+      "expected": [
+        {"kinds": ["user_fact"], "provenance": "stated", "all": [["fornai"]]},
+        {"kinds": ["user_fact"], "provenance": "stated", "all": [["verona"]]}
+      ]
+    },
+    {
+      "id": "w22",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 120, "author": "user", "text": "Per favore, non chiamarmi mai tesoro, mi mette a disagio."},
+        {"seq": 121, "author": "character", "text": "Va bene. Niente tesoro. Troverò un soprannome peggiore, ma solo un po'."}
+      ],
+      "expected": [{"kinds": ["boundary", "user_preference"], "provenance": "stated", "all": [["tesoro"]]}]
+    },
+    {
+      "id": "w23",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 140, "author": "user", "text": "Facciamo finta che lei sia più giovane: d'ora in poi ha trentacinque anni."},
+        {"seq": 141, "author": "character", "text": "Se mi permette, i miei capelli grigi protesterebbero. Ma ne prendo nota."}
+      ],
+      "expected": [{"kinds": ["identity_candidate"], "provenance": "stated", "all": [["trentacinque", "35"]]}]
+    },
+    {
+      "id": "w24",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 60, "author": "user", "text": "Stasera vengo al Calderone con Luca, il mio ragazzo. Trattalo bene!"},
+        {"seq": 61, "author": "character", "text": "LUCA!! finalmente lo conosco!! preparo la tisana più buona che ho, giuro"},
+        {"seq": 62, "author": "user", "text": "Non esagerare. Lui è astemio, quindi niente pozioni alcoliche."}
+      ],
+      "expected": [
+        {"kinds": ["user_fact"], "provenance": "stated", "all": [["luca"], ["ragazz", "fidanzat", "partner", "compagn"]]},
+        {"kinds": ["user_fact", "user_preference"], "provenance": "stated", "all": [["astemi", "alcol"]]}
+      ],
+      "inferences": [{"all": [["convivon", "vivono insieme", "sposat"]]}]
+    },
+    {
+      "id": "w25",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 15, "author": "user", "text": "Quando lavoro ascolto solo jazz, il silenzio mi distrae."},
+        {"seq": 16, "author": "character", "text": "Io lavoro col rumore delle gru del porto. Anche quello è un po' jazz."}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["jazz"]]}]
+    },
+    {
+      "id": "w26",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 99, "author": "user", "text": "Sto aspettando i risultati delle analisi, dovrebbero arrivare venerdì. Le farò sapere."},
+        {"seq": 100, "author": "character", "text": "La penserò venerdì, allora. A ogni buon conto, sono certo che andrà tutto bene."}
+      ],
+      "expected": [{"kinds": ["open_thread", "user_fact"], "provenance": "stated", "all": [["analisi"]]}],
+      "inferences": [{"all": [["malat", "malato", "tumor"]]}]
+    },
+    {
+      "id": "w27",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 77, "author": "user", "text": "Basta, ho deciso di smettere di fumare. Da domani niente sigarette."},
+        {"seq": 78, "author": "character", "text": "SIIII!! ti faccio una tisana anti-sigaretta, ma poco dai, sa di menta e speranza"}
+      ],
+      "expected": [{"kinds": ["decision", "user_fact"], "provenance": "stated", "all": [["fum", "sigarett"]]}],
+      "inferences": [{"all": [["salute", "malat", "dipendenz"]]}]
+    },
+    {
+      "id": "w28",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 45, "author": "user", "text": "Come hai imparato a disegnare mappe?"},
+        {"seq": 46, "author": "character", "text": "Mio nonno mi metteva una matita in mano e mi faceva copiare le coste. A sei anni disegnavo già il porto."}
+      ],
+      "expected": [{"kinds": ["character_fact"], "provenance": "fictional", "all": [["nonno"]]}]
+    },
+    {
+      "id": "w29",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 8, "author": "user", "text": "Stasera sono solo con Briciola, la mia cagnolina. Ha quattordici anni, è un po' anzianotta."},
+        {"seq": 9, "author": "character", "text": "Le porga i miei omaggi, signore. Quattordici anni sono un viaggio lungo e onorato."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["briciola"]]}],
+      "inferences": [{"all": [["vive da solo", "single", "vedov", "solitudin"]]}]
+    },
+    {
+      "id": "w30",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 130, "author": "user", "text": "Sai cosa? Mi piacerebbe che tu non facessi più la barista, ma la fioraia."},
+        {"seq": 131, "author": "character", "text": "fioraia?! ok ma i fiori li faccio frizzare lo stesso 🌸"}
+      ],
+      "expected": [{"kinds": ["identity_candidate"], "provenance": "stated", "all": [["fiora"]]}]
+    },
+    {
+      "id": "w31",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 55, "author": "user", "text": "Oggi ho chiuso la mia libreria per l'ultima volta. Venticinque anni, e ora più niente."},
+        {"seq": 56, "author": "character", "text": "Mi dispiace. Venticinque anni sono tante strade. Vuoi raccontarmi dell'ultimo giorno?"}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["librer"]]}],
+      "inferences": [{"all": [["triste", "depress", "pension"]]}]
+    },
+    {
+      "id": "w32",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 61, "author": "user", "text": "Questa settimana sono a Trieste per lavoro, torno domenica."},
+        {"seq": 62, "author": "character", "text": "Trieste ha un vento che mette ordine nei pensieri. Buon lavoro, signore."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["triest"]]}],
+      "inferences": [{"all": [["commercial", "viaggia spesso", "trasfert"]]}]
+    },
+    {
+      "id": "w33",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 17, "author": "user", "text": "La mia tisana preferita è quella allo zenzero e limone, la bevo sempre prima di dormire."},
+        {"seq": 18, "author": "character", "text": "zenzero e limone!! segnato, te la preparo doppia la prossima volta"}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["zenzero"]]}]
+    },
+    {
+      "id": "w34",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 88, "author": "user", "text": "Ah, una cosa importante: sono allergico alle noci. Non farmi mai assaggiare i tuoi dolci strani."},
+        {"seq": 89, "author": "character", "text": "Niente noci, promesso. Sulla mappa dei forni ci metto un simbolo apposta."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["allerg"], ["noc"]]}]
+    },
+    {
+      "id": "w35",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 150, "author": "user", "text": "*Saliamo sull'ultimo vagone e chiudo la porta.* Ce l'abbiamo fatta, il controllore non ci ha visti."},
+        {"seq": 151, "author": "character", "text": "Signore, il controllore sono io. Ma per questa volta, a ogni buon conto, non ho visto nulla."}
+      ],
+      "expected": [{"kinds": ["narrative_event", "character_fact"], "provenance": "fictional", "all": [["vagon", "controllor"]]}]
+    },
+    {
+      "id": "w36",
+      "character": "Tessa Moravi",
+      "existing": ["Ha trentadue anni."],
+      "messages": [
+        {"seq": 44, "author": "user", "text": "Ti avevo detto trentadue anni? Mi sono sbagliato, ne ho trentatré."},
+        {"seq": 45, "author": "character", "text": "ahah vecchietto!! trentatré segnato, giuro"}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["trentatre", "33"]]}]
+    },
+    {
+      "id": "w37",
+      "character": "Nerea Falchi",
+      "messages": [
+        {"seq": 19, "author": "user", "text": "Quest'anno ho comprato la terza barca a vela, mia moglie dice che esagero."},
+        {"seq": 20, "author": "character", "text": "Tua moglie ha ragione. Però se vuoi ti disegno le rotte, così almeno non le perdi."}
+      ],
+      "expected": [
+        {"kinds": ["user_fact"], "provenance": "stated", "all": [["barc"]]},
+        {"kinds": ["user_fact"], "provenance": "stated", "all": [["moglie", "spos"]]}
+      ],
+      "inferences": [{"all": [["ricc", "benestant", "soldi"]]}]
+    },
+    {
+      "id": "w38",
+      "character": "Ilario Sant'Elmo",
+      "messages": [
+        {"seq": 70, "author": "user", "text": "In treno leggo sempre romanzi gialli, soprattutto quelli ambientati in montagna."},
+        {"seq": 71, "author": "character", "text": "Le montagne custodiscono bene i segreti. Gliene consiglierò uno al prossimo viaggio."}
+      ],
+      "expected": [{"kinds": ["user_preference"], "provenance": "stated", "all": [["giall"]]}],
+      "inferences": [{"all": [["pendolar", "viaggia spesso", "abita in montagna"]]}]
+    },
+    {
+      "id": "w39",
+      "character": "Tessa Moravi",
+      "messages": [
+        {"seq": 99, "author": "user", "text": "Ti prego, niente emoji quando parliamo di mia madre. È un argomento serio per me."},
+        {"seq": 100, "author": "character", "text": "Va bene. Promesso."}
+      ],
+      "expected": [{"kinds": ["boundary"], "provenance": "stated", "all": [["madre"]]}],
+      "inferences": [{"all": [["mort", "malat", "lutto", "defunt"]]}]
+    },
+    {
+      "id": "w40",
+      "character": "Nerea Falchi",
+      "context": [
+        {"seq": 200, "author": "user", "text": "Ti ricordi che ti ho parlato del mio lavoro in porto?"},
+        {"seq": 201, "author": "character", "text": "Certo. Quello con le gru che sembrano giraffe."}
+      ],
+      "messages": [
+        {"seq": 202, "author": "user", "text": "Ecco, da ieri sono diventato capo turno al porto."},
+        {"seq": 203, "author": "character", "text": "Capo turno. Allora d'ora in poi le mie mappe del porto te le vendo a prezzo pieno."}
+      ],
+      "expected": [{"kinds": ["user_fact"], "provenance": "stated", "all": [["capo turno", "capoturno", "promoss"]]}],
+      "inferences": [{"all": [["stipend", "soldi", "aument"]]}]
+    }
+  ]
+}

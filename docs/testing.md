@@ -1,6 +1,6 @@
 # Testing
 
-Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-10 to T-GPU-13) have not run. The `gpu` level exists (GPU.1), and its T-GPU-01 passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)); T-GPU-02 to T-GPU-04 (GPU.2) passed there on 2026-11-25 too ([evidence](verification/2026-11-25-gpu-text-profiles.md)), and so did T-GPU-05 (GPU.4, [evidence](verification/2026-11-25-gpu-structured-output.md)), T-GPU-06 (GPU.5, [evidence](verification/2026-11-25-gpu-image-profiles.md)), T-GPU-07 to T-GPU-09 (GPU.6, [evidence](verification/2026-11-25-gpu-mode-switches.md); T-GPU-07's ten round trips in two runs of five) and T-GPU-14 (P02.7, [evidence](verification/2026-11-25-p02-7-vram-tuning.md)). The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
+Status: accepted (2026-11-01), revised 2026-11-06 for the consistency and image identity tests, the delivered `lint` level and the backend gates, and 2026-11-06 for the `docker` level. **Reconciled on 2026-11-09: the catalog tests named by the exits of P01 to P07 have run, in the phase exit files under [verification](verification/), and the paragraph below is the history of how they came in.** The tests that need the real GPU or a real model (T-QLT-01 and T-QLT-05 to T-QLT-07 on real profiles, T-GPU-10 to T-GPU-13) have not run. The `gpu` level exists (GPU.1), and its T-GPU-01 passed on the reference machine on 2026-11-25 ([evidence](verification/2026-11-25-gpu-level.md)); T-GPU-02 to T-GPU-04 (GPU.2) passed there on 2026-11-25 too ([evidence](verification/2026-11-25-gpu-text-profiles.md)), and so did T-GPU-05 (GPU.4, [evidence](verification/2026-11-25-gpu-structured-output.md)), T-GPU-06 (GPU.5, [evidence](verification/2026-11-25-gpu-image-profiles.md)), T-GPU-07 to T-GPU-09 (GPU.6, [evidence](verification/2026-11-25-gpu-mode-switches.md); T-GPU-07's ten round trips in two runs of five) and T-GPU-14 (P02.7, [evidence](verification/2026-11-25-p02-7-vram-tuning.md)). The `quality` level exists (QLT.1) and automates T-QLT-05, with the SmartCache and SWA padding measurements, and T-QLT-06 ([The `quality` level](#the-quality-level)); only its short smoke mode has run, on `rocinante-x-12b` on 2026-11-26 ([evidence](verification/2026-11-26-quality-level.md)), so neither protocol is passed. The P08 specs `responsive.spec.mjs`, `accessibility.spec.mjs` (T-QLT-03), `performance.spec.mjs` and `empty-loading.spec.mjs` and the unit spec `virtual-window.spec.ts` are written and have not run. The Schemathesis contract test covers only the two health routes, because the other routers are not in the OpenAPI schema ([API](api.md)). The `e2e` level exists (P01.8c): its smoke test passed against the fakes ([evidence](verification/2026-11-06-e2e-level.md)). The fake runtimes of `tests/fakes/` and `compose.test.yaml` are written (P01.8b) ([evidence](verification/2026-11-06-fake-runtimes.md)); their Docker test, `tests/docker/TestFakes.Tests.ps1`, first ran and passed with P01.6a, after two fixes to the test itself. The CI workflow `.github/workflows/ci.yml` is written (P01.8d) and has not run; see [Continuous integration](#continuous-integration). Every catalog test that no exit file records is planned and assigned to a roadmap phase. Delivered so far: the `test` command with its `lint` level, the Pester tests of the scripts in the `unit` level ([evidence](verification/2026-11-06-lint.md)), and the backend's ruff, format and `mypy --strict` gates in `lint` and its pytest unit tests in `unit`, all in the backend test stage ([evidence](verification/2026-11-06-backend-skeleton.md)). The backend part of the `integration` level (database, migrations and health routes) is delivered too ([evidence](verification/2026-11-06-backend-persistence.md)). The orchestrator's gates and unit tests, with T-ORC-01, run in its own test stage ([evidence](verification/2026-11-06-orchestrator-state-machine.md)), and so does T-ORC-07, with the scan that confines the Docker socket to the container gate. The backend's unit tests run the same scan on the backend ([evidence](verification/2026-11-06-container-gate.md)). The orchestrator's integration tests, with T-ORC-10, run in the `integration` level, and its unit tests cover each threshold of the GPU preflight with a fake probe ([evidence](verification/2026-11-06-control-api.md)). T-ORC-03, in `orchestrator/tests/unit/test_leases.py`, and the supervisor's unit tests passed in a targeted `test unit -k` run (P02.2). T-MSG-03, T-MSG-09, T-MSG-12, T-MSG-13 and T-SEC-06 at the integration level, in `backend/tests/integration/test_reply_streaming.py`, and the event hub's tests in `backend/tests/unit/test_event_hub.py` passed in a targeted `test unit` run of those two files (P02.5c); their E2E halves are planned with the chat screens. The integration test of the text lifecycle through the control API, `tests/integration/test_text_lifecycle.py`, is written and has not run yet. The frontend's ESLint, color check and strict build run in `lint`, and its Vitest and Node tests, with T-SEC-09, run in `unit` ([evidence](verification/2026-11-06-frontend-shell.md)). The `docker` level ran in full and passed, with T-DCK-06, T-DCK-07 and T-DCK-13 for `setup.cmd` ([evidence](verification/2026-11-06-setup.md)). T-IMG-04 and T-ORC-02 (P06.1) passed in a targeted `test unit` run of their files on 2026-11-07, with the backend's `gpu.state` tests; the frontend translator spec that checks the Italian GPU labels passed `lint` but was not run on its own then.
 
 ## Levels
 
@@ -58,13 +58,24 @@ are trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildca
 A plain `gpu` run leaves out `tests/gpu/Session.Tests.ps1`, the two-hour session T-GPU-13, which only
 `test gpu Session` (two hours) or `test gpu Session short` (150 s) runs.
 
+`quality` takes the names of its test files (`Consistency`, `Extraction`), `short` and the ids of catalog text
+profiles, in any order (see [The `quality` level](#the-quality-level)). Without a profile it runs on every catalog text
+profile; without a file name it runs both files:
+
+```powershell
+.\scripts\lyrveil.cmd test quality                                   # T-QLT-05 and T-QLT-06 on every catalog profile
+.\scripts\lyrveil.cmd test quality rocinante-x-12b                   # both on one profile
+.\scripts\lyrveil.cmd test quality Extraction rocinante-12b-v1.1     # T-QLT-06 alone on one profile
+.\scripts\lyrveil.cmd test quality Consistency short rocinante-x-12b # the smoke mode of T-QLT-05
+```
+
 Every other level refuses arguments.
 
 `all` runs `lint`, `unit`, `integration`, `e2e` and `docker`. It leaves out `gpu` and `quality`, which need the hardware and are explicit. `gpu` exits with a clear skip message when no GPU is present. A skip is never reported as a pass.
 
 `integration` builds the test stage of each component that has a `tests/integration` folder, today the backend and the orchestrator, and runs `pytest tests/integration` in it, without network access. The backend's tests use SQLite files in the container's own file system. The test stage has the Python and SQLite build of the runtime image, so WAL and FTS5 are proven on the build that production uses. The tests start the engine, the Alembic command line, the health routes and `main()` against real database files, with Uvicorn replaced by a stand-in. The orchestrator's tests run the control API in process through Starlette's test client, with a fake GPU probe.
 
-Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. See [The `docker` level](#the-docker-level). `gpu` runs the Pester files `tests/gpu/*.Tests.ps1` against the real runtimes; without a GPU it prints `Test level 'gpu' skipped` and `test gpu: SKIPPED (gpu)` and exits 1. See [The `gpu` level](#the-gpu-level). Today `quality` has no tests, so it exits 1.
+Every command exits 0 only when the level ran tests and all of them passed. An unknown level, a missing level and a level with no tests yet exit 1 with a message. `docker` runs the Pester files `tests/docker/*.Tests.ps1` with the host's Docker, and fails when there are none. It builds the images of `compose.yaml` and of `tests/fakes/Dockerfile`, so it needs Docker and takes a while on a first run. See [The `docker` level](#the-docker-level). `gpu` runs the Pester files `tests/gpu/*.Tests.ps1` against the real runtimes; without a GPU it prints `Test level 'gpu' skipped` and `test gpu: SKIPPED (gpu)` and exits 1. See [The `gpu` level](#the-gpu-level). `quality` runs the Pester files `tests/quality/*.Tests.ps1` with the same preparation, skip and cleanup; see [The `quality` level](#the-quality-level).
 
 ### The `gpu` level
 
@@ -398,6 +409,115 @@ latency p50 6.9 s and maximum 38.2 s (the maximum follows an image switch), imag
 1268 MiB, close to the 1024 MiB limit. **The two-hour run (`test gpu Session`) has not been made**, so T-GPU-13 is not
 passed; it needs two hours of the GPU, and its host RAM limit may be the first check to fail on this machine.
 
+### The `quality` level
+
+Delivered with QLT.1 for the automated parts of P04's quality exit: T-QLT-05, the
+[consistency protocol](consistency-engine.md#consistency-protocol) with the SmartCache and SWA padding measurements of
+[ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md), and T-QLT-06, the
+[extraction evaluation](consistency-engine.md#extraction-evaluation). T-QLT-01, T-QLT-07 and C7, the owner's blind
+test, need human review and are not part of it.
+
+`Invoke-QualityTestLevel` of [`scripts/lib/TestCommand.psm1`](../scripts/lib/TestCommand.psm1) runs
+`tests/quality/*.Tests.ps1` through `Invoke-GpuLevel` of [`scripts/lib/GpuLevel.psm1`](../scripts/lib/GpuLevel.psm1),
+so it has the gpu level's steps exactly: the skip without a GPU (`test quality: SKIPPED (quality)`, exit 1), the
+refusal while an installation's runtime or orchestrator runs, the project `lyrveil-gpu-test` with its own data volume
+`lyrveil-gpu-test-data`, `lyrveil-models` read-only, the configuration check and the removal of everything at the end,
+also on failure. `Resolve-QualityArgument` of [`scripts/lib/QualityLevel.psm1`](../scripts/lib/QualityLevel.psm1) sorts
+the arguments before any GPU or Docker call: a capitalized name must be a test file of `tests/quality`, and `short` and
+the catalog text profile ids reach every file that runs as its `Select` parameter. Anything else exits 1 with
+`Nothing ran.`. Both files hand `runtime/` of the data volume to the backend's user 10001, as an installation's volume
+has it, and write their launch lines as that user (`Set-GpuTestLaunchLine -AsBackendUser`), so they run in either order.
+
+`tests/quality/Consistency.Tests.ps1` holds **T-QLT-05**. It prepares the stack like `tests/gpu/Session.Tests.ps1` (the
+test-only orchestrator, the backend, both runtime containers), turns diagnostic mode on so that every reply keeps its
+prompt, and loads the demo characters, whose band and narration must match the script. For each selected profile:
+
+- **Profile.** It makes the profile active through the backend, as **Applica ora** does: `PATCH /settings/models`, then
+  `POST /settings/models/apply`, the reload job, `LLM_READY`, and `/api/v1/model` naming the profile's file.
+- **Conversations.** One conversation per demo character follows
+  [`tests/quality/consistency/script.json`](../tests/quality/consistency/script.json): 108 shared user messages with
+  three time jumps, two corrections and a 26-message topic change, and each character's 12 identity probes in blocks of
+  four ending at messages 10, 60 and 120 (name, age, occupation, place, gender, main trait and a fact of block 2). The
+  driver waits for each reply (300 s at most), counts its tokens with the loaded model (`/api/extra/tokencount`), and
+  judges a probe with its keyword lists (`Test-QualityProbeAnswer`: one expected fragment and no rejected one, compared
+  lowercase without accents). A conversation stops at the first reply that does not complete, and the missing replies
+  count against it.
+- **C6.** One more conversation with the script's change character (Nerea) runs its first 60 messages on the next
+  catalog text profile (wrapping), then the backend changes back to the measured profile for messages 61 to 120.
+- **Checks.** The `checks_json` of every reply's active variant is read from `/data/db/lyrveil.sqlite3`, opened
+  read-only, by the backend's own Python (`docker compose exec`).
+- **Scores.** `Get-QualityConsistencyScore` computes C1 (at least 95 % of the probes right, and no delivered reply with
+  a V6 or V10 hit), C2 (at most 1 reply with a delivered V11 hit per 200), C3 (V13, at most 2 per 100), C4 (per band, a
+  median within the target of [Length bands](prompting.md#length-bands) and at most 10 % of the replies cut by N4), C5
+  (narration spans delivered for `nessuna`, with N3's removed spans as the raw tendency) and C6 (C1 and C4 on the change
+  conversation after the change). C1, C2, C4, C6 and the completion of every planned reply are hard and fail the test;
+  C3 and C5 are recorded; C7 is recorded as `not_run`.
+
+Then it removes the stack and measures **SmartCache** for each profile with `lyrveil-llm` alone, at the profile's level A
+with `SMART_CACHE` 0 and then 2 and `LEVEL=CUSTOM`. Each trial replays the stored prompts of the last 20 replies of the
+first conversation in pairs: the first prompt, then the extraction prompt of a T-QLT-06 window under its grammar (the
+structured task), then the second prompt, whose `last_process` from `/api/extra/perf` is the measurement. It is read in
+KoboldCpp's own unit, which behaves as milliseconds per prompt token (like `last_eval` in T-GPU-04); both trials replay
+the same prompts, so the ratio of the processing times is kept. `docker stats` of the runtime is read after every
+request for the peak RAM, and `docker info` gives the memory Docker sees.
+`Get-QualitySmartCacheDecision` gives 2 when the median falls by at least 50 % and the peak stays at least 4096 MiB below
+that memory, 0 when either fails, and `undecided` when a trial is missing, measured nothing or failed. The record also
+says whether the catalog may carry 2: its validator allows `smart_cache` 2 only for a profile whose `min_tier` is
+`target`, which neither catalog profile has. **SWA padding** is planned only for a `gemma4` profile
+(`Get-QualitySwaPaddingPlan`), so for both catalog profiles it is recorded as `not_applicable` with that reason
+([ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md)). `Get-QualitySwaPaddingDecision` holds the rule for a
+`gemma4` profile (the smallest value within 10 % of the best median `last_process` that keeps 512 MiB of margin and
+the speed rule); the file has no runner for those trials, and would fail rather than guess for such a profile.
+
+`tests/quality/Extraction.Tests.ps1` holds **T-QLT-06**. Like T-GPU-05 it copies no backend prompt, grammar or rule:
+[`backend/tests/gpu_probe/extraction_eval.py`](../backend/tests/gpu_probe/extraction_eval.py), in the backend's test
+stage with no network, gives the `memory_extraction` job's prompt (`extraction.render_prompt`) for each of the 40
+windows of [`backend/tests/fixtures/extraction_eval/windows.json`](../backend/tests/fixtures/extraction_eval/windows.json),
+with the job's grammar, length and temperature, and the repair prompt of a refused output. For each profile the test
+starts `lyrveil-llm` alone at level A, generates every window, has the probe judge the outputs with the job's
+`validate_result`, repairs each refused one once, and has the probe score the results. The probe drops an item as the
+job does (a source outside the window, an unknown or missing target, blank text) and stores provenance as guard 1
+does (`checked_provenance`). The four targets:
+
+- at least 85 % of the 43 expected items found with one of their kinds, their provenance and every keyword group;
+- at most 3 % of the 14 inferences (what a window only implies) stored as `stated`;
+- no stored item that matches one of the 4 expected `identity_candidate` items under another kind, which would change
+  canonical data;
+- at least 98 % of the windows valid after the repair, so all 40.
+
+The short mode (`short`) of both files is a smoke run of the same code that fits in about ten minutes: T-QLT-05 runs the
+first probe block alone (4 messages per conversation, the change after message 2, one SmartCache pair) and T-QLT-06 the
+first 5 windows. Its results file says it is no evidence for the catalog.
+
+**Result so far** ([evidence](verification/2026-11-26-quality-level.md)). Only the short mode has run, on
+`rocinante-x-12b`, on 2026-11-26, and every run left nothing behind. `test quality Consistency short rocinante-x-12b`
+passed once (6 Pester cases, 291.8 s):
+
+- 16 of 16 replies completed, 12 of 12 probes were right, and no V6, V10, V11 or V13 hit was delivered;
+- the medians were 13, 63.5 and 9 tokens for `brevi`, `lunghi` and `brevissimi`, with no reply cut, and C6 held after
+  the change back from `rocinante-12b-v1.1`;
+- SmartCache kept 0 (`last_process` fell 1.76 % on one pair with a three-message history).
+
+A second run, with the final code, missed C1 at 11 of 12. Tessa answered "Apprendo pozione!" to "Che lavoro fai?", and
+that probe's list lacked the `pozion` of her later occupation probe. Same-topic probes now share their fragments, and a
+unit case checks it.
+
+`test quality Extraction short rocinante-x-12b` **failed** its found-rate target. All 5 outputs were valid, but 0 of
+the 5 expected items were found: the model returned no memory for four windows and, for one, a `duplicate` of a memory
+the window does not show, which the job drops. **The full protocols have not run on either profile**, so T-QLT-05 and
+T-QLT-06 are not passed, and the extraction result is a finding for the P04 tuning round.
+
+The results go to `test-results/quality/consistency-<mode>-<time>.json` and `test-results/quality/extraction-<mode>-<time>.json`,
+which Git ignores: every reply with its text, probe verdict, length and checks, every score against its target, every
+trial and decision, and every extraction output with its verdict.
+`tests/scripts/QualityLevel.Tests.ps1`, in the `unit` level, covers the arguments, the plan built from the real script,
+the probe and narration readers, every score at and just past its target, the trial launch lines and the SmartCache and
+SWA padding rules. `backend/tests/unit/test_gpu_extraction_probe.py` checks that the probe gives the job's prompt and
+repair prompt, refuses what the job refuses, applies guard 1, drops what the job drops, scores each target at its
+threshold, and that the fixture holds 40 valid windows. The cases "The gpu level" of `tests/scripts/TestCommand.Tests.ps1`
+also cover `test quality`: both files with their items and the cleanup, one named file, a refused argument before any
+GPU or Docker call, and the skip without a GPU.
+
 ### The `docker` level
 
 Delivered with P01.8b, P01.6a, P01.6b, P01.6c, P01.6d and P01.7b ([setup evidence](verification/2026-11-06-setup.md),
@@ -600,11 +720,14 @@ tests/
   e2e/               Playwright 1.64.1 and @axe-core/playwright 4.14.0: package.json, playwright.config.mjs, specs/
   docker/
   gpu/
-  quality/italian/
-  quality/consistency/
-  quality/extraction/
-  quality/images/
+  quality/           Consistency.Tests.ps1 (T-QLT-05), Extraction.Tests.ps1 (T-QLT-06)
+  quality/consistency/   script.json, the scripted conversations of T-QLT-05
+  quality/italian/   planned
+  quality/images/    planned
 ```
+
+The 40 windows of T-QLT-06 are `backend/tests/fixtures/extraction_eval/windows.json`, beside the probe that reads them
+in the backend's test stage.
 
 ### Fake runtimes
 

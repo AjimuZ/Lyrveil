@@ -1,4 +1,4 @@
-# Runs the gpu level against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives its tests NVML samples, the runtime APIs, the control and backend APIs, and the process, route and network probes of the stop and offline tests.
+# Runs the gpu and quality levels against the real runtimes of compose.yaml in the project "lyrveil-gpu-test", and gives their tests NVML samples, the runtime APIs, the control and backend APIs, and the process, route and network probes of the stop and offline tests.
 
 Set-StrictMode -Version Latest
 
@@ -482,15 +482,18 @@ function Write-GpuTestLaunchFile {
     <#
     Replaces runtime/llm-launch.env in the test data volume with Line, and with WithImage also writes
     runtime/image-launch.env with the default RESERVE_VRAM_GB, mode 0644 under a 0755 folder, from a one-off container
-    of the built text runtime image with no network. Returns $true when the container succeeded, and $false, writing
-    nothing, when a line is not KEY=VALUE with a value of letters, digits, ".", "_" and "-" only. Not exported.
+    of the built text runtime image with no network. It runs as root without capabilities, or with AsBackendUser as
+    10001, the owner Set-GpuTestDataOwner -WithRuntime gives runtime/, which root without DAC_OVERRIDE can no longer
+    write. Returns $true when the container succeeded, and $false, writing nothing, when a line is not KEY=VALUE with a
+    value of letters, digits, ".", "_" and "-" only. Not exported.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
         [Parameter(Mandatory = $true)] [string[]]$Line,
-        [switch]$WithImage
+        [switch]$WithImage,
+        [switch]$AsBackendUser
     )
 
     # The lines reach printf as separate arguments, so none may hold a space or a shell character. The script has no
@@ -503,8 +506,9 @@ function Write-GpuTestLaunchFile {
     }
     $shellScript = "set -eu; umask 022; mkdir -p /data/runtime; printf '%s\n' `$@ > /data/runtime/llm-launch.env"
     if ($WithImage) { $shellScript += "; printf '%s\n' RESERVE_VRAM_GB=1.5 > /data/runtime/image-launch.env" }
+    $user = if ($AsBackendUser) { '10001:10001' } else { '0:0' }
     $write = Invoke-GpuNative -Directory $Root -Command 'docker' -Argument (@(
-            'run', '--rm', '--network', 'none', '--user', '0:0', '--cap-drop', 'ALL',
+            'run', '--rm', '--network', 'none', '--user', $user, '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges:true', '--volume', "$($script:DataVolume):/data",
             '--entrypoint', '/bin/sh', 'lyrveil/llm:gpu-test', '-c', $shellScript, 'sh') + $Line)
     return ($write.Status -eq 0)
@@ -534,16 +538,18 @@ function Set-GpuTestLaunchLine {
     Replaces the text runtime's launch file in the test data volume with Line, the lines of a tuning trial, and returns
     $true when it was written, or $false, writing nothing, when a line is not KEY=VALUE with a plain value. The
     runtime's entrypoint still checks every key and value at its next start. Call it while lyrveil-llm is removed.
+    With AsBackendUser it writes as 10001, for a volume whose runtime/ Set-GpuTestDataOwner -WithRuntime handed over.
     #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([bool])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
-        [Parameter(Mandatory = $true)] [string[]]$Line
+        [Parameter(Mandatory = $true)] [string[]]$Line,
+        [switch]$AsBackendUser
     )
 
     if (-not $PSCmdlet.ShouldProcess('runtime/llm-launch.env', 'Write the launch lines of a trial')) { return $true }
-    return (Write-GpuTestLaunchFile -Root $Root -Line $Line)
+    return (Write-GpuTestLaunchFile -Root $Root -Line $Line -AsBackendUser:$AsBackendUser)
 }
 
 function Get-RunningInstallationRuntime {
@@ -749,15 +755,17 @@ function Invoke-GpuBackendProbe {
     Runs Action of the probe backend/tests/gpu_probe/<Probe>.py with Body as its JSON request, in a new container of
     the image of Initialize-GpuBackendProbe, and returns @{ Status; Body }: the container's exit status and the parsed
     JSON line it printed, or $null. structured_task (T-GPU-05) takes "prompt" and "check"; image_presets (T-GPU-06,
-    T-IMG-14) takes "workflow" and "rule". The container has no network, a read-only root and no capability, carries
-    the test project's label, so the level's leftover check would see it, and is removed when it exits.
+    T-IMG-14) takes "workflow" and "rule"; extraction_eval (T-QLT-06, and the structured prompts of the SmartCache
+    measurement of T-QLT-05) takes "prompt", "check" and "score". The container has no network, a read-only root and no
+    capability, carries the test project's label, so the level's leftover check would see it, and is removed when it
+    exits.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
-        [ValidateSet('structured_task', 'image_presets')] [string]$Probe = 'structured_task',
-        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check', 'workflow', 'rule')] [string]$Action,
+        [ValidateSet('structured_task', 'image_presets', 'extraction_eval')] [string]$Probe = 'structured_task',
+        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check', 'workflow', 'rule', 'score')] [string]$Action,
         [Parameter(Mandatory = $true)] [hashtable]$Body
     )
 
@@ -1053,6 +1061,22 @@ function ConvertFrom-DockerMemoryText {
     $amount = [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
     $factor = @{ B = 1.0 / 1MB; kB = 1000.0 / 1MB; KiB = 1.0 / 1KB; MB = 1000000.0 / 1MB; MiB = 1.0; GB = 1000000000.0 / 1MB; GiB = 1024.0 }
     return [math]::Round($amount * $factor[$Matches[2]], 1)
+}
+
+function Get-GpuDockerMemoryTotal {
+    <#
+    Returns the memory Docker sees, in MiB, as "docker info" reports it (MemTotal; with Docker Desktop on WSL2 the
+    memory of its VM), or -1 when Docker fails or reports no amount. The SmartCache rule of T-QLT-05 keeps the text
+    runtime's peak RAM at least 4 GiB below it.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param()
+
+    $info = Invoke-GpuNative -Command 'docker' -Capture -Argument @('info', '--format', '{{.MemTotal}}')
+    $text = ($info.Output -join '').Trim()
+    if ($info.Status -ne 0 -or $text -notmatch '^[0-9]+$') { return -1.0 }
+    return [math]::Round([double]$text / 1MB, 1)
 }
 
 function Start-GpuMemorySampler {
@@ -1580,7 +1604,9 @@ function Invoke-GpuLevel {
     test project, refuses a resolved configuration that Test-GpuTestConfiguration rejects, builds the runtime images
     with ":gpu-test" tags, creates the test data volume with the launch files and runs the tests. Whatever happens
     after the first removal, also on failure or interruption, it removes the project and its data volume and returns
-    1 if anything is left. Returns 0 only when the tests passed and nothing is left. TestCommand.psm1 calls it.
+    1 if anything is left. Returns 0 only when the tests passed and nothing is left. TestCommand.psm1 calls it for the
+    gpu level and, with Level 'quality', for the quality level, which runs on the same test project; Level only names
+    the level in the messages.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -1588,34 +1614,35 @@ function Invoke-GpuLevel {
         [Parameter(Mandatory = $true)] [string]$Root,
         [string[]]$File = @(),
         [Parameter(Mandatory = $true)] [scriptblock]$Runner,
-        [hashtable]$Data = $null
+        [hashtable]$Data = $null,
+        [ValidateSet('gpu', 'quality')] [string]$Level = 'gpu'
     )
 
     $files = [string[]]@($File | Where-Object { $_ })
     if ($files.Length -eq 0) {
-        Write-Host "Test level 'gpu' has no tests yet. Nothing ran, so it cannot pass."
+        Write-Host "Test level '$Level' has no tests yet. Nothing ran, so it cannot pass."
         return 1
     }
     Write-Host 'GPU: reading GPU 0 through NVML with nvidia-smi'
     $card = Get-GpuSample
     if (-not $card.Available) {
-        Write-Host "Test level 'gpu' skipped: $($card.Reason). It needs an NVIDIA GPU with its driver. No test ran, and a skip is not a pass."
+        Write-Host "Test level '$Level' skipped: $($card.Reason). It needs an NVIDIA GPU with its driver. No test ran, and a skip is not a pass."
         return $script:SkippedStatus
     }
     Write-Host ("GPU: {0}, {1} MiB, {2} MiB in use" -f $card.Name, $card.TotalMiB, $card.UsedMiB)
 
     $running = Get-RunningInstallationRuntime
     if (-not $running.Known) {
-        Write-Host '  [FAIL] gpu: docker ps failed, so Docker is not available.'
+        Write-Host "  [FAIL] ${Level}: docker ps failed, so Docker is not available."
         return 1
     }
     if ($running.Names.Length -gt 0) {
-        Write-Host "  [FAIL] gpu: the container $($running.Names -join ' and ') of an installation is running. Stop Lyrveil first; this level never touches it."
+        Write-Host "  [FAIL] ${Level}: the container $($running.Names -join ' and ') of an installation is running. Stop Lyrveil first; this level never touches it."
         return 1
     }
     try { $textProfile = Get-GpuTestProfile -Root $Root }
     catch {
-        Write-Host "  [FAIL] gpu: $($_.Exception.Message)"
+        Write-Host "  [FAIL] ${Level}: $($_.Exception.Message)"
         return 1
     }
 
@@ -1623,7 +1650,7 @@ function Invoke-GpuLevel {
     try {
         Write-Host "GPU: clearing any earlier Compose project '$script:ProjectName' and the volume '$script:DataVolume'"
         $ready = Remove-GpuTestProject -Root $Root
-        if (-not $ready) { Write-Host '  [FAIL] gpu: an earlier test project or its volume could not be removed' }
+        if (-not $ready) { Write-Host "  [FAIL] ${Level}: an earlier test project or its volume could not be removed" }
         if ($ready) {
             Write-Host 'GPU: checking the resolved configuration'
             $config = Invoke-GpuCompose -Root $Root -Capture -Argument (@('config', '--format', 'json') + $script:Services + $script:StackServices)
@@ -1631,32 +1658,32 @@ function Invoke-GpuLevel {
             if ($config.Status -eq 0) { $problems = @(Test-GpuTestConfiguration -Text ($config.Output -join "`n")) }
             foreach ($problem in $problems) { Write-Host "         $problem" }
             $ready = ($problems.Length -eq 0)
-            if (-not $ready) { Write-Host '  [FAIL] gpu: the resolved configuration could reach an installation; nothing was started' }
+            if (-not $ready) { Write-Host "  [FAIL] ${Level}: the resolved configuration could reach an installation; nothing was started" }
         }
         if ($ready) {
             Write-Host 'GPU: building the runtime images with the tag :gpu-test'
             $build = Invoke-GpuCompose -Root $Root -Argument (@('build') + $script:Services)
             $ready = ($build.Status -eq 0)
-            if (-not $ready) { Write-Host "  [FAIL] gpu: the runtime images did not build (exit $($build.Status))" }
+            if (-not $ready) { Write-Host "  [FAIL] ${Level}: the runtime images did not build (exit $($build.Status))" }
         }
         if ($ready) {
             Write-Host "GPU: creating the volume '$script:DataVolume' with the launch files for '$($textProfile.id)'"
             $ready = Initialize-GpuTestData -Root $Root -TextProfile $textProfile
-            if (-not $ready) { Write-Host '  [FAIL] gpu: the test data volume could not be prepared' }
+            if (-not $ready) { Write-Host "  [FAIL] ${Level}: the test data volume could not be prepared" }
         }
         if ($ready) {
             $status = [int](& $Runner $Root $files $Data)
             $label = if ($status -eq 0) { 'ok  ' } else { 'FAIL' }
-            Write-Host "  [$label] gpu: tests (exit $status)"
+            Write-Host "  [$label] ${Level}: tests (exit $status)"
         }
     }
     finally {
         Write-Host "GPU: removing the Compose project '$script:ProjectName' and the volume '$script:DataVolume'"
         if (Remove-GpuTestProject -Root $Root) {
-            Write-Host '  [ok  ] gpu: no container or volume of the test project is left'
+            Write-Host "  [ok  ] ${Level}: no container or volume of the test project is left"
         }
         else {
-            Write-Host '  [FAIL] gpu: the test project was not fully removed'
+            Write-Host "  [FAIL] ${Level}: the test project was not fully removed"
             $status = 1
         }
     }
@@ -1672,4 +1699,4 @@ Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample
     Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog, Initialize-GpuStackImage, New-GpuTestRuntimeContainer,
     Set-GpuTestDataOwner, Invoke-GpuServiceApi, Start-GpuVramLoad, Get-GpuVramLoad, Stop-GpuVramLoad, Start-GpuTimelineSampler,
     Stop-GpuTimelineSampler, Get-GpuTestServiceLog, Read-GpuTestLaunchFile, Get-GpuTestServiceTop, Invoke-GpuHostProcessProbe,
-    Invoke-GpuRouteProbe, Invoke-GpuRouteControl, Get-GpuTestNetworkFact, Get-GpuTestMemory
+    Invoke-GpuRouteProbe, Invoke-GpuRouteControl, Get-GpuTestNetworkFact, Get-GpuTestMemory, Get-GpuDockerMemoryTotal

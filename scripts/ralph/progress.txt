@@ -282,6 +282,11 @@
 - Keep an hours-long gpu test opt-in with a named list in TestCommand.psm1 ($script:OptInGpuTestFile) that the default glob filters out; the file still runs when named, and its items arrive through Select.
 - Give a long-running driver injected Clock, Wait and action script blocks, so one implementation serves the real run and a unit test on a virtual clock.
 - A long test writes its results file in AfterAll, which also runs when the test fails, so a failed run still leaves its evidence.
+- In PowerShell, a hashtable key named Item, Keys, Values or Count is shadowed by the hashtable's own members ($h.Item returns the indexer, not the key's value). Use other key names.
+- Keep .ps1 and .psm1 files ASCII. Windows PowerShell 5.1 reads BOM-less files as ANSI. Write accented test text with [char] code points.
+- PSScriptAnalyzer's ShouldProcess rule also flags New-/Set-/Start- helper functions inside test files. Name such helpers with Get- or Invoke-.
+- When piping a possibly-$null value into ForEach-Object, filter with Where-Object { $null -ne $_ } first: $null | ForEach-Object runs the block once.
+- For GPU quality checks, reuse the backend's own code through a probe in the backend test stage (stdin JSON in, one ASCII JSON line out), so the test never copies prompts, grammars or validation rules.
 
 ---
 
@@ -2741,4 +2746,31 @@ Not observed: one ten-round run (the shell limit is 10 minutes, ten rounds take 
   - The orchestrator's default text profile is rocinante-x-12b, but the level's data volume starts with the smallest profile's launch file; Session.Tests.ps1 rewrites it to level A of the target-tier default, as Resilience.Tests.ps1 does.
   - The Bash shell here denied piped commands; use the Grep tool to filter output, or run a command plain.
   - A scriptblock called with positional arguments need not declare them; PSScriptAnalyzer's PSReviewUnusedParameter flags unused declared parameters in stand-in script blocks, so omit them or use $args.
+---
+
+## 2026-11-26T20:25:36Z - QLT.1
+- The quality level now runs. `scripts\lyrveil.cmd test quality` takes test file names (Consistency, Extraction), `short` and catalog text profile ids. QualityLevel.psm1 sorts them and refuses anything else before any GPU or Docker call. TestCommand.psm1 runs tests/quality/*.Tests.ps1 through Invoke-GpuLevel, so the level gets the gpu level's preparation, skip, refusal while an installation runs, and cleanup.
+
+tests/quality/Consistency.Tests.ps1 holds T-QLT-05. It drives one scripted 120-message conversation per demo character (tests/quality/consistency/script.json) through the real backend, then the C6 conversation, which starts on the next catalog profile and changes back through PATCH /settings/models and Applica ora. It reads each reply's checks_json read-only from the test database and counts reply tokens with the loaded model. QualityLevel.psm1 scores C1 to C6 against their targets, and a missed hard target fails the test; C7 is recorded as not_run. It then measures SmartCache 0 and 2 by replaying the conversation's own chat prompts, each after an extraction prompt, and decides it with the ADR 0031 rule. It records SWA padding as not applicable: the plan only covers gemma4 profiles, and the rule is implemented and unit-tested.
+
+tests/quality/Extraction.Tests.ps1 holds T-QLT-06. It uses the new probe backend/tests/gpu_probe/extraction_eval.py, which applies the job's own prompt, grammar, validation, item dropping and guard-1 provenance, on 40 synthetic windows in backend/tests/fixtures/extraction_eval/windows.json, and scores the four targets. Both files write scores to test-results/quality/.
+
+GpuLevel.psm1 gained a Level name for its messages, the extraction_eval probe and its score action, Get-GpuDockerMemoryTotal, and -AsBackendUser on the launch-file writer.
+
+Real runs on the RTX 4070, short mode on rocinante-x-12b, each with full cleanup:
+- Consistency, first run: passed. 16 of 16 replies, C1 12 of 12, C6 met, SmartCache kept 0 (1.76 % fall, peak 1345.5 of 24031.8 MiB).
+- Consistency, second run: failed C1 at 11 of 12, on a keyword list inconsistency in the script. The lists are now aligned and a unit case guards them; not re-run after that.
+- Extraction: failed. 0 of 5 expected items found, all outputs valid. A finding about the model and the extraction prompt.
+
+The full protocols have not run on either profile. Lint passes; the 15 new probe pytest tests pass. The new Pester unit tests have not run. Documented in docs/testing.md, consistency-engine.md, gpu-orchestration.md, CHANGELOG.md, docs/README.md and docs/verification/2026-11-26-quality-level.md.
+- Files changed: scripts/lib/QualityLevel.psm1, scripts/lib/TestCommand.psm1, scripts/lib/GpuLevel.psm1, tests/quality/Consistency.Tests.ps1, tests/quality/Extraction.Tests.ps1, tests/quality/consistency/script.json, backend/tests/gpu_probe/extraction_eval.py, backend/tests/fixtures/extraction_eval/windows.json, backend/tests/unit/test_gpu_extraction_probe.py, tests/scripts/QualityLevel.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/consistency-engine.md, docs/gpu-orchestration.md, docs/README.md, docs/verification/2026-11-26-quality-level.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Not run yet: tests/scripts/QualityLevel.Tests.ps1 and the four new 'test quality' cases in tests/scripts/TestCommand.Tests.ps1. The orchestrator's unit run is their first execution. backend/tests/unit/test_gpu_extraction_probe.py passed (15 tests).
+  - Timing on the RTX 4070: 'test quality Consistency short rocinante-x-12b' takes about 5.5 minutes end to end (~295 s of Pester) and 'test quality Extraction short rocinante-x-12b' about 2 minutes, so both fit in one 10-minute tool call. The full modes need hours and cannot run in-session.
+  - Real finding for P04's tuning round: rocinante-x-12b under the extraction job's own prompt returned no memories for 4 of 5 clear facts, and once marked a fact as a duplicate of E1 in a window with no existing memory (the job drops that). The worked example's E1/update may be what it copies. The found-rate target fails until the prompt or example is tuned.
+  - KoboldCpp's /api/extra/perf last_process behaves like milliseconds per prompt token (as last_eval did in T-GPU-04), not seconds. Use it only as a ratio between runs of the same prompts.
+  - SmartCache 2 can only enter the catalog for a profile with min_tier 'target' (catalog validator rule). Both Rocinante profiles have min_tier 'reduced', so a decision of 2 would also need a catalog change.
+  - Both quality files hand runtime/ of the test volume to UID 10001 (Set-GpuTestDataOwner -WithRuntime) and write launch files with Set-GpuTestLaunchLine -AsBackendUser. After that handover the root writer can no longer replace the files, so any new file in the shared test volume must do the same.
+  - Replies vary between runs, so a short-mode score is a smoke result, not a stable score.
+  - The Bash tool here denies 'python -c' and piped commands. Read results files with the Grep and Read tools.
 ---

@@ -400,6 +400,15 @@ Describe 'The gpu level' {
                 "Describe 'opt-in session test' {",
                 '    It "runs" { Write-Host "opt-in session test ran for [$script:Seen]" }',
                 '}', '') -join "`n")
+        # The two files of the quality level, which runs on the same test project and passes its items as Select.
+        foreach ($name in @('Consistency', 'Extraction')) {
+            Write-FixtureFile $script:GpuRepository "tests/quality/$name.Tests.ps1" (@(
+                    'param([string[]]$Select = @())',
+                    'BeforeAll { $script:Seen = @($Select) -join "," }',
+                    "Describe 'quality $name test' {",
+                    "    It 'runs' { Write-Host ""quality $name test ran for [`$script:Seen]"" }",
+                    '}', '') -join "`n")
+        }
         Invoke-FixtureGit $script:GpuRepository @('add', '-A')
         $script:SavedGpuPath = $env:PATH
         $env:PATH = "$script:GpuBin;$env:PATH"
@@ -503,6 +512,51 @@ Describe 'The gpu level' {
         $run.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
             Should -BeGreaterThan $run.Output.IndexOf('selected gpu test ran')
         $run.ExitCode | Should -Be 0
+    }
+
+    It 'runs every quality file on the gpu level steps, passing short and the catalog profiles named, then cleans up' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'quality', 'small-model', 'short')
+        $out = $run.Output
+        $out | Should -Match 'Quality: tests/quality/Consistency\.Tests\.ps1, tests/quality/Extraction\.Tests\.ps1, for small-model short'
+        $out | Should -Match 'quality Consistency test ran for \[small-model,short\]'
+        $out | Should -Match 'quality Extraction test ran for \[small-model,short\]'
+        $out | Should -Not -Match 'stand-in gpu test ran'
+        $build = $out.IndexOf("fake-docker $script:Project build lyrveil-llm lyrveil-image")
+        $tests = $out.IndexOf('quality Consistency test ran')
+        $build | Should -BeGreaterThan -1
+        $tests | Should -BeGreaterThan $build
+        $out.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') | Should -BeGreaterThan $out.IndexOf('quality Extraction test ran')
+        $out | Should -Match '\[ok  \] quality: no container or volume of the test project is left'
+        $out | Should -Match 'test quality: passed'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'runs only the quality file an argument names, with every catalog profile when none is named' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'quality', 'Extraction')
+        $run.Output | Should -Match 'Quality: tests/quality/Extraction\.Tests\.ps1\r?\n'
+        $run.Output | Should -Match 'quality Extraction test ran for \[\]'
+        $run.Output | Should -Not -Match 'quality Consistency test ran'
+        $run.ExitCode | Should -Be 0
+    }
+
+    It 'refuses a quality argument that is no test file, short or catalog profile before any GPU or Docker call' {
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'quality', 'rocinante-x-12b', 'Nothing')
+        $run.Output | Should -Match "'rocinante-x-12b' is neither a test file of tests/quality, 'short', nor a text profile of the catalog"
+        $run.Output | Should -Match "'Nothing' names no test file of tests/quality"
+        $run.Output | Should -Match 'catalog text profiles \(big-model, small-model\)\. Nothing ran\.'
+        $run.Output | Should -Not -Match 'reading GPU 0'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.ExitCode | Should -Be 1
+    }
+
+    It 'skips the quality level without a GPU, touching no Docker, and never passes' {
+        $env:FAKE_NVIDIA_EXIT = '9'
+        $run = Invoke-EntryPoint $script:GpuRepository @('test', 'quality')
+        $run.Output | Should -Match "Test level 'quality' skipped: nvidia-smi exited with status 9"
+        $run.Output | Should -Match 'test quality: SKIPPED \(quality\)\. No test ran'
+        $run.Output | Should -Not -Match 'fake-docker'
+        $run.Output | Should -Not -Match 'quality Consistency test ran'
+        $run.ExitCode | Should -Be 1
     }
 
     It 'removes the project and the volume and fails when a test fails' {

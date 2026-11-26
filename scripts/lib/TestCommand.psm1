@@ -11,6 +11,7 @@ Import-Module (Join-Path $PSScriptRoot 'FrontendComponent.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuLevel.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuTuning.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'QualityLevel.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
 $script:Runners = [ordered]@{
@@ -20,7 +21,7 @@ $script:Runners = [ordered]@{
     e2e         = 'Invoke-EndToEndLevel'
     docker      = 'Invoke-DockerLevel'
     gpu         = 'Invoke-GpuTestLevel'
-    quality     = $null
+    quality     = 'Invoke-QualityTestLevel'
 }
 
 # The status a runner returns when its level cannot run on this machine, as gpu without a GPU. It is reported as
@@ -30,9 +31,10 @@ $script:SkippedStatus = 2
 # "all" runs every level except gpu and quality, which need the reference hardware and are always explicit.
 $script:AllLevels = @('lint', 'unit', 'integration', 'e2e', 'docker')
 
-# Levels that accept arguments after their name: unit passes them to pytest, and gpu takes them as the trials of the
-# tuning procedure to run. Every other level refuses them.
-$script:ArgumentLevels = @('unit', 'gpu')
+# Levels that accept arguments after their name: unit passes them to pytest, gpu takes them as the trials of the
+# tuning procedure to run, and quality as its test files, "short" and the text profiles to run on. Every other level
+# refuses them.
+$script:ArgumentLevels = @('unit', 'gpu', 'quality')
 
 # The gpu test file that a trial selection runs alone.
 $script:TuningTestFile = 'tests/gpu/Tuning.Tests.ps1'
@@ -258,6 +260,51 @@ function Invoke-GpuTestLevel {
     return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner -Data $data)
 }
 
+function Invoke-QualityTestLevel {
+    <#
+    Runs the quality level: the Pester files tests/quality/*.Tests.ps1 (T-QLT-05 and T-QLT-06) through Invoke-GpuLevel
+    of GpuLevel.psm1, so they get the gpu level's GPU check, refusal while an installation runs, test project, data
+    volume and cleanup, against the real runtimes and the models of lyrveil-models. Resolve-QualityArgument of
+    QualityLevel.psm1 sorts the arguments: the names of test files (such as Consistency) run only those files, and
+    "short" and catalog text profile ids reach every file that runs as its Select parameter, so "test quality
+    rocinante-x-12b" runs both protocols on that profile and a plain "test quality" on every catalog text profile.
+    Any other argument, or a catalog that cannot be read, returns 1 before any GPU or Docker call. Returns 0 only when
+    the tests ran and passed and the test project is gone, 2 (the skip status) without a GPU, and 1 otherwise, also
+    when tests/quality holds no test file. Not exported.
+    #>
+    param([string]$Root, [string[]]$Argument = @())
+
+    $available = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/quality/*.Tests.ps1'))
+    if ($available.Length -eq 0) {
+        Write-Host "Test level 'quality' has no tests yet. Nothing ran, so it cannot pass."
+        return 1
+    }
+    try {
+        $catalog = (Read-Utf8Text -Path (Join-Path $Root 'config\model-catalog.json')) | ConvertFrom-Json
+        $profileIds = [string[]]@(Get-QualityTextProfileId -Catalog $catalog)
+    }
+    catch {
+        Write-Host "Test level 'quality' could not read config/model-catalog.json: $($_.Exception.Message). Nothing ran."
+        return 1
+    }
+    $resolved = Resolve-QualityArgument -Argument $Argument -TestFile $available -TextProfileId $profileIds
+    if ($resolved.Problems.Length -gt 0) {
+        foreach ($problem in $resolved.Problems) { Write-Host $problem }
+        Write-Host "Test level 'quality' takes the names of its test files, 'short' and catalog text profiles ($($profileIds -join ', ')). Nothing ran."
+        return 1
+    }
+    $files = if ($resolved.Files.Length -gt 0) { $resolved.Files } else { $available }
+    $data = $null
+    if ($resolved.Items.Length -gt 0) { $data = @{ Select = [string[]]$resolved.Items } }
+    $scope = if ($resolved.Items.Length -gt 0) { ", for $($resolved.Items -join ' ')" } else { '' }
+    Write-Host "Quality: $(@($files) -join ', ')$scope"
+    $runner = {
+        param([string]$RunRoot, [string[]]$RunFile, [hashtable]$RunData)
+        Invoke-PesterUnitTest -Root $RunRoot -File $RunFile -Data $RunData
+    }
+    return (Invoke-GpuLevel -Root $Root -File $files -Runner $runner -Data $data -Level 'quality')
+}
+
 function Invoke-PesterUnitTest {
     <#
     Runs the Pester test files File, repository-relative, with the pinned Pester, passing Data, when given, as the
@@ -292,8 +339,9 @@ function Invoke-LyrveilTest {
     arguments, and returns the exit status: 0 when the level ran tests and all passed, 1 otherwise. An unknown or
     missing level, arguments for a level that takes none, and a level with no tests yet all return 1 with a
     message, so no level reports a pass without running tests. A level that cannot run on this machine, as gpu without
-    a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest, and "gpu",
-    which takes the names of its test files or trial selectors of the tuning procedure.
+    a GPU, is reported as SKIPPED and also returns 1. Only "unit" takes arguments, which go to pytest, "gpu",
+    which takes the names of its test files or trial selectors of the tuning procedure, and "quality", which takes the
+    names of its test files, "short" and catalog text profiles.
     "all" runs lint, unit, integration, e2e and docker, and passes only when each of them does.
     #>
     [CmdletBinding()]
@@ -316,7 +364,7 @@ function Invoke-LyrveilTest {
     }
     $extra = [string[]]@($given | Select-Object -Skip 1)
     if ($extra.Length -gt 0 -and $script:ArgumentLevels -notcontains $name) {
-        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments) and gpu (test files or tuning trials) take them."
+        Write-Host "Test level '$name' takes no arguments. Only unit (pytest arguments), gpu (test files or tuning trials) and quality (test files, short and text profiles) take them."
         return 1
     }
 

@@ -59,6 +59,19 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The `quality` level (QLT.1). `scripts\lyrveil.cmd test quality` no longer exits with "no tests yet". It runs T-QLT-05
+  (`tests/quality/Consistency.Tests.ps1`) and T-QLT-06 (`tests/quality/Extraction.Tests.ps1`) on every catalog text
+  profile, or on the profiles named, as in `test quality rocinante-x-12b`, with the gpu level's preparation, skip and
+  cleanup. A file name runs that file alone, and `short` runs a smoke mode of about ten minutes.
+  - T-QLT-05 drives one scripted 120-message conversation per demo character through the backend, then the C6
+    profile change. It scores C1 to C6 against their targets and fails on a missed hard target.
+  - The same file measures SmartCache 0 and 2 on the protocol's own chat prompts and decides it by the rule of
+    ADR 0031. It records SWA padding as not applicable, since no catalog profile uses sliding-window attention.
+  - T-QLT-06 evaluates the memory extraction job's own prompt, grammar and validation on 40 synthetic windows.
+  - Every score goes to `test-results/quality/`.
+  - Only the short mode has run, on `rocinante-x-12b`. T-QLT-05 passed once, and missed C1 at 11 of 12 probes on a
+    second run. T-QLT-06 found 0 of 5 expected items, with every output valid. The full protocols have not run, and the new Pester unit tests have not run yet (see
+    [docs/verification/2026-11-26-quality-level.md](docs/verification/2026-11-26-quality-level.md)).
 - T-GPU-13, the two-hour session, as an opt-in test of the `gpu` level (GPU.8), in `tests/gpu/Session.Tests.ps1`.
   `scripts\lyrveil.cmd test gpu Session` drives 3 conversations and 20 images over 7200 s by itself, and
   `scripts\lyrveil.cmd test gpu Session short` runs the same driver for 150 s with 2 images; a plain `test gpu` leaves

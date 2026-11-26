@@ -2,7 +2,9 @@
 
 Status: accepted (2026-11-01), revised 2026-11-06 for consistency across text profiles. Implementation (2026-11-09): delivered in
 phase P04 and passed by its automated exit; the Italian quality and consistency protocols (T-QLT-05, T-QLT-06) have not
-run on any real profile, so P04.10 is pending. Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
+run in full on any real profile, so P04.10 is pending. Since QLT.1 the `quality` level runs both
+([The `quality` level](testing.md#the-quality-level)); only its short smoke mode has run, on `rocinante-x-12b`
+([evidence](verification/2026-11-26-quality-level.md)). Delivered in P04.2b: extraction never writes canonical data, and an item the model labels `identity_candidate` is
 stored as a memory that no prompt shows and that changes nothing else
 ([Delivered in P04.2b](memory-engine.md#delivered-in-p042b)). Code does not yet detect a card change the model did not
 label; "Applica al profilo" has no screen, because the Memory Studio's **Proposte** tab is not drawn. Delivered in P04.6: the Character State Manager with bounded updates and replay
@@ -339,8 +341,11 @@ V1 and V4 endings.
 
 ## Consistency protocol
 
-T-QLT-05 ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)). Scripts are in
-`tests/quality/consistency/`. P04 runs it on every catalog text profile, and P08 runs it again on the default.
+T-QLT-05 ([ADR 0034](decisions/0034-character-consistency-protocol-and-verified-profiles.md)). The test is
+`tests/quality/Consistency.Tests.ps1` and its scripted conversations are `tests/quality/consistency/script.json`; the
+scores and the SmartCache and SWA padding rules are computed by `scripts/lib/QualityLevel.psm1`
+([The `quality` level](testing.md#the-quality-level)). P04 runs it on every catalog text profile, and P08 runs it again
+on the default.
 Each of the three demo characters runs a scripted conversation of 120 messages, including time jumps,
 corrections and a long topic change.
 
@@ -360,8 +365,10 @@ custom profile. The results go to `docs/verification/`, and the catalog's `quali
 
 ## Extraction evaluation
 
-T-QLT-06. Scripts are in `tests/quality/extraction/`. P04 runs them on every catalog text profile, with 40
-synthetic message windows and their expected items.
+T-QLT-06. The test is `tests/quality/Extraction.Tests.ps1`. Its 40 synthetic message windows and their expected items
+are `backend/tests/fixtures/extraction_eval/windows.json`, which the probe `backend/tests/gpu_probe/extraction_eval.py`
+reads in the backend's test stage, so the evaluation uses the job's own prompt, grammar, validation and guard 1. P04
+runs it on every catalog text profile.
 
 | Measure | Target |
 | --- | --- |

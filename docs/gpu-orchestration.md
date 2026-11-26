@@ -471,6 +471,14 @@ layout ([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)):
   reply after a structured task falls by at least 50 %, and the container's peak RAM stays at least 4 GiB below the
   memory Docker sees.
 
+Since QLT.1, `tests/quality/Consistency.Tests.ps1` takes both measurements, and `scripts/lib/QualityLevel.psm1`
+computes both rules ([The `quality` level](testing.md#the-quality-level)). SWA padding is recorded as not applicable
+for each catalog profile. The SmartCache trials replay the protocol's own chat prompts, each after an extraction
+prompt. The catalog validator allows `smart_cache` 2 only for a profile whose `min_tier` is `target`, which neither
+catalog profile has, so a decision of 2 would also need a catalog change. Only the short smoke mode has run so far
+([evidence](verification/2026-11-26-quality-level.md)). It kept 0, on one pair with a three-message history, which is no
+evidence.
+
 ## Timeouts
 
 | Setting | Default |
