@@ -3008,7 +3008,7 @@
       ],
       "priority": 126,
       "passes": false,
-      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "notes": "BLOCKED: T-GPU-10's acceptance (a real CUDA out-of-memory, caused by reducing available VRAM on purpose, handled and passing on this machine) cannot be met without an owner decision. Measured on the RTX 4070 under Windows 11/WSL2 in five runs: CUDA always reported 11090 MiB free to the text runtime, even with a test container holding 4352 MiB of VRAM, idle or busy. A level-A load with every layer on the GPU, context 24576 and batch 2048 got 11924.4 MiB on CUDA0 with no allocation error and only ran slower (replies about 28 s instead of about 3 s). That is most likely the NVIDIA driver's shared\nReal GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
       "dependsOn": [
         "GPU.6",
         "DROP.1"
