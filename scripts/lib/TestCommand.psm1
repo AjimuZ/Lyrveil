@@ -12,6 +12,7 @@ Import-Module (Join-Path $PSScriptRoot 'EndToEnd.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuLevel.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GpuTuning.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'ItalianQuality.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ImageQuality.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'QualityLevel.psm1') -Force
 
 # Every level named in docs/testing.md. A level without a runner has no tests yet and always fails.
@@ -285,15 +286,17 @@ function Invoke-QualityTestLevel {
     try {
         $catalog = (Read-Utf8Text -Path (Join-Path $Root 'config\model-catalog.json')) | ConvertFrom-Json
         $profileIds = [string[]]@(Get-QualityTextProfileId -Catalog $catalog)
+        $imageIds = [string[]]@(Get-QualityImageProfileId -Catalog $catalog)
     }
     catch {
         Write-Host "Test level 'quality' could not read config/model-catalog.json: $($_.Exception.Message). Nothing ran."
         return 1
     }
-    $resolved = Resolve-QualityArgument -Argument $Argument -TestFile $available -TextProfileId $profileIds
+    $resolved = Resolve-QualityArgument -Argument $Argument -TestFile $available -TextProfileId $profileIds -ImageProfileId $imageIds
     if ($resolved.Problems.Length -gt 0) {
         foreach ($problem in $resolved.Problems) { Write-Host $problem }
-        Write-Host "Test level 'quality' takes the names of its test files, 'short' and catalog text profiles ($($profileIds -join ', ')). Nothing ran."
+        $imageNote = if ($imageIds.Length -gt 0) { " (image profiles for ImageGrid: $($imageIds -join ', '))" } else { '' }
+        Write-Host "Test level 'quality' takes the names of its test files, 'short' and catalog text profiles ($($profileIds -join ', '))$imageNote. Nothing ran."
         return 1
     }
     $files = if ($resolved.Files.Length -gt 0) { $resolved.Files } else { $available }
@@ -311,11 +314,14 @@ function Invoke-QualityTestLevel {
 function Invoke-QualityRatingLevel {
     <#
     Runs the quality-rating level: imports the owner's filled blind sheet of T-QLT-01 (Italian quality protocol) with
-    Invoke-ItalianRating of ItalianQuality.psm1 and prints the verdict per profile. Argument is the path of the sheet,
-    sheet.md of a test-results/quality/italian-<mode>-<time> folder, and optionally the folder that holds its key.json
-    and metrics.json when it is not the sheet's own; a relative path that names nothing from the current location is
-    tried from Root. It needs no GPU or Docker. Returns 0 only when the sheet read without
-    a problem and every profile met M1 to M6, and 1 otherwise, also without or with too many arguments. Not exported.
+    Invoke-ItalianRating of ItalianQuality.psm1 and prints the verdict per profile, or, when the sheet is the image
+    review sheet of T-QLT-02 and T-QLT-07 (Test-ImageReviewSheet), with Invoke-ImageReview of ImageQuality.psm1 and
+    prints the verdicts and the default rule. Argument is the path of the sheet, sheet.md of a
+    test-results/quality/italian-<mode>-<time> or image-<mode>-<time> folder, and optionally the folder that holds its
+    key.json (and metrics.json, for the Italian sheet) when it is not the sheet's own; a relative path that names
+    nothing from the current location is tried from Root. It needs no GPU or Docker. Returns 0 only when the sheet read
+    without a problem and every profile met M1 to M6, or the image verdict is 'met', and 1 otherwise, also without or
+    with too many arguments. Not exported.
     #>
     param([string]$Root, [string[]]$Argument = @())
 
@@ -332,7 +338,7 @@ function Invoke-QualityRatingLevel {
         })
     $folder = ''
     if ($paths.Length -eq 2) { $folder = $paths[1] }
-    $result = Invoke-ItalianRating -SheetPath $paths[0] -Folder $folder
+    $result = if (Test-ImageReviewSheet -SheetPath $paths[0]) { Invoke-ImageReview -SheetPath $paths[0] -Folder $folder } else { Invoke-ItalianRating -SheetPath $paths[0] -Folder $folder }
     foreach ($problem in $result.Problems) { Write-Host "  $problem" }
     if ($result.VerdictPath) { Write-Host "Verdict: $($result.VerdictPath)" }
     return [int]$result.Status

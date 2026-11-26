@@ -274,6 +274,41 @@ Describe 'scripts\lyrveil.cmd test' {
         $blank.Output | Should -Match 'test quality-rating: FAILED'
         $blank.ExitCode | Should -Be 1
     }
+
+    It 'quality-rating imports a filled image review sheet and exits by its verdict' {
+        Import-Module (Join-Path $script:RepositoryRoot 'scripts\lib\ImageQuality.psm1') -Force
+        $cells = New-Object System.Collections.Generic.List[object]
+        $expected = @{ hair_color = 'red hair'; hair_length = 'short hair'; eye_color = 'green eyes'; age = 27; age_band = 'woman'; outfit = 'canvas jacket' }
+        $made = @(@('grid', 'default'), @('grid', 'clip-skip-1'), @('grid', 'cfg-4.5'), @('grid', 'cfg-7'), @('grid', 'denoise-0.35'), @('grid', 'denoise-0.55'), @('identity', 'baseline'))
+        foreach ($pair in $made) {
+            $path = Join-Path $TestDrive "image-$($pair[1]).jpg"
+            [System.IO.File]::WriteAllBytes($path, [byte[]](1, 2, 3))
+            $cells.Add(@{
+                    Id = "$($pair[0])/$($pair[1])"; Section = $pair[0]; Variant = $pair[1]; Profile = 'big'; Character = 'Nerea'; Scene = 'cafe'; Seed = 1
+                    Aspect = 'portrait'; Expected = $expected; Status = 'success'; Seconds = 20.0; Path = $path
+                })
+        }
+        $blind = Get-ImageReviewSheet -Cell $cells.ToArray() -DefaultProfile 'big' -Seed 2 -Mode 'Full'
+        $paths = Write-ImageArtifact -Folder (Join-Path $TestDrive 'image-cli') -Blind $blind -Cell $cells.ToArray()
+        $filled = foreach ($line in ($blind.Sheet -split '\r?\n')) {
+            if ($line -match '^Defect:\s*$') { 'Defect: no' }
+            elseif ($line -match '^(Hair color|Hair length|Eyes|Age band|Outfit):\s*$') { "$($Matches[1]): ok" }
+            else { $line }
+        }
+        [System.IO.File]::WriteAllText($paths.Sheet, ($filled -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        $run = Invoke-EntryPoint $script:RepositoryRoot @('test', 'quality-rating', $paths.Sheet)
+        $run.Output | Should -Match 'identity: accuracy 1 over 5 checks, target met True'
+        $run.Output | Should -Match 'Verdict: .*verdict\.json'
+        $run.Output | Should -Match 'test quality-rating: passed'
+        $run.ExitCode | Should -Be 0
+
+        [System.IO.File]::WriteAllText($paths.Sheet, $blind.Sheet, (New-Object System.Text.UTF8Encoding($false)))
+        $blank = Invoke-EntryPoint $script:RepositoryRoot @('test', 'quality-rating', $paths.Sheet)
+        $blank.Output | Should -Match 'was left blank'
+        $blank.Output | Should -Match 'status: incomplete'
+        $blank.Output | Should -Match 'test quality-rating: FAILED'
+        $blank.ExitCode | Should -Be 1
+    }
 }
 
 Describe 'The e2e level' {

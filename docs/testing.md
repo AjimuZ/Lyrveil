@@ -59,20 +59,24 @@ are trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildca
 A plain `gpu` run leaves out `tests/gpu/Session.Tests.ps1`, the two-hour session T-GPU-13, which only
 `test gpu Session` (two hours) or `test gpu Session short` (150 s) runs.
 
-`quality` takes the names of its test files (`Consistency`, `Extraction`), `short` and the ids of catalog text
-profiles, in any order (see [The `quality` level](#the-quality-level)). Without a profile it runs on every catalog text
-profile; without a file name it runs both files:
+`quality` takes the names of its test files (`Consistency`, `Extraction`, `ImageGrid`), `short`, the ids of catalog text
+profiles and the ids of catalog image profiles, in any order (see [The `quality` level](#the-quality-level)). Without a
+profile it runs on every catalog text profile (`Consistency`, `Extraction`) and every catalog image profile
+(`ImageGrid`); without a file name it runs all three files:
 
 ```powershell
-.\scripts\lyrveil.cmd test quality                                   # T-QLT-05 and T-QLT-06 on every catalog profile
-.\scripts\lyrveil.cmd test quality rocinante-x-12b                   # both on one profile
+.\scripts\lyrveil.cmd test quality                                   # T-QLT-05, T-QLT-06, T-QLT-02 and T-QLT-07 on every catalog profile
+.\scripts\lyrveil.cmd test quality rocinante-x-12b                   # the text files on one profile (and ImageGrid on every image profile)
 .\scripts\lyrveil.cmd test quality Extraction rocinante-12b-v1.1     # T-QLT-06 alone on one profile
 .\scripts\lyrveil.cmd test quality Consistency short rocinante-x-12b # the smoke mode of T-QLT-05
+.\scripts\lyrveil.cmd test quality ImageGrid                         # T-QLT-02 and T-QLT-07 on every image profile
+.\scripts\lyrveil.cmd test quality ImageGrid short illustrious-xl-v2.0 # the smoke mode of both on the default image profile
 ```
 
-`quality-rating` takes the path of the owner's filled blind sheet of T-QLT-01 and, optionally, the folder that holds
-its `key.json` and `metrics.json` (the sheet's own folder by default). It needs no GPU or Docker; see
-[T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import).
+`quality-rating` takes the path of the owner's filled blind sheet of T-QLT-01, or of T-QLT-02 and T-QLT-07, and,
+optionally, the folder that holds its `key.json` (and `metrics.json`, for T-QLT-01); the sheet's own folder is the
+default. It needs no GPU or Docker; see [T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import) and
+[T-QLT-02 and T-QLT-07](#t-qlt-02-and-t-qlt-07-image-grid-identity-protocol-and-levers).
 
 Every other level refuses arguments.
 
@@ -421,8 +425,10 @@ Delivered with QLT.1 for the automated parts of P04's quality exit: T-QLT-05, th
 [ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md), and T-QLT-06, the
 [extraction evaluation](consistency-engine.md#extraction-evaluation). Delivered with QLT.2: the generation, the
 automatic metrics and the blind sheet of T-QLT-01, with the `quality-rating` level that imports the owner's ratings
-(see [T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import)). T-QLT-07 and C7, the owner's blind test, need human
-review and are not part of it.
+(see [T-QLT-01](#t-qlt-01-generation-blind-sheet-and-import)). Delivered with QLT.3: the renders, the blind sheet and
+the import of T-QLT-02 and T-QLT-07
+(see [T-QLT-02 and T-QLT-07](#t-qlt-02-and-t-qlt-07-image-grid-identity-protocol-and-levers)). C7, the owner's blind test
+of 20 replies, is not part of it.
 
 `Invoke-QualityTestLevel` of [`scripts/lib/TestCommand.psm1`](../scripts/lib/TestCommand.psm1) runs
 `tests/quality/*.Tests.ps1` through `Invoke-GpuLevel` of [`scripts/lib/GpuLevel.psm1`](../scripts/lib/GpuLevel.psm1),
@@ -430,8 +436,9 @@ so it has the gpu level's steps exactly: the skip without a GPU (`test quality: 
 refusal while an installation's runtime or orchestrator runs, the project `lyrveil-gpu-test` with its own data volume
 `lyrveil-gpu-test-data`, `lyrveil-models` read-only, the configuration check and the removal of everything at the end,
 also on failure. `Resolve-QualityArgument` of [`scripts/lib/QualityLevel.psm1`](../scripts/lib/QualityLevel.psm1) sorts
-the arguments before any GPU or Docker call: a capitalized name must be a test file of `tests/quality`, and `short` and
-the catalog text profile ids reach every file that runs as its `Select` parameter. Anything else exits 1 with
+the arguments before any GPU or Docker call: a capitalized name must be a test file of `tests/quality`, and `short`, the
+catalog text profile ids and the catalog image profile ids reach every file that runs as its `Select` parameter (a file
+ignores the profiles of the kind it does not run). Anything else exits 1 with
 `Nothing ran.`. Both files hand `runtime/` of the data volume to the backend's user 10001, as an installation's volume
 has it, and write their launch lines as that user (`Set-GpuTestLaunchLine -AsBackendUser`), so they run in either order.
 
@@ -573,6 +580,72 @@ threshold, and that the fixture holds 40 valid windows. The cases "The gpu level
 also cover `test quality`: both files with their items and the cleanup, one named file, a refused argument before any
 GPU or Docker call, and the skip without a GPU; and `test quality-rating`, with its usage and an import that passes and
 one that fails on a blank sheet.
+
+#### T-QLT-02 and T-QLT-07: image grid, identity protocol and levers
+
+Delivered with QLT.3 ([evidence](verification/2026-11-26-image-quality.md)). `tests/quality/ImageGrid.Tests.ps1` renders
+the [image default grid](image-generation.md#grid) for each catalog image profile and, on the default image profile
+of the target tier, the [image identity protocol](image-generation.md#image-identity-protocol) with the
+[measured levers](image-generation.md#measured-levers). Like T-GPU-06 it copies no prompt, size or sampler value: it
+builds the backend's test stage and runs `backend/tests/gpu_probe/image_quality.py plan`, which gives the graph of every
+cell with the backend's own `VisualConsistencyService.build` and `build_workflow`. Then, profile by profile, it starts
+`lyrveil-image` alone, renders every cell, saves its image as a JPEG outside the container
+(`Invoke-GpuImageGraph -SavePath`), and removes the runtime and waits for the VRAM.
+
+- **Grid (every image profile).** 3 characters (the demo ones), 2 scenes and 3 seeds, **Alta**, portrait. Each image is
+  rendered at the default settings and with one setting changed: CLIP skip 1, CFG 4.5 and 7, second-pass `denoise` 0.35
+  and 0.55. That is 6 renders for each of the 18 combinations, 108 for a profile. One setting at a time keeps the grid at
+  108 renders; the full product of the documented values would be 324.
+- **Sizes (default profile).** The same 18 combinations at landscape, tall and wide at the default settings (54 more).
+- **Identity protocol (default profile).** The 3 demo characters and the synthetic Ottavia (52) and Bruno (70), 4 scenes
+  and 3 seeds at the default settings, with the size `auto` gives for the scene's framing: 60 renders. The same 60 with
+  weight 1.1 on the `hair_color` and `eye_color` tags (`(red hair:1.1)`), inserted in the probe because adoption is what
+  the measurement decides.
+- **PAG (default profile).** The protocol's renders at the first seed (20) at `PerturbedAttentionGuidance` `scale` 1.5
+  and 3, a node inserted between the checkpoint and the first pass's `KSampler`. Scale 0 is the protocol's baseline
+  render of the same character, scene and seed.
+- **Not done.** The protocol asks for scenes "written by every catalog text profile". The scenes here are four fixed
+  `ImageScene` values with vocabulary tags (cafe, street, park, library), so the second target of T-QLT-07, the gap
+  between a text profile and the default, is recorded as `not_run`.
+
+`short` plans one character, one scene and one seed: 9 grid renders, 2 identity renders and 2 PAG renders on the default
+profile (13), 6 on another profile. It is a smoke run and its verdict says so.
+
+**The blind review.** `ImageQuality.psm1` turns the renders into `test-results/quality/image-<mode>-<time>/`:
+`sheet.md` for the owner, `images/` with every image under an opaque name, `key.json` and `renders.json`. The sheet names
+no profile, setting or lever and has four parts, each in a random order:
+
+| Part | Item | The owner answers |
+| --- | --- | --- |
+| G | One grid image | `Defect: yes` or `no` (a visible defect: limbs, hands, face, objects, smears, stray text) |
+| I | One identity image and the character's expected attributes | `Hair color:`, `Hair length:`, `Eyes:`, `Age band:`, `Outfit:`, each `ok` or `wrong` |
+| P | A PAG image and the scale-0 image of the same render, the PAG one on a random side A or B | `Better: A`, `B` or `same` |
+| W | A weighted image and its baseline, on a random side | `Style change: yes` or `no` |
+
+`scripts\lyrveil.cmd test quality-rating <sheet.md>` recognizes this sheet by its first heading, reads `key.json` from
+its folder, writes `verdict.json` and exits 0 only when no answer is missing or invalid and the verdict is `met`.
+Nothing is guessed: a blank or invalid answer is listed and leaves its decision `incomplete`. The decisions, which are
+code in `Get-ImageVerdict` and are tested with synthetic answers:
+
+| Decision | Rule |
+| --- | --- |
+| Default image profile (T-QLT-02) | Each profile's share of default-setting images with a defect. The default changes (`change`, naming the candidate) only when another profile's share is strictly lower; a tie keeps it. A change needs an ADR, so the verdict is a proposal. Fewer than two profiles reviewed: `undecided` |
+| CLIP skip, CFG, `denoise` (T-QLT-02) | The default setting stays unless another value has a defect share at least 10 points lower (this module's reading of "unless the grid shows a visible defect": the document gives no number); the lowest such value wins |
+| Tall and wide (T-QLT-07) | Tall is kept when its defect share is at most portrait's, wide when it is at most landscape's, else removed |
+| Attribute accuracy (T-QLT-07) | Correct checks over all checks of the baseline identity images, at least 0.90 |
+| Identity weight 1.1 (T-QLT-07) | `adopt` when the weighted images' accuracy is at least 5 points higher and no pair shows a style change |
+| PAG scale (T-QLT-07) | A scale is adoptable when its image wins at least 60 % of the pairs (a `same` is no win) and the nearest-rank 95th percentile of its render seconds is at most 45 s; the one with more wins is adopted, the smaller on a tie, else scale 0 |
+
+The render seconds of the PAG cells are the client-side seconds of an **Alta** render with the checkpoint already loaded
+(the grid renders first, so the first render after the start, which loads it, is never a PAG cell). The verdict's `status` is `met` when every decision is made and the accuracy
+target holds, `missed` when the accuracy is below target, and `incomplete` when any answer is missing, also when the sheet
+has no identity image because the default image profile was not part of the run.
+
+**Result so far.** Only the short mode has run, on the default profile: 13 renders on the RTX 4070 and the unfilled sheet
+imported with exit 1. **No full run has been made and no owner has reviewed a sheet, so T-QLT-02 and T-QLT-07 have no
+verdict** and are not passed. `tests/scripts/ImageQuality.Tests.ps1` covers the sheet (blind, one item per render, random
+sides, fixed seed), the reader, and every decision at and around its threshold on synthetic renders and answers;
+`backend/tests/unit/test_gpu_image_quality_probe.py` covers the plan (the counts, the sizes, the PAG node, the weight).
 
 ### The `docker` level
 
@@ -776,7 +849,7 @@ tests/
   e2e/               Playwright 1.64.1 and @axe-core/playwright 4.14.0: package.json, playwright.config.mjs, specs/
   docker/
   gpu/
-  quality/           Consistency.Tests.ps1 (T-QLT-05), Extraction.Tests.ps1 (T-QLT-06)
+  quality/           Consistency.Tests.ps1 (T-QLT-05), Extraction.Tests.ps1 (T-QLT-06), ImageGrid.Tests.ps1 (T-QLT-02, T-QLT-07)
   quality/consistency/   script.json, the scripted conversations of T-QLT-05 and T-QLT-01
   quality/italian/   not used: T-QLT-01 reads the replies of the consistency conversations
   quality/images/    planned

@@ -59,6 +59,19 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-QLT-02 and T-QLT-07, the image default grid and the image identity protocol with its measured levers, as a
+  generation and an import (QLT.3). `scripts\lyrveil.cmd test quality ImageGrid` renders, for each catalog image
+  profile, the grid (3 characters, 2 scenes, 3 seeds, with CLIP skip 1, CFG 4.5 and 7 and second-pass denoise 0.35 and
+  0.55 changed one at a time) and, on the default image profile, the tall, wide and landscape sizes, the protocol's 5
+  characters in 4 scenes and 3 seeds with and without weight 1.1 on the hair and eye color, and PAG at scale 1.5 and 3.
+  It writes `test-results/quality/image-<mode>-<time>/`: `sheet.md`, a blind review sheet of images under opaque ids (a
+  defect yes or no, five attribute checks, which of two images is better, whether the style changed), `images/`, and
+  `key.json`, which says what each image is. `scripts\lyrveil.cmd test quality-rating <sheet.md>` imports the filled
+  sheet and computes the default image profile rule, the parameter decisions, the tall and wide sizes, the attribute
+  accuracy, the identity weight and the PAG scale (`met`, `missed` or `incomplete`, never a guessed answer). The text
+  profile gap of T-QLT-07 is not measured, since the scenes are fixed. Only the short mode of the generation has run,
+  on `illustrious-xl-v2.0`, and the unit tests have not run yet; no owner has reviewed a sheet, so T-QLT-02 and
+  T-QLT-07 have no verdict (see [docs/verification/2026-11-26-image-quality.md](docs/verification/2026-11-26-image-quality.md)).
 - T-QLT-01, the Italian quality protocol, as a generation and an import (QLT.2). The conversations of T-QLT-05 are its
   scripts, so `scripts\lyrveil.cmd test quality` (or `test quality Consistency`) now also writes
   `test-results/quality/italian-<mode>-<time>/`: `metrics.json` with the automatic metrics M1 to M4 for each profile,

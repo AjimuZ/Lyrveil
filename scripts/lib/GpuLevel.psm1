@@ -756,7 +756,8 @@ function Invoke-GpuBackendProbe {
     the image of Initialize-GpuBackendProbe, and returns @{ Status; Body }: the container's exit status and the parsed
     JSON line it printed, or $null. structured_task (T-GPU-05) takes "prompt" and "check"; image_presets (T-GPU-06,
     T-IMG-14) takes "workflow" and "rule"; extraction_eval (T-QLT-06, and the structured prompts of the SmartCache
-    measurement of T-QLT-05) takes "prompt", "check" and "score". The container has no network, a read-only root and no
+    measurement of T-QLT-05) takes "prompt", "check" and "score"; image_quality (T-QLT-02, T-QLT-07) takes "plan". The
+    container has no network, a read-only root and no
     capability, carries the test project's label, so the level's leftover check would see it, and is removed when it
     exits.
     #>
@@ -764,8 +765,8 @@ function Invoke-GpuBackendProbe {
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
-        [ValidateSet('structured_task', 'image_presets', 'extraction_eval')] [string]$Probe = 'structured_task',
-        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check', 'workflow', 'rule', 'score')] [string]$Action,
+        [ValidateSet('structured_task', 'image_presets', 'extraction_eval', 'image_quality')] [string]$Probe = 'structured_task',
+        [Parameter(Mandatory = $true)] [ValidateSet('prompt', 'check', 'workflow', 'rule', 'score', 'plan')] [string]$Action,
         [Parameter(Mandatory = $true)] [hashtable]$Body
     )
 
@@ -785,7 +786,9 @@ function Invoke-GpuBackendProbe {
 # The client of Invoke-GpuImageGraph, run by the Python of lyrveil-image from its standard input. It submits the
 # workflow to ComfyUI, polls its history every half second, reads the PNG header of the first saved image through
 # /view, and prints one JSON line. execution_seconds comes from ComfyUI's own execution_start and execution_success
-# timestamps (milliseconds), so it holds no polling delay. __WORKFLOW__ and __TIMEOUT__ are replaced.
+# timestamps (milliseconds), so it holds no polling delay. With __EXPORT__ true it first prints one line "DATA " and
+# the first image re-encoded as a JPEG of quality 92, in base64, so the last line stays the JSON line.
+# __WORKFLOW__, __TIMEOUT__ and __EXPORT__ are replaced.
 $script:ImageJobClient = @'
 import json, struct, time, urllib.parse, urllib.request as request
 workflow = json.loads(r'''__WORKFLOW__''')
@@ -820,9 +823,16 @@ width = height = 0
 if images:
     first = images[0]
     query = urllib.parse.urlencode({'filename': first.get('filename', ''), 'subfolder': first.get('subfolder', ''), 'type': first.get('type', 'output')})
-    head = request.urlopen(base + '/view?' + query, timeout=30).read(24)
+    data = request.urlopen(base + '/view?' + query, timeout=60).read()
+    head = data[:24]
     if head[:8] == b'\x89PNG\r\n\x1a\n':
         width, height = struct.unpack('>II', head[16:24])
+    if __EXPORT__:
+        import base64, io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.open(io.BytesIO(data)).convert('RGB').save(buffer, 'JPEG', quality=92)
+        print('DATA ' + base64.b64encode(buffer.getvalue()).decode())
 print(json.dumps({'prompt_id': prompt_id, 'status': status, 'seconds': seconds, 'execution_seconds': execution, 'images': len(images), 'width': width, 'height': height}))
 '@
 
@@ -885,25 +895,41 @@ function Invoke-GpuImageGraph {
     $null, with prompt_id, status (ComfyUI's status_str, such as "success" or "error", or "timeout"), seconds from the
     submission to the end as the client saw it (polled every half second), execution_seconds from ComfyUI's own
     timestamps ($null when it reported none), images (the number saved) and width and height of the first saved PNG
-    (0 when none was read). The image stays in the runtime's tmpfs and is never copied out.
+    (0 when none was read). The image stays in the runtime's tmpfs and is never copied out, unless SavePath is given:
+    then the first saved image goes, as a JPEG of quality 92, to that file (its folder must exist; the quality review
+    needs the pictures), and Result has saved $true when the file was written. Without SavePath nothing is written.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)] [string]$Root,
         [Parameter(Mandatory = $true)] [ValidatePattern('^[\x20-\x7E]+$')] [string]$WorkflowJson,
-        [ValidateRange(10, 600)] [int]$TimeoutSecond = 240
+        [ValidateRange(10, 600)] [int]$TimeoutSecond = 240,
+        [string]$SavePath = ''
     )
 
     # The text goes into a raw triple-quoted Python string, which three quotes in a row would end.
     if ($WorkflowJson.Contains("'''")) { throw 'The workflow JSON holds three single quotes in a row.' }
-    $client = $script:ImageJobClient.Replace('__WORKFLOW__', $WorkflowJson).Replace('__TIMEOUT__', "$TimeoutSecond")
+    $export = if ($SavePath) { 'True' } else { 'False' }
+    $client = $script:ImageJobClient.Replace('__WORKFLOW__', $WorkflowJson).Replace('__TIMEOUT__', "$TimeoutSecond").Replace('__EXPORT__', $export)
     $run = Invoke-GpuCompose -Root $Root -Capture -InputText $client -Argument @('exec', '-T', 'lyrveil-image', 'python', '-')
     $parsed = $null
     $last = @($run.Output | Where-Object { $_.Trim() } | Select-Object -Last 1)
     if ($run.Status -eq 0 -and $last.Length -eq 1) {
         try { $parsed = $last[0] | ConvertFrom-Json }
         catch { $parsed = $null }
+    }
+    if ($SavePath) {
+        $saved = $false
+        $data = @($run.Output | Where-Object { ([string]$_).StartsWith('DATA ') } | Select-Object -First 1)
+        if ($null -ne $parsed -and $data.Length -eq 1) {
+            try {
+                [System.IO.File]::WriteAllBytes($SavePath, [System.Convert]::FromBase64String(([string]$data[0]).Substring(5).Trim()))
+                $saved = $true
+            }
+            catch { $saved = $false }
+        }
+        if ($null -ne $parsed) { $parsed | Add-Member -NotePropertyName 'saved' -NotePropertyValue $saved -Force }
     }
     return @{ Status = [int]$run.Status; Result = $parsed }
 }

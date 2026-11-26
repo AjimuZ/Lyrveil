@@ -35,7 +35,8 @@ BeforeAll {
 
     $script:Catalog = [System.IO.File]::ReadAllText((Join-Path $script:Root 'config\model-catalog.json'), $script:Utf8) | ConvertFrom-Json
     $script:ProfileIds = [string[]]@(Get-QualityTextProfileId -Catalog $script:Catalog)
-    $script:Selection = Get-QualitySelection -Select $Select -TextProfileId $script:ProfileIds
+    # Image profile ids are accepted and ignored, so "test quality <image profile>" reaches ImageGrid.Tests.ps1 too.
+    $script:Selection = Get-QualitySelection -Select $Select -TextProfileId $script:ProfileIds -ImageProfileId @(Get-QualityImageProfileId -Catalog $script:Catalog)
     $scriptText = [System.IO.File]::ReadAllText((Join-Path $script:Root 'tests\quality\consistency\script.json'), $script:Utf8)
     $script:Plan = Get-QualityConsistencyPlan -Document ($scriptText | ConvertFrom-Json) -Mode $script:Selection.Mode
     $script:ResultFile = Join-Path $script:Root ('test-results\quality\consistency-{0}-{1}.json' -f $script:Plan.Mode.ToLowerInvariant(), $script:StartedAt.ToString('yyyyMMdd-HHmmss'))

@@ -290,6 +290,9 @@
 - A shared module (ItalianQuality.psm1) holds all the logic and the Pester test files only drive and assert. This keeps the real-stack file thin and the synthetic unit tests complete.
 - A blind rating artefact is a sheet with opaque ids plus a separate key file, bound by a hash id that the importer checks. A blank or invalid answer makes a profile 'incomplete', never a guessed value.
 - Use a non-state-changing verb (Get-) for pure builders, to avoid the PSUseShouldProcess lint rule. Keep non-ASCII out of PowerShell test files, because Windows PowerShell 5.1 reads BOM-less files as ANSI.
+- To get images out of the tmpfs-only ComfyUI container, print the re-encoded JPEG as one base64 line before the final JSON line and decode it on the host. The last non-empty line stays the parseable result.
+- Keep a blind sheet's key beside the sheet and name the images with opaque ids; put every decision rule in a pure module that is unit-tested with synthetic answers at and around each threshold.
+- For a quality protocol with several parameters, change one setting at a time (6 settings x N combinations) instead of the full product, and state that choice in the docs.
 
 ---
 
@@ -2789,4 +2792,43 @@ The full protocols have not run on either profile. Lint passes; the 15 new probe
   - The expected question rates for M4 (0.10, 0.30, 0.50 for raramente, a_volte, spesso) are this task's reading of the protocol, which gives no numbers. The owner may want to confirm them.
   - A short-mode reply from rocinante-x-12b contained the literal word 'Utente' where a user name should be. It is worth a look in the P04 tuning round.
   - Both catalog profiles are mixed in one sheet only when both are selected in the same run. A single-profile run gives a single-profile sheet.
+---
+
+## 2026-11-26T21:08:54Z - QLT.3
+- Added `test quality ImageGrid`, which renders the T-QLT-02 grid for each image profile and the T-QLT-07 identity protocol and levers, and writes a blind review sheet for the owner. `test quality-rating <sheet.md>` now also imports that sheet and computes the verdicts and the default rule. A real short run passed, but the full run and the owner's review have not happened, so T-QLT-02 and T-QLT-07 have no verdict. The new Pester and pytest files have never executed.
+
+**What now exists**
+- **Probe.** `backend/tests/gpu_probe/image_quality.py plan` builds every render with the backend's own prompt and workflow builders.
+  - Grid, every image profile: 3 characters, 2 scenes, 3 seeds, Alta. Each image is rendered at the default settings and with one setting changed at a time: CLIP skip 1, CFG 4.5 and 7, denoise 0.35 and 0.55. That is 108 renders per profile.
+  - Default profile only: the landscape, tall and wide sizes, the 5 identity characters in 4 scenes and 3 seeds with and without weight 1.1 on hair and eye color, and PAG at scale 1.5 and 3. The PAG node and the weight are inserted in the probe only; no workflow file or production module changed.
+  - A full run is 538 renders, roughly three and a half hours of the GPU, plus the owner's review of 558 items.
+- **Test file.** `tests/quality/ImageGrid.Tests.ps1` starts `lyrveil-image`, renders each cell, saves it as a JPEG outside the container, writes `test-results/quality/image-<mode>-<time>/` (`sheet.md`, `images/`, `key.json`, `renders.json`), and removes the runtime. To support this, `Invoke-GpuImageGraph` gained an optional `-SavePath`, and the backend probe runner accepts `image_quality`/`plan`.
+- **Sheet and import.** `scripts/lib/ImageQuality.psm1` builds the blind sheet, reads the owner's answers, computes the verdicts and writes `verdict.json`. `quality-rating` recognizes the image sheet by its first heading. Blank or invalid answers leave a decision `incomplete`; nothing is guessed.
+- **Arguments.** Catalog image profile ids are now accepted as items of `test quality`. `Consistency` and `Extraction` ignore them.
+
+**Decision rules** (code in `Get-ImageVerdict`, boundaries tested with synthetic answers):
+- **Default image profile.** It changes only to a profile with strictly fewer defective images; a tie keeps it. The verdict is a proposal, since a change needs an ADR.
+- **Parameters.** A default CLIP skip, CFG or denoise is replaced only by a value with at least 10 points fewer defective images. The documents give no number; the 10 points is my reading, so please confirm it.
+- **Tall and wide.** Tall is kept if its defect share is at most portrait's; wide against landscape.
+- **Identity.** Baseline attribute accuracy must be at least 0.90.
+- **Weight 1.1.** Adopted at a gain of at least 5 points with no style change.
+- **PAG.** A scale is adoptable at 60% or more pair wins and a 95th-percentile render time of at most 45 s. `same` counts as no win.
+
+**What ran**
+- **Real run.** `test quality ImageGrid short illustrious-xl-v2.0` on the RTX 4070 rendered all 13 planned cells (Pester 5 passed, 305.8 s). The run left no container or volume behind. I looked at one image: it is a plausible picture of the character. Importing the unfilled sheet exited 1 with every decision `incomplete` and 14 ids listed as blank.
+- **Lint.** `test lint` passes, including PSScriptAnalyzer, ruff, ruff format and mypy.
+
+**What did not run**
+- **Unit tests.** `tests/scripts/ImageQuality.Tests.ps1`, the new cases in `QualityLevel.Tests.ps1` and `TestCommand.Tests.ps1`, and `backend/tests/unit/test_gpu_image_quality_probe.py` have never executed. The `unit` level runs everything together, so it was left to the orchestrator.
+- **Edits after the real run.** I renamed an output field (`values` to `variants`) and fixed two lint findings in the new Pester file after the real run and the first lint. Lint was re-run after the lint fixes, not after the rename.
+- **Full run and review.** The full run on all three image profiles, the grid on `illustrious-xl-v1.0` and `noobai-xl-1.1`, and the owner's review.
+- **Text-profile gap.** The second T-QLT-07 target, the gap between each text profile and the default, is recorded as `not_run`. The scenes are four fixed `ImageScene` values, not scenes written by each text profile.
+- Files changed: backend/tests/gpu_probe/image_quality.py, backend/tests/unit/test_gpu_image_quality_probe.py, scripts/lib/ImageQuality.psm1, scripts/lib/GpuLevel.psm1, scripts/lib/QualityLevel.psm1, scripts/lib/TestCommand.psm1, tests/quality/ImageGrid.Tests.ps1, tests/quality/Consistency.Tests.ps1, tests/quality/Extraction.Tests.ps1, tests/scripts/ImageQuality.Tests.ps1, tests/scripts/QualityLevel.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, docs/image-generation.md, docs/README.md, docs/verification/2026-11-26-image-quality.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Not run: tests/scripts/ImageQuality.Tests.ps1, the image cases in QualityLevel.Tests.ps1 and TestCommand.Tests.ps1, and backend/tests/unit/test_gpu_image_quality_probe.py. The orchestrator's unit run is their first execution, so a failure there is most likely in those files. Lint passes, including ruff format and mypy on the new Python.
+  - Real short run: `test quality ImageGrid short illustrious-xl-v2.0` took 305.8 s for 13 renders and passed. A plain short run of every profile would exceed the 10-minute Bash timeout, so run profiles one at a time. The full run (538 renders, about 3.5 h) and the owner's review have not happened.
+  - Owner flow: run `test quality ImageGrid` (or `ImageGrid <profile>`), fill test-results/quality/image-<mode>-<time>/sheet.md without opening key.json, then run `scripts\lyrveil.cmd test quality-rating <sheet.md>`. Only the default image profile (illustrious-xl-v2.0 on the target tier) gets the identity protocol and the levers, so name it or run every profile.
+  - The 10-point margin for replacing a default grid setting is my reading, because the docs give no number. The owner may want to confirm it. The T-QLT-07 text-profile gap is not measured, since the scenes are fixed rather than written by each text profile.
+  - ComfyUI caches node outputs: a grid render that differs only in the second pass's denoise reuses the first pass, so its time is shorter (11.5 s against 21 s). Do not use such renders as timing evidence. PAG renders are not cached, since the PAG node changes the first pass.
+  - PowerShell 5.1 pitfalls: do not read a dictionary key named like a real member (Values, Keys, Count) with dot access; the output key was renamed from values to variants for that reason. Keep the plan JSON per section, since ConvertFrom-Json in 5.1 limits strings to about 2 MB.
 ---

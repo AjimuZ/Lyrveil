@@ -440,6 +440,14 @@ T-QLT-07 runs in P05 ([ADR 0036](decisions/0036-structured-image-scenes-and-meas
 
 The result goes to `docs/verification/`. A failing age band is changed in the vocabulary and measured again.
 
+Delivered with QLT.3 ([The quality level](testing.md#t-qlt-02-and-t-qlt-07-image-grid-identity-protocol-and-levers)):
+`scripts\lyrveil.cmd test quality ImageGrid` renders the protocol's 5 characters, 4 scenes and 3 seeds (60 images), the
+same images with the identity weight and the PAG pairs, and writes the fixed sheet for the owner as a blind review;
+`test quality-rating <sheet.md>` imports the answers and computes the accuracy and the lever decisions. The scenes are
+four fixed `ImageScene` values, not scenes written by each catalog text profile, so the gap between a text profile and
+the default is **not measured** yet. The smoke run of 2026-11-26 is no result
+([evidence](verification/2026-11-26-image-quality.md)): the owner has not reviewed a sheet.
+
 ## Default parameters
 
 The active [image profile](models.md#image-profiles) selects the checkpoint and its preset
@@ -527,6 +535,14 @@ P05 renders a fixed grid for each image profile: 3 characters, 2 scenes and 3 se
 5.5 and 7, and second-pass `denoise` 0.35, 0.45 and 0.55. The defaults stay unless the grid shows a visible defect. The
 owner reviews the profiles blind for the [default rule](models.md#defaults-and-how-they-can-change). The result goes to
 `docs/verification/`.
+
+Delivered with QLT.3: `scripts\lyrveil.cmd test quality ImageGrid` renders the grid with one setting changed at a time
+(6 renders for each of the 18 combinations, 108 per profile; the full product would be 324), plus the landscape, tall and
+wide sizes on the default profile, and the owner marks each image `Defect: yes` or `no` on the blind sheet. A default
+setting is replaced only by a value with at least 10 points fewer defective images (the document gives no number, so
+this is that module's reading), and the default profile changes only to a profile with strictly fewer defective images.
+No full run has been made, so the defaults stand
+([evidence](verification/2026-11-26-image-quality.md)).
 
 ## Workflow
 

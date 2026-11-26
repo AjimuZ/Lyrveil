@@ -84,6 +84,42 @@ Describe 'Get-QualitySelection and Get-QualityChangeProfile' {
     }
 }
 
+Describe 'The image profiles of "test quality"' {
+    BeforeAll {
+        $script:ImageIds = @('illustrious-xl-v2.0', 'noobai-xl-1.1')
+    }
+
+    It 'reads the image profile ids of the catalog in order, and none for a catalog without them' {
+        $catalog = '{"text": [{"id": "a"}], "image": [{"id": "illustrious-xl-v2.0"}, {"id": "noobai-xl-1.1"}]}' | ConvertFrom-Json
+        Get-QualityImageProfileId -Catalog $catalog | Should -Be $script:ImageIds
+        @(Get-QualityImageProfileId -Catalog ('{"text": []}' | ConvertFrom-Json)).Length | Should -Be 0
+    }
+
+    It 'takes an image profile id as an item, next to short and the text profiles' {
+        $resolved = Resolve-QualityArgument -Argument @('ImageGrid', 'noobai-xl-1.1', 'short', 'rocinante-x-12b') -TestFile @('tests/quality/ImageGrid.Tests.ps1') -TextProfileId $script:Ids -ImageProfileId $script:ImageIds
+        $resolved.Files | Should -Be @('tests/quality/ImageGrid.Tests.ps1')
+        $resolved.Items | Should -Be @('noobai-xl-1.1', 'short', 'rocinante-x-12b')
+        $resolved.Problems | Should -BeNullOrEmpty
+    }
+
+    It 'refuses an unknown profile naming both kinds only when the catalog has image profiles' {
+        (Resolve-QualityArgument -Argument @('nosuch') -TestFile @() -TextProfileId $script:Ids -ImageProfileId $script:ImageIds).Problems[0] | Should -Match 'a text or image profile of the catalog'
+        (Resolve-QualityArgument -Argument @('nosuch') -TestFile @() -TextProfileId $script:Ids).Problems[0] | Should -Match 'nor a text profile of the catalog'
+    }
+
+    It 'selects the named image profiles, or every one, and leaves the other kind of profile out of Unknown' {
+        $named = Get-QualitySelection -Select @('noobai-xl-1.1', 'rocinante-x-12b') -TextProfileId $script:Ids -ImageProfileId $script:ImageIds
+        $named.ImageProfiles | Should -Be @('noobai-xl-1.1')
+        $named.Profiles | Should -Be @('rocinante-x-12b')
+        $named.Unknown | Should -BeNullOrEmpty
+        $all = Get-QualitySelection -Select @('short') -TextProfileId $script:Ids -ImageProfileId $script:ImageIds
+        $all.ImageProfiles | Should -Be $script:ImageIds
+        $all.Profiles | Should -Be $script:Ids
+        $without = Get-QualitySelection -Select @('noobai-xl-1.1') -TextProfileId $script:Ids
+        $without.Unknown | Should -Be @('noobai-xl-1.1')
+    }
+}
+
 Describe 'Get-QualityConsistencyPlan' {
     It 'plans 120 messages per demo character with the probes ending at 10, 60 and 120 and the shared messages between' {
         $plan = Get-QualityConsistencyPlan -Document $script:ScriptDocument -Mode Full

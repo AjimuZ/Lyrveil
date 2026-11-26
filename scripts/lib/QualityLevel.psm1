@@ -70,21 +70,36 @@ function Get-QualityTextProfileId {
     return [string[]]@($text.Value | ForEach-Object { [string]$_.id } | Where-Object { $_ })
 }
 
+function Get-QualityImageProfileId {
+    <#
+    Returns the ids of the image profiles of the catalog document Catalog (config/model-catalog.json, parsed), in
+    catalog order. Returns none for a catalog without image profiles.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)] $Catalog)
+
+    $image = $Catalog.PSObject.Properties['image']
+    if ($null -eq $image) { return [string[]]@() }
+    return [string[]]@($image.Value | ForEach-Object { [string]$_.id } | Where-Object { $_ })
+}
+
 function Resolve-QualityArgument {
     <#
     Sorts the arguments of "test quality" and returns @{ Files; Items; Problems }. An argument that starts with a capital
     letter names a test file, and must be one of TestFile (repository-relative tests/quality/<Name>.Tests.ps1); Files
-    lists them once each in argument order, and is empty when none is named, meaning every file. "short" and the ids of
-    TextProfileId are items, listed once each in argument order, which every file that runs receives as Select. Every
-    other argument, and a file name that names no file, gives one message in Problems, so the level refuses the command
-    before any GPU or Docker call.
+    lists them once each in argument order, and is empty when none is named, meaning every file. "short", the ids of
+    TextProfileId and the ids of ImageProfileId are items, listed once each in argument order, which every file that
+    runs receives as Select. Every other argument, and a file name that names no file, gives one message in Problems,
+    so the level refuses the command before any GPU or Docker call.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [string[]]$Argument = @(),
         [string[]]$TestFile = @(),
-        [string[]]$TextProfileId = @()
+        [string[]]$TextProfileId = @(),
+        [string[]]$ImageProfileId = @()
     )
 
     $files = New-Object System.Collections.Generic.List[string]
@@ -99,34 +114,40 @@ function Resolve-QualityArgument {
             else { $problems.Add("'$argument' names no test file of tests/quality.") }
             continue
         }
-        if ($argument -ceq 'short' -or @($TextProfileId) -ccontains $argument) {
+        if ($argument -ceq 'short' -or @($TextProfileId) -ccontains $argument -or @($ImageProfileId) -ccontains $argument) {
             if (-not $items.Contains($argument)) { $items.Add($argument) }
             continue
         }
-        $problems.Add("'$argument' is neither a test file of tests/quality, 'short', nor a text profile of the catalog.")
+        $kind = if (@($ImageProfileId).Length -gt 0) { 'a text or image profile' } else { 'a text profile' }
+        $problems.Add("'$argument' is neither a test file of tests/quality, 'short', nor $kind of the catalog.")
     }
     return @{ Files = [string[]]$files.ToArray(); Items = [string[]]$items.ToArray(); Problems = [string[]]$problems.ToArray() }
 }
 
 function Get-QualitySelection {
     <#
-    Returns @{ Mode; Profiles; Unknown } for the Select items a quality test file receives: Mode is Short when "short" is
-    among them and Full otherwise; Profiles are the named catalog text profiles in the order named, or every one of
-    TextProfileId in catalog order when none is named; Unknown lists the items that are neither.
+    Returns @{ Mode; Profiles; ImageProfiles; Unknown } for the Select items a quality test file receives: Mode is Short
+    when "short" is among them and Full otherwise; Profiles are the named catalog text profiles in the order named, or
+    every one of TextProfileId in catalog order when none is named; ImageProfiles are the same for the catalog image
+    profiles of ImageProfileId; Unknown lists the items that are none of these, so a file ignores the profiles of the
+    kind it does not run.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [string[]]$Select = @(),
-        [string[]]$TextProfileId = @()
+        [string[]]$TextProfileId = @(),
+        [string[]]$ImageProfileId = @()
     )
 
     $given = [string[]]@($Select | Where-Object { $_ })
     $named = [string[]]@($given | Where-Object { @($TextProfileId) -ccontains $_ } | Select-Object -Unique)
-    $unknown = [string[]]@($given | Where-Object { $_ -cne 'short' -and @($TextProfileId) -cnotcontains $_ })
+    $namedImage = [string[]]@($given | Where-Object { @($ImageProfileId) -ccontains $_ } | Select-Object -Unique)
+    $unknown = [string[]]@($given | Where-Object { $_ -cne 'short' -and @($TextProfileId) -cnotcontains $_ -and @($ImageProfileId) -cnotcontains $_ })
     $mode = if ($given -ccontains 'short') { 'Short' } else { 'Full' }
     $profiles = if ($named.Length -gt 0) { $named } else { [string[]]@($TextProfileId) }
-    return @{ Mode = $mode; Profiles = [string[]]$profiles; Unknown = $unknown }
+    $imageProfiles = if ($namedImage.Length -gt 0) { $namedImage } else { [string[]]@($ImageProfileId) }
+    return @{ Mode = $mode; Profiles = [string[]]$profiles; ImageProfiles = [string[]]$imageProfiles; Unknown = $unknown }
 }
 
 function Get-QualityChangeProfile {
@@ -562,7 +583,7 @@ function Get-QualitySwaPaddingDecision {
     return $record
 }
 
-Export-ModuleMember -Function ConvertTo-QualityFoldedText, Get-QualityTextProfileId, Resolve-QualityArgument, Get-QualitySelection,
+Export-ModuleMember -Function ConvertTo-QualityFoldedText, Get-QualityTextProfileId, Get-QualityImageProfileId, Resolve-QualityArgument, Get-QualitySelection,
     Get-QualityChangeProfile, Get-QualityConsistencyPlan, Test-QualityProbeAnswer, Measure-QualityNarrationSpan, Get-QualityMedian,
     Get-QualityConsistencyScore, Get-QualityTrialLaunchLine, Get-QualitySmartCacheDecision, Get-QualitySwaPaddingPlan,
     Get-QualitySwaPaddingDecision

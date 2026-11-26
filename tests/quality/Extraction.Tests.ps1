@@ -29,7 +29,8 @@ BeforeAll {
 
     $catalog = [System.IO.File]::ReadAllText((Join-Path $script:Root 'config\model-catalog.json'), $script:Utf8) | ConvertFrom-Json
     $script:ProfileIds = [string[]]@(Get-QualityTextProfileId -Catalog $catalog)
-    $script:Selection = Get-QualitySelection -Select $Select -TextProfileId $script:ProfileIds
+    # Image profile ids are accepted and ignored, so "test quality <image profile>" reaches ImageGrid.Tests.ps1 too.
+    $script:Selection = Get-QualitySelection -Select $Select -TextProfileId $script:ProfileIds -ImageProfileId @(Get-QualityImageProfileId -Catalog $catalog)
     $script:ResultFile = Join-Path $script:Root ('test-results\quality\extraction-{0}-{1}.json' -f $script:Selection.Mode.ToLowerInvariant(), $script:StartedAt.ToString('yyyyMMdd-HHmmss'))
     $script:Record = [ordered]@{ selection = [string[]]@($Select); mode = $script:Selection.Mode; profiles_selected = $script:Selection.Profiles; preparation = [ordered]@{}; profiles = [ordered]@{} }
     $script:Problems = New-Object System.Collections.Generic.List[string]
