@@ -2328,7 +2328,8 @@
         "P05.EXIT-HW",
         "GPU.6",
         "GPU.7",
-        "DROP.1"
+        "DROP.1",
+        "GPU.7b"
       ],
       "taskType": "integration_sensitive",
       "source": {
@@ -3000,15 +3001,16 @@
     },
     {
       "id": "GPU.7",
-      "title": "T-GPU-10 to T-GPU-12 in the gpu level",
-      "description": "Add T-GPU-10 (real CUDA out-of-memory handled by reducing available VRAM on purpose), T-GPU-11 (no orphan process and full VRAM release after stop.cmd) and T-GPU-12 (everything works with the network disconnected).",
+      "title": "T-GPU-11 and T-GPU-12 in the gpu level",
+      "description": "Add T-GPU-11 (no orphan process and full VRAM release after stop.cmd) and T-GPU-12 (everything works with the network disconnected). T-GPU-10 moved to GPU.7b, which needs an owner decision on the NVIDIA sysmem fallback.",
       "acceptanceCriteria": [
-        "T-GPU-10 and T-GPU-11 are gpu-level tests and pass on this machine.",
-        "T-GPU-12 runs the stack with no external network access by an automated means (for example an internal-only network), passes, and docs/testing.md says plainly which part, if any, still needs a manual unplug."
+        "T-GPU-11 is a gpu-level test and passes on this machine.",
+        "T-GPU-12 runs the stack with no external network access by an automated means (for example an internal-only network), passes, and docs/testing.md says plainly which part, if any, still needs a manual unplug.",
+        "The T-GPU-10 cases that cannot pass yet are not left failing in the default gpu run: they are marked pending GPU.7b with the measured reason, never counted as passed."
       ],
       "priority": 126,
       "passes": false,
-      "notes": "BLOCKED: T-GPU-10's acceptance (a real CUDA out-of-memory, caused by reducing available VRAM on purpose, handled and passing on this machine) cannot be met without an owner decision. Measured on the RTX 4070 under Windows 11/WSL2 in five runs: CUDA always reported 11090 MiB free to the text runtime, even with a test container holding 4352 MiB of VRAM, idle or busy. A level-A load with every layer on the GPU, context 24576 and batch 2048 got 11924.4 MiB on CUDA0 with no allocation error and only ran slower (replies about 28 s instead of about 3 s). That is most likely the NVIDIA driver's shared\nReal GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.",
+      "notes": "Real GPU on this machine: RTX 4070 12 GB; all catalog models are present and verified in the `lyrveil-models` volume. Run the level for real with `scripts/lyrveil.cmd test gpu` (allowlisted) and record the result honestly; a skip is never a pass. Mount `lyrveil-models` read-only, use a test project name of its own and its own data volume, never touch a running Lyrveil, `lyrveil-data` or the backups, and always clean up, also on failure.\nSupervisor, 2026-11-26: split. Your earlier T-GPU-11/T-GPU-12 work (14 passed) is restored; finish and commit it. T-GPU-10 moves to GPU.7b: keep its test code, but make its cases report pending/skipped with the reason (never passed) until GPU.7b runs.",
       "dependsOn": [
         "GPU.6",
         "DROP.1"
@@ -3148,6 +3150,27 @@
         "path": "docs/models.md",
         "section": "Defaults and how they can change",
         "line": "Owner decision 2026-11-25: drop Gemma 4, rocinante-x-12b default."
+      }
+    },
+    {
+      "id": "GPU.7b",
+      "title": "T-GPU-10 real CUDA out-of-memory on Windows",
+      "description": "T-GPU-10: a real CUDA out-of-memory, caused by reducing available VRAM on purpose, is handled (LLM_LOAD_FAILED, lowering, level-B load). On Windows 11/WSL2 the NVIDIA driver falls back to shared system memory instead of failing, so no out-of-memory happens.",
+      "acceptanceCriteria": [
+        "T-GPU-10 passes on this machine after the owner sets the NVIDIA \"CUDA - Sysmem Fallback Policy\", or a new ADR redefines T-GPU-10 for Windows from the owner decision, and docs/gpu-orchestration.md and docs/testing.md record it.",
+        "The measured behaviour with and without the fallback (VRAM, reply time) is recorded in a dated file."
+      ],
+      "priority": 126,
+      "passes": false,
+      "notes": "BLOCKED: waiting for a person: Nel Pannello di controllo NVIDIA > Gestisci impostazioni 3D imposta 'CUDA - Sysmem Fallback Policy' su 'Prefer No Sysmem Fallback' (oppure decidi di ridefinire T-GPU-10 per Windows); poi unblock per rieseguire T-GPU-10.\nMeasured by GPU.7 on 2026-11-26: CUDA always reported 11090 MiB free even with a test container holding 4352 MiB; a level-A load at context 24576, batch 2048 got 11924 MiB on CUDA0 with no allocation error and replies about 28 s instead of about 3 s, most likely the driver's sysmem fallback. Rerun with `scripts/lyrveil.cmd test gpu Resilience t-gpu-10`.",
+      "dependsOn": [
+        "GPU.7"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/testing.md",
+        "section": "GPU and quality levels",
+        "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
       }
     }
   ]
