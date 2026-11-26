@@ -393,6 +393,13 @@ Describe 'The gpu level' {
                 "Describe 'selected gpu test' {",
                 '    It "runs" { Write-Host "selected gpu test ran for [$script:Seen]" }',
                 '}', '') -join "`n")
+        # The opt-in file of T-GPU-13: a plain "test gpu" must leave it out, and a command that names it must run it.
+        Write-FixtureFile $script:GpuRepository 'tests/gpu/Session.Tests.ps1' (@(
+                'param([string[]]$Select = @())',
+                'BeforeAll { $script:Seen = @($Select) -join "," }',
+                "Describe 'opt-in session test' {",
+                '    It "runs" { Write-Host "opt-in session test ran for [$script:Seen]" }',
+                '}', '') -join "`n")
         Invoke-FixtureGit $script:GpuRepository @('add', '-A')
         $script:SavedGpuPath = $env:PATH
         $env:PATH = "$script:GpuBin;$env:PATH"
@@ -459,6 +466,22 @@ Describe 'The gpu level' {
         $out | Should -Match 'lyrveil-gpu-test-data:/data --entrypoint /bin/sh lyrveil/llm:gpu-test'
         $out | Should -Match 'test gpu: passed'
         $run.ExitCode | Should -Be 0
+    }
+
+    It 'leaves the opt-in session test out of a plain run, and runs it only when named, with or without its item' {
+        $plain = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu')
+        $plain.Output | Should -Match 'stand-in gpu test ran'
+        $plain.Output | Should -Match 'other gpu test ran'
+        $plain.Output | Should -Not -Match 'opt-in session test ran'
+        $named = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'Session')
+        $named.Output | Should -Match 'GPU: only tests/gpu/Session\.Tests\.ps1'
+        $named.Output | Should -Match 'opt-in session test ran for \[\]'
+        $named.Output | Should -Not -Match 'stand-in gpu test ran'
+        $short = Invoke-EntryPoint $script:GpuRepository @('test', 'gpu', 'Session', 'short')
+        $short.Output | Should -Match 'opt-in session test ran for \[short\]'
+        $short.Output.LastIndexOf('fake-docker volume rm --force lyrveil-gpu-test-data') |
+            Should -BeGreaterThan $short.Output.IndexOf('opt-in session test ran')
+        $short.ExitCode | Should -Be 0
     }
 
     It 'runs only the test file an argument names, with the same steps and cleanup' {

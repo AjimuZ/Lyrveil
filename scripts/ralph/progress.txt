@@ -279,6 +279,9 @@
 - Mark tests that cannot pass yet with Set-ItResult -Skipped -Because '<measured reason>' so Pester reports them as skipped with the reason and never as passed.
 - Give every negative probe a positive control: a bridge container that must show a default route, or a process scan that must see the processes before the stop, so an empty result cannot pass by accident.
 - In Windows PowerShell 5.1, ask Docker for a single JSON object (--format '{{json .}}') rather than parsing a JSON array.
+- Keep an hours-long gpu test opt-in with a named list in TestCommand.psm1 ($script:OptInGpuTestFile) that the default glob filters out; the file still runs when named, and its items arrive through Select.
+- Give a long-running driver injected Clock, Wait and action script blocks, so one implementation serves the real run and a unit test on a virtual clock.
+- A long test writes its results file in AfterAll, which also runs when the test fails, so a failed run still leaves its evidence.
 
 ---
 
@@ -2711,4 +2714,31 @@ Not observed: one ten-round run (the shell limit is 10 minutes, ten rounds take 
   - On Docker Desktop, 'docker top' PIDs match what a '--pid host' container sees in /proc, so the Docker VM's process table can confirm no orphan after a stop.
   - T-GPU-10 measurement (twice): CUDA in lyrveil-llm reported 11090 MiB free while another container held 4352 MiB; the forced load put 11924.4 MiB of buffers on CUDA0 with no allocation failure while NVML saw about 6724 MiB; the reply job took 3.3 s in one run and 26.7 s in the other.
   - Not run: tests/scripts/GpuResilience.Tests.ps1 (unit level).
+---
+
+## 2026-11-26T19:34:25Z - GPU.8
+- T-GPU-13 is added as an opt-in gpu test. `scripts\lyrveil.cmd test gpu Session` runs it for 7200 s with 20 images and 3 conversations, and `... Session short` runs the same driver for 150 s with 2 images. A plain `test gpu` leaves it out. The short mode passed once on the real RTX 4070. Lint passed. The two-hour run was not made, so T-GPU-13 itself is not passed. The new unit cases in `tests/scripts/GpuSession.Tests.ps1` and `TestCommand.Tests.ps1` are written but not run, because no allowlisted command runs only the unit Pester files.
+
+**What was added**
+- `scripts/lib/GpuSession.psm1` holds the plan, the schedule, the driver and the verdict. The clock, the wait and the actions are injected, so a unit test can drive it on a virtual clock.
+- **Schedule:** a text every 90 s (30 s in short mode) across the three conversations in turn, and the images spread evenly over the duration.
+- **Driver:** it runs the events one at a time and samples while idle, after each event and at the end. It stops early after 5 failed events in a row.
+- **Verdict:** it passes only if the session ran its full duration with every planned event succeeding. Every image must complete and each conversation must get a successful text. NVML must be readable in each sample, and host free RAM must stay at or above 1024 MiB. The lowest VRAM of the last quarter may be at most 1024 MiB above that of the second quarter. Latency (p50, p95, max) is recorded but has no limit of its own.
+- `tests/gpu/Session.Tests.ps1` prepares the same stack as `Resilience.Tests.ps1`, drives the session through the backend and the orchestrator, and judges it. It writes every sample, event and the verdict to `test-results/gpu/session-<mode>-<time>.json` in `AfterAll`, so a failed run still leaves a file.
+- `Get-GpuTestMemory` in `GpuLevel.psm1` reads `docker stats` for the test project's containers only, in two Docker calls.
+- `TestCommand.psm1` filters `tests/gpu/Session.Tests.ps1` out of the default file list. `docs/testing.md` and `CHANGELOG.md` document both modes.
+
+**Real short run**
+- It ran 196.3 s with 7 events (5 texts, 2 images) and 0 errors; 4 Pester cases passed and nothing was left behind.
+- Text latency p50 was 6.9 s, max 38.2 s. Image latency p50 was 31.2 s, max 35.8 s.
+- VRAM peaked at 9823 MiB in the samples (10227 MiB in the 250 ms job).
+- Host free RAM never fell below 1268 MiB, close to the 1024 MiB limit, so that rule may be the first to fail in a full run.
+- Files changed: scripts/lib/GpuSession.psm1, scripts/lib/GpuLevel.psm1, scripts/lib/TestCommand.psm1, tests/gpu/Session.Tests.ps1, tests/scripts/GpuSession.Tests.ps1, tests/scripts/TestCommand.Tests.ps1, docs/testing.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Not run: tests/scripts/GpuSession.Tests.ps1 and the new opt-in case in tests/scripts/TestCommand.Tests.ps1 (unit level); the orchestrator's unit run is their first execution. Lint passed (45 scripts, 0 findings; 1335 links, 0 broken).
+  - The short session `scripts/lyrveil.cmd test gpu Session short` took about 5 min end to end with warm image caches and passed on the RTX 4070: 7 events, 0 errors, 196.3 s, host free RAM minimum 1268 MiB against the 1024 MiB limit, VRAM floors 9736 MiB (second quarter) and 604 MiB (last quarter).
+  - The full two-hour run (`test gpu Session`) has not been made; it needs the GPU for two hours. Its host RAM check is the one most likely to fail on this machine.
+  - The orchestrator's default text profile is rocinante-x-12b, but the level's data volume starts with the smallest profile's launch file; Session.Tests.ps1 rewrites it to level A of the target-tier default, as Resilience.Tests.ps1 does.
+  - The Bash shell here denied piped commands; use the Grep tool to filter output, or run a command plain.
+  - A scriptblock called with positional arguments need not declare them; PSScriptAnalyzer's PSReviewUnusedParameter flags unused declared parameters in stand-in script blocks, so omit them or use $args.
 ---

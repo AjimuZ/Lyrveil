@@ -51,8 +51,12 @@ are trial selectors of the tuning procedure, `<profile>/<trial>` with `*` wildca
 .\scripts\lyrveil.cmd test gpu StructuredOutput
 .\scripts\lyrveil.cmd test gpu ModeSwitch t-gpu-07 rounds-5
 .\scripts\lyrveil.cmd test gpu Resilience
+.\scripts\lyrveil.cmd test gpu Session short
 .\scripts\lyrveil.cmd test gpu rocinante-x-12b/A rocinante-x-12b/batch-*
 ```
+
+A plain `gpu` run leaves out `tests/gpu/Session.Tests.ps1`, the two-hour session T-GPU-13, which only
+`test gpu Session` (two hours) or `test gpu Session short` (150 s) runs.
 
 Every other level refuses arguments.
 
@@ -345,7 +349,54 @@ serve, exits 1 before any GPU or Docker call. Since GPU.4 they check that a test
 with the same cleanup. Since GPU.5 they check that identifiers after a file name reach that file as its `Select`
 parameter. Since GPU.6 their configuration holds the orchestrator and the backend, and they check the Docker socket
 outside the orchestrator, a writable models mount in the backend, another host mount, a variable from `.env`, another
-token and a missing service. They are written and have not run yet.
+token and a missing service. They are written and have not run yet. Since GPU.8 they also check that a plain `test gpu`
+leaves out `tests/gpu/Session.Tests.ps1`, and that `test gpu Session` and `test gpu Session short` run it with the
+same cleanup.
+
+`tests/gpu/Session.Tests.ps1` holds **T-GPU-13** (GPU.8), the two-hour session, and is **opt-in**: a plain
+`scripts\lyrveil.cmd test gpu` leaves it out (`$script:OptInGpuTestFile` of
+[`scripts/lib/TestCommand.psm1`](../scripts/lib/TestCommand.psm1)), because it runs for hours. Two options run it, both
+with the usual preparation and cleanup:
+
+```powershell
+.\scripts\lyrveil.cmd test gpu Session          # the full session: 7200 s, 20 images, 3 conversations
+.\scripts\lyrveil.cmd test gpu Session short    # the same driver: 150 s, 2 images, 3 conversations
+```
+
+It prepares the stack like `Resilience.Tests.ps1`, waits for the text runtime, then drives the session by itself
+through the backend's REST API and the orchestrator, with no person involved. The plan, the schedule, the driver and the
+verdict are in [`scripts/lib/GpuSession.psm1`](../scripts/lib/GpuSession.psm1):
+
+- **Events.** A text message falls due every 90 s (every 30 s in the short mode), taking the three conversations in turn,
+  80 texts in all. The 20 images (Rapida, square) are spread evenly, the first at 180 s and the last at 7020 s, again in
+  turn. The events run one after the other, each when it falls due or at once after a slower one; an image makes the
+  orchestrator switch to the image runtime and back, and that switch shows in the latency of the text that follows.
+- **Recorded.** Every 30 s (15 s in the short mode), after every event and at the end, a sample holds the used VRAM of
+  GPU 0 through NVML, the host's free RAM (`Win32_OperatingSystem`), the memory `docker stats` reports for each
+  container of the test project and the orchestrator's state. A background job also reads NVML every 250 ms for the
+  peak. Each event holds its latency as the driver measured it, its result and its error text.
+- **Verdict.** It passes only when the session was not stopped early (five failed events in a row stop it, so a broken
+  stack does not burn two hours); it lasted its whole duration; every planned event ran and succeeded; all 20 images
+  completed and each of the three conversations had a successful text; at least half the expected samples were taken
+  and NVML could be read in each; the host never had less than 1024 MiB of RAM free; and the lowest VRAM of the last
+  quarter of the planned duration is at most 1024 MiB above that of the second quarter, so a model or cache that is
+  never released shows. Latency (p50, p95 and maximum for texts and images) is recorded and summarized but has no
+  limit of its own: a reply over its 300 s timeout, or an image over 420 s, is a failed event.
+
+The results, with every sample, every event, the verdict and its summary, go to
+`test-results/gpu/session-<mode>-<time>.json`, which Git ignores. The file is written when the test ends, also when it
+fails, so an interrupted run leaves no record. `tests/scripts/GpuSession.Tests.ps1`, in the `unit` level, covers the
+shortened mode of the same driver on a virtual clock with stand-in actions: the plan and schedule, the order and
+non-overlap of the events, a late event, a failed event, the early stop, an unreadable sample, a rising VRAM floor, low
+RAM and a short session. They are written and have not run yet.
+
+**Result so far.** The short mode ran once on the reference machine (RTX 4070, 12 GB) on 2026-11-26 through
+`scripts\lyrveil.cmd test gpu Session short`: 4 Pester cases passed, nothing was left behind, and the verdict passed.
+The session lasted 196.3 s (the events overran the planned 150 s), with 7 events (5 texts, 2 images) and 0 errors; text
+latency p50 6.9 s and maximum 38.2 s (the maximum follows an image switch), image latency p50 31.2 s and maximum
+35.8 s; VRAM peak 9823 MiB in the samples (10227 MiB in the 250 ms job); the host's free RAM never fell below
+1268 MiB, close to the 1024 MiB limit. **The two-hour run (`test gpu Session`) has not been made**, so T-GPU-13 is not
+passed; it needs two hours of the GPU, and its host RAM limit may be the first check to fail on this machine.
 
 ### The `docker` level
 
@@ -1037,7 +1088,7 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-GPU-10 | Real CUDA out-of-memory handled, by reducing available VRAM on purpose. `tests/gpu/Resilience.Tests.ps1` (GPU.7), run alone with the item `t-gpu-10`; **pending GPU.7b**: on Windows the driver's shared-memory fallback means no allocation fails on the reference machine, so its cases are reported as skipped in every other run ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
 | T-GPU-11 | No orphan process and full VRAM release after `stop.cmd`. `tests/gpu/Resilience.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.7), the code of `stop.cmd` on the test project; passed on the reference machine on 2026-11-26 ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
 | T-GPU-12 | Everything works with the network disconnected. `tests/gpu/Resilience.Tests.ps1` (GPU.7): the backend, the orchestrator and both runtimes on internal networks only, probed for routes, connections and lookups, answering and rendering on the real GPU; passed on the reference machine on 2026-11-26. The frontend, the browser and a start with the host's network disconnected still need a manual unplug ([evidence](verification/2026-11-26-gpu-resilience.md)) | P06 |
-| T-GPU-13 | Two-hour session with 20 images and 3 conversations | P08 |
+| T-GPU-13 | Two-hour session with 20 images and 3 conversations. `tests/gpu/Session.Tests.ps1` (GPU.8), opt-in: `scripts\lyrveil.cmd test gpu Session` runs the two hours and `... Session short` the same driver for 150 s; the driver is written and its short mode passed once on the reference machine on 2026-11-26; the two-hour run has not been made | P08 |
 | T-GPU-14 | [Speed rule](gpu-orchestration.md#measuring-and-tuning) for the default text profile, comparing AutoFit with `MOE_CPU_LAYERS` for a mixture-of-experts default, and the [efficiency levers](decisions/0030-koboldcpp-efficiency-levers.md). `tests/gpu/Tuning.Tests.ps1` in the [`gpu` level](#the-gpu-level) (GPU.3), with steps 1 to 9; since [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) for `rocinante-x-12b`, the dense default. Passed on the reference machine on 2026-11-25 over twelve partial runs for the earlier default `gemma-4-26b-a4b`: AutoFit at 42.6 T/s and a first token in 9.04 s ([evidence](verification/2026-11-25-gpu-tuning.md)); passed again the same day for `rocinante-x-12b` at 12288 over three partial runs of procedure version 2: 53.0 T/s and a first token in 2.22 s ([evidence](verification/2026-11-25-rocinante-default-gpu.md)) | P02 |
 
 ### Quality

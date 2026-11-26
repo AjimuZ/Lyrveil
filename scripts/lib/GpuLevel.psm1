@@ -1012,6 +1012,34 @@ function Get-GpuTestContainerMemory {
     return (ConvertFrom-DockerMemoryText -Text ($stats.Output -join ' '))
 }
 
+function Get-GpuTestMemory {
+    <#
+    Returns a hashtable from service name to the memory in MiB that "docker stats" reports for each running container of
+    the test project, read with two Docker calls however many containers run (the service name is the container name
+    without the project prefix and the number). It is empty when nothing runs or Docker fails, and a container whose
+    amount cannot be read maps to -1. Only the project's own containers are asked for, never another container.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param()
+
+    $memory = @{}
+    $listed = Invoke-GpuNative -Command 'docker' -Capture -Argument @(
+        'ps', '--format', '{{.Names}}', '--filter', "label=com.docker.compose.project=$script:ProjectName")
+    if ($listed.Status -ne 0) { return $memory }
+    $names = [string[]]@($listed.Output | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($names.Length -eq 0) { return $memory }
+    $stats = Invoke-GpuNative -Command 'docker' -Capture -Argument (@('stats', '--no-stream', '--format', '{{.Name}}|{{.MemUsage}}') + $names)
+    if ($stats.Status -ne 0) { return $memory }
+    foreach ($line in $stats.Output) {
+        $parts = ([string]$line).Split('|', 2)
+        if ($parts.Length -ne 2) { continue }
+        $service = $parts[0].Trim() -replace ('^' + [regex]::Escape($script:ProjectName) + '-'), '' -replace '-\d+$', ''
+        $memory[$service] = ConvertFrom-DockerMemoryText -Text $parts[1]
+    }
+    return $memory
+}
+
 function ConvertFrom-DockerMemoryText {
     <#
     Returns the first amount of a "docker stats" memory text such as "4.5GiB / 23.47GiB" in MiB, or -1 when the text
@@ -1644,4 +1672,4 @@ Export-ModuleMember -Function Invoke-GpuLevel, Get-GpuTestSetting, Get-GpuSample
     Stop-GpuMemorySampler, Open-GpuCommandLog, Close-GpuCommandLog, Initialize-GpuStackImage, New-GpuTestRuntimeContainer,
     Set-GpuTestDataOwner, Invoke-GpuServiceApi, Start-GpuVramLoad, Get-GpuVramLoad, Stop-GpuVramLoad, Start-GpuTimelineSampler,
     Stop-GpuTimelineSampler, Get-GpuTestServiceLog, Read-GpuTestLaunchFile, Get-GpuTestServiceTop, Invoke-GpuHostProcessProbe,
-    Invoke-GpuRouteProbe, Invoke-GpuRouteControl, Get-GpuTestNetworkFact
+    Invoke-GpuRouteProbe, Invoke-GpuRouteControl, Get-GpuTestNetworkFact, Get-GpuTestMemory

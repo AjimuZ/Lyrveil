@@ -37,6 +37,10 @@ $script:ArgumentLevels = @('unit', 'gpu')
 # The gpu test file that a trial selection runs alone.
 $script:TuningTestFile = 'tests/gpu/Tuning.Tests.ps1'
 
+# The gpu test files that a plain "test gpu" leaves out because they run for hours (T-GPU-13). They run only when a
+# command names them, as in "test gpu Session" or "test gpu Session short".
+$script:OptInGpuTestFile = @('tests/gpu/Session.Tests.ps1')
+
 function Write-CheckLine {
     # Prints one counted result and its failures. Not exported.
     param([string]$Name, [int]$Checked, [int]$Failed, [string]$Unit, [string[]]$Failures)
@@ -191,7 +195,8 @@ function Invoke-GpuTestLevel {
     wildcards: it runs only tests/gpu/Tuning.Tests.ps1 and only the trials they select, so the procedure can run in
     parts; a selector that is malformed or selects no trial of the plan returns 1 before any GPU or Docker call. Returns 0
     only when the tests ran and passed and the test project is gone, 2 (the skip status) when the machine has no GPU,
-    and 1 otherwise, also when there is no test file to run. Not exported.
+    and 1 otherwise, also when there is no test file to run. With no argument it runs every file of tests/gpu except the
+    opt-in ones ($script:OptInGpuTestFile, the two-hour session T-GPU-13), which run only when named. Not exported.
     #>
     param([string]$Root, [string[]]$Argument = @())
 
@@ -244,7 +249,7 @@ function Invoke-GpuTestLevel {
         Write-Host "GPU: only the tuning trials $($selection -join ' ') of $script:TuningTestFile"
     }
     else {
-        $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/gpu/*.Tests.ps1'))
+        $files = [string[]]@(Get-RepositoryFile -Root $Root -Pattern @('tests/gpu/*.Tests.ps1') | Where-Object { $script:OptInGpuTestFile -notcontains $_ })
     }
     $runner = {
         param([string]$RunRoot, [string[]]$RunFile, [hashtable]$RunData)

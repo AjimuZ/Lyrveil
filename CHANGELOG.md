@@ -59,6 +59,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- T-GPU-13, the two-hour session, as an opt-in test of the `gpu` level (GPU.8), in `tests/gpu/Session.Tests.ps1`.
+  `scripts\lyrveil.cmd test gpu Session` drives 3 conversations and 20 images over 7200 s by itself, and
+  `scripts\lyrveil.cmd test gpu Session short` runs the same driver for 150 s with 2 images; a plain `test gpu` leaves
+  the test out. It records VRAM, host RAM, container memory, errors and latency, writes every sample, event and its
+  verdict to `test-results/gpu/session-<mode>-<time>.json`, and judges errors, completion, free RAM and a rising VRAM
+  floor. The short mode passed once on the reference machine (7 events, 0 errors); the unit cases on a virtual clock are
+  written and have not run yet; the two-hour run has not been made (see
+  [docs/testing.md](docs/testing.md#the-gpu-level)).
 - T-GPU-11 and T-GPU-12 in the `gpu` level (GPU.7), in `tests/gpu/Resilience.Tests.ps1`
   (`scripts\lyrveil.cmd test gpu Resilience`). T-GPU-12 checks that the backend, the orchestrator and both runtimes
   join only internal networks and publish no port. In each container a probe finds no default route, no connection
