@@ -3804,7 +3804,7 @@
       ],
       "priority": 159,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: waiting for a person: Dopo P12.EXIT e P12.6, con la GPU libera: collega un mondo a due personaggi e verifica in modalità diagnostica che una sua voce arrivi in una risposta (AC-24); poi unblock per registrare le prove.",
       "dependsOn": [
         "P12.EXIT",
         "P12.6"
