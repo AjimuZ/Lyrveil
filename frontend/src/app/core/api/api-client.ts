@@ -1,5 +1,5 @@
 // Typed HTTP access to the REST API under /api/v1, the only place that builds request URLs.
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
@@ -39,6 +39,14 @@ export class ApiClient {
 
   get<T>(path: string, query?: ApiQuery): Observable<T> {
     return this.http.get<T>(API_BASE_PATH + path, { params: toParams(query) });
+  }
+
+  /**
+   * Reads a file answer as a blob, with the response so the caller can read `Content-Disposition`. A failure has no
+   * JSON body to read (it is a blob), so its `ApiError` carries the code of the status and no server `detail`.
+   */
+  download(path: string, query?: ApiQuery): Observable<HttpResponse<Blob>> {
+    return this.http.get(API_BASE_PATH + path, { params: toParams(query), observe: 'response', responseType: 'blob' });
   }
 
   post<T>(path: string, body?: unknown): Observable<T> {

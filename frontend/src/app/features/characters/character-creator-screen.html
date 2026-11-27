@@ -3,7 +3,16 @@
 <section class="screen">
   <header class="header">
     <div>
-      <h1 class="title">{{ (id() === undefined ? 'screen.characterNew' : 'screen.characterEdit') | t }}</h1>
+      <h1 class="title">
+        {{
+          (id() !== undefined
+            ? 'screen.characterEdit'
+            : importId() !== undefined
+              ? 'screen.characterImport'
+              : 'screen.characterNew'
+          ) | t
+        }}
+      </h1>
       @if (fullName() !== '') {
         <p class="subtitle">{{ fullName() }}</p>
       }
@@ -12,7 +21,7 @@
   </header>
 
   @if (phase() === 'loading') {
-    <p class="note" role="status">{{ 'creator.loading' | t }}</p>
+    <p class="note" role="status">{{ (importId() === undefined ? 'creator.loading' : 'card.import.loading') | t }}</p>
   } @else if (phase() === 'failed') {
     <div class="banner error" role="alert">
       @if (loadError(); as failure) {
@@ -21,6 +30,24 @@
       <a class="button" routerLink="/chats">{{ 'creator.toChats' | t }}</a>
     </div>
   } @else {
+    <lyr-card-actions [characterId]="id()" />
+
+    @if (cardImport(); as imported) {
+      <lyr-card-import-preview
+        [cardImport]="imported"
+        [source]="importSource()"
+        [tokens]="tokenEstimate()"
+        [createScenarios]="createScenarios()"
+        [cardFields]="cardFields()"
+        [proposed]="proposed()"
+        [converting]="converting()"
+        [conversionFailure]="conversionFailure()"
+        (sourceChange)="useSource($event)"
+        (convert)="convert()"
+        (createScenariosChange)="createScenarios.set($event)"
+      />
+    }
+
     @switch (notice()) {
       @case ('created') {
         <p class="banner" role="status">{{ 'creator.notice.created' | t }}</p>
@@ -101,10 +128,10 @@
       <!-- Identità -->
       <div class="panel" id="creator-panel-identity" [hidden]="tab() !== 'identity'">
         <p class="note">{{ 'creator.adults' | t }}</p>
-        <lyr-field [label]="'creator.firstName' | t" fid="creator-first-name" [field]="f.identity.firstName">
+        <lyr-field [label]="'creator.firstName' | t" fid="creator-first-name" [field]="f.identity.firstName" [mark]="mark('identity.first_name')">
           <input id="creator-first-name" class="control" type="text" autocomplete="off" [formField]="f.identity.firstName" />
         </lyr-field>
-        <lyr-field [label]="'creator.lastName' | t" fid="creator-last-name" [field]="f.identity.lastName">
+        <lyr-field [label]="'creator.lastName' | t" fid="creator-last-name" [field]="f.identity.lastName" [mark]="mark('identity.last_name')">
           <input id="creator-last-name" class="control" type="text" autocomplete="off" [formField]="f.identity.lastName" />
         </lyr-field>
         <lyr-field
@@ -112,6 +139,7 @@
           fid="creator-age"
           [field]="f.identity.age"
           [hint]="'creator.ageHint' | t"
+          [mark]="mark('identity.age')"
         >
           <input
             id="creator-age"
@@ -129,26 +157,26 @@
             }
           </select>
         </lyr-field>
-        <lyr-field [label]="'creator.language' | t" fid="creator-language" [field]="f.identity.primaryLanguage">
+        <lyr-field [label]="'creator.language' | t" fid="creator-language" [field]="f.identity.primaryLanguage" [mark]="mark('identity.primary_language')">
           <select id="creator-language" class="control" [formField]="f.identity.primaryLanguage">
             @for (option of languages; track option.value) {
               <option [value]="option.value">{{ option.label | t }}</option>
             }
           </select>
         </lyr-field>
-        <lyr-field [label]="'creator.narrativeIdentity' | t" fid="creator-narrative" [field]="f.identity.narrativeIdentity">
+        <lyr-field [label]="'creator.narrativeIdentity' | t" fid="creator-narrative" [field]="f.identity.narrativeIdentity" [mark]="mark('identity.narrative_identity')">
           <textarea id="creator-narrative" class="control" rows="3" [formField]="f.identity.narrativeIdentity"></textarea>
         </lyr-field>
-        <lyr-field [label]="'creator.occupation' | t" fid="creator-occupation" [field]="f.identity.occupation">
+        <lyr-field [label]="'creator.occupation' | t" fid="creator-occupation" [field]="f.identity.occupation" [mark]="mark('identity.occupation')">
           <input id="creator-occupation" class="control" type="text" autocomplete="off" [formField]="f.identity.occupation" />
         </lyr-field>
-        <lyr-field [label]="'creator.setting' | t" fid="creator-setting" [field]="f.identity.setting">
+        <lyr-field [label]="'creator.setting' | t" fid="creator-setting" [field]="f.identity.setting" [mark]="mark('identity.setting')">
           <input id="creator-setting" class="control" type="text" autocomplete="off" [formField]="f.identity.setting" />
         </lyr-field>
-        <lyr-field [label]="'creator.biography' | t" fid="creator-biography" [field]="f.identity.biography">
+        <lyr-field [label]="'creator.biography' | t" fid="creator-biography" [field]="f.identity.biography" [mark]="mark('identity.biography')">
           <textarea id="creator-biography" class="control" rows="4" [formField]="f.identity.biography"></textarea>
         </lyr-field>
-        <lyr-field [label]="'creator.background' | t" fid="creator-background" [field]="f.identity.background">
+        <lyr-field [label]="'creator.background' | t" fid="creator-background" [field]="f.identity.background" [mark]="mark('identity.background')">
           <textarea id="creator-background" class="control" rows="3" [formField]="f.identity.background"></textarea>
         </lyr-field>
 
@@ -184,7 +212,12 @@
 
       <!-- Personalità -->
       <div class="panel" id="creator-panel-personality" [hidden]="tab() !== 'personality'">
-        <p class="note">{{ 'creator.traits.note' | t }}</p>
+        <p class="note">
+          @if (mark('traits'); as shown) {
+            <span class="mark">{{ (shown === 'card' ? 'creator.mark.card' : 'creator.mark.proposed') | t }}</span>
+          }
+          {{ 'creator.traits.note' | t }}
+        </p>
         <ul class="cards">
           @for (trait of f.traits; track trait; let i = $index) {
             <li class="card">
@@ -312,7 +345,12 @@
 
         <fieldset class="group">
           <legend>{{ 'creator.examples' | t }}</legend>
-          <p class="note">{{ 'creator.examples.note' | t }}</p>
+          <p class="note">
+            @if (mark('communication.examples'); as shown) {
+              <span class="mark">{{ (shown === 'card' ? 'creator.mark.card' : 'creator.mark.proposed') | t }}</span>
+            }
+            {{ 'creator.examples.note' | t }}
+          </p>
           <ul class="cards">
             @for (example of f.communication.examples; track example; let i = $index) {
               <li class="card">

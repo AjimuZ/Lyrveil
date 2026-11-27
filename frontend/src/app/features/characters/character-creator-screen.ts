@@ -18,7 +18,18 @@ import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
 import { AvatarTools } from './avatar-tools';
+import { CardActions } from './card-actions';
 import { creatorSchema, emptyModel, renderIdentity, toCard, toModel, CreatorModel } from './card-form';
+import {
+  CardImport,
+  FieldMark,
+  ImportSource,
+  conversionEnded,
+  draftToModel,
+  markOf,
+  modelTokenEstimate,
+} from './card-import.model';
+import { CardImportPreview } from './card-import-preview';
 import {
   MAX_AVOIDED,
   MAX_EXAMPLES,
@@ -77,12 +88,19 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
  * keeps its locks.
  *
  * The Images tab holds the avatar tools of an existing character; a new one gets them after its first save, because
- * assets belong to a stored character. Not delivered here, so no control is drawn for it: import and export, the token counter of the
+ * assets belong to a stored character. Not delivered here, so no control is drawn for it: the token counter of the
  * examples and the first-chunk warning of the persistent prompt.
+ *
+ * The header holds the import and export actions (`lyr-card-actions`). On `/characters/import/:importId` the screen
+ * reads that import (`GET /characters/imports/{id}`), shows its preview and fills the form from the embedded Lyrveil
+ * card when the file has one, otherwise from the direct mapping. Fields read from the file are marked **dalla card**
+ * and those the model wrote **proposto**. The age stays empty, and required, unless the card stated an adult one.
+ * **Struttura con il modello** queues the conversion and follows it like the assist draft; **Salva personaggio** sends
+ * the form with `import_id` and `create_scenarios`, which is the only thing that creates the character.
  */
 @Component({
   selector: 'lyr-character-creator',
-  imports: [FormField, FieldShell, TagPicker, TranslatePipe, RouterLink, AvatarTools],
+  imports: [FormField, FieldShell, TagPicker, TranslatePipe, RouterLink, AvatarTools, CardActions, CardImportPreview],
   templateUrl: './character-creator-screen.html',
   styleUrl: './character-creator-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -101,6 +119,8 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
 
   /** The character to edit, from the route; absent on `/characters/new`. */
   readonly id = input<string>();
+  /** The card import to review, from `/characters/import/:importId`; absent elsewhere. */
+  readonly importId = input<string>();
 
   protected readonly tabs: readonly { id: CreatorTab; label: TextKey }[] = [
     { id: 'identity', label: 'creator.tab.identity' },
@@ -159,7 +179,18 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
     return [...new Set(keys)].map((key) => this.translator.t(key)).join(', ');
   });
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
+  private conversionTimer: ReturnType<typeof setTimeout> | undefined;
   private destroyed = false;
+
+  /** The card import under review, or null for a character written by hand. */
+  protected readonly cardImport = signal<CardImport | null>(null);
+  protected readonly importSource = signal<ImportSource>('direct');
+  /** **Crea gli scenari dai saluti**, on by default. */
+  protected readonly createScenarios = signal(true);
+  protected readonly converting = signal(false);
+  protected readonly conversionFailure = signal('');
+  /** The card paths that the form took from the file, marked **dalla card**. */
+  protected readonly cardFields = signal<readonly string[]>([]);
 
   protected readonly vocabulary = signal(new Vocabulary([]));
   protected readonly model = signal<CreatorModel>(emptyModel());
@@ -170,6 +201,8 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
   private readonly baseline = signal(JSON.stringify(emptyModel()));
   /** True while the form differs from what was loaded or last saved. */
   protected readonly dirty = computed(() => JSON.stringify(this.model()) !== this.baseline());
+  /** The estimated tokens of the text in the form; the runtime's own count is not available to the browser. */
+  protected readonly tokenEstimate = computed(() => modelTokenEstimate(this.model()));
   protected readonly persistentIdentity = computed(() => renderIdentity(this.model().visual));
   protected readonly addressExample = computed(
     () => ADDRESS_EXAMPLE[this.model().communication.addressForm] ?? 'creator.address.example.tu',
@@ -202,13 +235,23 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
     // External sync: the draft in the browser follows the form while a new character is being written.
     effect(() => {
       const model = this.model();
-      if (this.phase() === 'ready' && this.id() === undefined) {
+      if (this.phase() === 'ready' && this.id() === undefined && this.cardImport() === null) {
         untracked(() => (this.dirty() ? writeDraft(model) : clearDraft()));
       }
+    });
+    // External sync: another import in the address (a second file picked on this screen) replaces the one on show.
+    effect(() => {
+      const importId = this.importId();
+      untracked(() => {
+        if (this.phase() === 'ready' && importId !== undefined && importId !== this.cardImport()?.id) {
+          void this.reopenImport(importId);
+        }
+      });
     });
     this.destroyRef.onDestroy(() => {
       this.destroyed = true;
       clearTimeout(this.pollTimer);
+      clearTimeout(this.conversionTimer);
     });
   }
 
@@ -216,7 +259,10 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
     try {
       this.vocabulary.set(await this.store.vocabulary());
       const id = this.id();
-      if (id === undefined) {
+      const importId = this.importId();
+      if (id === undefined && importId !== undefined) {
+        await this.openImport(importId);
+      } else if (id === undefined) {
         const draft = readDraft();
         if (draft !== null) {
           this.model.set(draft);
@@ -465,6 +511,127 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
     this.assistState.set('failed');
   }
 
+  /** The mark of the card field at `path`: **dalla card**, **proposto** or none. */
+  protected mark(path: string): FieldMark | null {
+    return markOf(path, this.cardFields(), this.proposed());
+  }
+
+  /** Reads an import and fills the form from it; a failure is the screen's load error. */
+  private async openImport(importId: string): Promise<void> {
+    clearTimeout(this.conversionTimer);
+    this.converting.set(false);
+    this.conversionFailure.set('');
+    this.proposed.set([]);
+    this.assistState.set('idle');
+    const imported = await this.store.cardImport(importId);
+    this.cardImport.set(imported);
+    this.createScenarios.set(true);
+    this.notice.set(null);
+    this.useSource(imported.embedded_lyrveil !== null ? 'embedded' : 'direct');
+    if (imported.conversion !== null && !conversionEnded(imported.conversion)) {
+      this.converting.set(true);
+      this.followConversion(importId);
+    }
+  }
+
+  private async reopenImport(importId: string): Promise<void> {
+    try {
+      await this.openImport(importId);
+    } catch (failure) {
+      this.loadError.set(toApiError(failure));
+      this.phase.set('failed');
+    }
+  }
+
+  /**
+   * Fills the form from one of the import's sources. The form stays unsaved (the baseline is the empty model), so the
+   * leave guard asks before the review is lost. The direct draft marks its `card_fields`; the model's conversion marks
+   * its `proposed_fields`, and only the age keeps its mark **dalla card**. A source the import lacks changes nothing.
+   */
+  protected useSource(source: ImportSource): void {
+    const imported = this.cardImport();
+    if (imported === null) {
+      return;
+    }
+    const direct = imported.direct_draft;
+    let model: CreatorModel | null = null;
+    let fromCard: readonly string[] = [];
+    let proposed: readonly string[] = [];
+    const result = imported.conversion?.result ?? null;
+    if (source === 'embedded' && imported.embedded_lyrveil !== null) {
+      model = toModel(imported.embedded_lyrveil.card);
+    } else if (source === 'conversion' && result !== null) {
+      model = draftToModel(result.draft);
+      fromCard = (direct?.card_fields ?? []).filter((path) => path === 'identity.age');
+      proposed = result.proposed_fields;
+    } else if (source === 'direct' && direct !== null) {
+      model = draftToModel(direct.draft);
+      fromCard = direct.card_fields;
+    }
+    if (model === null) {
+      return;
+    }
+    this.model.set(model);
+    this.creatorForm().reset();
+    this.cardFields.set(fromCard);
+    this.proposed.set(proposed);
+    this.importSource.set(source);
+    this.followGender = false;
+    this.followRegister = false;
+    this.attempted.set(false);
+  }
+
+  /** Queues the structured conversion of the import and follows its job until it ends. */
+  protected async convert(): Promise<void> {
+    const imported = this.cardImport();
+    if (imported === null || this.converting()) {
+      return;
+    }
+    this.converting.set(true);
+    this.conversionFailure.set('');
+    try {
+      await this.store.startConversion(imported.id);
+      this.followConversion(imported.id);
+    } catch (failure) {
+      const error = toApiError(failure);
+      this.failConversion(error.detail ?? this.translator.t(error.textKey));
+    }
+  }
+
+  private followConversion(importId: string): void {
+    this.conversionTimer = setTimeout(() => void this.readConversion(importId), DRAFT_POLL_MS);
+  }
+
+  private async readConversion(importId: string): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+    try {
+      const imported = await this.store.cardImport(importId);
+      if (this.destroyed || this.cardImport()?.id !== importId) {
+        return;
+      }
+      const conversion = imported.conversion;
+      if (conversion?.status === 'completed' && conversion.result !== null) {
+        this.cardImport.set(imported);
+        this.converting.set(false);
+        this.useSource('conversion');
+      } else if (conversion?.status === 'failed' || conversion?.status === 'cancelled') {
+        this.failConversion(conversion.error_detail ?? this.translator.t('card.convert.failed'));
+      } else {
+        this.followConversion(importId);
+      }
+    } catch (failure) {
+      const error = toApiError(failure);
+      this.failConversion(error.detail ?? this.translator.t(error.textKey));
+    }
+  }
+
+  private failConversion(reason: string): void {
+    this.conversionFailure.set(reason);
+    this.converting.set(false);
+  }
+
   /** Drops the restored draft and starts again from an empty form. */
   protected discardDraft(): void {
     clearDraft();
@@ -496,7 +663,11 @@ export class CharacterCreatorScreen implements OnInit, HasUnsavedChanges {
       const body = toCard(this.model());
       const id = this.id();
       if (id === undefined) {
-        const created = await this.store.create(body);
+        const imported = this.cardImport();
+        const created =
+          imported === null
+            ? await this.store.create(body)
+            : await this.store.createFromImport(body, imported.id, this.createScenarios());
         this.baseline.set(JSON.stringify(this.model()));
         clearDraft();
         await this.router.navigate(['/characters', created.id, 'edit']);

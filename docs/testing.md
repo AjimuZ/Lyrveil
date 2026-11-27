@@ -1370,7 +1370,13 @@ the V3 and V2 envelopes, the required fields, both PNG chunks, the native card a
 unknown `extensions` keys of an imported character, and the error for `png` without an avatar. T-CRD-08 is written in `backend/tests/integration/test_card_roundtrip.py`
 (P10.5b): Lyrveil, then a V3 PNG, then Lyrveil gives an equal card; an edited card names its changed fields; and a
 tampered embedded card with a matching hash is refused. Its last clause, a card then Lyrveil then a card keeping every
-unknown field, is checked in `test_card_export.py`. The other tests are not written yet. The
+unknown field, is checked in `test_card_export.py`. T-CRD-09 is written in `tests/e2e/specs/card-import.spec.mjs`
+(P10.6): a V2 PNG card is imported, the preview is read, the age is entered, the character is saved with the scenarios
+of its greetings, and it is exported as PNG, in the native format and as the original card; a second test checks that a
+refused file shows its error. The E2E spec was not run when it was written. The browser's own parts are unit specs:
+`card-import.model.spec.ts`, `card-import-preview.spec.ts`, `card-actions.spec.ts` and
+`character-creator-import.spec.ts`. The structured conversion needs the text model, so the E2E does not run it; the unit
+spec follows it with a mocked job. The other tests are not written yet. The
 fixtures are original synthetic cards written for the tests. No community card is committed
 ([R-PUB-06](requirements.md#17-publication)). The V1, V2 and V3 JSON cards are in `backend/tests/fixtures/tavern_cards`.
 The PNG and APNG cards are built from them, chunk by chunk, by the test module.

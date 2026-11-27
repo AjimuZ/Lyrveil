@@ -1,0 +1,168 @@
+@let imported = cardImport();
+
+<section class="preview" aria-labelledby="card-preview-title" data-testid="card-import-preview">
+  <h2 id="card-preview-title" class="title">{{ 'card.preview.title' | t }}</h2>
+  <p class="note">{{ 'card.preview.note' | t }}</p>
+
+  <dl class="facts">
+    <div class="fact">
+      <dt>{{ 'card.preview.name' | t }}</dt>
+      <dd>{{ imported.preview.name }}@if (imported.preview.nickname !== '') { ({{ imported.preview.nickname }}) }</dd>
+    </div>
+    @if (imported.preview.creator !== '') {
+      <div class="fact">
+        <dt>{{ 'card.preview.creator' | t }}</dt>
+        <dd>{{ imported.preview.creator }}</dd>
+      </div>
+    }
+    @if (imported.preview.version !== '') {
+      <div class="fact">
+        <dt>{{ 'card.preview.version' | t }}</dt>
+        <dd>{{ imported.preview.version }}</dd>
+      </div>
+    }
+    @if (imported.preview.tags.length > 0) {
+      <div class="fact">
+        <dt>{{ 'card.preview.tags' | t }}</dt>
+        <dd>{{ imported.preview.tags.join(', ') }}</dd>
+      </div>
+    }
+    <div class="fact">
+      <dt>{{ 'card.preview.avatar' | t }}</dt>
+      <dd>{{ (imported.preview.has_avatar ? 'card.preview.avatar.yes' : 'card.preview.avatar.no') | t }}</dd>
+    </div>
+    <div class="fact">
+      <dt>{{ 'card.preview.greetings' | t }}</dt>
+      <dd>{{ imported.preview.greeting_count }}</dd>
+    </div>
+    @if (imported.preview.has_lorebook) {
+      <div class="fact">
+        <dt>{{ 'card.preview.lorebook' | t }}</dt>
+        <dd>{{ 'card.preview.lorebook.note' | t }}</dd>
+      </div>
+    }
+  </dl>
+
+  @if (imported.preview.creator_notes !== '' || imported.preview.system_prompt !== '' || imported.preview.post_history_instructions !== '') {
+    <details class="unused">
+      <summary>{{ 'card.preview.unused' | t }}</summary>
+      <p class="note">{{ 'card.preview.unused.note' | t }}</p>
+      @if (imported.preview.creator_notes !== '') {
+        <h3 class="sub">{{ 'card.preview.creatorNotes' | t }}</h3>
+        <p class="text">{{ imported.preview.creator_notes }}</p>
+      }
+      @if (imported.preview.system_prompt !== '') {
+        <h3 class="sub">{{ 'card.preview.systemPrompt' | t }}</h3>
+        <p class="text">{{ imported.preview.system_prompt }}</p>
+      }
+      @if (imported.preview.post_history_instructions !== '') {
+        <h3 class="sub">{{ 'card.preview.postHistory' | t }}</h3>
+        <p class="text">{{ imported.preview.post_history_instructions }}</p>
+      }
+    </details>
+  }
+
+  <h3 class="sub">{{ 'card.source.title' | t }}</h3>
+  @if (embedded(); as lyrveil) {
+    @if (source() === 'embedded') {
+      <p class="banner" role="status">{{ 'card.embedded.using' | t }}</p>
+      @if (!lyrveil.text_matches) {
+        <p class="banner" role="status">
+          {{ 'card.embedded.changed' | t }}
+          @for (label of changedLabels(); track label; let last = $last) {
+            {{ label | t }}{{ last ? '.' : ',' }}
+          }
+        </p>
+        <button type="button" class="button" (click)="pick('direct')">{{ 'card.useEdited' | t }}</button>
+      }
+    } @else {
+      <button type="button" class="button" (click)="pick('embedded')">{{ 'card.useEmbedded' | t }}</button>
+    }
+  } @else {
+    <p class="note">{{ 'card.source.direct' | t }}</p>
+  }
+
+  <p class="note" data-testid="card-age-report">{{ ageText().key | t: { value: ageText().value } }}</p>
+
+  @if (cardLabels().length > 0) {
+    <p class="marks">
+      <span class="mark">{{ 'creator.mark.card' | t }}</span>
+      @for (label of cardLabels(); track label; let last = $last) {
+        {{ label | t }}{{ last ? '' : ',' }}
+      }
+    </p>
+  }
+  @if (proposedLabels().length > 0) {
+    <p class="marks">
+      <span class="mark">{{ 'creator.mark.proposed' | t }}</span>
+      @for (label of proposedLabels(); track label; let last = $last) {
+        {{ label | t }}{{ last ? '' : ',' }}
+      }
+    </p>
+  }
+
+  <p class="note" data-testid="card-token-estimate">{{ 'card.tokens.estimate' | t: { tokens: tokens() } }}</p>
+  @if (longCard()) {
+    <p class="banner" role="status">{{ 'card.tokens.long' | t }}</p>
+  }
+
+  <div class="convert">
+    <button type="button" class="button" [disabled]="converting()" (click)="convert.emit()">
+      {{ 'card.convert' | t }}
+    </button>
+    <p class="note">{{ 'card.convert.note' | t }}</p>
+    @if (converting()) {
+      <p class="note" role="status">{{ 'card.convert.running' | t }}</p>
+    }
+    @if (conversionFailure() !== '') {
+      <p class="banner error" role="alert">{{ conversionFailure() }}</p>
+    }
+  </div>
+
+  @if (scenarios().length > 0) {
+    <div class="scenarios">
+      <label class="choice">
+        <input type="checkbox" [checked]="createScenarios()" (change)="toggleScenarios($event)" />
+        {{ 'card.scenarios.create' | t }}
+      </label>
+      <ul class="list">
+        @for (scenario of scenarios(); track $index) {
+          <li>{{ scenario.title }}</li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (imported.report; as report) {
+    @if (report.macros.length > 0 || report.left_out.length > 0) {
+      <details class="report">
+        <summary>{{ 'card.report.title' | t }}</summary>
+        @if (report.macros.length > 0) {
+          <h3 class="sub">{{ 'card.report.macros' | t }}</h3>
+          <ul class="list">
+            @for (macro of report.macros; track $index) {
+              <li>
+                <code>{{ macro.macro }}</code> · {{ macroAction(macro) | t }}
+                @if (macro.count > 1) {
+                  (×{{ macro.count }})
+                }
+                <span class="source">{{ macro.source }}</span>
+              </li>
+            }
+          </ul>
+        }
+        @if (report.left_out.length > 0) {
+          <h3 class="sub">{{ 'card.report.leftOut' | t }}</h3>
+          <ul class="list">
+            @for (item of report.left_out; track $index) {
+              <li>
+                {{ item.detail }}
+                <span class="source">{{ item.source }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </details>
+    }
+  }
+</section>

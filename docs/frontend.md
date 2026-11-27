@@ -62,7 +62,7 @@ All feature routes load lazily.
 | `/settings/models` | 9. Model settings |
 | `/settings/resources` | 10. AI resource monitoring |
 | `/settings/data` | Backup, export, deleted conversations |
-| `/characters/import/:importId` | Planned (P10): the import preview of a Character Card |
+| `/characters/import/:importId` | The Creator with the import preview of a Character Card (P10.6) |
 | `/characters/:id/lore` | Planned (P12): 11. the character's own lore book |
 | `/worlds`, `/worlds/:id` | Planned (P12): 11. Worlds and lore |
 | `/settings/personas` | Planned (P11): 12. Personas |
@@ -284,7 +284,7 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
   kept the locked traits and fields. A failed draft shows the server's Italian reason, such as "L'età deve essere almeno
   18.", and leaves the form as it was. The draft replaces what the form held; there is no merge. The job is followed by
   polling, because the backend does not publish `job.updated` yet.
-- **Not delivered, so no control is drawn for it:** import and export (avatar generation came in P05.5b), the counter of how many examples enter the prompt, the first-chunk warning of
+- **Not delivered, so no control is drawn for it:** the counter of how many examples enter the prompt, the first-chunk warning of
   **Prompt persistente** (the prompt builder arrives with P05, so the text is the plain list of the chosen tags), and
   the locks' effect on a tag translation (there is no such job yet). The characters list is still a
   placeholder; the new-chat dialog links to the Creator.
@@ -293,15 +293,41 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
   `tests/e2e/specs/character-creator.spec.mjs` (T-CHR-13); see [Testing](testing.md#character-creator). The E2E spec
   was written but not run in this change.
 
-Planned for version 1.1, P10 ([Character cards](character-system.md#character-cards)), and not built:
+Character cards, P10 ([Character cards](character-system.md#character-cards)). **Delivered in P10.6, in the Creator:**
 
-- The characters list and the Creator's header get **Importa una card**, which accepts JSON and PNG files.
-- `/characters/import/:importId` shows the preview: the name, the avatar, the creator and tags, the fields that no
-  draft uses, and the report. Its actions are **Apri nel Creator** and **Struttura con il modello**.
-- The Creator then opens with fields marked **dalla card** or **proposto**, the age empty and required unless the
-  card stated one, and **Crea gli scenari dai saluti**.
-- The profile gets **Esporta come card** (V3 JSON, V2 JSON or PNG, plus the scenarios to include), **Esporta**
-  (`lyrveil.character`), and, for an imported character, **Scarica la card originale**.
+- **Importa una card** (`card-actions.ts`, under the Creator's header) takes a JSON or PNG file. A card is sent to
+  `POST /characters/imports` and the screen opens `/characters/import/:importId`; nothing becomes a character yet. A file
+  of the native format (`format: "lyrveil.character"`) goes to `POST /characters/import` instead and opens the new
+  character, so the native import is reached from the same action. A refusal shows the server's Italian `detail`, which
+  names the card path of a refused text (`data.description`), or the catalog text of its code.
+- **The preview** (`card-import-preview.ts`) sits above the form and reads `GET /characters/imports/{id}`, so a reload
+  keeps it for the 7 days the import lives. It shows the name, creator, version, tags, whether there is an avatar, the
+  number of greetings, the notes and prompt fields that no model reads, the report (macros and the texts left out, each
+  with its card path) and the age finding. The form is filled at once: from the embedded Lyrveil card when the file has
+  one, otherwise from the direct mapping. When the text was edited outside Lyrveil the preview names the edited
+  texts and offers **Usa i testi modificati**, and a way back to the Lyrveil card.
+- **Marks.** Identity fields, traits and examples read from the file are marked **dalla card**, those the model wrote
+  **proposto** (`lyr-field` takes a `mark`); the preview also lists them by label. The age is empty and required unless the
+  card stated an adult one, and then it is marked **dalla card**.
+- **Token figure.** The preview shows **Stima: circa N token**, 4 characters per token over the text of the form, and a
+  warning above 1500. It is labelled as an estimate: no route gives the browser the runtime's own count (the count that
+  `CARD_TOO_LONG` uses lives in the job), so the runtime figure is not delivered.
+- **Struttura con il modello** starts `POST /characters/imports/{id}/conversion`, reads the import every second until the
+  conversion ends, then fills the form from its draft with the fields it wrote marked **proposto**. A failed
+  conversion shows its Italian reason, `CARD_TOO_LONG` included, and leaves the form as it was.
+- **Crea gli scenari dai saluti** is a checkbox, on by default, over the list of scenarios the greetings offer.
+  **Salva personaggio** sends the form with `import_id` and `create_scenarios` to `POST /characters`.
+- **Esporta** (when a character is stored) opens a panel with the scenarios to include and **Esporta come card V3
+  (JSON)**, **V2 (JSON)**, **PNG**, **Esporta in formato Lyrveil** (`lyrveil.character`) and, for an imported character,
+  **Scarica la card originale**. The first scenario ticked in list order gives the first message. A PNG for a character
+  with no primary avatar says so. The files are read as blobs and saved with the browser's own download.
+- **Tests:** `card-import.model.spec.ts`, `card-import-preview.spec.ts`, `card-actions.spec.ts` and
+  `character-creator-import.spec.ts` (unit), and `tests/e2e/specs/card-import.spec.mjs` (T-CRD-09); see
+  [Testing](testing.md#character-cards). The E2E spec was written but not run in this change.
+
+Still planned: **Importa una card** on the characters list (the list is a placeholder), and **Esporta come card**,
+**Esporta** and **Scarica la card originale** on the profile. The conversion's queue place is not shown, because the
+import answer carries only the job's status.
 
 ### 4. Character Profile
 

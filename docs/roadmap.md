@@ -239,7 +239,7 @@ Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Charact
   age rule.
 - [x] P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an
   embedded Lyrveil card.
-- [ ] P10.6 The Creator's import preview, and its import and export actions, including those of the native format.
+- [x] P10.6 The Creator's import preview, and its import and export actions, including those of the native format.
 
 Exit: T-CRD-01 to T-CRD-09 pass. A V2 PNG and a V3 JSON card from the test fixtures import, and both directions of
 the round trip hold. AC-21 and AC-22 hold in a manual run.

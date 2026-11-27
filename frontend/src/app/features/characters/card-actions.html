@@ -1,0 +1,56 @@
+<div class="bar" role="group" [attr.aria-label]="'card.actions.label' | t">
+  <div class="import">
+    <label class="label" for="card-import-file">{{ 'card.import' | t }}</label>
+    <input
+      id="card-import-file"
+      class="control"
+      type="file"
+      accept=".json,.png,application/json,image/png"
+      [disabled]="busy()"
+      (change)="pick($event)"
+    />
+  </div>
+  @if (characterId()) {
+    <button type="button" class="button" [attr.aria-expanded]="open()" aria-controls="card-export-panel" (click)="toggle()">
+      {{ 'card.export' | t }}
+    </button>
+  }
+</div>
+
+@if (error(); as failure) {
+  <p class="banner error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+}
+
+@if (open()) {
+  <div class="panel" id="card-export-panel" role="region" [attr.aria-label]="'card.export.title' | t">
+    <h2 class="title">{{ 'card.export.title' | t }}</h2>
+    @if (scenarios().length > 0) {
+      <fieldset class="scenarios">
+        <legend>{{ 'card.export.scenarios' | t }}</legend>
+        <p class="note">{{ 'card.export.scenariosNote' | t }}</p>
+        @for (scenario of scenarios(); track scenario.id) {
+          <label class="choice">
+            <input type="checkbox" [checked]="isChosen(scenario.id)" (change)="choose(scenario.id, $event)" />
+            {{ scenario.title }}
+          </label>
+        }
+      </fieldset>
+    } @else {
+      <p class="note">{{ 'card.export.noScenarios' | t }}</p>
+    }
+    <div class="buttons">
+      @for (item of formats; track item.format) {
+        <button type="button" class="button" [disabled]="busy()" (click)="exportCard(item.format)">
+          {{ item.label | t }}
+        </button>
+      }
+      <button type="button" class="button" [disabled]="busy()" (click)="exportNative()">{{ 'card.export.native' | t }}</button>
+      @if (original()) {
+        <button type="button" class="button" (click)="saveOriginal()">{{ 'card.original' | t }}</button>
+      }
+    </div>
+    @if (noAvatar()) {
+      <p class="banner error" role="alert">{{ 'card.export.noAvatar' | t }}</p>
+    }
+  </div>
+}

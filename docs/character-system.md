@@ -467,7 +467,9 @@ JSON exactly as read, a typed view and the file's SHA-256.
    **Salva personaggio** sends `POST /characters` with `import_id`. That one transaction stores the character as
    version 1, actor `import`, the `character_sources` row, the avatar, and the scenarios from the greetings when
    **Crea gli scenari dai saluti** is on, which is the default. The backend route is delivered in P10.4 ([API](api.md#character-cards-planned));
-   the screen is not.
+   the screen is delivered in P10.6 ([Frontend](frontend.md#3-character-creator)). There the preview and the form are one
+   screen, `/characters/import/:importId`: the form is already filled when the preview shows, so **Apri nel Creator** has no
+   button of its own.
 6. **Expiry.** An unsaved import expires after 7 days.
 
 **Direct mapping.** It is deterministic, and the text stays in its source language:
@@ -579,7 +581,8 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
     says. When the hash matches and a rule refuses it, the whole import is refused. When the text was edited, an
     embedded card that fails is dropped, and the import offers the direct mapping alone.
   - **Not covered.** The embedded `format_version` must be an integer from 1 to the one this build reads; any other
-    block is ignored. The screen with the two choices is not built.
+    block is ignored. The screen with the two choices is delivered in P10.6: the Creator starts from the embedded card and
+    **Usa i testi modificati** switches the form to the direct mapping.
 
 **Scarica la card originale** on the profile returns the stored source as it was imported.
 

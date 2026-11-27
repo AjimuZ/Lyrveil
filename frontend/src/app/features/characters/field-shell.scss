@@ -20,6 +20,16 @@
   color: var(--ob-text);
 }
 
+.mark {
+  margin-right: auto;
+  padding: 0 var(--ob-space-2);
+  background: var(--ob-selected);
+  color: var(--ob-primary-hover);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  font-size: 0.875rem;
+}
+
 .hint,
 .error {
   margin: 0;

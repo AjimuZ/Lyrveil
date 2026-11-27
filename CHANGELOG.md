@@ -62,6 +62,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The Creator imports and exports Character Cards (P10.6,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). **Importa una card** takes a JSON or PNG card
+  and opens `/characters/import/:importId`: a preview with the card's facts, the import report, the fields marked
+  **dalla card** or **proposto**, and a token figure that is labelled as an estimate (the runtime's own count is not
+  available to the browser). The age stays empty and required unless the card stated an adult one. **Usa i testi
+  modificati** switches an edited Lyrveil card to the direct reading, **Struttura con il modello** has the model
+  structure the card, **Crea gli scenari dai saluti** is on by default, and **Salva personaggio** creates the
+  character from the import. **Esporta** gives the card as V3 JSON, V2 JSON or PNG with the scenarios to include, the
+  native format, and **Scarica la card originale** for an imported character. A native file is imported from the same
+  action. A refused file shows its Italian reason with the card path. The E2E spec (T-CRD-09) and the unit specs are
+  written and not yet run. The characters list and the profile do not have these actions yet.
 - Import of an embedded Lyrveil card, in the backend only (P10.5b,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). A card with `extensions.lyrveil` now answers
   `embedded_lyrveil` with the native card, validated like any native import, `text_matches`, and `changed_fields`

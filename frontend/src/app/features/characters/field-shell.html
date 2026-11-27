@@ -1,6 +1,9 @@
 <div class="field">
   <div class="head">
     <label class="label" [attr.for]="fid()">{{ label() }}</label>
+    @if (mark(); as shown) {
+      <span class="mark">{{ (shown === 'card' ? 'creator.mark.card' : 'creator.mark.proposed') | t }}</span>
+    }
     <ng-content select="[lock]" />
   </div>
   <ng-content />

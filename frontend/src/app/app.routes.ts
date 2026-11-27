@@ -18,7 +18,8 @@ function unavailable(path: string, screen: TextKey): Route {
 
 /**
  * Returns the route of the Character Creator. It is left with a confirmation when the form holds unsaved changes
- * (docs/frontend.md, screen 3); the `id` segment, when the path has one, is bound to the screen's `id` input.
+ * (docs/frontend.md, screen 3); the `id` segment, when the path has one, is bound to the screen's `id` input, and the
+ * `importId` segment of `characters/import/:importId` to its `importId` input.
  */
 function creator(path: string, screen: TextKey): Route {
   return {
@@ -45,6 +46,7 @@ export const routes: Routes = [
   },
   unavailable('characters', 'screen.characters'),
   creator('characters/new', 'screen.characterNew'),
+  creator('characters/import/:importId', 'screen.characterImport'),
   {
     path: 'characters/:id',
     loadComponent: () =>

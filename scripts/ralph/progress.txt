@@ -310,6 +310,9 @@
 - JSON bytes try `ensure_ascii=False` and fall back to ASCII escapes on `UnicodeEncodeError`, so a stored lone surrogate cannot turn an export into a 500.
 - Data read from a file never skips a rule because a hash or signature matches. The hash only chooses which source is preselected, and the data is validated with the same function as a native import.
 - To break an import cycle between services, move the small pure helper down into the domain module both sides can import, rather than importing lazily.
+- Pure import helpers (draft to form model, field marks, token estimate, file name, native-file detection) live in `card-import.model.ts` with a spec; components only call them.
+- Test data for specs that more than one spec needs goes in a `*.fixtures.ts` file with no vitest globals, so the app tsconfig still compiles it; a spec file never exports helpers.
+- A screen that reads an id from the route reacts to a changed id with an effect that calls the loader untracked, so the same component can show a second import without a reload.
 
 ---
 
@@ -3006,4 +3009,41 @@ The V3 dates in a `character_book`-less export are in Unix seconds. A source `cr
   - `embedded_lyrveil.card` is the validated card. The future Creator screen should send it as the body of `POST /characters` with `import_id`. **Usa i testi modificati** switches to `direct_draft`.
   - The hash does not cover scenario, first_mes or alternate_greetings, so an edit there is not reported as a changed field. This is the decision from P10.5a, still open for the owner.
   - The Bash tool refuses chained commands. `test lint` runs fine as a single command.
+---
+
+## 2026-11-27T16:40:24Z - P10.6
+- The Creator now imports a card file (JSON or PNG), previews it and saves it. It also exports V3 JSON, V2 JSON, PNG, the native format and the original card. `test lint` passes, including the strict build. The new unit specs and the E2E spec for T-CRD-09 are written but not run. One part is only partly delivered: the preview shows a labelled estimate, not the runtime's token count.
+
+**Import.** **Importa una card** sits under the Creator's header.
+- A card goes to `POST /characters/imports`, and the screen opens `/characters/import/:importId`. A reload keeps the preview.
+- A native `lyrveil.character` JSON goes to `POST /characters/import` instead and opens the new character, so the native import uses the same action.
+- A refusal shows the server's Italian detail, which carries the source path, or the catalog text of its error code.
+
+**Preview and form.**
+- The preview shows the card's facts, the notes that no model reads, the macros and left-out report, and the age finding.
+- The form starts from the embedded Lyrveil card when the file has one, otherwise from the direct mapping.
+- Fields are marked **dalla card** or **proposto**.
+- The age stays empty and required unless the card stated an adult age.
+- **Usa i testi modificati** appears when the text was edited outside Lyrveil, with a way back to the Lyrveil card.
+- **Struttura con il modello** follows the conversion job and fills the form. A failure shows its Italian reason and leaves the form as it was.
+- **Crea gli scenari dai saluti** is on by default, and **Salva personaggio** sends `import_id` and `create_scenarios`.
+
+**Export.** **Esporta** opens a panel with a scenario choice and one button per format:
+- card V3 JSON, V2 JSON and PNG;
+- the native format;
+- **Scarica la card originale**, shown only for an imported character.
+
+A PNG export for a character with no primary avatar says so.
+
+**Not delivered.**
+- No route gives the browser the runtime's token count, so the preview shows **Stima: circa N token**, labelled as an estimate (4 characters per token).
+- **Importa una card** on the characters list and the export actions on the profile are not done. The list is still a placeholder, and the export actions are only in the Creator.
+- Files changed: frontend/src/app/core/api/api-client.ts, frontend/src/app/app.routes.ts, frontend/src/i18n/it.json, frontend/src/app/features/characters/card-import.model.ts, frontend/src/app/features/characters/card-import.fixtures.ts, frontend/src/app/features/characters/card-import-preview.ts, frontend/src/app/features/characters/card-import-preview.html, frontend/src/app/features/characters/card-import-preview.scss, frontend/src/app/features/characters/card-actions.ts, frontend/src/app/features/characters/card-actions.html, frontend/src/app/features/characters/card-actions.scss, frontend/src/app/features/characters/save-file.ts, frontend/src/app/features/characters/characters-store.ts, frontend/src/app/features/characters/field-shell.ts, frontend/src/app/features/characters/field-shell.html, frontend/src/app/features/characters/field-shell.scss, frontend/src/app/features/characters/character-creator-screen.ts, frontend/src/app/features/characters/character-creator-screen.html, frontend/src/app/features/characters/character-creator-screen.scss, frontend/src/app/features/characters/card-import.model.spec.ts, frontend/src/app/features/characters/card-import-preview.spec.ts, frontend/src/app/features/characters/card-actions.spec.ts, frontend/src/app/features/characters/character-creator-import.spec.ts, tests/e2e/specs/card-import.spec.mjs, docs/frontend.md, docs/testing.md, docs/character-system.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The new unit specs and the T-CRD-09 E2E spec were written but not run; the orchestrator's unit and e2e levels are their first run. Risks to watch: jsdom has no DataTransfer, object URLs or reliable File.text(), so the specs stub them. Flushing a blob request with an error status needs a Blob body.
+  - No HTTP route returns the runtime token count (card_conversion counts inside the job). The preview shows a labelled estimate (4 chars per token, from the form's text). A real count needs a new backend route, which is a separate task.
+  - The preview and the form are one screen: the Creator reads the import, so there is no separate Apri nel Creator step. The import answer carries only the conversion job's status, so the queue place is not shown.
+  - The import actions (Importa una card, Esporta panel) live in `lyr-card-actions`, which takes an optional `characterId`. The profile screen and the characters list can reuse it. The profile's own spec would need no change until it is added.
+  - `ApiClient.download` returns a blob response, so a failed download has no server `detail`. The status code gives only the generic text; the PNG 409 is mapped to a specific message by the caller.
+  - The Bash tool refused a compound command with `wc` and `ls`; `scripts/lyrveil.cmd test lint` runs as a single command. ESLint rejects `output<void>()`; use `output()`.
 ---

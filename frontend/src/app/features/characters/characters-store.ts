@@ -18,6 +18,20 @@ import {
   Vocabulary,
   VocabularyList,
 } from './card.model';
+import { CardFormat, CardImport, fileNameFrom } from './card-import.model';
+
+/** A file the server answered: its bytes and the name it proposed. */
+export interface DownloadedFile {
+  readonly blob: Blob;
+  readonly name: string;
+}
+
+/** The part of a scenario that the export's choice shows. */
+export interface ScenarioChoice {
+  readonly id: string;
+  readonly title: string;
+  readonly opening_message: string;
+}
 
 /**
  * Reads and writes character cards through the REST API. Every method rejects with an `ApiError`; a refused save
@@ -164,6 +178,81 @@ export class CharactersStore {
   /** Reads the state of a job by id: its status, the stage it runs, and the Italian reason when it failed. */
   job(jobId: string): Promise<JobDetail> {
     return firstValueFrom(this.api.get<JobDetail>(`/jobs/${encodeURIComponent(jobId)}`));
+  }
+
+  // Character cards (P10): the import and its preview, saving it, and the export files.
+
+  /** Sends a card file (JSON or PNG) to be read. Nothing becomes a character until `createFromImport`. */
+  importCard(file: File): Promise<CardImport> {
+    const body = new FormData();
+    body.append('file', file, file.name);
+    return firstValueFrom(this.api.post<CardImport>('/characters/imports', body));
+  }
+
+  /** Reads a stored import again, with the state of its conversion. */
+  cardImport(importId: string): Promise<CardImport> {
+    return firstValueFrom(this.api.get<CardImport>(`/characters/imports/${encodeURIComponent(importId)}`));
+  }
+
+  /** Queues the structured conversion of an import; follow it with `cardImport`. */
+  startConversion(importId: string): Promise<QueuedJob> {
+    return firstValueFrom(
+      this.api.post<QueuedJob>(`/characters/imports/${encodeURIComponent(importId)}/conversion`),
+    );
+  }
+
+  /**
+   * Saves the reviewed card of an import as a new character in one transaction (avatar, source and, with
+   * `createScenarios`, the scenarios of the greetings). It remembers the id in `justCreated`, like `create`.
+   */
+  async createFromImport(card: Record<string, unknown>, importId: string, createScenarios: boolean): Promise<Character> {
+    const body = { ...card, import_id: importId, create_scenarios: createScenarios };
+    const created = await firstValueFrom(this.api.post<Character>('/characters', body));
+    this.createdState.set(created.id);
+    return created;
+  }
+
+  /** Imports a `lyrveil.character` file as a new character. */
+  async importNative(file: File): Promise<Character> {
+    const body = new FormData();
+    body.append('file', file, file.name);
+    const imported = await firstValueFrom(this.api.post<{ readonly character: Character }>('/characters/import', body));
+    this.createdState.set(imported.character.id);
+    return imported.character;
+  }
+
+  /** Reads the card of `format` for a character, with the scenarios that become its greetings. */
+  exportCard(id: string, format: CardFormat, scenarioIds: readonly string[]): Promise<DownloadedFile> {
+    return this.file(this.api.download(`${this.path(id)}/card`, { format, scenario_ids: scenarioIds }), 'card');
+  }
+
+  /** Reads the character as a `lyrveil.character` file. */
+  exportNative(id: string): Promise<DownloadedFile> {
+    return this.file(this.api.download(`${this.path(id)}/export`), 'personaggio.lyrveil-character.json');
+  }
+
+  /**
+   * Reads the card an imported character came from, exactly as stored. It rejects with a 404 `ApiError` for a character
+   * that was not imported.
+   */
+  originalCard(id: string): Promise<DownloadedFile> {
+    return this.file(this.api.download(`${this.path(id)}/source`), 'card-originale.json');
+  }
+
+  /** Lists the active scenarios usable with the character: its own and those for any character. */
+  async scenariosOf(id: string): Promise<readonly ScenarioChoice[]> {
+    const list = await firstValueFrom(
+      this.api.get<{ readonly items: readonly ScenarioChoice[] }>('/scenarios', { character_id: id, status: 'active' }),
+    );
+    return list.items;
+  }
+
+  private async file(request: ReturnType<ApiClient['download']>, fallbackName: string): Promise<DownloadedFile> {
+    const response = await firstValueFrom(request);
+    return {
+      blob: response.body ?? new Blob([]),
+      name: fileNameFrom(response.headers.get('Content-Disposition'), fallbackName),
+    };
   }
 
   private path(id: string): string {
