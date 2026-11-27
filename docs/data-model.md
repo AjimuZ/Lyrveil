@@ -655,10 +655,10 @@ service (`services/notifications.py`), the routes and the `notification.created`
 
 ## Version 1.1 tables (planned)
 
-Not built, except the P10 tables of revision `0018`. Each phase adds its tables in a new Alembic revision after `0017`. Columns added to `conversations`,
+Not built, except the P10 tables of revision `0018` and the P11 persona table and columns of revision `0020`. Each phase adds its tables in a new Alembic revision after `0017`. Columns added to `conversations`,
 `scenarios` and `memories` stay plain columns, with no foreign key: SQLite cannot add one without rebuilding the table,
 which would drop its search triggers (see [`scenarios`](#scenarios)). The services enforce them, as they do for
-`scenario_id`.
+`scenario_id`, and revision `0020` adds triggers for the persona rules.
 
 ### P10: character cards
 
@@ -747,6 +747,23 @@ New columns:
 The revision creates the default persona from `user.display_name` and `user.grammatical_gender`, or from their
 defaults when no row exists. It sets the persona on every conversation and every shared memory, and deletes the two
 keys from `application_settings`. A persona that a conversation uses can be archived and not deleted.
+
+Delivered in revision `0020` (P11.1a):
+
+- A stored setting outside its range (a name that is empty or over 40 characters, an unknown gender, text that is not
+  JSON) gives the default instead, so the upgrade never fails on it. The downgrade writes the two keys back from the
+  default persona, leaving out a value equal to its default.
+- `CHECK`s hold the lengths, the age, the gender and status lists, `is_default` in 0 or 1, and that the default persona
+  is never `archived`. The partial unique index `ux_user_personas_default` allows one row with `is_default = 1`.
+- The three `persona_id` columns are plain columns, as `conversations.scenario_id` is: SQLite cannot drop a column that
+  a foreign key names, so a `REFERENCES` clause would leave the downgrade only a rebuild of tables that carry the
+  full-text triggers. Triggers hold the rules instead: `user_personas_in_use` refuses to delete a persona that a
+  conversation uses, `conversations_persona_fixed` refuses to change a `persona_id` once set, and
+  `user_personas_clear_scenarios` sets `scenarios.persona_id` to NULL when its persona is deleted.
+- `memories.persona_id` has the `CHECK` `persona_id IS NULL OR scope = 'shared'`. A shared memory written before P11.3
+  still has NULL.
+- `conversations.persona_id` is nullable in the schema. The conversation insert sets the default persona; the picker's
+  choice arrives with P11.4. The index `ix_conversations_persona` serves the delete check.
 
 ### P12: worlds and lore
 

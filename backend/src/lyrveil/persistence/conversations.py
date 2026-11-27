@@ -150,12 +150,16 @@ def insert(
     scenario_snapshot: dict[str, object] | None = None,
 ) -> None:
     """Adds an active conversation with `next_seq` 1 and every cursor at 0. A conversation that starts from a scenario
-    stores its id and `scenario_snapshot`, the copy that later edits of the scenario never change."""
+    stores its id and `scenario_snapshot`, the copy that later edits of the scenario never change.
+
+    The conversation takes the default persona (ADR 0048), which revision 0020 creates and which always exists after
+    it; its `persona_id` never changes afterwards. Choosing another persona at creation arrives with the new-chat
+    picker (P11.4)."""
     connection.execute(
         text(
             "INSERT INTO conversations (id, character_id, scenario_id, scenario_snapshot_json, title, language, "
-            "shares_memory, created_at, updated_at) VALUES (:id, :character_id, :scenario_id, :snapshot, :title, "
-            ":language, :shares_memory, :now, :now)"
+            "shares_memory, persona_id, created_at, updated_at) VALUES (:id, :character_id, :scenario_id, :snapshot, "
+            ":title, :language, :shares_memory, (SELECT id FROM user_personas WHERE is_default = 1), :now, :now)"
         ),
         {
             "id": conversation_id,

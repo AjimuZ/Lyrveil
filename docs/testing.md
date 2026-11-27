@@ -1395,7 +1395,10 @@ The PNG and APNG cards are built from them, chunk by chunk, by the test module.
 
 ### Personas
 
-Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). None of these tests is written.
+Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). T-PSN-01 and the database half of T-PSN-02
+(lengths, age, one default, the default never archived, the delete rule and the fixed `persona_id`) are written in
+`backend/tests/integration/test_migrations.py` (P11.1a) and were not run when they were written. The other tests are
+not written yet.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

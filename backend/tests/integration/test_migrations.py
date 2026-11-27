@@ -7,8 +7,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
+from lyrveil.persistence import conversations
 from lyrveil.persistence.migrations import (
     PROJECT_ROOT,
     head_revision,
@@ -35,7 +36,8 @@ LIFECYCLE = "0015"
 SCHEDULING = "0016"
 NOTIFICATIONS = "0017"
 CARD_IMPORTS = "0018"
-HEAD = "0019"
+CARD_CONVERSION = "0019"
+HEAD = "0020"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -71,7 +73,8 @@ TABLES_WITH_PROPOSALS = {*TABLES_WITH_IMAGES, "image_proposals"}
 TABLES_WITH_LIFECYCLE = {*TABLES_WITH_PROPOSALS, "model_lifecycle_events"}
 TABLES_WITH_SCHEDULING = {*TABLES_WITH_LIFECYCLE, "scheduled_events"}
 TABLES_WITH_NOTIFICATIONS = {*TABLES_WITH_SCHEDULING, "notifications"}
-TABLES = {*TABLES_WITH_NOTIFICATIONS, "card_imports", "character_sources"}
+TABLES_WITH_CARD_IMPORTS = {*TABLES_WITH_NOTIFICATIONS, "card_imports", "character_sources"}
+TABLES = {*TABLES_WITH_CARD_IMPORTS, "user_personas"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -113,6 +116,7 @@ def test_the_revisions_follow_one_another() -> None:
         SCHEDULING,
         NOTIFICATIONS,
         CARD_IMPORTS,
+        CARD_CONVERSION,
         HEAD,
     }
 
@@ -145,6 +149,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", CARD_CONVERSION, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == TABLES_WITH_CARD_IMPORTS
     assert alembic(database_path, "downgrade", NOTIFICATIONS, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES_WITH_NOTIFICATIONS
     assert alembic(database_path, "downgrade", SCHEDULING, cwd=tmp_path).returncode == 0
@@ -491,3 +497,200 @@ def test_the_memory_index_folds_accents_and_finds_stems(database_path: Path, tmp
         assert found == [("a",)]
         found = connection.execute("SELECT episode_id FROM episode_fts WHERE episode_fts MATCH '\"CITTÀ\"'").fetchall()
         assert found == [("e",)]
+
+
+def seed_chat_with_memories(database_path: Path, settings: dict[str, object]) -> None:
+    """Seeds a database at revision 0019 with the chat of `seed_chat`, a second conversation, one conversation memory,
+    one shared memory and the settings in `settings` (key to decoded value), with `app.diagnostic_mode` beside them."""
+    connection = open_database(database_path)
+    try:
+        seed_chat(connection)
+        connection.execute(
+            "INSERT INTO conversations (id, character_id, title, created_at, updated_at) "
+            "VALUES ('w', 'c', 'Bosco', ?, ?)",
+            (NOW, NOW),
+        )
+        insert_memory(connection, "own")
+        insert_memory(connection, "shared", scope="shared", conversation_id=None, origin_conversation_id="v")
+        for key, value in {**settings, "app.diagnostic_mode": True}.items():
+            connection.execute("INSERT INTO application_settings VALUES (?, ?, ?)", (key, json.dumps(value), NOW))
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [
+        pytest.param(
+            {"user.display_name": "Nicolò", "user.grammatical_gender": "maschile"},
+            ("Nicolò", "maschile"),
+            id="with the two settings",
+        ),
+        pytest.param({}, ("Utente", "non_indicato"), id="without them"),
+        pytest.param(
+            {"user.display_name": "x" * 41, "user.grammatical_gender": "neutro"},
+            ("Utente", "non_indicato"),
+            id="with values outside their range",
+        ),
+    ],
+)
+def test_the_migration_creates_the_default_persona_from_the_settings_and_sets_it_everywhere(
+    database_path: Path, tmp_path: Path, settings: dict[str, object], expected: tuple[str, str]
+) -> None:
+    """T-PSN-01: revision 0020 creates one default persona from the two settings, or from their defaults, sets it on
+    every conversation and on the shared memories only, and removes the two keys while other settings stay."""
+    assert alembic(database_path, "upgrade", CARD_CONVERSION, cwd=tmp_path).returncode == 0
+    seed_chat_with_memories(database_path, settings)
+
+    result = alembic(database_path, "upgrade", "head", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    connection = open_database(database_path)
+    try:
+        personas = connection.execute(
+            "SELECT id, name, grammatical_gender, age, appearance, about, is_default, status FROM user_personas"
+        ).fetchall()
+        assert [row[1:] for row in personas] == [(*expected, None, "", "", 1, "active")]
+        persona_id = personas[0][0]
+        assert connection.execute("SELECT id, persona_id, persona_note FROM conversations ORDER BY id").fetchall() == [
+            ("v", persona_id, ""),
+            ("w", persona_id, ""),
+        ]
+        assert connection.execute("SELECT id, persona_id FROM memories ORDER BY id").fetchall() == [
+            ("own", None),
+            ("shared", persona_id),
+        ]
+        assert connection.execute("SELECT key FROM application_settings").fetchall() == [("app.diagnostic_mode",)]
+    finally:
+        connection.close()
+
+
+def test_a_downgrade_restores_the_two_settings_from_the_default_persona(database_path: Path, tmp_path: Path) -> None:
+    assert alembic(database_path, "upgrade", CARD_CONVERSION, cwd=tmp_path).returncode == 0
+    seed_chat_with_memories(database_path, {"user.display_name": "Nicolò", "user.grammatical_gender": "femminile"})
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+
+    result = alembic(database_path, "downgrade", CARD_CONVERSION, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    connection = open_database(database_path)
+    try:
+        rows = connection.execute("SELECT key, value_json FROM application_settings ORDER BY key").fetchall()
+        assert {key: json.loads(value) for key, value in rows} == {
+            "app.diagnostic_mode": True,
+            "user.display_name": "Nicolò",
+            "user.grammatical_gender": "femminile",
+        }
+        assert "persona_id" not in {row[1] for row in connection.execute("PRAGMA table_info(conversations)")}
+        assert "persona_id" not in {row[1] for row in connection.execute("PRAGMA table_info(memories)")}
+    finally:
+        connection.close()
+
+
+PERSONA_INSERT = (
+    "INSERT INTO user_personas (id, name, grammatical_gender, age, appearance, about, is_default, status, created_at, "
+    "updated_at) VALUES (:id, :name, :grammatical_gender, :age, :appearance, :about, :is_default, :status, :now, :now)"
+)
+
+
+def insert_persona(connection: sqlite3.Connection, persona_id: str, **overrides: object) -> None:
+    """Inserts a valid persona that is not the default, changing the columns named in `overrides`."""
+    row: dict[str, object] = {
+        "id": persona_id,
+        "name": "Mara",
+        "grammatical_gender": "femminile",
+        "age": 30,
+        "appearance": "",
+        "about": "",
+        "is_default": 0,
+        "status": "active",
+        "now": NOW,
+        **overrides,
+    }
+    connection.execute(PERSONA_INSERT, row)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"age": 17}, id="age under 18"),
+        pytest.param({"age": 121}, id="age over 120"),
+        pytest.param({"name": ""}, id="empty name"),
+        pytest.param({"name": "x" * 41}, id="name over 40"),
+        pytest.param({"grammatical_gender": "neutro"}, id="unknown gender"),
+        pytest.param({"appearance": "x" * 601}, id="appearance over 600"),
+        pytest.param({"about": "x" * 1201}, id="about over 1200"),
+        pytest.param({"status": "deleted"}, id="unknown status"),
+        pytest.param({"is_default": 2}, id="is_default is not a boolean"),
+    ],
+)
+def test_a_persona_that_breaks_a_documented_rule_is_refused(
+    database_path: Path, tmp_path: Path, overrides: dict[str, object]
+) -> None:
+    """The database half of T-PSN-02 for the persona's own fields."""
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        insert_persona(connection, "ok-null-age", age=None)
+        insert_persona(connection, "ok-18", age=18, name="x" * 40, appearance="x" * 600, about="x" * 1200)
+        insert_persona(connection, "ok-120", age=120)
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            insert_persona(connection, "bad", **overrides)
+    finally:
+        connection.close()
+
+
+def test_the_database_keeps_one_default_persona_and_the_conversation_rules(database_path: Path, tmp_path: Path) -> None:
+    """The database half of T-PSN-02 for the default and the archive and delete rules: one default, which cannot be
+    archived; a persona that a conversation uses cannot be deleted; a conversation's persona never changes; deleting a
+    persona clears the scenarios that preselect it."""
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        (default_id,) = connection.execute("SELECT id FROM user_personas WHERE is_default = 1").fetchone()
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            insert_persona(connection, "second-default", is_default=1)
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            connection.execute("UPDATE user_personas SET status = 'archived' WHERE id = ?", (default_id,))
+
+        insert_persona(connection, "other")
+        seed_chat(connection)
+        connection.execute("UPDATE conversations SET persona_id = 'other' WHERE id = 'v'")
+        with pytest.raises(sqlite3.IntegrityError, match="never changes"):
+            connection.execute("UPDATE conversations SET persona_id = ? WHERE id = 'v'", (default_id,))
+        with pytest.raises(sqlite3.IntegrityError, match="only be archived"):
+            connection.execute("DELETE FROM user_personas WHERE id = 'other'")
+        connection.execute("UPDATE user_personas SET status = 'archived' WHERE id = 'other'")
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            connection.execute("UPDATE conversations SET persona_note = ? WHERE id = 'v'", ("x" * 601,))
+        connection.execute("UPDATE conversations SET persona_note = 'Siete colleghi da due anni' WHERE id = 'v'")
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            insert_memory(connection, "own", persona_id=default_id)
+
+        insert_persona(connection, "unused")
+        connection.execute(
+            "INSERT INTO scenarios (id, title, persona_id, created_at, updated_at) "
+            "VALUES ('s', 'Faro', 'unused', ?, ?)",
+            (NOW, NOW),
+        )
+        connection.execute("DELETE FROM user_personas WHERE id = 'unused'")
+        assert connection.execute("SELECT persona_id FROM scenarios").fetchall() == [(None,)]
+    finally:
+        connection.close()
+
+
+def test_a_new_conversation_takes_the_default_persona(engine: Engine) -> None:
+    upgrade_to_head(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO characters (id, first_name, age, created_at, updated_at) VALUES ('c', 'Alba', 30, :n, :n)"
+            ),
+            {"n": NOW},
+        )
+        conversations.insert(
+            connection, conversation_id="v", character_id="c", title="Faro", language=None, shares_memory=False, now=NOW
+        )
+        default_id = connection.execute(text("SELECT id FROM user_personas WHERE is_default = 1")).scalar_one()
+        row = connection.execute(text("SELECT persona_id, persona_note FROM conversations")).one()
+    assert tuple(row) == (default_id, "")

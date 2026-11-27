@@ -62,6 +62,13 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- User personas in the database (P11.1a, [ADR 0048](docs/decisions/0048-user-personas.md)). Migration 0020 adds
+  `user_personas` and creates the default persona from the settings `user.display_name` and
+  `user.grammatical_gender`, or from `Utente` and `non_indicato` when they were never set. Every existing conversation
+  and shared memory gets that persona, and the two keys are removed. New conversations take the default persona. The
+  database refuses an age outside 18 to 120, a name over 40 characters, a second default persona, an archived default,
+  a change of a conversation's persona and the deletion of a persona that a conversation uses. Prompts still read the
+  user's name from the defaults, and no route or screen manages personas yet. The tests are written and not yet run.
 - The Creator imports and exports Character Cards (P10.6,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). **Importa una card** takes a JSON or PNG card
   and opens `/characters/import/:importId`: a preview with the card's facts, the import report, the fields marked
