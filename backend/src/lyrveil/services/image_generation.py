@@ -338,9 +338,7 @@ class ImageGenerationService:
             if job.message_id is not None and (message is None or message.deleted_at is not None):
                 return None
             if message is not None:
-                chat = load_context_request(
-                    connection, message.conversation_id, message.seq, user=self._replies.user, now=self._clock()
-                )
+                chat = load_context_request(connection, message.conversation_id, message.seq, now=self._clock())
                 if chat is not None:
                     return _Target(chat.card, chat)
             assert job.character_id is not None, "an image job names its character"

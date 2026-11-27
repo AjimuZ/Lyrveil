@@ -28,7 +28,7 @@ never undoes the reply. A regenerated reply that extraction had already passed a
 import json
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, tzinfo
 
 import anyio
@@ -61,7 +61,6 @@ from lyrveil.context.builder import (
     SummaryText,
     split_messages,
 )
-from lyrveil.context.minimal import UserProfile
 from lyrveil.context.time_context import time_lines
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.errors import ContentPolicyBlockedError
@@ -93,6 +92,7 @@ from lyrveil.memory.window import ExtractionSettings
 from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import messages as repository
+from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import relationship as state_repository
 from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.persistence import summaries as summary_repository
@@ -145,12 +145,12 @@ class ReplySettings:
 
     P02 has no settings store yet, so the defaults are the documented ones: the `mistral_v3_tekken` family of
     `rocinante-x-12b`, the default text profile of both tiers (ADR 0045), the `nemo` chat preset of docs/prompting.md
-    (Sampler presets), `llm.max_length` 400 and the default user of docs/configuration.md. A sampler field left at None
-    is not sent. `max_length` is the ceiling of every length band: the request sends the character's band, capped by it.
+    (Sampler presets) and `llm.max_length` 400. A sampler field left at None is not sent. `max_length` is the ceiling of
+    every length band: the request sends the character's band, capped by it. The user is not a setting: each request
+    names the conversation's own persona (ADR 0048).
     """
 
     template: TextTemplate = "mistral_v3_tekken"
-    user: UserProfile = field(default_factory=UserProfile)
     max_length: int = 400
     temperature: float | None = 0.8
     top_p: float | None = 0.95
@@ -273,9 +273,12 @@ def _failure(error: Exception) -> tuple[str, bool]:
     return INTERNAL, False
 
 
-def reply_request(assembly: Assembly, formatter: PromptFormatter, settings: ReplySettings, genkey: str) -> TextRequest:
+def reply_request(
+    assembly: Assembly, formatter: PromptFormatter, settings: ReplySettings, genkey: str, user_name: str
+) -> TextRequest:
     """Returns the runtime request of a built reply prompt, with the reply settings' samplers and the family's stop
-    sequences. Replies and image captions share it, so a caption is sampled as the character's replies are."""
+    sequences for `user_name`, the name of the conversation's persona that the prompt was built with. Replies,
+    proactive messages and image captions share it, so a caption is sampled as the character's replies are."""
     return TextRequest(
         prompt=assembly.prompt.text,
         max_context_length=assembly.context_limit,
@@ -292,7 +295,7 @@ def reply_request(assembly: Assembly, formatter: PromptFormatter, settings: Repl
         dry_allowed_length=settings.dry_allowed_length,
         dry_penalty_last_n=settings.dry_penalty_last_n,
         dry_sequence_breakers=settings.dry_sequence_breakers,
-        stop_sequence=formatter.stop_sequences(settings.user.display_name),
+        stop_sequence=formatter.stop_sequences(user_name),
     )
 
 
@@ -301,21 +304,22 @@ def load_context_request(
     conversation_id: str,
     before_seq: int,
     *,
-    user: UserProfile,
     now: datetime,
     previous_memory_ids: frozenset[str] = frozenset(),
     instruction: str | None = None,
     hint: str = "",
     zone: tzinfo | None = None,
 ) -> ContextRequest | None:
-    """Reads what the reply at `before_seq` is built from: the character's whole card, the newest MAX_HISTORY_MESSAGES
-    readable messages before it, the scenario copy the chat started with, the chat's active checkpoints, its state
-    as block 4 (empty until a run has written one), and as `notes` the adaptive notes that the checks recorded on its
-    last replies started (lyrveil.consistency.checks.active_notes).
+    """Reads what the reply at `before_seq` is built from: the character's whole card, the conversation's persona with
+    its note as they are now (lyrveil.persistence.personas.chat_persona), the newest MAX_HISTORY_MESSAGES readable
+    messages before it, the scenario copy the chat started with, the chat's active checkpoints, its state as block 4
+    (empty until a run has written one), and as `notes` the adaptive notes that the checks recorded on its last replies
+    started (lyrveil.consistency.checks.active_notes).
 
-    Everything is keyed by this conversation, so another chat of the same character adds nothing; memories are read
-    later by the builder, under the same scope. The notes read only replies before `before_seq`, so a regenerated reply
-    gets the notes its first variant had. Returns None when no user message has text. The conversation must exist.
+    Everything is keyed by this conversation, so another chat of the same character, or another persona, adds nothing;
+    memories are read later by the builder, under the same scope. The notes read only replies before `before_seq`, so a
+    regenerated reply gets the notes its first variant had. Returns None when no user message has text. The
+    conversation must exist.
 
     With an `instruction` the request is a proactive message's: it has no current message, every readable message
     before `before_seq` is history, and `hint` joins the memory query. It then never returns None.
@@ -336,19 +340,20 @@ def load_context_request(
         history, current = split
     else:
         history = [message for message in messages if message.author is not Author.SYSTEM]
+    persona = persona_repository.chat_persona(connection, conversation_id)
     stored_state = state_repository.load_state(connection, conversation_id)
-    state = StateText() if stored_state is None else StateText(*state_lines(stored_state.state, user))
+    state = StateText() if stored_state is None else StateText(*state_lines(stored_state.state, persona))
     language = conversation.effective_language
     # The newest NOTE_REPLIES replies start notes, and the one before them tells whether a V7 hit was the second.
     recent = repository.reply_checks(connection, conversation_id, before_seq, NOTE_REPLIES + 1)
     started = active_notes([recorded_checks(checks) for checks in recent])
-    notes = tuple(note_text(check, stored.card, user, language) for check in started)
+    notes = tuple(note_text(check, stored.card, persona, language) for check in started)
     time = () if zone is None else time_lines(now, from_utc_text(history[-1].created_at) if history else None, zone)
     return ContextRequest(
         character_id=conversation.character_id,
         conversation_id=conversation_id,
         card=stored.card,
-        user=user,
+        persona=persona,
         language=language,
         shares_memory=conversation.shares_memory,
         history=history,
@@ -629,16 +634,16 @@ class ChatInferenceService:
         if wanted is None:
             raise JobFailedError(INTERNAL, _NOTHING_TO_ANSWER, retryable=False)
         formatter = formatter_for(self._settings.template)
-        rules = CheckRules.for_chat(wanted.card, wanted.user, wanted.language)
+        rules = CheckRules.for_chat(wanted.card, wanted.persona, wanted.language)
         previous = [message.content for message in wanted.history if message.author is Author.CHARACTER]
         restarts: list[str] = []
         corrected = False
         assembly = await self._assemble(job, reply, wanted, formatter)
         used_notes = tuple(wanted.notes)
-        request = self._request(assembly, formatter, context.genkey)
+        request = self._request(assembly, formatter, context.genkey, wanted)
         while True:
             pipeline = _Pipeline(
-                TurnCutoff(formatter.control_texts(), wanted.user.display_name),
+                TurnCutoff(formatter.control_texts(), wanted.persona.name),
                 ReplyNormalizer(NormalizerRules.for_card(wanted.card)),
                 SentenceSplitter(),
             )
@@ -651,10 +656,10 @@ class ChatInferenceService:
                 restarts.append(stopped)
                 corrected = True
                 await self._restart(job, reply, stopped, streamed)
-                notes = (note_text(stopped, wanted.card, wanted.user, wanted.language), *wanted.notes)
+                notes = (note_text(stopped, wanted.card, wanted.persona, wanted.language), *wanted.notes)
                 used_notes = notes[:MAX_NOTES]
                 assembly = await self._assemble(job, reply, replace(wanted, notes=used_notes), formatter)
-                request = self._request(assembly, formatter, context.genkey)
+                request = self._request(assembly, formatter, context.genkey, wanted)
                 continue
             normalized = done.normalized
             assert normalized is not None
@@ -681,8 +686,10 @@ class ChatInferenceService:
         _log_assembly(job.id, reply.conversation_id, assembly)
         return assembly
 
-    def _request(self, assembly: Assembly, formatter: PromptFormatter, genkey: str) -> TextRequest:
-        return reply_request(assembly, formatter, self._settings, genkey)
+    def _request(
+        self, assembly: Assembly, formatter: PromptFormatter, genkey: str, wanted: ContextRequest
+    ) -> TextRequest:
+        return reply_request(assembly, formatter, self._settings, genkey, wanted.persona.name)
 
     async def _stream(
         self,
@@ -774,7 +781,6 @@ class ChatInferenceService:
                 connection,
                 reply.conversation_id,
                 reply.seq,
-                user=self._settings.user,
                 now=self._clock(),
                 previous_memory_ids=previous,
                 zone=self._zone,

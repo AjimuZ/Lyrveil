@@ -515,7 +515,8 @@ Delivered in P04.9b (`api/diagnostics.py`, `services/diagnostics.py`): the diagn
 
 - `GET /messages/{id}/diagnostics` answers the prompt assembly stored for the reply: `message_id`, `conversation_id`,
   `variant_id`, `created_at`, `token_total`, `context_limit`, `blocks` (tokens per prompt block: `global`, `identity`,
-  `communication`, `scenario`, `summary`, `history`, `state`, `memories`, `anchor`, `current`), `budgets`
+  `communication`, `persona` since P11.2, `scenario`, `summary`, `history`, `state`, `memories`, `anchor`, `current`;
+  an assembly stored before P11.2 has no `persona`), `budgets`
   (`context_limit`, `reply_reserve`, `safety_margin`, `available`, `memory_target`, `summary_target`), `notes`,
   `reductions`, `gaps`, `history_count`, `current_truncated`, `memories` (`id`, `type`, `kind`, `status`, `label`, `score`,
   `token_cost`, `parts` and the memory's current `content`, null once it is deleted), `summaries` and `prompt_text`

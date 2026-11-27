@@ -337,7 +337,8 @@ Since P02.5c `ChatInferenceService` renders replies with it; since P04.5 `Contex
   `text` and `prefix`, the start of `text` that ends where the last user turn begins. For `gemma4` and `chatml` the
   prefix holds the stable text and the history, for `mistral_v3_tekken` only the history.
 - `structured(system_text, user_text)` returns one system text and one user turn, with no frame.
-- `stop_sequences(user_display_name)` returns the family's stop sequences.
+- `stop_sequences(user_display_name)` returns the family's stop sequences. Since P11.2 the name is the conversation's
+  persona's.
 - `neutralize_frame_markers` replaces the `[` of a line that starts with `[Contesto per` or `[Messaggio di`,
   in any case and after optional spaces, with `(`. Every text the formatter receives passes through it, so only the
   formatter writes the markers.
@@ -411,8 +412,11 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   Until P04.5 the prompt was `context/minimal.py`, blocks 1 and 2 and the newest turns trimmed a quarter at a time.
 - `ReplySettings` holds the documented defaults while no settings store exists: the `mistral_v3_tekken` family and
   the `nemo` chat sampler preset of `rocinante-x-12b`, the default text profile of both tiers since
-  [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md), `max_length` 400 (`llm.max_length`, the cap of every
-  length band) and the user `Utente`. Another active profile is not followed yet. The structured services
+  [ADR 0045](decisions/0045-drop-gemma-4-rocinante-x-default.md) and `max_length` 400 (`llm.max_length`, the cap of
+  every length band). Another active profile is not followed yet. Since P11.2 the user is no longer a setting:
+  `load_context_request`, the extraction and the summary read the conversation's own persona and note
+  (`persistence.personas.chat_persona`), and `reply_request` takes that persona's name for the stop sequence
+  ([Prompting](prompting.md#blocks-10-to-12)). The structured services
   (`CharacterCreatorService`, `MemoryExtractionService`, `SummaryService`) default to the same family, and the
   composition root passes them `ReplySettings.template`. `Worker.context` carries the
   `context.*` budgets (`ContextSettings`).

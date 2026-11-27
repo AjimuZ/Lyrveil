@@ -23,7 +23,6 @@ from pydantic import ValidationError
 from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.messages import Author
@@ -44,6 +43,7 @@ from lyrveil.memory.summaries import (
 from lyrveil.memory.window import WindowMessage, readable_before_pending, window_hash
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import memory_extraction as message_repository
+from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import summaries as repository
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.prompts import summary
@@ -199,8 +199,9 @@ class SummaryService:
     """Runs one summary step per call, as the JobHandler of `summary_checkpoint` (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `template` is the prompt family of the
-    loaded text model and `user` names the user in the prompt. `settings` gives the chunk size and the recent tail, and
-    the trigger a finished run checks again. `clock` returns the aware current time; tests pass a fake one.
+    loaded text model; the prompt names the user after the conversation's own persona, read in the transaction that
+    builds it (ADR 0048). `settings` gives the chunk size and the recent tail, and the trigger a finished run checks
+    again. `clock` returns the aware current time; tests pass a fake one.
     """
 
     def __init__(
@@ -209,7 +210,6 @@ class SummaryService:
         runtime: TextRuntime | None = None,
         *,
         template: TextTemplate = "mistral_v3_tekken",
-        user: UserProfile | None = None,
         settings: SummarySettings | None = None,
         queue: JobQueue | None = None,
         clock: Callable[[], datetime] = _utc_now,
@@ -217,7 +217,6 @@ class SummaryService:
         self._engine = engine
         self._runtime = runtime
         self._template = template
-        self._user = user or UserProfile()
         self._settings = settings or SummarySettings()
         self._queue = queue or JobQueue(clock=clock)
         self._clock = clock
@@ -285,10 +284,11 @@ class SummaryService:
             character = conversation_repository.find_profile(connection, conversation.character_id)
             assert character is not None, "a conversation's character cannot be removed while the chat exists"
             language = conversation.effective_language
-            names = {Author.USER: self._user.display_name, Author.CHARACTER: character.first_name}
+            user_name = persona_repository.chat_persona(connection, conversation_id).name
+            names = {Author.USER: user_name, Author.CHARACTER: character.first_name}
 
             def prompt(**parts: Any) -> SummaryPrompt:
-                return SummaryPrompt(self._user.display_name, character.full_name, language, **parts)
+                return SummaryPrompt(user_name, character.full_name, language, **parts)
 
             if named is not None:
                 found = self._range_messages(connection, conversation_id, *named)

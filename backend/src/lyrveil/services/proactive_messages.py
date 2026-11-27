@@ -216,11 +216,11 @@ class ProactiveMessageService:
     """Runs one proactive message per call, as the JobHandler of `proactive_message` (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `events` receives each event after
-    the change it announces was committed. `settings` give the template family, the user and the samplers of a reply,
-    `context` the prompt budgets and `retriever` finds the memories (by default an FtsMemoryRetriever on `engine`).
-    `clock` returns the aware current time; tests pass a fake one. `zone` is `LYRVEIL_TZ`, for the time context of
-    block 4. The handler also ends the event of a job that failed
-    for good (`abandon`) or was cancelled (`cancelled`).
+    the change it announces was committed. `settings` give the template family and the samplers of a reply; the user
+    is the conversation's persona, read with the rest of the prompt's input. `context` gives the prompt budgets and
+    `retriever` finds the memories (by default an FtsMemoryRetriever on `engine`). `clock` returns the aware current
+    time; tests pass a fake one. `zone` is `LYRVEIL_TZ`, for the time context of block 4. The handler also ends the
+    event of a job that failed for good (`abandon`) or was cancelled (`cancelled`).
     """
 
     def __init__(
@@ -286,7 +286,7 @@ class ProactiveMessageService:
         if isinstance(prepared, _Ended):
             return JobDone({"status": prepared.status, "reason": prepared.reason})
         event, wanted = prepared.event, prepared.wanted
-        user = wanted.user.display_name
+        user = wanted.persona.name
         if event.kind is EventKind.SCHEDULED_MESSAGE:
             reason = event.note or SCHEDULED_REASON
         else:
@@ -341,14 +341,13 @@ class ProactiveMessageService:
                 connection,
                 event.conversation_id,
                 _BEFORE_ALL,
-                user=self._settings.user,
                 now=self._clock(),
                 instruction="",
                 hint=event.note or "",
                 zone=self._zone,
             )
             assert wanted is not None, "a proactive request always loads"
-            return _Ready(event, wanted, CheckRules.for_chat(wanted.card, wanted.user, wanted.language))
+            return _Ready(event, wanted, CheckRules.for_chat(wanted.card, wanted.persona, wanted.language))
 
         return write(self._engine, work)
 
@@ -369,9 +368,9 @@ class ProactiveMessageService:
         Raises JobFailedError STRUCTURED_OUTPUT_INVALID, retryable, when the decision and its one repair are refused."""
         event, wanted = prepared.event, prepared.wanted
         memories = await to_thread.run_sync(self._memories, wanted)
-        names = {Author.USER: wanted.user.display_name, Author.CHARACTER: wanted.card.identity.first_name}
+        names = {Author.USER: wanted.persona.name, Author.CHARACTER: wanted.card.identity.first_name}
         data = prompts.DecisionPrompt(
-            user_name=wanted.user.display_name,
+            user_name=wanted.persona.name,
             character_name=wanted.card.identity.first_name,
             language=wanted.language,
             kind=event.kind.value,
@@ -439,14 +438,15 @@ class ProactiveMessageService:
         while True:
             attempts += 1
             assembly = await self._builder.build(replace(wanted, notes=notes), formatter, self._settings.max_length)
-            request = reply_request(assembly, formatter, self._settings, genkey)
+            request = reply_request(assembly, formatter, self._settings, genkey, wanted.persona.name)
             done = await self._stream(request, formatter, wanted, rules, BLOCKING if corrected else STOPPING)
             if done.stopped is not None and done.stopped in BLOCKING:
                 return _Ended("skipped", "blocked")
             if done.stopped is not None:
                 restarts.append(done.stopped)
                 corrected = True
-                notes = (note_text(done.stopped, wanted.card, wanted.user, wanted.language), *wanted.notes)[:MAX_NOTES]
+                note = note_text(done.stopped, wanted.card, wanted.persona, wanted.language)
+                notes = (note, *wanted.notes)[:MAX_NOTES]
                 continue
             normalized = done.normalized
             assert normalized is not None
@@ -492,7 +492,7 @@ class ProactiveMessageService:
         and returns the delivered text or the check that discarded it. Nothing is published: the text is delivered whole
         at the end. A stopping check or a cut asks the runtime to abort, and the rest of the stream is read and dropped.
         Raises RuntimeStreamDroppedError when the stream ends without its final chunk."""
-        cutoff = TurnCutoff(formatter.control_texts(), wanted.user.display_name)
+        cutoff = TurnCutoff(formatter.control_texts(), wanted.persona.name)
         normalizer = ReplyNormalizer(NormalizerRules.for_card(wanted.card))
         sentences = SentenceSplitter()
         finish: FinishReason | None = None

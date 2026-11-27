@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 
 from lyrveil.context.builder import Assembly, ContextBuilder, ContextRequest
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard, Identity
 from lyrveil.domain.card_draft import CharacterDraft, card_as_draft
 from lyrveil.domain.card_mapping import (
@@ -28,6 +27,7 @@ from lyrveil.domain.card_mapping import (
 )
 from lyrveil.domain.card_placeholders import MAX_MACRO_DEPTH, MacroAction, expand_macros, render_text
 from lyrveil.domain.messages import Author, Message, MessageStatus
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.domain.tavern_card import CardData, parse_card
 from lyrveil.ports.memory_retriever import RetrievalQuery, RetrievalResult
 from lyrveil.ports.text_runtime import TextChunk, TextRequest, TextRuntimeInfo
@@ -36,7 +36,7 @@ from lyrveil.prompts.formatter import formatter_for
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "tavern_cards"
 NOW = datetime(2026, 11, 27, 10, 0, tzinfo=UTC)
-ANNA = UserProfile(display_name="Anna")
+ANNA = ChatPersona(name="Anna")
 # The texts of the v2 fixture that no prompt may carry.
 NEVER_IN_A_PROMPT = (
     "Write as {{char}} in third person.",
@@ -350,7 +350,7 @@ async def _build(card: CharacterCard, scenario: dict[str, object], count: int, *
         character_id="character",
         conversation_id="chat",
         card=card,
-        user=ANNA,
+        persona=ANNA,
         language="it",
         shares_memory=False,
         history=history,

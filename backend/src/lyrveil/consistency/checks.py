@@ -1,7 +1,8 @@
 """Reply checks V1 to V13 and the adaptive notes of the anchor (docs/consistency-engine.md, Reply checks; ADR 0032):
 deterministic checks over the text a model writes for a character.
 
-The checks read the card, the user and the chat's language (`CheckRules`), and the lists under `prompts/<language>/`.
+The checks read the card, the conversation's persona and the chat's language (`CheckRules`), and the lists under
+`prompts/<language>/`.
 While a reply streams, `TurnCutoff` runs before the reply normalizer and ends the reply at control text of the
 template family, a frame marker of the dynamic context or the user's turn (V2, V3). `SentenceSplitter` cuts the text
 the normalizer releases into sentences, and `sentence_checks` runs the blocking check V4 and the corrected checks V6,
@@ -27,8 +28,9 @@ from functools import cache
 from pathlib import Path
 
 from lyrveil.consistency.content_guard import find_reply_violation
-from lyrveil.context.minimal import LANGUAGE_NAMES, UserProfile
+from lyrveil.context.minimal import LANGUAGE_NAMES
 from lyrveil.domain.card import CharacterCard
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.memory.text import stop_words, supported_languages
 
 # The lists, one folder per language code.
@@ -278,7 +280,8 @@ def _note_templates() -> dict[str, str]:
 @dataclass(frozen=True)
 class CheckRules:
     """What the checks read from the chat: the folded words of the character's full name, its age, its
-    `grammatical_gender` and `address_form`, the user's `grammatical_gender`, and the chat's language code."""
+    `grammatical_gender` and `address_form`, the `grammatical_gender` of the conversation's persona, and the chat's
+    language code."""
 
     names: frozenset[str]
     age: int
@@ -288,8 +291,9 @@ class CheckRules:
     language: str
 
     @classmethod
-    def for_chat(cls, card: CharacterCard, user: UserProfile, language: str) -> "CheckRules":
-        """Returns the rules of a chat of `card` with `user` in `language`; a code without lists reads as Italian."""
+    def for_chat(cls, card: CharacterCard, persona: ChatPersona, language: str) -> "CheckRules":
+        """Returns the rules of a chat of `card` with `persona` in `language`; a code without lists reads as
+        Italian."""
         identity = card.identity
         names = frozenset(_words(f"{identity.first_name} {identity.last_name or ''}"))
         code = language if language in LANGUAGE_NAMES else "it"
@@ -298,7 +302,7 @@ class CheckRules:
             identity.age,
             identity.grammatical_gender,
             card.communication.address_form,
-            user.grammatical_gender,
+            persona.grammatical_gender,
             code,
         )
 
@@ -646,9 +650,9 @@ def active_notes(replies: Sequence[Mapping[str, int]]) -> tuple[str, ...]:
     return tuple(active[-MAX_ACTIVE_NOTES:])
 
 
-def note_text(check: str, card: CharacterCard, user: UserProfile, language: str) -> str:
-    """Returns the corrective note of `check` (`prompts/it/notes.txt`) for a chat of `card` with `user` in `language`.
-    Raises KeyError for a check without a note: only V6, V7, V8, V9, V10, V11 and V13 have one."""
+def note_text(check: str, card: CharacterCard, persona: ChatPersona, language: str) -> str:
+    """Returns the corrective note of `check` (`prompts/it/notes.txt`) for a chat of `card` with `persona` in
+    `language`. Raises KeyError for a check without a note: only V6, V7, V8, V9, V10, V11 and V13 have one."""
     identity = card.identity
     return _note_templates()[check].format_map(
         {
@@ -656,7 +660,7 @@ def note_text(check: str, card: CharacterCard, user: UserProfile, language: str)
             "age": identity.age,
             "gender": identity.grammatical_gender,
             "address_form": card.communication.address_form,
-            "user_name": user.display_name,
+            "user_name": persona.name,
             "language_name": LANGUAGE_NAMES.get(language, LANGUAGE_NAMES["it"]),
         }
     )

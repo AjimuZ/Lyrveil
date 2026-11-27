@@ -80,14 +80,12 @@ Values are validated against a Pydantic model. `PATCH /settings` rejects unknown
 
 | Key | Default | Range |
 | --- | --- | --- |
-| `user.display_name` | `Utente` | 1 to 40 chars |
-| `user.grammatical_gender` | `non_indicato` | `femminile`, `maschile`, `non_indicato`. How characters address the user in Italian ([ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md)) |
 | `ui.language` | `it` | `it` |
 | `characters.default_language` | `it` | `it`, `en`, `fr`, `de`, `es` |
 | `app.first_start_notice_seen` | `false` | Boolean |
 | `app.diagnostic_mode` | `false` | Boolean. Turns on the Memory Studio's Diagnostica tab and keeps the prompt text of replies built while it is on |
 
-Version 1.1 (P11, [ADR 0048](decisions/0048-user-personas.md)): `user.display_name` and `user.grammatical_gender` become the name and gender of the default persona. Delivered in P11.1a: migration `0020` creates that persona from the two rows, or from the defaults above when a row is missing or out of range, and deletes the two keys ([Data model](data-model.md#p11-user-personas)). Planned: the prompts read the conversation's persona instead of these defaults (P11.2), and **Le tue persone** replaces the two keys in the settings screen (P11.4).
+Version 1.1 (P11, [ADR 0048](decisions/0048-user-personas.md)): the former keys `user.display_name` (default `Utente`, 1 to 40 characters) and `user.grammatical_gender` (default `non_indicato`; `femminile`, `maschile` or `non_indicato`, [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md)) became the name and gender of the default persona. Delivered in P11.1a: migration `0020` creates that persona from the two rows, or from those defaults when a row is missing or out of range, and deletes the two keys ([Data model](data-model.md#p11-user-personas)). Delivered in P11.2: every prompt reads the conversation's own persona, so nothing reads the two keys or their defaults any more ([Prompting](prompting.md#blocks-10-to-12)). Planned: **Le tue persone** takes their place in the settings screen (P11.4).
 
 Delivered so far: `app.diagnostic_mode` alone, through `GET` and `PATCH /settings` ([API](api.md#messages)), read from
 `application_settings` on every use and applied at once. A missing row means the default. The other keys are planned

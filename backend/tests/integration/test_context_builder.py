@@ -22,7 +22,6 @@ from lyrveil.context.builder import (
     ContextBuilder,
     ContextRequest,
 )
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.messages import Author, MessageStatus, VariantSource, VariantStatus, content_hash
@@ -255,7 +254,7 @@ async def assemble(
         before: int = connection.execute(
             text("SELECT next_seq FROM conversations WHERE id = :id"), {"id": conversation_id}
         ).scalar_one()
-        return load_context_request(connection, conversation_id, before, user=UserProfile(), now=NOW)
+        return load_context_request(connection, conversation_id, before, now=NOW)
 
     wanted = read(engine, load)
     assert wanted is not None

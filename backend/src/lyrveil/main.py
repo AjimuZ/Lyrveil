@@ -203,18 +203,11 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             engine,
             runtime,
             template=worker.replies.template,
-            user=worker.replies.user,
             settings=worker.memory,
             events=app.state.events,
             zone=app.state.settings.zone,
         )
-        summaries = SummaryService(
-            engine,
-            runtime,
-            template=worker.replies.template,
-            user=worker.replies.user,
-            settings=worker.summaries,
-        )
+        summaries = SummaryService(engine, runtime, template=worker.replies.template, settings=worker.summaries)
         proactive_messages = ProactiveMessageService(
             engine, runtime, app.state.events, worker.replies, context=worker.context, zone=app.state.settings.zone
         )

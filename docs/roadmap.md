@@ -255,7 +255,7 @@ Evidence:
 
 - [x] P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,
   `scenarios.persona_id` and `memories.persona_id`.
-- [ ] P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and
+- [x] P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and
   proactive prompts, and the new block 10.
 - [ ] P11.3 Shared memories read by persona.
 - [ ] P11.4 **Le tue persone**, the persona and note in the new-chat picker, and the note in the context panel.

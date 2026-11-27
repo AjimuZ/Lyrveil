@@ -21,7 +21,6 @@ from sqlalchemy import Connection, Engine, text
 
 from lyrveil.consistency.state import DAY_LIMIT, INITIAL_VALUES, RUN_LIMIT, UPDATE_REASONS, RelationshipState, replay
 from lyrveil.context.builder import StateText
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.memory_extraction import RelationshipEvent, StateUpdate
@@ -227,7 +226,7 @@ class Chat:
 
     def block_four(self) -> StateText:
         def load(connection: Connection) -> StateText:
-            request = load_context_request(connection, self.conversation_id, 10_000, user=UserProfile(), now=START)
+            request = load_context_request(connection, self.conversation_id, 10_000, now=START)
             assert request is not None
             return request.state
 

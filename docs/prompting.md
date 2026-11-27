@@ -8,7 +8,8 @@ draft, the memory extraction, the summaries, the image scene, the visual profile
 proactive message are delivered as Python modules in `backend/src/lyrveil/prompts/`, with the Italian pattern lists as
 text files in `prompts/it/`. The Italian quality protocol (T-QLT-01) has not run on a real model: its generation, metrics
 and blind sheet are automated ([Testing](testing.md#t-qlt-01-generation-blind-sheet-and-import)), and only the short
-smoke mode of the generation has run, so no profile has a verdict.
+smoke mode of the generation has run, so no profile has a verdict. Delivered in P11.2: block 10 and the conversation's
+persona in every prompt ([Blocks 10 to 12](#blocks-10-to-12)).
 
 **Not delivered: `PromptTemplateService` and the `.j2` files.** The design below loads versioned Jinja2 templates from
 `backend/src/lyrveil/prompts/<language>/`. The code does not: Jinja2 is not a dependency, and the template listings in this
@@ -43,7 +44,7 @@ receives the same four logical parts for every family
 
 | Part | Blocks | Changes when |
 | --- | --- | --- |
-| Stable system text | 1, 2, 3, 6 | The card is edited, the profile changes or a summary checkpoint is added |
+| Stable system text | 1, 2, 3, 10, the scenario copy, 6 | The card, the persona or the conversation's note is edited, the profile changes or a summary checkpoint is added |
 | History | 7, as plain turns | A new exchange is appended |
 | Dynamic context | 4, 5, 9, inside the frame below | Every reply |
 | Current message | 8 | Every reply |
@@ -367,11 +368,12 @@ first ([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)):
 
 ### Blocks 10 to 12
 
-Planned for version 1.1 and not built. Block 10 comes with P11
-([ADR 0048](decisions/0048-user-personas.md)), and blocks 11 and 12 come with P12
-([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). Their budgets and their place in the reduction order are in
-[Context composition](memory-engine.md#planned-for-version-11). From P11, `user.display_name` and
-`user.grammatical_gender` in every block, check and stop sequence come from the conversation's persona.
+Version 1.1. Block 10 is delivered in P11.2 ([ADR 0048](decisions/0048-user-personas.md)); blocks 11 and 12 are
+planned for P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) and not built. Their budgets and their place in
+the reduction order are in [Context composition](memory-engine.md#planned-for-version-11). Since P11.2,
+`user.display_name` and `user.grammatical_gender` in the templates of this document,
+[Image generation](image-generation.md#caption) and [Scheduler](scheduler.md#generation-flow) stand for the `name` and
+`grammatical_gender` of the conversation's persona.
 
 **Order of the stable text.** It becomes blocks 1, 2, 3, 10 and 11, then the scenario, then block 6. Block 12 joins the
 dynamic context after block 5 and before the anchor. An empty block adds nothing, not even its heading.
@@ -385,6 +387,30 @@ Cosa sai di {{ user.display_name }}:
 {% if persona.about %}{{ persona.about }}{% endif %}
 {% if persona_note %}Tra voi: {{ persona_note }}{% endif %}
 ```
+
+Delivered in P11.2:
+
+- **Which persona.** `load_context_request` reads the conversation's own `persona_id` row, in any status, with its
+  `persona_note` (`chat_persona` in `lyrveil/persistence/personas.py`), on every reply, proactive message and image
+  caption; the extraction and summary jobs read it when they build their prompt. A conversation whose `persona_id` is
+  NULL, which only a row written outside the service can leave, reads the default persona. No prompt reads the old
+  settings or another conversation's persona or note, and a persona or note edit reaches the prompt from the next
+  reply on.
+- **Where the persona appears.** Its name fills block 1, block 3 (the address line and the user's example lines),
+  block 4's bands, block 10's heading, the anchor, the frame markers, the corrective notes, the `{{user}}` placeholder
+  of card and scenario text, the caption line, the stop sequence `\n{name}:`, the V2 and V3 cut, the extraction,
+  summary and proactive decision prompts and the proactive instruction. Its gender fills block 1's address line and
+  check V12.
+- **Block 10** is `persona_block` in `lyrveil/context/blocks.py`. The age line reads `Ha 34 anni.` and is left out when
+  the age is not stated; the other three lines are written as stored, without an added period. The persona's own text
+  is not searched for `{{char}}` or `{{user}}`. The frame-marker escape of the stable text covers it.
+- **Budget.** Block 10 is rendered whole while it stays within 300 tokens (`PERSONA_MAX_TOKENS` in
+  `lyrveil/context/builder.py`); over that, `appearance` is left out, then `about`, as block 3 stops its examples at its
+  maximum. The age and the note are never left out, so the block exceeds 300 tokens only if they alone do. The target
+  of 150 plans the window and is not a limit of the code. Under budget pressure the reduction `persona` removes
+  `appearance`, then `about`, after `identity` and before `state`
+  ([Context composition](memory-engine.md#planned-for-version-11)). `Assembly.blocks` counts block 10 as `persona`;
+  the diagnostic view of the frontend does not show that count yet.
 
 Block 11, lore entries that are always active, stable:
 

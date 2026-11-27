@@ -717,8 +717,9 @@ characters keeps this rare.
 
 ### Planned for version 1.1
 
-Not built. P11 adds block 10, from [ADR 0048](decisions/0048-user-personas.md), and P12 adds blocks 11 and 12, from
-[ADR 0049](decisions/0049-worlds-and-lore-entries.md). Their texts are in [Prompting](prompting.md#blocks-10-to-12).
+Block 10 is delivered in P11.2, from [ADR 0048](decisions/0048-user-personas.md); blocks 11 and 12 are not built, and
+P12 adds them, from [ADR 0049](decisions/0049-worlds-and-lore-entries.md). Their texts are in
+[Prompting](prompting.md#blocks-10-to-12).
 
 | # | Block | Part | Priority when over budget | Min | Target | Max |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -747,6 +748,13 @@ The reduction order becomes:
 
 Each assembly also records `lore_refs`, which diagnostic mode lists apart from the memories
 ([Data model](data-model.md#version-11-tables-planned)).
+
+Delivered in P11.2 for block 10 (`lyrveil/context/builder.py`): the stable text is blocks 1, 2, 3 and 10, the scenario
+and block 6. Block 10 is rendered with the required blocks, whole up to its maximum of 300 tokens and otherwise
+without `appearance`, then without `about`. Step 7 of the order above is the reduction `persona`, between `identity`
+and `state` in `REDUCTION_ORDER`, and `history_below_floor` stays the last resort after them. `Assembly.blocks` and
+the stored assembly count the block as `persona`. Unit tests in `backend/tests/unit/test_context_builder.py` cover
+the cap, the reduction and T-MOD-05 with block 10; they were not run when they were written.
 
 ### Token counting
 

@@ -262,7 +262,7 @@ These do not interrupt the reply. They feed the diagnostic view, the adaptive no
 | V7 | Same first three words as one of the last 10 replies, or similarity of at least 0.9 |
 | V8 | Language differs from the expected one, by a stop-word ratio |
 | V9 | Contains a phrase from the calque list |
-| V12 | Second-person agreement contradicts `user.grammatical_gender`, such as `sei stanca` for a user set to `maschile`. Italian only |
+| V12 | Second-person agreement contradicts the `grammatical_gender` of the conversation's persona, such as `sei stanca` for a persona set to `maschile`. Italian only |
 | V13 | Forms of the other address form: `Lei`, `La` and courtesy verb forms for a `tu` character, or `tu`, `ti` and `tuo` for a `lei` character. Italian only |
 
 ### Adaptive notes
@@ -316,7 +316,8 @@ lists of `prompts/<language>/`. `ChatInferenceService` runs them on every reply
   Italian, in words (`trentun`). A word of `[not_before]` right after it (`ho 5 anni di esperienza`) means a duration.
 - **V11 and V12.** A lead of `gender_agreement.txt` (`sono`, `mi sono` and others for V11; `sei`, `ti sei` and others
   for V12), at most one adverb, then a stem ending in `o` or `a` that contradicts the gender. Plural endings and words
-  that are also adverbs (`solo`, `certo`) are left out. V12 reads `user.grammatical_gender`.
+  that are also adverbs (`solo`, `certo`) are left out. V12 reads the `grammatical_gender` of the conversation's
+  persona, which replaced `user.grammatical_gender` in P11.2 ([ADR 0048](decisions/0048-user-personas.md)).
 - **V13.** The forms of `address_forms.txt`. For a `tu` character, `Lei`, `Suo`, `Sua`, `Suoi` and `Sue` count only
   capitalized and inside a sentence, and courtesy forms such as `mi scusi` count anywhere. For a `lei` character,
   `tu`, `ti`, `te`, `tuo` and imperatives such as `dimmi` count. `La` and `Le` are left out, because a place such as

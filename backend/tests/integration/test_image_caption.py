@@ -15,7 +15,6 @@ from sqlalchemy import Connection, Engine, text
 
 from integration.test_context_builder import STAMP, add_message
 from lyrveil.context.builder import ContextRequest
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.identifiers import new_id
 from lyrveil.domain.messages import Author
@@ -107,7 +106,7 @@ def chat_of(engine: Engine) -> ContextRequest:
         before: int = connection.execute(
             text("SELECT next_seq FROM conversations WHERE id = :id"), {"id": conversation_id}
         ).scalar_one()
-        return load_context_request(connection, conversation_id, before, user=UserProfile(), now=NOW)
+        return load_context_request(connection, conversation_id, before, now=NOW)
 
     chat = read(engine, load)
     assert chat is not None

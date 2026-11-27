@@ -1401,7 +1401,13 @@ Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). T-PSN-01 
 T-PSN-02 (name, age, gender, the content guard on every text and on the note, the default, the archive and delete
 rules) and the conversation half of T-PSN-04 (`persona_id` fixed, `persona_note` editable) are written in
 `backend/tests/integration/test_personas.py` (P11.1b), together with the choice of persona for a new conversation; they
-were not run when they were written. The prompt half of T-PSN-04 and the other tests are not written yet.
+were not run when they were written. T-PSN-03 and the prompt half of T-PSN-04 are written in P11.2: the unit half in
+`backend/tests/unit/test_context_builder.py` (the persona in blocks 1 and 3, the anchor and the frame, block 10 after
+block 3, its 300-token cap, the `persona` reduction after `identity`, and T-MOD-05 with block 10), and the integration
+half in `backend/tests/integration/test_persona_prompts.py` (a reply through the scheduler with its stop sequences and
+check V12, the extraction, summary and proactive prompts, and a persona and note edit seen by the next prompt only,
+with a second persona whose texts never appear). They were not run when they were written. T-PSN-05 and T-PSN-06 are
+not written yet.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

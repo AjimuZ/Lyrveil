@@ -37,9 +37,9 @@ from lyrveil.consistency.state import (
     update_proposals,
 )
 from lyrveil.context.blocks import state_lines
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.identifiers import to_utc_text
 from lyrveil.domain.memory_extraction import RelationshipEvent, StateUpdate
+from lyrveil.domain.personas import ChatPersona
 
 ROME = ZoneInfo("Europe/Rome")
 START = datetime(2026, 11, 7, 8, 0, tzinfo=UTC)
@@ -336,7 +336,7 @@ def test_random_edits_and_deletions_keep_the_state_equal_to_replaying_history() 
 
 
 def test_block_four_words_the_state_without_numbers() -> None:
-    sara = UserProfile(display_name="Sara")
+    sara = ChatPersona(name="Sara")
     first, no_details = state_lines(RelationshipState(), sara)
     assert first == (
         "Il vostro rapporto: vi siete appena conosciuti, sei prudente con Sara, parli poco di te, nessuna tensione.",

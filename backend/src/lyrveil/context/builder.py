@@ -1,11 +1,12 @@
 """ContextBuilder: composes the prompt of one reply within the runtime's real window (docs/memory-engine.md, Context
 composition; docs/prompting.md, System blocks and Length bands; ADR 0031).
 
-The blocks fill the four parts of lyrveil.prompts.formatter.ChatParts: the stable text (blocks 1, 2, 3, the
+The blocks fill the four parts of lyrveil.prompts.formatter.ChatParts: the stable text (blocks 1, 2, 3, 10, the
 conversation's scenario copy and block 6), the history (block 7), the dynamic context (blocks 4, 5 and 9) and the
-current message (block 8). Every count that decides is the runtime's (TokenCounter): blocks and messages are counted one
-by one to choose what to try, and the whole prompt is counted with `special` before it is sent. The retriever's
-estimate only packs block 5. Nothing is written: the caller records the memory use after the reply is committed.
+current message (block 8). The user every block names is the conversation's persona (ADR 0048). Every count that
+decides is the runtime's (TokenCounter): blocks and messages are counted one by one to choose what to try, and the whole
+prompt is counted with `special` before it is sent. The retriever's estimate only packs block 5. Nothing is written: the
+caller records the memory use after the reply is committed.
 """
 
 from collections.abc import Mapping, Sequence
@@ -16,30 +17,35 @@ from anyio import to_thread
 
 from lyrveil.context.blocks import (
     OPTIONAL_IDENTITY,
+    OPTIONAL_PERSONA,
     anchor,
     canonical_identity,
     communication_profile,
     global_instructions,
     memory_block,
+    persona_block,
     reply_length,
     stable_text,
     state_block,
     summary_block,
 )
-from lyrveil.context.minimal import UserProfile, scenario_block
+from lyrveil.context.minimal import scenario_block
 from lyrveil.context.tokens import TokenCounter
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.card_placeholders import render_card, render_text
 from lyrveil.domain.messages import Author, Message
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.memory.retrieval import is_past_intent
 from lyrveil.memory.summaries import ACTIVE, Checkpoint, choose_summaries, coverage_gaps
 from lyrveil.ports.memory_retriever import MemoryRetriever, RetrievalQuery, RetrievalResult, RetrievedMemory
 from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.prompts.formatter import ChatParts, FormattedPrompt, PromptFormatter, Turn
 
-# docs/memory-engine.md (Context composition): the maxima of blocks 3, 5 and 6, the floor of block 7 and the cap of
-# block 8, in tokens.
+# docs/memory-engine.md (Context composition): the maxima of blocks 3, 10, 5 and 6, the floor of block 7 and the cap of
+# block 8, in tokens. Block 10's minimum is 0, an empty block, and its target of 150 only plans the window
+# (docs/memory-engine.md, Planned for version 1.1): like blocks 1 to 3 it is rendered whole up to its maximum.
 COMMUNICATION_MAX_TOKENS = 500
+PERSONA_MAX_TOKENS = 300
 MEMORY_MAX_TOKENS = 1400
 SUMMARY_MAX_TOKENS = 900
 HISTORY_FLOOR_TOKENS = 800
@@ -57,15 +63,17 @@ SUMMARIES = "summaries"
 MEMORIES = "memories"
 HISTORY = "history"
 IDENTITY = "identity"
+PERSONA = "persona"
 STATE = "state"
 HISTORY_BELOW_FLOOR = "history_below_floor"
-REDUCTION_ORDER = (EXAMPLES, SUMMARIES, MEMORIES, HISTORY, IDENTITY, STATE, HISTORY_BELOW_FLOOR)
+REDUCTION_ORDER = (EXAMPLES, SUMMARIES, MEMORIES, HISTORY, IDENTITY, PERSONA, STATE, HISTORY_BELOW_FLOOR)
 
 # The keys of Assembly.blocks: the token count of each block of the final prompt.
 BLOCK_NAMES = (
     "global",
     "identity",
     "communication",
+    "persona",
     "scenario",
     "summary",
     "history",
@@ -132,12 +140,14 @@ class ContextRequest:
     them out.
 
     `card` and `scenario` are the stored texts, `{{char}}` and `{{user}}` included; the build renders them (ADR 0047).
+    `persona` is the conversation's own persona with its note (ADR 0048): every block, the frame and the placeholders
+    name it, and block 10 describes it.
     """
 
     character_id: str
     conversation_id: str
     card: CharacterCard
-    user: UserProfile
+    persona: ChatPersona
     language: str
     shares_memory: bool
     history: Sequence[Message]
@@ -233,6 +243,7 @@ class _Draft:
     memories: list[RetrievedMemory]
     history: list[Message] = field(default_factory=list)
     dropped: set[str] = field(default_factory=set)
+    persona_dropped: set[str] = field(default_factory=set)
     state_details: bool = True
 
 
@@ -258,7 +269,8 @@ class ContextBuilder:
 
         The window is the context size the runtime reports. The reply reserve is the band's `max_length` capped by
         `llm_max_length`, and the safety margin is kept free too. Blocks 1, 2, 3 (examples in saved order while block 3
-        stays within COMMUNICATION_MAX_TOKENS), 4, 8 (cut to CURRENT_MAX_TOKENS) and 9 are rendered first, memories and
+        stays within COMMUNICATION_MAX_TOKENS), 10 (without `appearance`, then without `about`, while it is over
+        PERSONA_MAX_TOKENS), 4, 8 (cut to CURRENT_MAX_TOKENS) and 9 are rendered first, memories and
         summaries are chosen at their targets, and the history takes what is left, from the newest message back,
         never less than HISTORY_FLOOR_TOKENS. When the whole history fits, the room left goes to memories, then
         summaries, up to their maxima. The whole prompt is then counted; while it is over `available` it is reduced in
@@ -282,9 +294,9 @@ class _Run:
         tokenizer_id: str,
     ) -> None:
         # ADR 0047: the stored card and scenario keep `{{char}}` and `{{user}}`; every block of this prompt reads them
-        # rendered with the first name and the user's display name. Rendering is pure, so the stable text stays the same
-        # bytes from one reply to the next (ADR 0031).
-        user_name = request.user.display_name
+        # rendered with the first name and the name of the conversation's persona. Rendering is pure, so the stable
+        # text stays the same bytes from one reply to the next (ADR 0031).
+        user_name = request.persona.name
         request = replace(request, card=render_card(request.card, user_name))
         first_name = request.card.identity.first_name
         self._counter = counter
@@ -295,11 +307,11 @@ class _Run:
         self._tokenizer = tokenizer_id
         self._turn_costs: dict[str, int] = {}
         self._overhead = 0
-        self._global = global_instructions(request.card, request.user, request.language)
+        self._global = global_instructions(request.card, request.persona, request.language)
         self._scenario = render_text(scenario_block(request.scenario), first_name, user_name)
         # The extra line closes the dynamic context, so it is counted with the anchor, which is never reduced either.
         extra = " ".join(request.extra_line.split())
-        self._anchor = "\n".join(part for part in (anchor(request.card, request.user, request.notes), extra) if part)
+        self._anchor = "\n".join(part for part in (anchor(request.card, request.persona, request.notes), extra) if part)
 
     async def assemble(self, limit: int, llm_max_length: int) -> Assembly:
         request, settings = self._request, self._settings
@@ -320,6 +332,7 @@ class _Run:
             examples=await self._examples_that_fit(),
             summaries=[by_id[c.id] for c in selection.checkpoints],
             memories=list(retrieved.items),
+            persona_dropped=await self._persona_over_max(),
         )
         _, base = await self._count(draft)
         room = available - base
@@ -375,7 +388,10 @@ class _Run:
         return canonical_identity(self._request.card, frozenset(draft.dropped))
 
     def _communication(self, draft: _Draft) -> str:
-        return communication_profile(self._request.card, self._request.user, draft.examples)
+        return communication_profile(self._request.card, self._request.persona, draft.examples)
+
+    def _persona(self, draft: _Draft) -> str:
+        return persona_block(self._request.persona, frozenset(draft.persona_dropped))
 
     def _summary(self, draft: _Draft) -> str:
         return summary_block([summary.text for summary in draft.summaries])
@@ -388,14 +404,19 @@ class _Run:
         request = self._request
         return ChatParts(
             stable_text=stable_text(
-                self._global, self._identity(draft), self._communication(draft), self._scenario, self._summary(draft)
+                self._global,
+                self._identity(draft),
+                self._communication(draft),
+                self._persona(draft),
+                self._scenario,
+                self._summary(draft),
             ),
             history=tuple(_turn(message) for message in draft.history),
             state=self._state(draft),
             memories=memory_block(draft.memories),
             anchor=self._anchor,
             character_first_name=request.card.identity.first_name,
-            user_display_name=request.user.display_name,
+            user_display_name=request.persona.name,
         )
 
     # Counting
@@ -448,6 +469,7 @@ class _Run:
             "global": self._global,
             "identity": self._identity(draft),
             "communication": self._communication(draft),
+            "persona": self._persona(draft),
             "scenario": self._scenario,
             "summary": self._summary(draft),
             "state": self._state(draft),
@@ -483,9 +505,21 @@ class _Run:
         request = self._request
         examples = request.card.communication.examples
         for shown in range(1, len(examples) + 1):
-            if await self._tokens(communication_profile(request.card, request.user, shown)) > COMMUNICATION_MAX_TOKENS:
+            profile = communication_profile(request.card, request.persona, shown)
+            if await self._tokens(profile) > COMMUNICATION_MAX_TOKENS:
                 return shown - 1
         return len(examples)
+
+    async def _persona_over_max(self) -> set[str]:
+        """Returns the parts of OPTIONAL_PERSONA that block 10 leaves out to stay within PERSONA_MAX_TOKENS: none when
+        the whole block fits, else `appearance`, then `about` as well. The age and the note are never left out, so the
+        block can stay over its maximum only when they alone exceed it."""
+        dropped: set[str] = set()
+        for key in OPTIONAL_PERSONA:
+            if await self._tokens(persona_block(self._request.persona, frozenset(dropped))) <= PERSONA_MAX_TOKENS:
+                break
+            dropped.add(key)
+        return dropped
 
     async def _retrieve(self, budget: int) -> RetrievalResult:
         if budget <= 0:
@@ -577,6 +611,16 @@ class _Run:
                     continue
                 draft.dropped.add(key)
                 reduced = self._identity(draft)
+                if reduced != full:
+                    return await self._tokens(full) - await self._tokens(reduced)
+            return None
+        if name == PERSONA:
+            full = self._persona(draft)
+            for key in OPTIONAL_PERSONA:
+                if key in draft.persona_dropped:
+                    continue
+                draft.persona_dropped.add(key)
+                reduced = self._persona(draft)
                 if reduced != full:
                     return await self._tokens(full) - await self._tokens(reduced)
             return None

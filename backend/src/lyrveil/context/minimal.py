@@ -1,24 +1,15 @@
-"""Prompt pieces shared by every prompt of a chat: the user as prompts name them, the language names and the scenario
-block.
+"""Prompt pieces shared by every prompt of a chat: the language names and the scenario block.
 
 Since P04.5 lyrveil.context.builder composes the reply prompt and lyrveil.context.blocks renders its blocks; the
-structured tasks (extraction, summaries) read the names below too.
+structured tasks (extraction, summaries) read the names below too. The user every prompt names is the conversation's
+persona, lyrveil.domain.personas.ChatPersona (ADR 0048).
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 
 # docs/prompting.md (Language resolution): the supported codes, by the name block 1 writes.
 LANGUAGE_NAMES = {"it": "italiano", "en": "inglese", "fr": "francese", "de": "tedesco", "es": "spagnolo"}
 NO_GENDER = "non_indicato"
-
-
-@dataclass(frozen=True)
-class UserProfile:
-    """The user as the prompt names them: the settings `user.display_name` and `user.grammatical_gender`."""
-
-    display_name: str = "Utente"
-    grammatical_gender: str = NO_GENDER
 
 
 def scenario_block(snapshot: Mapping[str, object] | None) -> str:

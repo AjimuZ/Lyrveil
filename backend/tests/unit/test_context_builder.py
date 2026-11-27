@@ -1,6 +1,6 @@
 """Tests of lyrveil/context/blocks.py and lyrveil/context/builder.py without a database: T-CON-11 (length bands, the
-anchor, the examples of block 3), T-MOD-05 with the full context (two replies share the stable text and the history) and
-the prefix of a scripted conversation (P08.4).
+anchor, the examples of block 3), T-MOD-05 with the full context (two replies share the stable text and the history),
+the prefix of a scripted conversation (P08.4), and the unit half of T-PSN-03 (block 10, its budget and its cut order).
 
 The runtime is a fake whose tokenizer counts whitespace-separated words; the retriever is a fake that packs fixed items
 by their estimated cost.
@@ -13,19 +13,32 @@ from typing import Any, get_args
 import pytest
 
 from lyrveil.catalog import TextTemplate
-from lyrveil.context.blocks import LENGTH_BANDS, anchor, communication_profile, reply_length
+from lyrveil.context.blocks import (
+    LENGTH_BANDS,
+    OPTIONAL_IDENTITY,
+    anchor,
+    canonical_identity,
+    communication_profile,
+    persona_block,
+    reply_length,
+)
 from lyrveil.context.builder import (
     COMMUNICATION_MAX_TOKENS,
     CURRENT_MAX_TOKENS,
     EXAMPLES,
+    IDENTITY,
+    PERSONA,
+    PERSONA_MAX_TOKENS,
+    REDUCTION_ORDER,
+    STATE,
     Assembly,
     ContextBuilder,
     ContextRequest,
     split_messages,
 )
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard, MessageLength
 from lyrveil.domain.messages import Author, Message, MessageStatus
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.memory.retrieval import estimate_tokens
 from lyrveil.ports.memory_retriever import RetrievalQuery, RetrievalResult, RetrievedMemory, ScoreParts
 from lyrveil.ports.text_runtime import TextChunk, TextRequest, TextRuntimeInfo
@@ -34,8 +47,12 @@ from lyrveil.prompts.formatter import formatter_for
 FAMILIES: tuple[TextTemplate, ...] = get_args(TextTemplate)
 BANDS: tuple[MessageLength, ...] = get_args(MessageLength)
 NOW = datetime(2026, 11, 7, 10, 0, tzinfo=UTC)
-USER = UserProfile()
+USER = ChatPersona()
 FRAME = "[Contesto per Giulia, non scritto da Utente]"
+APPEARANCE = "Capelli corti e neri, occhiali tondi."
+ABOUT = "Fa la cuoca in una trattoria di Sampierdarena e suona il contrabbasso."
+NOTE = "Vi siete conosciute a un corso di vela."
+MARTA = ChatPersona("Marta", "femminile", 34, APPEARANCE, ABOUT, NOTE)
 
 
 class WordRuntime:
@@ -157,7 +174,7 @@ def request(character: CharacterCard, messages: Sequence[Message], **overrides: 
         "character_id": "character",
         "conversation_id": "chat",
         "card": character,
-        "user": USER,
+        "persona": USER,
         "language": "it",
         "shares_memory": False,
         "history": history,
@@ -341,3 +358,133 @@ async def test_the_stable_prefix_stays_byte_identical_across_a_scripted_conversa
     report = f"{family}: {len(sizes)} replies, prefix bytes per reply {sizes}, every prefix extends the one before"
     record_property("prefix_stability", report)
     print(f"prefix stability, {report}")
+
+
+def test_block_10_holds_the_age_appearance_about_and_note_and_an_empty_one_adds_nothing() -> None:
+    assert persona_block(MARTA).splitlines() == [
+        "Cosa sai di Marta:",
+        "Ha 34 anni.",
+        f"Aspetto: {APPEARANCE}",
+        ABOUT,
+        f"Tra voi: {NOTE}",
+    ]
+    assert persona_block(ChatPersona("Marta", age=34)) == "Cosa sai di Marta:\nHa 34 anni."
+    assert persona_block(ChatPersona("Marta", "femminile")) == "", "the name and the gender alone are block 1's"
+    cut = persona_block(MARTA, frozenset({"appearance", "about"}))
+    assert cut == f"Cosa sai di Marta:\nHa 34 anni.\nTra voi: {NOTE}"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("family", FAMILIES)
+async def test_the_persona_names_every_block_and_block_10_follows_block_3(family: TextTemplate) -> None:
+    """T-PSN-03, unit half: block 1, block 3, the anchor and the frame name the persona, and block 10 sits in the stable
+    text between block 3 and the scenario."""
+    character = card(examples=[{"user": "Che fai stasera?", "character": "Restauro una mappa."}])
+    scenario = {"title": "Il porto", "description": "Vi incontrate al porto vecchio.", "setting": "Genova"}
+    assembly = await build(character, chat(5), family=family, persona=MARTA, scenario=scenario)
+
+    text = assembly.prompt.text
+    assert "Stai interpretando Giulia Rossi in una chat privata con Marta." in text
+    assert "- Quando ti rivolgi a Marta, usa il femminile." in text
+    assert text.count("Dai del tu a Marta.") == 2, "block 3 and the anchor"
+    block = persona_block(MARTA)
+    assert f"{communication_profile(character, MARTA, 1)}\n\n{block}\n\nScenario: Il porto" in text
+    assert "[Contesto per Giulia, non scritto da Marta]" in text
+    assert "[Messaggio di Marta]\nMessaggio numero 5" in text
+    assert "Utente" not in text
+    assert assembly.blocks["persona"] == len(block.split())
+
+
+@pytest.mark.anyio
+async def test_a_persona_with_only_a_name_and_a_gender_adds_no_block_10() -> None:
+    assembly = await build(card(), chat(5), persona=ChatPersona("Marta", "femminile"))
+    assert "Cosa sai di" not in assembly.prompt.text
+    assert assembly.blocks["persona"] == 0
+
+
+@pytest.mark.anyio
+async def test_block_10_leaves_out_appearance_then_about_to_stay_within_its_maximum() -> None:
+    """Block 10 is rendered whole up to PERSONA_MAX_TOKENS. Over it, `appearance` goes first, then `about`; the age and
+    the note always stay. The cut is part of rendering, like block 3's examples, not a reduction."""
+    tall = " ".join(["alta"] * 120)
+    cook = " ".join(["cuoca"] * 200)
+    first = await build(card(), chat(5), persona=ChatPersona("Marta", "femminile", 34, tall, cook, NOTE))
+    assert "alta alta" not in first.prompt.text
+    assert cook in first.prompt.text
+    assert first.blocks["persona"] <= PERSONA_MAX_TOKENS
+    assert first.reductions == ()
+
+    longer = " ".join(["cuoca"] * 320)
+    second = await build(card(), chat(5), persona=ChatPersona("Marta", "femminile", 34, tall, longer, NOTE))
+    assert "Aspetto:" not in second.prompt.text
+    assert "cuoca" not in second.prompt.text
+    assert f"Cosa sai di Marta:\nHa 34 anni.\nTra voi: {NOTE}" in second.prompt.text
+
+
+@pytest.mark.anyio
+async def test_under_pressure_block_10_loses_appearance_then_about_after_the_identity_parts() -> None:
+    """docs/memory-engine.md (Planned for version 1.1): after the optional identity parts and before the state details,
+    block 10 loses `appearance`, then `about`. The name and the gender in block 1, the age and the note stay."""
+    assert REDUCTION_ORDER.index(IDENTITY) < REDUCTION_ORDER.index(PERSONA) < REDUCTION_ORDER.index(STATE)
+    character = card()
+    roomy = await build(character, chat(3), persona=MARTA)
+    assert roomy.reductions == ()
+    full_identity = len(canonical_identity(character).split())
+    identity_parts = full_identity - len(canonical_identity(character, frozenset(OPTIONAL_IDENTITY)).split())
+    appearance = len(f"Aspetto: {APPEARANCE}".split())
+
+    def window(short: int) -> int:
+        """A window `short` tokens too small for the roomy prompt."""
+        return roomy.token_total - short + roomy.max_length + 64
+
+    no_appearance = await build(character, chat(3), persona=MARTA, window=window(identity_parts + 1))
+    assert no_appearance.fits
+    assert no_appearance.reductions == (IDENTITY, PERSONA)
+    assert "Aspetto:" not in no_appearance.prompt.text
+    assert ABOUT in no_appearance.prompt.text
+
+    neither = await build(character, chat(3), persona=MARTA, window=window(identity_parts + appearance + 1))
+    assert neither.fits
+    assert neither.reductions == (IDENTITY, PERSONA)
+    kept = neither.prompt.text
+    assert "Aspetto:" not in kept
+    assert ABOUT not in kept
+    assert "Stai interpretando Giulia Rossi in una chat privata con Marta." in kept
+    assert "- Quando ti rivolgi a Marta, usa il femminile." in kept
+    assert f"Cosa sai di Marta:\nHa 34 anni.\nTra voi: {NOTE}" in kept
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("family", FAMILIES)
+async def test_consecutive_replies_share_block_10_in_the_stable_text(family: TextTemplate) -> None:
+    """T-MOD-05 with block 10: two replies of a chat with a persona share the stable text, block 10 included, and the
+    history byte for byte, while the memories and the notes change in the dynamic context."""
+    first = await build(
+        card(), chat(5), family=family, persona=MARTA, retriever=Retriever([memory(1, "Vive a Genova.")])
+    )
+    second = await build(
+        card(),
+        chat(7),
+        family=family,
+        persona=MARTA,
+        retriever=Retriever([memory(2, "Ama il mare.")]),
+        notes=("Hai 29 anni.",),
+    )
+
+    assert second.prompt.text.startswith(first.prompt.prefix)
+    assert second.prompt.prefix.startswith(first.prompt.prefix)
+    block = persona_block(MARTA)
+    stable_parts = []
+    for assembly in (first, second):
+        prompt = assembly.prompt
+        last_turn = prompt.text[len(prompt.prefix) :]
+        before_frame, frame = last_turn.split("[Contesto per Giulia, non scritto da Marta]\n", 1)
+        assert block not in frame
+        if family == "mistral_v3_tekken":
+            # This family writes the stable text into the last user turn, just before the frame.
+            assert block in before_frame
+            stable_parts.append(before_frame)
+        else:
+            assert block in prompt.prefix
+    if family == "mistral_v3_tekken":
+        assert stable_parts[0] == stable_parts[1]

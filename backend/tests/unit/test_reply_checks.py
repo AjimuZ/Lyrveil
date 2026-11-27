@@ -25,8 +25,8 @@ from lyrveil.consistency.checks import (
     sentence_checks,
     split_sentences,
 )
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.card import CharacterCard
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.prompts.formatter import formatter_for
 from lyrveil.services.demo_characters import DEMO_CARDS
 
@@ -287,7 +287,7 @@ def test_the_first_stop_follows_sentence_order_and_the_checks_given() -> None:
 
 def test_the_rules_are_read_from_the_card_the_user_and_the_language() -> None:
     card = CharacterCard.model_validate(DEMO_CARDS[0])
-    rules = CheckRules.for_chat(card, UserProfile("Sara", "femminile"), "xx")
+    rules = CheckRules.for_chat(card, ChatPersona("Sara", "femminile"), "xx")
     identity = card.identity
     assert identity.first_name.lower() in rules.names
     assert (rules.age, rules.gender, rules.address_form) == (
@@ -328,7 +328,7 @@ def test_recorded_checks_read_the_checks_of_a_variant_record() -> None:
 
 def test_notes_are_fixed_texts_filled_from_the_card_and_the_user() -> None:
     card = CharacterCard.model_validate(DEMO_CARDS[0])
-    user = UserProfile("Sara")
+    user = ChatPersona("Sara")
     identity = card.identity
     assert note_text("V6", card, user, "it") == f"Ti chiami {identity.first_name}."
     assert note_text("V10", card, user, "it") == f"Hai {identity.age} anni."

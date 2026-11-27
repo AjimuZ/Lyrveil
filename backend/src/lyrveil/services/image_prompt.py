@@ -129,7 +129,8 @@ class ImagePromptStage:
     """Runs the `prompt` stage of one image at a time with `runtime`, which the caller's llm lease covers.
 
     `retriever` finds the memories of the caption's prompt, as for a reply; `settings` are the reply settings, whose
-    template family, samplers and user the caption uses, and whose template family formats the scene prompt too.
+    template family and samplers the caption uses, and whose template family formats the scene prompt too. The caption
+    names the persona of the chat's ContextRequest.
     """
 
     def __init__(
@@ -181,11 +182,11 @@ class ImagePromptStage:
         """
         settings = self._settings
         formatter = formatter_for(settings.template)
-        asked = replace(chat, extra_line=image_caption_line(chat.user, request))
+        asked = replace(chat, extra_line=image_caption_line(chat.persona, request))
         assembly = await self._builder.build(asked, formatter, min(settings.max_length, CAPTION_MAX_LENGTH))
-        text_request = reply_request(assembly, formatter, settings, genkey)
-        rules = CheckRules.for_chat(chat.card, chat.user, chat.language)
-        cutoff = TurnCutoff(formatter.control_texts(), chat.user.display_name)
+        text_request = reply_request(assembly, formatter, settings, genkey, chat.persona.name)
+        rules = CheckRules.for_chat(chat.card, chat.persona, chat.language)
+        cutoff = TurnCutoff(formatter.control_texts(), chat.persona.name)
         normalizer = ReplyNormalizer(NormalizerRules.for_card(chat.card))
         sentences = SentenceSplitter()
         finish: FinishReason | None = None

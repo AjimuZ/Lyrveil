@@ -7,7 +7,7 @@ rules (revision 0020): one default, never archived, a used persona is never dele
 
 from sqlalchemy import Connection, RowMapping, text
 
-from lyrveil.domain.personas import Persona, PersonaStatus
+from lyrveil.domain.personas import ChatPersona, Persona, PersonaStatus
 
 _SELECT = (
     "SELECT p.id, p.name, p.grammatical_gender, p.age, p.appearance, p.about, p.is_default, p.status, p.created_at, "
@@ -62,6 +62,40 @@ def list_all(connection: Connection, status: PersonaStatus) -> list[Persona]:
         .all()
     )
     return [_persona(row) for row in rows]
+
+
+def chat_persona(connection: Connection, conversation_id: str) -> ChatPersona:
+    """Returns the persona the prompts of `conversation_id` read, with the conversation's `persona_note`.
+
+    That is the conversation's own `persona_id` row, in any status: an archived persona keeps its conversations
+    working. A conversation whose `persona_id` is NULL, which only a row written outside ConversationService can leave,
+    reads the default persona, the one it would have been given. Without any persona row, or for an unknown
+    conversation, the ChatPersona defaults stand in. Never reads another conversation's note."""
+    row = (
+        connection.execute(
+            text(
+                "SELECT p.name, p.grammatical_gender, p.age, p.appearance, p.about, c.persona_note "
+                "FROM conversations AS c LEFT JOIN user_personas AS p "
+                "ON p.id = COALESCE(c.persona_id, (SELECT d.id FROM user_personas AS d WHERE d.is_default = 1)) "
+                "WHERE c.id = :id"
+            ),
+            {"id": conversation_id},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return ChatPersona()
+    if row["name"] is None:
+        return ChatPersona(note=row["persona_note"] or "")
+    return ChatPersona(
+        name=row["name"],
+        grammatical_gender=row["grammatical_gender"],
+        age=row["age"],
+        appearance=row["appearance"],
+        about=row["about"],
+        note=row["persona_note"] or "",
+    )
 
 
 def default_id(connection: Connection) -> str | None:

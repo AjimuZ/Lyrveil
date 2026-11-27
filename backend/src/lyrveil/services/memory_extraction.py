@@ -30,7 +30,6 @@ from sqlalchemy import Connection, Engine
 
 from lyrveil.catalog import TextTemplate
 from lyrveil.consistency.state import LARGE_MIN_EPISODE_IMPORTANCE
-from lyrveil.context.minimal import UserProfile
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.domain.memory_extraction import (
@@ -61,6 +60,7 @@ from lyrveil.memory.window import (
 )
 from lyrveil.persistence import conversations as conversation_repository
 from lyrveil.persistence import memory_extraction as repository
+from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import relationship as state_repository
 from lyrveil.persistence.memory_index import index_episode
 from lyrveil.ports.text_runtime import TextRuntime, TextRuntimeError
@@ -274,7 +274,8 @@ class MemoryExtractionService:
     (lyrveil.jobs.handlers).
 
     `runtime` must be used only under the run's lease, which the scheduler holds. `template` is the prompt family of
-    the loaded text model and `user` names the user in the prompt. `settings` gives the trigger threshold that a
+    the loaded text model; the prompt names the user after the conversation's own persona, read in the transaction that
+    selects the window (ADR 0048). `settings` gives the trigger threshold that a
     finished run checks again for the messages after its window. `events`, when given, receives `memory.conflict` for
     each conflict a committed run stored. `clock` returns the aware current time; tests pass a fake one. `zone` is the
     deployment time zone, whose calendar days bound the daily relationship change; the composition root passes
@@ -287,7 +288,6 @@ class MemoryExtractionService:
         runtime: TextRuntime | None = None,
         *,
         template: TextTemplate = "mistral_v3_tekken",
-        user: UserProfile | None = None,
         settings: ExtractionSettings | None = None,
         queue: JobQueue | None = None,
         events: EventHub | None = None,
@@ -297,7 +297,6 @@ class MemoryExtractionService:
         self._engine = engine
         self._runtime = runtime
         self._template = template
-        self._user = user or UserProfile()
         self._settings = settings or ExtractionSettings()
         self._queue = queue or JobQueue(clock=clock)
         self._events = events
@@ -434,9 +433,10 @@ class MemoryExtractionService:
             context = repository.context_before(connection, conversation_id, window.from_seq, CONTEXT_MESSAGES)
             memory_refs = {f"E{number}": memory for number, memory in enumerate(existing, 1)}
             episode_refs = {f"P{number}": episode for number, episode in enumerate(episodes, 1)}
-            names = {Author.USER: self._user.display_name, Author.CHARACTER: character.first_name}
+            user_name = persona_repository.chat_persona(connection, conversation_id).name
+            names = {Author.USER: user_name, Author.CHARACTER: character.first_name}
             prompt = ExtractionPrompt(
-                user_name=self._user.display_name,
+                user_name=user_name,
                 character_name=character.full_name,
                 language=language,
                 existing=[

@@ -62,6 +62,15 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Characters now know who they are talking to (P11.2, [ADR 0048](docs/decisions/0048-user-personas.md)). Every prompt
+  of a conversation names its own persona: the instructions, the style lines and examples, the relationship lines, the
+  closing reminder, the `{{user}}` placeholder of cards and scenarios, the image caption, the stop sequence that ends a
+  reply at the user's turn, the extraction, summary and proactive prompts, and the gender check V12. A new block in the
+  stable part of the prompt, after the style lines, tells the character the persona's age, appearance and description
+  and the conversation's note, in up to 300 tokens: when it is longer, or the context runs short, the appearance goes
+  first and then the description, while the name, gender, age and note stay. An edit of the persona or the note
+  applies from the next reply. The diagnostic record counts the block as `persona`; the Memory Studio does not show
+  that count yet, and no screen manages personas yet. The tests are written and not yet run.
 - Persona routes and the persona of a conversation (P11.1b, [ADR 0048](docs/decisions/0048-user-personas.md)).
   `GET` and `POST /personas`, `GET`, `PUT` and `DELETE /personas/{id}`, `POST /personas/{id}/default`, `/archive` and
   `/unarchive` manage the user's personas. Every text passes the content guard, the age is empty or 18 to 120, exactly

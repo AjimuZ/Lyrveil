@@ -1,11 +1,12 @@
-"""The text of the reply prompt's blocks (docs/prompting.md, System blocks and Length bands), with no database and no
-runtime: block 1, block 2 with its optional parts, block 3 with a given number of examples, blocks 4, 5 and 6 from their
-items, the anchor (block 9) and the length bands.
+"""The text of the reply prompt's blocks (docs/prompting.md, System blocks, Blocks 10 to 12 and Length bands), with no
+database and no runtime: block 1, block 2 with its optional parts, block 3 with a given number of examples, blocks 4, 5
+and 6 from their items, the anchor (block 9), block 10 with its optional parts and the length bands.
 
-Pure and deterministic: the same card and items give the same bytes, so the stable text stays identical between replies
-and KoboldCpp reuses it from its cache (ADR 0031). An empty line of a template is left out. Token budgets are
-lyrveil.context.builder's; the scenario block is lyrveil.context.minimal's. PromptTemplateService, with versioned Jinja2
-files, is planned to replace the text here; until then it follows the templates of docs/prompting.md.
+Pure and deterministic: the same card, persona and items give the same bytes, so the stable text stays identical
+between replies and KoboldCpp reuses it from its cache (ADR 0031). An empty line of a template is left out. The user is
+always the conversation's persona (ADR 0048). Token budgets are lyrveil.context.builder's; the scenario block is
+lyrveil.context.minimal's. PromptTemplateService, with versioned Jinja2 files, is planned to replace the text here;
+until then it follows the templates of docs/prompting.md.
 """
 
 import re
@@ -13,13 +14,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from lyrveil.consistency.state import DIMENSIONS, RelationshipState, band
-from lyrveil.context.minimal import LANGUAGE_NAMES, NO_GENDER, UserProfile
+from lyrveil.context.minimal import LANGUAGE_NAMES, NO_GENDER
 from lyrveil.domain.card import CharacterCard, EmojiUse, MessageLength, Narration, TraitCategory
+from lyrveil.domain.personas import ChatPersona
 from lyrveil.ports.memory_retriever import RetrievedMemory
 
 MEMORY_HEADER = "Ricordi pertinenti:"
 SUMMARY_HEADER = "Riassunto di quello che è successo prima:"
 EXAMPLES_HEADER = "Esempi di stile, non cose successe:"
+# Block 10's heading, which names the persona; a block with no line has no heading either.
+PERSONA_HEADER = "Cosa sai di {name}:"
 # The anchor holds the first sentence of this many main traits and at most this many corrective notes (ADR 0031).
 ANCHOR_TRAITS = 2
 MAX_NOTES = 2
@@ -89,6 +93,10 @@ OPTIONAL_IDENTITY: tuple[str, ...] = (
     "occupation",
 )
 
+# The optional parts of block 10 in the order the budget removes them (ADR 0048). The age and the conversation's note
+# always stay, and the persona's name and gender are in block 1, which is never reduced.
+OPTIONAL_PERSONA: tuple[str, ...] = ("appearance", "about")
+
 # Block 4's words for the four bands of each dimension, lowest first. docs/consistency-engine.md (From numbers to text)
 # words them from the user's side ("si fida di te"); block 4 speaks to the character, so the same phrases are turned to
 # the second person and name the user, which `{user}` stands for.
@@ -142,14 +150,15 @@ def _full_name(card: CharacterCard) -> str:
     return identity.first_name if not identity.last_name else f"{identity.first_name} {identity.last_name}"
 
 
-def global_instructions(card: CharacterCard, user: UserProfile, language: str) -> str:
-    """Returns block 1, `system_global.v1.j2`, for a chat in `language` (a code of LANGUAGE_NAMES, else Italian). Never
+def global_instructions(card: CharacterCard, persona: ChatPersona, language: str) -> str:
+    """Returns block 1, `system_global.v1.j2`, for a chat with `persona` in `language` (a code of LANGUAGE_NAMES, else
+    Italian): the persona's name throughout, and its gender in the address line unless it is `non_indicato`. Never
     reduced."""
-    name, first, you = _full_name(card), card.identity.first_name, user.display_name
+    name, first, you = _full_name(card), card.identity.first_name, persona.name
     language_name = LANGUAGE_NAMES.get(language, LANGUAGE_NAMES["it"])
     address = (
-        f"- Quando ti rivolgi a {you}, usa il {user.grammatical_gender}.\n"
-        if user.grammatical_gender != NO_GENDER
+        f"- Quando ti rivolgi a {you}, usa il {persona.grammatical_gender}.\n"
+        if persona.grammatical_gender != NO_GENDER
         else ""
     )
     return (
@@ -215,9 +224,9 @@ def canonical_identity(card: CharacterCard, dropped: frozenset[str] = frozenset(
     return "\n\n".join((text, "\n".join(traits))) if traits else text
 
 
-def communication_profile(card: CharacterCard, user: UserProfile, examples: int) -> str:
-    """Returns block 3 with the first `examples` example exchanges of the card, in saved order. With 0 it is the core
-    style description, which is never reduced."""
+def communication_profile(card: CharacterCard, persona: ChatPersona, examples: int) -> str:
+    """Returns block 3 with the first `examples` example exchanges of the card, in saved order, the address line and
+    the user's example lines naming `persona`. With 0 it is the core style description, which is never reduced."""
     comm = card.communication
     style = [
         f"Punteggiatura: {_ended(comm.punctuation)}" if comm.punctuation else "",
@@ -229,8 +238,7 @@ def communication_profile(card: CharacterCard, user: UserProfile, examples: int)
         f"Registro: {words(comm.formality)}. Lunghezza: {words(comm.message_length)}. "
         f"Domande: {words(comm.question_frequency)}.",
         " ".join(part for part in style if part),
-        f"Dai del {comm.address_form} a {user.display_name}. {NARRATION_TEXTS[comm.narration]} "
-        f"{EMOJI_TEXTS[comm.emoji]}",
+        f"Dai del {comm.address_form} a {persona.name}. {NARRATION_TEXTS[comm.narration]} {EMOJI_TEXTS[comm.emoji]}",
         f"Espressioni tue: {', '.join(comm.recurring_expressions)}. Non usarle in ogni messaggio."
         if comm.recurring_expressions
         else "",
@@ -241,20 +249,38 @@ def communication_profile(card: CharacterCard, user: UserProfile, examples: int)
         lines.append(EXAMPLES_HEADER)
         for example in shown:
             if example.user:
-                lines.append(f"{user.display_name}: {example.user}")
+                lines.append(f"{persona.name}: {example.user}")
             lines.append(f"{card.identity.first_name}: {example.character}")
     return "\n".join(line for line in lines if line)
 
 
-def state_lines(state: RelationshipState, user: UserProfile) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Returns block 4's lines and details for a conversation state (docs/prompting.md, Block 4).
+def persona_block(persona: ChatPersona, dropped: frozenset[str] = frozenset()) -> str:
+    """Returns block 10 (docs/prompting.md, Blocks 10 to 12): what the character knows of `persona` from the start,
+    under PERSONA_HEADER. The lines are the age, `appearance`, `about` and the conversation's note, in that order; an
+    empty field leaves its line out, and with no line the block is "", heading included.
+
+    `dropped` names parts of OPTIONAL_PERSONA to leave out. The age and the note are always written: the note is what
+    this one conversation starts from, and the age is one short line."""
+    lines = [
+        f"Ha {persona.age} anni." if persona.age is not None else "",
+        f"Aspetto: {persona.appearance}" if persona.appearance and "appearance" not in dropped else "",
+        persona.about if "about" not in dropped else "",
+        f"Tra voi: {persona.note}" if persona.note else "",
+    ]
+    kept = [line for line in lines if line]
+    return "\n".join([PERSONA_HEADER.format(name=persona.name), *kept]) if kept else ""
+
+
+def state_lines(state: RelationshipState, persona: ChatPersona) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Returns block 4's lines and details for a conversation state (docs/prompting.md, Block 4), naming `persona`
+    where the bands name the user.
 
     The lines, always kept, are the relationship (its narrative, or else the words of the four bands), the emotional
     state, the topic and the boundaries; the details, which the budget removes last, are the open threads. A value
     never appears as a number, and an empty field leaves its line out. The time lines are P07.4's.
     """
     bands = ", ".join(STATE_BANDS[dimension][band(state.value(dimension))] for dimension in DIMENSIONS)
-    relationship = state.narrative or bands.replace("{user}", user.display_name)
+    relationship = state.narrative or bands.replace("{user}", persona.name)
     lines = (
         f"Il vostro rapporto: {_ended(relationship)}",
         f"Come ti senti ora: {_ended(state.emotional_state)}" if state.emotional_state else "",
@@ -282,28 +308,29 @@ def summary_block(texts: Sequence[str]) -> str:
     return "\n".join([SUMMARY_HEADER, *texts]) if texts else ""
 
 
-def anchor(card: CharacterCard, user: UserProfile, notes: Sequence[str] = ()) -> str:
+def anchor(card: CharacterCard, persona: ChatPersona, notes: Sequence[str] = ()) -> str:
     """Returns block 9, `anchor.v1.j2`: name and age, the gender line, the first sentence of the first two main traits
-    in saved order, the address form, the length text of the card's band, the narration and emoji rules, and the
-    first MAX_NOTES of `notes`. Never reduced."""
+    in saved order, the address form towards `persona`, the length text of the card's band, the narration and emoji
+    rules, and the first MAX_NOTES of `notes`. Never reduced."""
     identity, comm = card.identity, card.communication
     gender = f" Parli di te al {identity.grammatical_gender}." if identity.grammatical_gender != NO_GENDER else ""
     main = [trait.description for trait in card.traits if trait.category == "main_trait"][:ANCHOR_TRAITS]
     lines = [
         f"Ricorda: sei {_full_name(card)} e hai {identity.age} anni.{gender}",
         " ".join(first_sentence(description) for description in main),
-        f"Dai del {comm.address_form} a {user.display_name}. {LENGTH_BANDS[comm.message_length].text} "
+        f"Dai del {comm.address_form} a {persona.name}. {LENGTH_BANDS[comm.message_length].text} "
         f"{NARRATION_TEXTS[comm.narration]} {EMOJI_TEXTS[comm.emoji]}",
         *notes[:MAX_NOTES],
     ]
     return "\n".join(line for line in lines if line)
 
 
-def image_caption_line(user: UserProfile, request: str) -> str:
+def image_caption_line(persona: ChatPersona, request: str) -> str:
     """Returns the extra line of the dynamic context that asks for an image's caption (docs/image-generation.md,
-    Caption): the request on one line, cut at CAPTION_REQUEST_CHARS, without its final period, which the line adds."""
+    Caption), naming `persona`: the request on one line, cut at CAPTION_REQUEST_CHARS, without its final period, which
+    the line adds."""
     flat = " ".join(request.split())[:CAPTION_REQUEST_CHARS].rstrip(" .")
-    return CAPTION_LINE.format(user=user.display_name, request=flat)
+    return CAPTION_LINE.format(user=persona.name, request=flat)
 
 
 def stable_text(*blocks: str) -> str:
