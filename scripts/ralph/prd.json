@@ -3524,8 +3524,8 @@
         "The P11 section lists the evidence, and the phase table shows the automated part as passed and the manual part (P11.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 147,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "I ran the unit, integration, e2e and lint levels, and all four passed on the first run. That covers T-PSN-01 to T-PSN-06 and the stable-prefix test T-MOD-05 with block 10. The persona tests had never run before this task. No code changed, because nothing failed.\n\nCounts:\n- **Unit:** Pester 262, backend 1189, orchestrator 592, Vitest 252 in 38 files, Node 18.\n- **Integration:** backend 504, orchestrator 209.\n- **E2E:** Playwright 114.\n- **Lint:** it also passed a second time after my doc edits, with 129 Markdown files and 1541 links, none broken.\n\nI recorded all this in `docs/verification/2026-11-27-p11-exit.md`.\n\nIn `docs/roadmap.md`, the P11 row now reads \"In progress: automated exit passed; manual part (P11.EXIT-HW) pending\". The P11 section links the evidence, and the phase is not marked done. AC-23 and the real-model manual run remain pending. I also removed the \"written, not run\" notes in `docs/testing.md`, `docs/frontend.md` and `CHANGELOG.md`, and added the new file to `docs/README.md`.\n\nI did not run the docker and gpu levels, since the P11 exit names no test from them. I also did not inspect the narrow-screen bottom bar by eye.",
       "dependsOn": [
         "P11.1a",
         "P11.1b",

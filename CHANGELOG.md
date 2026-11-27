@@ -11,8 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Automated exit of the personas phase (P11.EXIT). T-PSN-01 to T-PSN-06 and the stable-prefix test T-MOD-05 with
+  block 10 pass with the `unit`, `integration`, `e2e` and `lint` levels, so the "written and not run" notes of the P11
+  entries no longer apply. The manual part (AC-23 on the real application, P11.EXIT-HW) has not run. See
+  [docs/verification/2026-11-27-p11-exit.md](docs/verification/2026-11-27-p11-exit.md).
 - Memory retrieval reads the shared memories of the conversation's own persona only (P11.3, ADR 0048). Test
-  `test_shared_memories_are_read_by_persona` (T-PSN-05) was written and has not run. "Condividi" is not built yet.
+  `test_shared_memories_are_read_by_persona` (T-PSN-05) passes in the P11 exit run. "Condividi" is not built yet.
 - The VRAM tuning procedure ran on the reference machine (P02.7). `vram_preferred_mib` of both Rocinante profiles in
   `config/model-catalog.json` is now 9678, the measured level-A peak of `rocinante-x-12b` (9217 MiB) plus 5 %;
   `vram_required_mib` keeps 6000. The launch values stay as they were (level A, context 12288, batch 512, no mmap,
@@ -69,8 +73,8 @@ an entry says "not yet run", the test was written and has not run.
   knows what is written in it. A new chat asks **Persona** (archived ones hidden, the scenario's or the default
   preselected) and **Cosa sa di te all'inizio**, and the conversation's context panel shows the persona and edits the
   note. The persona of an existing chat cannot be changed. The link is in the main navigation, because **Impostazioni**
-  is not built yet. The unit spec `personas-store.spec.ts` and the end-to-end spec `personas.spec.mjs` (T-PSN-06) were
-  written and have not run.
+  is not built yet. The unit spec `personas-store.spec.ts` and the end-to-end spec `personas.spec.mjs` (T-PSN-06) pass
+  in the P11 exit run.
 - Characters now know who they are talking to (P11.2, [ADR 0048](docs/decisions/0048-user-personas.md)). Every prompt
   of a conversation names its own persona: the instructions, the style lines and examples, the relationship lines, the
   closing reminder, the `{{user}}` placeholder of cards and scenarios, the image caption, the stop sequence that ends a
@@ -79,7 +83,7 @@ an entry says "not yet run", the test was written and has not run.
   and the conversation's note, in up to 300 tokens: when it is longer, or the context runs short, the appearance goes
   first and then the description, while the name, gender, age and note stay. An edit of the persona or the note
   applies from the next reply. The diagnostic record counts the block as `persona`; the Memory Studio does not show
-  that count yet, and no screen manages personas yet. The tests are written and not yet run.
+  that count yet. The tests pass in the P11 exit run.
 - Persona routes and the persona of a conversation (P11.1b, [ADR 0048](docs/decisions/0048-user-personas.md)).
   `GET` and `POST /personas`, `GET`, `PUT` and `DELETE /personas/{id}`, `POST /personas/{id}/default`, `/archive` and
   `/unarchive` manage the user's personas. Every text passes the content guard, the age is empty or 18 to 120, exactly
@@ -88,14 +92,14 @@ an entry says "not yet run", the test was written and has not run.
   characters): without a `persona_id` the chat takes the scenario's persona, else the default one, and an archived
   persona is refused for new chats while its chats keep working. `PATCH /conversations/{id}` edits the note and
   refuses `persona_id`, which never changes. Scenarios take an optional `persona_id`. Prompts still read the default
-  name and gender, and no screen manages personas yet. The tests are written and not yet run.
+  name and gender at that step. The tests pass in the P11 exit run.
 - User personas in the database (P11.1a, [ADR 0048](docs/decisions/0048-user-personas.md)). Migration 0020 adds
   `user_personas` and creates the default persona from the settings `user.display_name` and
   `user.grammatical_gender`, or from `Utente` and `non_indicato` when they were never set. Every existing conversation
   and shared memory gets that persona, and the two keys are removed. New conversations take the default persona. The
   database refuses an age outside 18 to 120, a name over 40 characters, a second default persona, an archived default,
   a change of a conversation's persona and the deletion of a persona that a conversation uses. Prompts still read the
-  user's name from the defaults, and no route or screen manages personas yet. The tests are written and not yet run.
+  user's name from the defaults at that step. The tests pass in the P11 exit run.
 - The Creator imports and exports Character Cards (P10.6,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). **Importa una card** takes a JSON or PNG card
   and opens `/characters/import/:importId`: a preview with the card's facts, the import report, the fields marked

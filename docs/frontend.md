@@ -567,8 +567,8 @@ Delivered in P11.4 (`features/personas/`, the new-chat dialog and the context pa
   offers no way to change it, and a **Cosa sa di te** field with **Salva la nota** (`PATCH /conversations/{id}` with
   `persona_note`; a blank note clears it). The note applies from the next reply, and a refusal appears in the chat's
   error banner.
-- **Tests:** `personas-store.spec.ts` (unit) and `tests/e2e/specs/personas.spec.mjs` (T-PSN-06). Both were written but
-  not run in this change.
+- **Tests:** `personas-store.spec.ts` (unit) and `tests/e2e/specs/personas.spec.mjs` (T-PSN-06). Both passed in the P11 exit
+  run ([evidence](verification/2026-11-27-p11-exit.md)).
 
 ## Keyboard
 

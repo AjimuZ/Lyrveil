@@ -324,6 +324,7 @@
 - Per-conversation prompt inputs (persona, note) are read in the same transaction that builds the prompt, never cached in a service constructor, so an edit applies from the next reply.
 - Run `scripts/lyrveil.cmd test lint` after frontend changes: it also runs the strict Angular build, which catches template type errors and renamed doc anchors.
 - When a docs heading changes (for example '(planned)' removed), grep docs/traceability.md for the old anchor in the same change.
+- An exit task that edits docs after the levels have run should re-run lint and state in the evidence file which files changed after the test runs.
 
 ---
 
@@ -3170,4 +3171,26 @@ Not in this task: prompts still use the default `Utente` and `non_indicato`, and
   - The unit spec personas-store.spec.ts and the e2e spec personas.spec.mjs have not been run. Only lint and the strict frontend build were run, and both passed.
   - The extra nav link adds an eighth item to the narrow-screen bottom bar. The responsive e2e specs have not been run against it.
   - e2e: getByLabel('Persona', { exact: true }) is needed because 'Personaggio' is another label in the same dialog.
+---
+
+## 2026-11-27T17:53:19Z - P11.EXIT
+- I ran the unit, integration, e2e and lint levels, and all four passed on the first run. That covers T-PSN-01 to T-PSN-06 and the stable-prefix test T-MOD-05 with block 10. The persona tests had never run before this task. No code changed, because nothing failed.
+
+Counts:
+- **Unit:** Pester 262, backend 1189, orchestrator 592, Vitest 252 in 38 files, Node 18.
+- **Integration:** backend 504, orchestrator 209.
+- **E2E:** Playwright 114.
+- **Lint:** it also passed a second time after my doc edits, with 129 Markdown files and 1541 links, none broken.
+
+I recorded all this in `docs/verification/2026-11-27-p11-exit.md`.
+
+In `docs/roadmap.md`, the P11 row now reads "In progress: automated exit passed; manual part (P11.EXIT-HW) pending". The P11 section links the evidence, and the phase is not marked done. AC-23 and the real-model manual run remain pending. I also removed the "written, not run" notes in `docs/testing.md`, `docs/frontend.md` and `CHANGELOG.md`, and added the new file to `docs/README.md`.
+
+I did not run the docker and gpu levels, since the P11 exit names no test from them. I also did not inspect the narrow-screen bottom bar by eye.
+- Files changed: docs/verification/2026-11-27-p11-exit.md, docs/roadmap.md, docs/README.md, docs/testing.md, docs/frontend.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - All four levels passed first time, including personas-store.spec.ts and personas.spec.mjs (T-PSN-06), which had never run.
+  - P11.EXIT-HW (AC-23 manual run with the real text model) is still pending; the P11 phase row says so and must not be marked Done until it runs.
+  - The e2e level now has 114 specs and the frontend has 38 Vitest files with 252 tests; later exit files should use these counts as the baseline.
+  - The scenario form still has no Persona choice, so scenarios.persona_id is covered at the API only.
 ---

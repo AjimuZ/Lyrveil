@@ -15,7 +15,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: automated exit passed; hardware and quality part (P08.EXIT-HW) pending |
 | P09 | Audit and public release | Planned |
 | P10 | Version 1.1: Character Card import and export | In progress: automated exit passed; manual part (P10.EXIT-HW) pending |
-| P11 | Version 1.1: user personas | Planned |
+| P11 | Version 1.1: user personas | In progress: automated exit passed; manual part (P11.EXIT-HW) pending |
 | P12 | Version 1.1: worlds and lore | Planned |
 
 Through P03, the project delivers the complete working path from character creation to persistent conversation. Later phases add advanced memory, images and orchestration on top of it.
@@ -262,6 +262,10 @@ Evidence:
 
 Exit: T-PSN-01 to T-PSN-06 pass. The stable-prefix test still passes with block 10 (T-MOD-05). AC-23 holds in a
 manual run.
+
+Evidence:
+
+- [P11 automated exit: the `unit`, `integration`, `e2e` and `lint` levels, with T-PSN-01 to T-PSN-06 and the stable-prefix test T-MOD-05 with block 10](verification/2026-11-27-p11-exit.md). The manual part (AC-23 in a manual run on the real application) is pending with P11.EXIT-HW, so the phase is not done.
 
 ## P12: Worlds and lore
 

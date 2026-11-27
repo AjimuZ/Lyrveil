@@ -1409,7 +1409,9 @@ check V12, the extraction, summary and proactive prompts, and a persona and note
 with a second persona whose texts never appear). They were not run when they were written. T-PSN-05 is written in
 `backend/tests/integration/test_memory_retrieval.py` (P11.3) and T-PSN-06 in `tests/e2e/specs/personas.spec.mjs`
 (P11.4: a second persona, a chat with it and a note, both in the context panel, the note edited there, and an archived
-persona hidden from the picker), with `personas-store.spec.ts` for the store. Neither ran when they were written.
+persona hidden from the picker), with `personas-store.spec.ts` for the store. None of these tests ran when they were
+written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
+([evidence](verification/2026-11-27-p11-exit.md)). AC-23 in a manual run is pending with P11.EXIT-HW.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |
