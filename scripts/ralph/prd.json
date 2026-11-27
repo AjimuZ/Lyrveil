@@ -3550,7 +3550,7 @@
       ],
       "priority": 148,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: waiting for a person: Dopo P11.EXIT, con la GPU libera: avvia due conversazioni con due persone diverse e verifica che nessuno dei due personaggi conosca l'altra persona (AC-23); poi unblock per registrare le prove.",
       "dependsOn": [
         "P11.EXIT"
       ],
