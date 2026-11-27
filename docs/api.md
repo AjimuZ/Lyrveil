@@ -42,6 +42,7 @@ Errors use `application/problem+json`:
 | `UNSUPPORTED_MEDIA` | 415 | Upload is not PNG, JPEG or WebP, or its bytes disagree. |
 | `CONTENT_POLICY_BLOCKED` | 422 | A safeguard refused the data ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)). |
 | `IMPORT_INVALID` | 422 | Character file invalid or of an unsupported version. |
+| `CARD_TOO_LONG` | 422 | Planned for 1.1 (P10). The card's text leaves too little room for the structured conversion in the active context. `detail` suggests the direct mapping. |
 | `PROMPT_SYNTAX_REFUSED` | 422 | An edited image prompt holds `embedding:` or a weight outside 0.5 to 1.5 ([Image generation](image-generation.md#sanitizer)). |
 | `FORBIDDEN_ORIGIN` | 403 | Host or Origin not allowed. |
 | `ORCHESTRATOR_UNAVAILABLE` | 503 | The control API does not answer. |
@@ -251,6 +252,38 @@ Delivered in P03.4a, all but `generate`, and not in `backend/openapi.json`:
 - `DELETE` answers `204` and removes the file and the thumbnail; `409 CONFLICT` for the primary avatar.
 - Every route answers `404 NOT_FOUND` for an unknown character, and for an asset that is deleted or belongs to another
   character.
+
+### Character cards (planned)
+
+Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-character-card-import-and-export.md),
+[Character cards](character-system.md#character-cards)).
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /characters/imports` | Reads a card file (multipart, field `file`) and answers `201` with the import. |
+| `GET /characters/imports/{id}` | The import: preview, direct draft, report, conversion job. |
+| `POST /characters/imports/{id}/conversion` | Starts `card_conversion` and answers `202` with the job. |
+| `DELETE /characters/imports/{id}` | Discards an unsaved import and its staged avatar. `204`. |
+| `GET /characters/{id}/card?format=&scenario_ids=` | Exports a card: `format` is `v3json` (the default), `v2json` or `png`. |
+| `GET /characters/{id}/source` | The stored source card of an imported character, as JSON. `404` for a character that was not imported. |
+
+- **The import answer.** It is `{"id", "status", "format", "container", "source_sha256", "preview", "direct_draft",
+  "report", "embedded_lyrveil", "conversion_job_id", "expires_at"}`.
+  - `preview` holds the source fields that no draft uses: name, nickname, creator, version, tags, creator notes, the
+    two prompt fields, the number of greetings, and whether there is an avatar or a lorebook.
+  - `embedded_lyrveil` is null, or `{"text_matches": true|false, "changed_fields": [...]}`.
+- **Errors.**
+  - `413 PAYLOAD_TOO_LARGE` over 64 MB.
+  - `415 UNSUPPORTED_MEDIA` for a file that is neither JSON nor PNG, a CHARX archive included.
+  - `422 IMPORT_INVALID` for a broken chunk, base64 or JSON, or a missing or unknown `spec`.
+  - `422 CONTENT_POLICY_BLOCKED` with the source path, such as `data.description`. Nothing is stored.
+- **Conversion.** `conversion` answers `422 CARD_TOO_LONG` when the text does not fit, and `409 CONFLICT` while a
+  conversion of the same import runs. The finished job's `result_json` has the shape of a draft
+  ([Assisted creation](character-system.md#assisted-creation)), with `age` removed.
+- **Saving.** `POST /characters` takes two optional fields, `import_id` and `create_scenarios` (default `true`). The
+  import must be `ready` and not expired, or the answer is `409 CONFLICT`. Saving sets it to `saved`.
+- **Export.** It answers `application/json` or `image/png` with a `Content-Disposition` file name made from the
+  character's name. `png` answers `409 CONFLICT` for a character without a primary avatar.
 
 ### Scenarios
 
@@ -535,6 +568,47 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
   advanced. `relationship/history` answers the newest 200 change rows with `event_kind`, `dimension`, `reason`, `status`
   and `sources`. All three answer `404` for an unknown or deleted chat.
 - **Events.** The WebSocket event `memory.updated` is not published by these routes yet.
+
+### Personas (planned)
+
+Planned for version 1.1, phase P11, and not built ([ADR 0048](decisions/0048-user-personas.md)).
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET`, `POST /personas` | List (`status`, default `active`) and create. |
+| `GET`, `PUT`, `DELETE /personas/{id}` | Read, replace the editable fields, delete. |
+| `POST /personas/{id}/default` | Makes it the default persona. |
+| `POST /personas/{id}/archive`, `/unarchive` | Hide from or show in the new-chat picker. |
+
+- A persona answers `{"id", "name", "grammatical_gender", "age", "appearance", "about", "is_default", "status",
+  "conversation_count", "created_at", "updated_at"}`. A text that describes a minor is `422 CONTENT_POLICY_BLOCKED`
+  naming the field, and an age under 18 is `422 VALIDATION_ERROR`.
+- `DELETE` answers `409 CONFLICT` while a conversation uses the persona or while it is the default. `archive` answers
+  `409` for the default persona.
+- `POST /conversations` takes `persona_id`, which defaults to the default persona, and `persona_note`. `PATCH
+  /conversations/{id}` accepts `persona_note`, and answers `422 VALIDATION_ERROR` for `persona_id`, which never changes.
+  Scenarios take an optional `persona_id`.
+- From P11, `GET` and `PUT /settings` no longer list `user.display_name` and `user.grammatical_gender`.
+
+### Lore (planned)
+
+Planned for version 1.1, phase P12, and not built ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET`, `POST /lore/worlds` | List (`status`, `q`) and create worlds. |
+| `GET`, `PUT`, `DELETE /lore/books/{id}` | A world or an own book, with its settings. `DELETE` is for worlds only. |
+| `GET /characters/{id}/lore` | The character's own book, created empty on first use. |
+| `GET`, `POST /lore/books/{id}/entries` | List (`q`, `enabled`) and create entries. |
+| `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |
+| `GET`, `POST /lore/books/{id}/links`, `DELETE /lore/links/{id}` | The characters, scenarios and conversations a world is linked to. |
+| `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. |
+| `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. |
+| `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. |
+
+- Entries and book names pass the content guard (`422 CONTENT_POLICY_BLOCKED`). A key with no stem after stop-word
+  removal is `422 VALIDATION_ERROR` naming the key.
+- `GET /messages/{id}/diagnostics` gains `lore_refs`.
 
 ### Jobs, scheduling, notifications, settings, data
 

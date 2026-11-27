@@ -87,6 +87,8 @@ Values are validated against a Pydantic model. `PATCH /settings` rejects unknown
 | `app.first_start_notice_seen` | `false` | Boolean |
 | `app.diagnostic_mode` | `false` | Boolean. Turns on the Memory Studio's Diagnostica tab and keeps the prompt text of replies built while it is on |
 
+Planned for version 1.1 (P11, [ADR 0048](decisions/0048-user-personas.md)) and not built: `user.display_name` and `user.grammatical_gender` become the name and gender of the default persona, and the migration removes the two keys.
+
 Delivered so far: `app.diagnostic_mode` alone, through `GET` and `PATCH /settings` ([API](api.md#messages)), read from
 `application_settings` on every use and applied at once. A missing row means the default. The other keys are planned
 with their screens.

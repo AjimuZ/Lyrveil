@@ -9,6 +9,7 @@
 | Canonical data | The character definition. Only an explicit user action changes it. |
 | Checkpoint (summary) | One versioned summary of a message range. |
 | Checkpoint (image) | The SDXL model file of the active image profile, loaded by ComfyUI. |
+| Character Card | The free-text character format of other applications, versions V1, V2 and V3. Lyrveil imports and exports it from version 1.1 ([ADR 0047](decisions/0047-character-card-import-and-export.md)). |
 | ComfyUI | The image runtime. Lyrveil sends it fixed workflows over HTTP. |
 | Consistency Engine | Rules that keep a character coherent: state updates, the reply normalizer, reply checks, canonical protection. |
 | Consistency protocol | T-QLT-05: scripted conversations that check identity, gender, address form and length on every catalog text profile. |
@@ -28,6 +29,8 @@
 | Launch level | `A`, `B` or `C`: context and batch values derived from the profile, lowered after out-of-memory failures. |
 | Lease | Short-lived permission to use the current runtime. It works as the global GPU lock. |
 | Length band | The reply length class of a character, `brevissimi` to `lunghi`, which sets `max_length` and the anchor's length text. |
+| Lore book | A set of lore entries: a character's own book or a world. Planned for version 1.1. |
+| Lore entry | Reference text written by the user that enters a reply when one of its keywords appears in the recent messages, or always when it is constant. Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). |
 | Memory Engine | Storage, extraction, retrieval and summaries of what a character remembers. |
 | Memory Studio | The screen that shows and corrects what a character remembers. |
 | Mixture of experts | A model that runs only some of its weights per token. Lyrveil's 26B profiles keep part of the experts in system RAM. |
@@ -37,6 +40,7 @@
 | NVML | NVIDIA's management library. Used here to read device memory. |
 | Obsidian Bloom | Lyrveil's design system. |
 | PAG | Perturbed-attention guidance, a core ComfyUI node that P05 measures as an image quality lever. |
+| Persona | One identity of the user: name, how characters address them, optional age, appearance and description. Each conversation uses one. Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). |
 | Preflight | Checks of Docker, GPU, memory, disk, directories and models before starting. |
 | Proactive message | A message the character sends without a user message. Off by default. |
 | Provenance | Where a memory comes from: `stated`, `inferred`, `fictional` or `user_confirmed`. |
@@ -55,3 +59,4 @@
 | Wardrobe | A character's usual outfit and up to 5 named outfits, each with English tags, chosen per image. |
 | Window | The range of messages one extraction analyzes. |
 | Working memory | The context built for one reply. It is rebuilt each time. |
+| World | A lore book shared by the characters, scenarios and conversations linked to it. Planned for version 1.1. |

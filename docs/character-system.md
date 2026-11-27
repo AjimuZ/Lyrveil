@@ -14,7 +14,9 @@ content guard on every card that is stored and on every draft ([Security](securi
 P05.3b: the translation and its merge, which keeps locked slots. Planned: the translation job on save. Reconciled on
 2026-11-09: the Creator, the profile and the exchange routes are delivered; the Creator's import and export actions, the
 characters list and the counter of examples are not drawn in the interface, as the notes in
-[Frontend](frontend.md#3-character-creator) say.
+[Frontend](frontend.md#3-character-creator) say. Planned for version 1.1 and not built: Character Card import and
+export ([Character cards](#character-cards), P10), and each character's own lore book (P12,
+[ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
 
 The Character Creator is a central feature. It creates, edits, duplicates, imports, exports and deletes characters, and
 it uses the same text and image infrastructure as conversations.
@@ -421,9 +423,64 @@ Delivered in P03.5 (backend only; the Creator has no import or export button yet
   `422 CONTENT_POLICY_BLOCKED` rather than `IMPORT_INVALID`, and nothing is imported.
 - Not delivered: the Creator's import and export buttons.
 
-### Character Card V2
+### Character cards
 
-Import of Character Card V2 JSON is planned after 1.0 as a one-way adapter. See [ADR 0021](decisions/0021-character-format-and-card-v2.md).
+Planned for version 1.1, phase P10, and not built. The rules and their reasons are in
+[ADR 0047](decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of ADR 0021.
+
+**Import flow.**
+
+1. **Read.** `POST /characters/imports` reads a V1, V2 or V3 card from JSON, or from the `ccv3` or `chara` chunk of a
+   PNG or APNG ([API](api.md#character-cards-planned)).
+2. **Check.** The parser applies the limits of [Security](security.md#version-11-inputs-planned), and the content guard
+   checks every string. A refusal stores nothing.
+3. **Store.** A `card_imports` row stores the parsed card, the direct mapping and the import report
+   ([Data model](data-model.md#version-11-tables-planned)).
+4. **Preview.** The preview shows the source fields that the mapping does not use, the report, and the avatar. Its
+   two actions are **Apri nel Creator** with the direct mapping, and **Struttura con il modello**, which starts
+   `card_conversion` and opens the Creator when the job ends.
+5. **Save.** In the Creator the age is empty and required unless the card states an adult age explicitly.
+   **Salva personaggio** sends `POST /characters` with `import_id`. That one transaction stores the character as
+   version 1, actor `import`, the `character_sources` row, the avatar, and the scenarios from the greetings when
+   **Crea gli scenari dai saluti** is on, which is the default.
+6. **Expiry.** An unsaved import expires after 7 days.
+
+**Direct mapping.** It is deterministic, and the text stays in its source language:
+
+| Card field | Lyrveil field | Rule |
+| --- | --- | --- |
+| `name` | `identity.first_name` | The whole name, trimmed. The Creator splits a last name if the user wants. |
+| `description` | `identity.biography` | As it is |
+| `personality` | `traits`, category `main_trait` | One trait per paragraph. A paragraph over 500 characters is split at sentence ends |
+| `mes_example` | `communication.examples` | One pair per `<START>` block: the first `{{user}}:` line, then the `{{char}}:` lines joined. A block with no user line gives `user` null. Up to 8 pairs. A pair over the field limits is left out and reported |
+| `scenario`, `first_mes` | A scenario titled with the name | Description and opening message. A text over the scenario limit of 2,000 characters is left out and reported |
+| `alternate_greetings` | One more scenario each | Same description, titled `<name> (saluto 2)`, `(saluto 3)` and so on |
+| `character_book` | Kept in the source | Becomes the own lore book in P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) |
+| `system_prompt`, `post_history_instructions`, `creator_notes`, `creator_notes_multilingual`, `tags`, `creator`, `character_version`, `nickname`, `source`, `group_only_greetings`, the dates, `extensions`, other `assets` | Kept in the source | Shown in the preview and the profile, and never sent to a model |
+| None | `identity.age` | Empty unless the text states an adult age as `N years old`, `N anni` or `age: N` |
+| None | `identity.grammatical_gender` | `non_indicato`, chosen by the user ([R-LNG-08](requirements.md#5-language)) |
+| None | `identity.primary_language` | The setting for new characters |
+
+The communication profile keeps its defaults, and the visual profile stays empty. The structured conversion fills
+every field of `CharacterDraft` in the character's language instead. It does not translate the scenarios.
+
+**Placeholders.** `{{char}}` and `{{user}}`, in any case, stay in the stored text, and the prompt renderer replaces them
+with the first name and the user's display name. The legacy `<BOT>`, `<USER>` and `<char>` become these two on import.
+The other macros are removed or replaced as ADR 0047 lists, and each one is named in the report.
+
+**Export.** `GET /characters/{id}/card` writes V3 JSON (the default), V2 JSON or a PNG of the primary avatar with a
+`ccv3` and a `chara` chunk:
+
+- **Rendered text.** The free text is rendered from the current card with the texts of blocks 2 and 3
+  ([Prompting](prompting.md#system-blocks)). The examples become `<START>` blocks.
+- **Scenarios.** The scenarios the user picks become `scenario`, `first_mes` and `alternate_greetings`.
+- **Embedded card.** `extensions.lyrveil` holds the complete card and the hash of the rendered text.
+- **Imported characters.** An imported character keeps its source's unknown `extensions` keys, `tags`, `creator`,
+  `creator_notes`, `source`, `character_version` and `creation_date`.
+- **On the way back.** A card whose hash matches imports from the embedded card. A card whose text changed elsewhere
+  shows the changed fields and offers **Usa i testi modificati**.
+
+**Scarica la card originale** on the profile returns the stored source as it was imported.
 
 ## Demo characters
 

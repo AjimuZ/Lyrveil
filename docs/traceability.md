@@ -1,6 +1,6 @@
 # Traceability
 
-Maps each [requirement](requirements.md) group to its design, phase and tests. The phase column says where a group is built, not whether it is: phases P01 to P07 are built and their automated exits passed, P08 is in progress and P09 has not started. A group that needs the real GPU or a real model is not shown to hold until its hardware or quality item in the [roadmap](roadmap.md) runs.
+Maps each [requirement](requirements.md) group to its design, phase and tests. The phase column says where a group is built, not whether it is: phases P01 to P07 are built and their automated exits passed, P08 is in progress and P09 has not started. A group that needs the real GPU or a real model is not shown to hold until its hardware or quality item in the [roadmap](roadmap.md) runs. The version 1.1 groups (R-CRD, R-PSN, R-LOR and AC-21 to AC-24) are planned for P10 to P12, and none of them is built.
 
 | Requirements | Topic | Design | Phase | Tests |
 | --- | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. T
 | R-CHR-01 to R-CHR-06 | Card | [Character system](character-system.md#card-schema), [Frontend screen 3](frontend.md#3-character-creator), [ADR 0033](decisions/0033-card-fields-for-a-model-independent-voice.md), [ADR 0035](decisions/0035-structured-visual-identity-and-wardrobe.md) | P03 | T-CHR-01 to T-CHR-04, T-CHR-07, T-CHR-13, T-CHR-14 |
 | R-CHR-07, R-CHR-08 | Assisted creation | [Character system](character-system.md#assisted-creation) | P03 | T-CHR-10, T-GPU-05 |
 | R-CHR-09, R-CHR-10 | Avatars | [Character system](character-system.md#avatars-and-images) | P03, P05 | T-CHR-11, T-CHR-12 |
-| R-CHR-11, R-CHR-12 | Exchange | [Format](character-system.md#exchange-format), [ADR 0021](decisions/0021-character-format-and-card-v2.md) | P03 | T-CHR-05, T-CHR-06 |
+| R-CHR-11, R-CHR-12 | Exchange | [Format](character-system.md#exchange-format), [ADR 0021](decisions/0021-character-format-and-card-v2.md), [ADR 0047](decisions/0047-character-card-import-and-export.md) | P03, P10 | T-CHR-05, T-CHR-06, T-CRD-07, T-CRD-08 |
 | R-MEM-01 to R-MEM-09 | Layers | [Memory layers](memory-engine.md#memory-layers), [ADR 0012](decisions/0012-memory-provenance-and-history.md) | P04 | T-MEM-15, T-MEM-18, T-CON-04 |
 | R-MEM-10 to R-MEM-14 | Extraction | [Pipeline](memory-engine.md#extraction-pipeline), [ADR 0013](decisions/0013-structured-output-grammar-and-validation.md) | P04 | T-MEM-01 to T-MEM-04, T-MEM-14 |
 | R-MEM-15 to R-MEM-17 | Retrieval | [Retrieval](memory-engine.md#retrieval), [ADR 0011](decisions/0011-memory-retrieval-fts5-without-embeddings.md) | P04 | T-MEM-05 to T-MEM-07, T-MEM-22 |
@@ -72,6 +72,15 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. T
 | R-SAF-01 to R-SAF-03 | Content safeguards | [Security](security.md#content-safeguards), [ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md) | P03, P05 | T-CHR-02, T-SEC-07, T-IMG-01 |
 | R-SAF-04, R-SAF-06 | Simulation, wellbeing | [Prompting](prompting.md#block-1-global-instructions), [Interface text](design-system.md#interface-text) | P02, P08 | T-QLT-01 |
 | R-SAF-05 | No pressure | [Scheduler safety](scheduler.md#safety) | P07 | T-SCH-05, T-QLT-01 |
+| R-CRD-01, R-CRD-02 | Card import and source | [Character cards](character-system.md#character-cards), [ADR 0047](decisions/0047-character-card-import-and-export.md), [Data model](data-model.md#version-11-tables-planned) | P10 | T-CRD-01, T-CRD-02 |
+| R-CRD-03, R-CRD-04 | Reviewed draft, age, safeguards | [Character cards](character-system.md#character-cards), [Security](security.md#version-11-inputs-planned), [ADR 0037](decisions/0037-content-guard-rules-for-character-text.md) | P10 | T-CRD-03 to T-CRD-06, T-CRD-09 |
+| R-CRD-05 | Card export and round trip | [Character cards](character-system.md#character-cards), [API](api.md#character-cards-planned) | P10 | T-CRD-07, T-CRD-08 |
+| R-CRD-06 | Greetings and lorebook | [Character cards](character-system.md#character-cards), [ADR 0049](decisions/0049-worlds-and-lore-entries.md) | P10, P12 | T-CRD-03, T-LOR-05 |
+| R-PSN-01, R-PSN-04 | Personas | [ADR 0048](decisions/0048-user-personas.md), [Frontend](frontend.md#12-personas-planned) | P11 | T-PSN-01, T-PSN-02, T-PSN-06 |
+| R-PSN-02, R-PSN-03 | Persona per conversation, knowledge | [ADR 0048](decisions/0048-user-personas.md), [Prompting](prompting.md#blocks-10-to-12), [Memory](memory-engine.md#shared-memory) | P11 | T-PSN-03 to T-PSN-05 |
+| R-LOR-01, R-LOR-02 | Lore books, entries and links | [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [Data model](data-model.md#version-11-tables-planned), [Frontend](frontend.md#11-worlds-and-lore-planned) | P12 | T-LOR-02, T-LOR-04, T-LOR-07 |
+| R-LOR-03, R-LOR-04 | Activation, budget, prefix, diagnostics | [Prompting](prompting.md#blocks-10-to-12), [Context composition](memory-engine.md#planned-for-version-11) | P12 | T-LOR-01, T-LOR-03, T-LOR-06, T-QLT-05 |
+| R-LOR-05 | Lorebook exchange | [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [API](api.md#lore-planned) | P12 | T-LOR-05, T-LOR-08 |
 
 ## Acceptance criteria
 
@@ -91,3 +100,6 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. T
 | AC-18 | T-DCK-08, T-GPU-12 |
 | AC-19 | T-ORC-02, T-GPU-07 |
 | AC-20 | Pre-publication audit, T-DCK-10 |
+| AC-21, AC-22 | T-CRD-08, T-CRD-09, manual run in P10 |
+| AC-23 | T-PSN-05, T-PSN-06, manual run in P11 |
+| AC-24 | T-LOR-06, T-LOR-07, manual run in P12 |

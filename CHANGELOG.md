@@ -62,6 +62,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Design of version 1.1, planned and not built: Character Card V1, V2 and V3 import and export as JSON and PNG, with
+  the Lyrveil card embedded so that a round trip loses nothing (P10,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of
+  ADR 0021); several user personas, one per conversation (P11, [ADR 0048](docs/decisions/0048-user-personas.md));
+  and worlds with lore entries that enter a reply by keyword (P12,
+  [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). The requirements R-CRD, R-PSN and R-LOR, the acceptance
+  criteria AC-21 to AC-24, the roadmap phases P10 to P12 and the tests T-CRD, T-PSN and T-LOR are documented, and none
+  of them is written yet.
 - T-QLT-02 and T-QLT-07, the image default grid and the image identity protocol with its measured levers, as a
   generation and an import (QLT.3). `scripts\lyrveil.cmd test quality ImageGrid` renders, for each catalog image
   profile, the grid (3 characters, 2 scenes, 3 seeds, with CLIP skip 1, CFG 4.5 and 7 and second-pass denoise 0.35 and

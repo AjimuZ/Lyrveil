@@ -41,6 +41,8 @@ Sharing is opt-in on both sides:
 - A memory enters the shared scope only through the user's "Condividi" action, which
   copies it and sets `origin_conversation_id`.
 - Extraction never writes to the shared scope.
+- Planned for version 1.1 (P11, [ADR 0048](decisions/0048-user-personas.md)) and not built: "Condividi" also stores
+  the origin conversation's persona, and a conversation reads only the shared memories of its own persona.
 
 ## The memory record
 
@@ -712,6 +714,39 @@ Never removed: global instructions, first name, age, grammatical gender, narrati
 main traits, values, the core style description, the anchor and the current message. A current message over 2048 tokens is
 truncated in the prompt only, with a visible note in the interface. The API limit of 8000
 characters keeps this rare.
+
+### Planned for version 1.1
+
+Not built. P11 adds block 10, from [ADR 0048](decisions/0048-user-personas.md), and P12 adds blocks 11 and 12, from
+[ADR 0049](decisions/0049-worlds-and-lore-entries.md). Their texts are in [Prompting](prompting.md#blocks-10-to-12).
+
+| # | Block | Part | Priority when over budget | Min | Target | Max |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10 | User persona | Stable | `appearance` cut, then `about`. Name and gender stay in block 1 | 0 | 150 | 300 |
+| 11 | Lore, always active | Stable | Lowest `priority` cut first | 0 | 300 | 600 |
+| 12 | Lore, activated | Dynamic | Lowest `priority` cut first | 0 | 500 | 900 |
+
+The stable text becomes blocks 1, 2, 3, 10 and 11, then the scenario, then block 6. The dynamic context becomes blocks
+4, 5, 12 and 9. The algorithm allocates block 10 with the required blocks, then block 11 at target, and it selects
+block 12 with its target as the budget, before the memories.
+
+With the targets of blocks 1 to 12, about 4,160 tokens go to the system blocks. At the catalog profiles' 12,288-token
+context, about 7,600 tokens remain for messages, and about 3,500 at 8,192.
+
+The reduction order becomes:
+
+1. message examples;
+2. the oldest summary parts;
+3. the lowest-priority activated lore entries;
+4. the lowest-scoring memories;
+5. the oldest recent messages, down to the floor;
+6. the optional identity fields that are not locked;
+7. the persona's `appearance`, then its `about`;
+8. the lowest-priority constant lore entries;
+9. the state details.
+
+Each assembly also records `lore_refs`, which diagnostic mode lists apart from the memories
+([Data model](data-model.md#version-11-tables-planned)).
 
 ### Token counting
 

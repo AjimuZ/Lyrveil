@@ -62,6 +62,10 @@ All feature routes load lazily.
 | `/settings/models` | 9. Model settings |
 | `/settings/resources` | 10. AI resource monitoring |
 | `/settings/data` | Backup, export, deleted conversations |
+| `/characters/import/:importId` | Planned (P10): the import preview of a Character Card |
+| `/characters/:id/lore` | Planned (P12): 11. the character's own lore book |
+| `/worlds`, `/worlds/:id` | Planned (P12): 11. Worlds and lore |
+| `/settings/personas` | Planned (P11): 12. Personas |
 
 Technical screens are reached only from `/settings`. Any other path redirects to `/chats`.
 
@@ -289,6 +293,16 @@ Delivered in P03.2a (`features/characters/`): the routes `/characters/new` and `
   `tests/e2e/specs/character-creator.spec.mjs` (T-CHR-13); see [Testing](testing.md#character-creator). The E2E spec
   was written but not run in this change.
 
+Planned for version 1.1, P10 ([Character cards](character-system.md#character-cards)), and not built:
+
+- The characters list and the Creator's header get **Importa una card**, which accepts JSON and PNG files.
+- `/characters/import/:importId` shows the preview: the name, the avatar, the creator and tags, the fields that no
+  draft uses, and the report. Its actions are **Apri nel Creator** and **Struttura con il modello**.
+- The Creator then opens with fields marked **dalla card** or **proposto**, the age empty and required unless the
+  card stated one, and **Crea gli scenari dai saluti**.
+- The profile gets **Esporta come card** (V3 JSON, V2 JSON or PNG, plus the scenarios to include), **Esporta**
+  (`lyrveil.character`), and, for an imported character, **Scarica la card originale**.
+
 ### 4. Character Profile
 
 Avatar and variants, identity summary, personality, communication examples, conversation list, **Nuova conversazione**, **Modifica**, **Memoria**, version history with compare and restore, proposals for the profile, duplicate, archive and purge. A clear note states that the character
@@ -423,6 +437,9 @@ delivered: scenario text in the conversation's context panel (that panel is plan
 
 Display name, **Come rivolgersi a te** (**Al femminile**, **Al maschile** or **Non indicato**), time zone view, interface language (`it` in 1.0), default language for new characters, first-start notice, global proactive switch, image auto-detect, contextual images, diagnostic mode, and links to the other sections.
 
+From P11 the display name and **Come rivolgersi a te** move to the default persona, and this screen links to
+**Le tue persone**.
+
 ### 9. Model settings
 
 Two lists, **Modello di testo** and **Modello per immagini**, show every [profile](models.md) with its short purpose,
@@ -472,6 +489,34 @@ triggers a read, and a poll every 3 s keeps the card's memory current, because n
 could not read shows **Non disponibile**. Not delivered: the memory and disk gauges, the job list with cancel and
 retry (the list and retry routes are planned), tokens per second, recent transitions, preflight results and the
 **Riprova** action during `ERROR` (the recover route is planned).
+
+### 11. Worlds and lore (planned)
+
+Planned for version 1.1, P12, and not built ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
+
+- **Mondi** (`/worlds`) lists worlds with search, the **Attivi** and **Archiviati** tabs, **Nuovo mondo** and
+  **Importa un lorebook**.
+- A world (`/worlds/:id`) has its name, description, scan depth and budget; its entries with search and an
+  **Attiva** switch; and its links to characters, scenarios and conversations.
+- The entry form has **Titolo**, **Contenuto**, **Parole chiave**, **Parole secondarie**, **Parole escluse**,
+  **Sempre attiva**, **Attiva**, **Priorità**, **Ordine**, **Maiuscole esatte** and **Nota**. It warns when an entry
+  is too long to ever enter the prompt.
+- **Prova le parole chiave** takes a pasted text and shows which entries would be active, with the key that matched or
+  the reason they stayed inactive.
+- The character profile opens the own book at `/characters/:id/lore` with the same editor.
+- The scenario form and the conversation's context panel get a **Mondi** choice.
+- Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories.
+
+### 12. Personas (planned)
+
+Planned for version 1.1, P11, and not built ([ADR 0048](decisions/0048-user-personas.md)).
+
+- **Le tue persone** (`/settings/personas`) lists personas with **Predefinita**, **Archivia** and **Elimina**, the
+  last offered only for a persona with no conversation.
+- The form has **Nome**, **Come rivolgersi a te**, **Età** (optional, at least 18), **Aspetto** and **Di te**. It
+  shows the note "Ciò che scrivi qui lo sa ogni personaggio che parla con questa persona."
+- The new-chat picker gets **Persona**, preselected from the scenario or the default, and **Cosa sa di te all'inizio**.
+- The conversation's context panel shows the persona and lets the user edit the note.
 
 ## Keyboard
 

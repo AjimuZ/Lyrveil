@@ -1,6 +1,6 @@
 # ADR 0021: Own versioned JSON format, Character Card V2 after 1.0
 
-Status: accepted (2026-11-01). Supersedes: none.
+Status: accepted (2026-11-01). Supersedes: none. Superseded in part by [ADR 0047](0047-character-card-import-and-export.md) (2026-11-27): Character Card V1, V2 and V3 are imported as JSON and PNG and exported too, in version 1.1. The `lyrveil.character` format stays.
 
 ## Context
 The requirements ask for a documented, versioned JSON format, with no dependency on a proprietary format, and for Character Card V2 to be evaluated later if technically convenient. Lyrveil's card has separate traits, a communication profile and a visual profile, which V2's free-text fields do not model directly.

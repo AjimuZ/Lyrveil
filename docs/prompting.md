@@ -365,6 +365,54 @@ first ([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)):
 | V9 | Evita le frasi fatte e i calchi dall'inglese. | 3 replies |
 | V13 | Dai del {{ comm.address_form }} a {{ user.display_name }}, sempre. | 3 replies |
 
+### Blocks 10 to 12
+
+Planned for version 1.1 and not built. Block 10 comes with P11
+([ADR 0048](decisions/0048-user-personas.md)), and blocks 11 and 12 come with P12
+([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). Their budgets and their place in the reduction order are in
+[Context composition](memory-engine.md#planned-for-version-11). From P11, `user.display_name` and
+`user.grammatical_gender` in every block, check and stop sequence come from the conversation's persona.
+
+**Order of the stable text.** It becomes blocks 1, 2, 3, 10 and 11, then the scenario, then block 6. Block 12 joins the
+dynamic context after block 5 and before the anchor. An empty block adds nothing, not even its heading.
+
+Block 10, user persona, stable:
+
+```jinja
+Cosa sai di {{ user.display_name }}:
+{% if persona.age %}Ha {{ persona.age }} anni.{% endif %}
+{% if persona.appearance %}Aspetto: {{ persona.appearance }}{% endif %}
+{% if persona.about %}{{ persona.about }}{% endif %}
+{% if persona_note %}Tra voi: {{ persona_note }}{% endif %}
+```
+
+Block 11, lore entries that are always active, stable:
+
+```jinja
+Il tuo mondo:
+{% for entry in constant_entries %}- {% if entry.title %}{{ entry.title }}: {% endif %}{{ entry.content }}
+{% endfor %}
+```
+
+Block 12, lore entries activated by keywords, dynamic:
+
+```jinja
+Cose che sai su quello di cui state parlando:
+{% for entry in active_entries %}- {% if entry.title %}{{ entry.title }}: {% endif %}{{ entry.content }}
+{% endfor %}
+```
+
+**Version 2 of block 1.** P12 changes the first two lines under `Cosa sai:`:
+
+```text
+- Conosci solo la tua scheda, le cose del tuo mondo, il vostro stato, i ricordi nel contesto e i messaggi di questa chat.
+- La tua scheda ha sempre la precedenza. Se un ricordo [sicuro] contraddice il tuo mondo, vale il ricordo: è successo dopo.
+```
+
+**Placeholders.** `{{char}}` and `{{user}}` inside card and lore text are replaced with the first name and the user's
+display name before a block is counted ([Character cards](character-system.md#character-cards)). The frame-marker
+escape of `PromptFormatter` applies to persona and lore text as it does to card text.
+
 ## Structured tasks
 
 All structured tasks use the same flow ([ADR 0013](decisions/0013-structured-output-grammar-and-validation.md)):

@@ -1,6 +1,6 @@
 # Requirements
 
-Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner, and 2026-11-06 for consistency across models and anime image quality. Implementation (2026-11-09): phases P01 to P07 are built and their automated exits passed, and P08 is in progress. The hardware and quality checks of P02 to P06 and the audit of P09 have not run, so a requirement that needs the real GPU or a model's measured quality is not shown to hold yet. [Traceability](traceability.md) and the [roadmap](roadmap.md) give the state per phase.
+Status: accepted (2026-11-01), revised 2026-11-05 for the model and hardware changes requested by the owner, 2026-11-06 for consistency across models and anime image quality, and 2026-11-27 for the version 1.1 requirements of [section 22](#22-version-11). Implementation (2026-11-09): phases P01 to P07 are built and their automated exits passed, and P08 is in progress. The hardware and quality checks of P02 to P06 and the audit of P09 have not run, so a requirement that needs the real GPU or a model's measured quality is not shown to hold yet. [Traceability](traceability.md) and the [roadmap](roadmap.md) give the state per phase.
 
 This document is the normative statement of what Lyrveil must do. Each requirement
 has a stable identifier. [Traceability](traceability.md) maps every group to its
@@ -30,7 +30,7 @@ receives generated messages and images.
 - Group conversations with several characters in one chat.
 - Additional AI models for embeddings, summaries, translation, speech or vision.
 - Active LoRA, ControlNet or reference-image workflows (prepared).
-- Character Card V2 import ([ADR 0021](decisions/0021-character-format-and-card-v2.md)).
+- Character Card import and export, user personas and lore. They are planned for version 1.1 ([section 22](#22-version-11)).
 - Native mobile apps. Mobile use means a responsive layout.
 - An explicit-content mode ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)).
 
@@ -115,7 +115,7 @@ reference machine was measured at 32 GB on 2026-11-05.
 | R-CHR-09 | Avatars: upload a local image, generate with the active image model, regenerate, choose a crop, save several variants, set a primary image. |
 | R-CHR-10 | The Creator uses the same image infrastructure as conversations. |
 | R-CHR-11 | Import and export use a documented, versioned JSON format. The proprietary format is never a mandatory dependency. |
-| R-CHR-12 | Character Card V2 compatibility is evaluated later ([ADR 0021](decisions/0021-character-format-and-card-v2.md)). |
+| R-CHR-12 | Character Card V2 compatibility is evaluated later ([ADR 0021](decisions/0021-character-format-and-card-v2.md)). Evaluated on 2026-11-27: import and export of V1, V2 and V3 cards are planned for version 1.1, as R-CRD-01 to R-CRD-06 ([ADR 0047](decisions/0047-character-card-import-and-export.md)). |
 
 ## 8. Memory: Lyrveil Memory Engine
 
@@ -337,3 +337,56 @@ dated evidence in `docs/verification/`:
 | AC-18 | Use everything offline. |
 | AC-19 | Verified: the text model and the image model are never held in VRAM at the same time. |
 | AC-20 | Verified: the public repository is reproducible and holds no private data or model weights. |
+
+## 22. Version 1.1
+
+Added on 2026-11-27 at the owner's request. These requirements are mandatory for version 1.1 and not for 1.0. Phases
+P10 to P12 of the [roadmap](roadmap.md) build them. Group conversations stay a non-goal of 1.1.
+
+### Character cards
+
+Design: [ADR 0047](decisions/0047-character-card-import-and-export.md).
+
+| ID | Requirement |
+| --- | --- |
+| R-CRD-01 | Import reads Character Card V1, V2 and V3 as JSON, and V2 and V3 embedded in PNG or APNG. It never fetches a remote address. |
+| R-CRD-02 | The imported card is stored unchanged with the new character, and the user can download it as it was imported. |
+| R-CRD-03 | An import always becomes a draft that the user reviews in the Creator. The user enters or confirms the age, which is never defaulted. Every text of the card passes the content guard. |
+| R-CRD-04 | Text from a card never replaces the global instructions. A card's system prompt and post-history instructions are kept and shown, and never sent to the model. |
+| R-CRD-05 | Export writes V3 JSON, V2 JSON and PNG. It keeps the unknown fields of an imported card, and it embeds the complete Lyrveil card, so that exporting and importing again in Lyrveil loses nothing. |
+| R-CRD-06 | A card's greetings can become scenarios of the character, and its lorebook becomes the character's own lore book. |
+
+### User personas
+
+Design: [ADR 0048](decisions/0048-user-personas.md).
+
+| ID | Requirement |
+| --- | --- |
+| R-PSN-01 | The user can keep several personas. Each has a name, how characters address the user, an optional age, an appearance and a description. One of them is the default. |
+| R-PSN-02 | Each conversation uses one persona, chosen when the conversation is created and never changed. A note per conversation states what the character knows of the user at the start. |
+| R-PSN-03 | A character knows its conversation's persona and note, what that conversation said, and only the shared memories of conversations with the same persona. |
+| R-PSN-04 | Persona text follows the adult rule and the content guard of character text. |
+
+### Worlds and lore
+
+Design: [ADR 0049](decisions/0049-worlds-and-lore-entries.md).
+
+| ID | Requirement |
+| --- | --- |
+| R-LOR-01 | A lore entry holds reference text with keywords, optional secondary and excluded keywords, a priority, an order, and enabled and always-active flags. |
+| R-LOR-02 | Entries belong to a character's own book or to a world. A world can be linked to characters, scenarios and single conversations, and a reply reads only the books its conversation is linked to. |
+| R-LOR-03 | Before each reply, the entries whose keywords appear in the recent messages enter the prompt within a token budget, and the always-active entries enter within their own budget. Activation needs no model. |
+| R-LOR-04 | Lore never changes the card or the memories, keeps the stable prompt prefix unchanged while the conversation moves, and is shown in diagnostic mode with the keyword that activated it. |
+| R-LOR-05 | Lore books import and export as V3 lorebooks and as the lorebook of a card, without losing unknown fields. |
+
+### Acceptance criteria for version 1.1
+
+Version 1.1 is accepted when AC-01 to AC-20 still hold and a user can also do the following, each with dated evidence
+in `docs/verification/`:
+
+| ID | Criterion |
+| --- | --- |
+| AC-21 | Import a community character card from a PNG, review it in the Creator and chat with the character. |
+| AC-22 | Export a character as a PNG card and import it again with no change to the card. |
+| AC-23 | Start conversations with two different personas, and see that neither character knows the other persona. |
+| AC-24 | Link a world to two characters and see one of its entries reach a reply in diagnostic mode. |

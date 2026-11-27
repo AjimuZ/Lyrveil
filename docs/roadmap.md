@@ -14,8 +14,13 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P07 | Proactive messages and messaging details | Done |
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: automated exit passed; hardware and quality part (P08.EXIT-HW) pending |
 | P09 | Audit and public release | Planned |
+| P10 | Version 1.1: Character Card import and export | Planned |
+| P11 | Version 1.1: user personas | Planned |
+| P12 | Version 1.1: worlds and lore | Planned |
 
 Through P03, the project delivers the complete working path from character creation to persistent conversation. Later phases add advanced memory, images and orchestration on top of it.
+
+P10 to P12 make version 1.1. They were planned on 2026-11-27 at the owner's request, in this order ([ADRs 0047 to 0049](decisions/README.md)). Work on them can start before P09 ends, but `v1.1.0` is tagged only after `v1.0.0`.
 
 ## P00: Documentation
 
@@ -220,6 +225,58 @@ Evidence:
 
 Exit: every acceptance criterion has dated evidence. The audit is clean.
 
+## P10: Character cards
+
+**Depends on:** P03 (exchange format, Creator, assisted creation). **Areas:** import, export, Creator, data.
+Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Character cards](character-system.md#character-cards).
+
+- [ ] P10.1 Parser for V1, V2 and V3 JSON and for the `ccv3` and `chara` chunks of PNG and APNG, with the limits and
+  the content guard on every string.
+- [ ] P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import
+  report.
+- [ ] P10.3 The `card_conversion` job with the assisted creation's grammar and repair, and `CARD_TOO_LONG`.
+- [ ] P10.4 Saving an import through `POST /characters` with `import_id`: avatar, scenarios from greetings, and the
+  age rule.
+- [ ] P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an
+  embedded Lyrveil card.
+- [ ] P10.6 The Creator's import preview, and its import and export actions, including those of the native format.
+
+Exit: T-CRD-01 to T-CRD-09 pass. A V2 PNG and a V3 JSON card from the test fixtures import, and both directions of
+the round trip hold. AC-21 and AC-22 hold in a manual run.
+
+## P11: User personas
+
+**Depends on:** P10. **Areas:** settings, conversations, prompts, memory. Design:
+[ADR 0048](decisions/0048-user-personas.md).
+
+- [ ] P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,
+  `scenarios.persona_id` and `memories.persona_id`.
+- [ ] P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and
+  proactive prompts, and the new block 10.
+- [ ] P11.3 Shared memories read by persona.
+- [ ] P11.4 **Le tue persone**, the persona and note in the new-chat picker, and the note in the context panel.
+
+Exit: T-PSN-01 to T-PSN-06 pass. The stable-prefix test still passes with block 10 (T-MOD-05). AC-23 holds in a
+manual run.
+
+## P12: Worlds and lore
+
+**Depends on:** P11. **Areas:** lore, prompts, Memory Studio, import and export. Design:
+[ADR 0049](decisions/0049-worlds-and-lore-entries.md).
+
+- [ ] P12.1 `lore_books`, `lore_entries` and `lore_links`, with the content guard and the stemmed keys.
+- [ ] P12.2 The matcher, the selection by budget and priority, and blocks 11 and 12 with the new reduction order and
+  version 2 of the global instructions.
+- [ ] P12.3 `lore_refs` in the assemblies and **Voci di lore** in diagnostic mode.
+- [ ] P12.4 `character_book` and `lorebook_v3` import and export, and the migration of the books stored by P10.
+- [ ] P12.5 **Mondi**, the own book of a character, the links from characters, scenarios and conversations, and
+  **Prova le parole chiave**.
+- [ ] P12.6 Run the consistency protocol (T-QLT-05) again on the default profile, with a world of 40 entries linked to
+  the protocol's character, and record the result next to the 1.0 run.
+
+Exit: T-LOR-01 to T-LOR-08 pass. T-QLT-05 meets its hard targets on the default profile with lore active. AC-24 holds
+in a manual run.
+
 ## After 1.0
 
 Candidates, not commitments, in this order for images:
@@ -228,5 +285,11 @@ Candidates, not commitments, in this order for images:
 2. IP-Adapter or a LoRA per character. Both need extra models, so R-MOD-06 and the non-goals must change first.
 3. A face detailer.
 
-Other candidates: Character Card V2 import, semantic memory search behind `MemoryRetriever`, group conversations, an
-interface in other languages.
+Other candidates: semantic memory search behind `MemoryRetriever`, group conversations, CHARX cards and SillyTavern
+world-info files, an interface in other languages. Character Card import and export, personas and lore are planned as
+P10 to P12 above.
+
+Group conversations need their own ADR and a measurement before any code. Each member has its own stable prefix, so
+KoboldCpp reprocesses the prompt at every change of speaker unless SmartCache keeps one slot per member
+([ADR 0031](decisions/0031-stable-prefix-dynamic-context-and-anchor.md)). Memory would also have to record which
+member witnessed which message. Personas (P11) and worlds (P12) are designed so that a group can reuse them.

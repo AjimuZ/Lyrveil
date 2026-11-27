@@ -24,7 +24,7 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0018](0018-adult-only-characters-and-content-safeguards.md) | Adult-only characters and deterministic content safeguards | Accepted |
 | [0019](0019-hardware-tiers.md) | Target and reduced hardware tiers | Superseded by [0027](0027-hardware-tiers-after-ram-upgrade.md) |
 | [0020](0020-proactive-messages-default-off.md) | Proactive messages off by default, missed events skipped | Accepted |
-| [0021](0021-character-format-and-card-v2.md) | Own versioned JSON format, Character Card V2 after 1.0 | Accepted |
+| [0021](0021-character-format-and-card-v2.md) | Own versioned JSON format, Character Card V2 after 1.0 | Accepted; its Character Card part superseded by [0047](0047-character-card-import-and-export.md) |
 | [0022](0022-root-scripts-and-repository-layout.md) | Thin root scripts, implementations in `scripts/` | Superseded by [0029](0029-windows-operation-with-docker-volumes.md) |
 | [0023](0023-obsidian-bloom-accessibility-extensions.md) | Control border and semantic tokens added to the palette | Accepted |
 | [0024](0024-selectable-model-profiles.md) | Selectable model profiles with tier defaults | Accepted; its Gemma 4 profiles and defaults superseded by [0045](0045-drop-gemma-4-rocinante-x-default.md) |
@@ -50,3 +50,6 @@ One record per material decision. Records are never rewritten. A new record supe
 | [0044](0044-accept-certifi-pillow-and-tslib-licenses.md) | Accept certifi (MPL-2.0), pillow (MIT-CMU) and tslib (0BSD) | Accepted |
 | [0045](0045-drop-gemma-4-rocinante-x-default.md) | Drop the Gemma 4 profiles, Rocinante X 12B the default on every tier | Accepted |
 | [0046](0046-test-only-orchestrator-for-the-gpu-level.md) | A test-only orchestrator drives the gpu level's real runtimes | Accepted |
+| [0047](0047-character-card-import-and-export.md) | Character Card V1, V2 and V3 import and export, with the Lyrveil card embedded | Accepted, planned for 1.1 (P10) |
+| [0048](0048-user-personas.md) | User personas, one per conversation | Accepted, planned for 1.1 (P11) |
+| [0049](0049-worlds-and-lore-entries.md) | Worlds and lore entries activated by keywords | Accepted, planned for 1.1 (P12) |

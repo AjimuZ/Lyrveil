@@ -1355,9 +1355,57 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 | T-QLT-06 | [Extraction evaluation](consistency-engine.md#extraction-evaluation) on every catalog text profile | P04 |
 | T-QLT-07 | [Image identity protocol](image-generation.md#image-identity-protocol), with the [measured levers](image-generation.md#measured-levers) | P05 |
 
+### Character cards
+
+Planned for version 1.1 ([ADR 0047](decisions/0047-character-card-import-and-export.md)). None of these tests is
+written. The fixtures are original synthetic cards written for the tests. No community card is committed
+([R-PUB-06](requirements.md#17-publication)).
+
+| ID | Test | Level | Phase |
+| --- | --- | --- | --- |
+| T-CRD-01 | Parsing: V1, V2 and V3 JSON, and PNG and APNG with `chara`, `ccv3` or both (`ccv3` wins). Refused: a bad chunk length or CRC, bad base64, bad JSON, nesting over 64 levels, a file over 64 MB, an unknown `spec`, a CHARX archive (`415`) | Unit | P10 |
+| T-CRD-02 | An import stores the parsed card unchanged with the file hash, `GET .../source` returns it, any refusal stores nothing, and an unsaved import expires with its staged avatar | Integration | P10 |
+| T-CRD-03 | Direct mapping as in the table: traits by paragraph, examples from `<START>` blocks, pairs over the limits left out and reported, macros replaced and listed, greetings turned into scenarios only when asked | Unit | P10 |
+| T-CRD-04 | Age: empty without an explicit adult age, filled with one, the conversion model's age never used. A minor in any string, the lorebook included, answers `422 CONTENT_POLICY_BLOCKED` with the source path | Unit, integration | P10 |
+| T-CRD-05 | `card_conversion` with the fake runtime: a valid draft, a repaired one, two refusals, and `CARD_TOO_LONG` before any generation | Integration | P10 |
+| T-CRD-06 | `{{char}}` and `{{user}}` render at prompt time with the first name and the user's name. `system_prompt`, `post_history_instructions` and `creator_notes` never reach a reply, draft, extraction or proactive prompt | Unit | P10 |
+| T-CRD-07 | Export as V3 JSON, V2 JSON and PNG: envelope values, every required field, both PNG chunks, `extensions.lyrveil`, the kept source fields and unknown `extensions` keys, and no conversation, memory, persona or user name | Unit, integration | P10 |
+| T-CRD-08 | Round trips: Lyrveil, then a V3 PNG, then Lyrveil gives an equal card; a card edited elsewhere names its changed fields; a card, then Lyrveil, then a card keeps every unknown field | Integration | P10 |
+| T-CRD-09 | In the browser: import a PNG card, read the preview, enter the age, save with scenarios, export as PNG | E2E | P10 |
+
+### Personas
+
+Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). None of these tests is written.
+
+| ID | Test | Level | Phase |
+| --- | --- | --- | --- |
+| T-PSN-01 | The migration creates the default persona from the two settings, or from their defaults without a row, sets it on every conversation and shared memory, and removes the keys | Integration | P11 |
+| T-PSN-02 | Validation: name length, age NULL or 18 to 120 at the API and in the database, the content guard on every text, one default, and the archive and delete rules | Unit, integration | P11 |
+| T-PSN-03 | The conversation's persona reaches block 1, block 3, block 10, the anchor, the stop sequences, the reply checks and the extraction and proactive prompts. No text of another persona reaches any prompt | Unit, integration | P11 |
+| T-PSN-04 | `persona_id` cannot change after creation, the note can, and a persona edit changes block 10 from the next reply only | Integration | P11 |
+| T-PSN-05 | With `shares_memory`, a conversation reads the shared memories of its own persona and never those of another | Integration | P11 |
+| T-PSN-06 | In the browser: create a second persona, start a chat with it and a note, see both in the context panel | E2E | P11 |
+
+### Lore
+
+Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). None of these tests is written.
+
+| ID | Test | Level | Phase |
+| --- | --- | --- | --- |
+| T-LOR-01 | Matcher: stem sequences in Italian and English, exact case-sensitive keys, secondary and excluded keys, disabled and constant entries, the scan depth, and keys refused for having no stem | Unit | P12 |
+| T-LOR-02 | A reply reads the own book, the character's worlds and the conversation's worlds. A scenario's links are copied at the start, and no link of another conversation applies | Integration | P12 |
+| T-LOR-03 | Selection and placement: priority, own book first, insertion order, block and book budgets, the new reduction order, block 11 in the stable text and block 12 in the dynamic context. The prefix stays byte-identical over twelve replies while the activated entries change | Unit | P12 |
+| T-LOR-04 | Validation: the field limits, the content guard on titles, contents and names, the 500-entry limit, and an entry over its block's maximum stored and never inserted | Unit, integration | P12 |
+| T-LOR-05 | A card's `character_book` becomes the own book. The decorators are applied or kept, `use_regex` entries are disabled and reported, unknown fields are kept, and the migration converts the sources stored by P10 | Integration | P12 |
+| T-LOR-06 | Each assembly stores `lore_refs`, diagnostic mode shows them apart from the memories, and extraction never reads lore | Integration | P12 |
+| T-LOR-07 | In the browser: create a world, add entries, link it to two characters, use **Prova le parole chiave**, and see an entry under **Voci di lore** | E2E | P12 |
+| T-LOR-08 | `lorebook_v3` import and export: a round trip keeps every field, and the decorators that were not applied come back as lines | Unit, integration | P12 |
+
 ## Acceptance
 
 P09 walks through [AC-01 to AC-20](requirements.md#21-acceptance-criteria) on a clean clone with the real hardware. It records each result in `docs/verification/`.
+
+P10 to P12 add [AC-21 to AC-24](requirements.md#acceptance-criteria-for-version-11) for version 1.1. Each phase records its criteria in a manual run, and the 1.1 release runs AC-01 to AC-24 again on a clean clone.
 
 ## Evidence
 

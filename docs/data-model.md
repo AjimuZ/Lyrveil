@@ -653,6 +653,127 @@ service (`services/notifications.py`), the routes and the `notification.created`
 | `value_json` | TEXT | Validated against the settings model |
 | `updated_at` | TEXT | |
 
+## Version 1.1 tables (planned)
+
+Not built. Each phase adds its tables in a new Alembic revision after `0017`. Columns added to `conversations`,
+`scenarios` and `memories` stay plain columns, with no foreign key: SQLite cannot add one without rebuilding the table,
+which would drop its search triggers (see [`scenarios`](#scenarios)). The services enforce them, as they do for
+`scenario_id`.
+
+### P10: character cards
+
+[ADR 0047](decisions/0047-character-card-import-and-export.md).
+
+`card_imports`, an import waiting for review:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `status` | TEXT | `ready`, `converting`, `saved`, `discarded` |
+| `format` | TEXT | `chara_card_v1`, `chara_card_v2`, `chara_card_v3` |
+| `container` | TEXT | `json`, `png` |
+| `source_json` | TEXT | The parsed card, unchanged. `json_valid` |
+| `source_sha256` | TEXT | Hash of the file's bytes |
+| `direct_draft_json` | TEXT | The direct mapping: card, proposed fields, scenarios |
+| `report_json` | TEXT | Fields left out, macros replaced, warnings |
+| `conversion_job_id` | TEXT | FK `generation_jobs`, SET NULL |
+| `avatar_staging_path` | TEXT | NULL without an avatar. Below `data/media/.staging` |
+| `character_id` | TEXT | Set when saved. FK, SET NULL |
+| `created_at`, `expires_at` | TEXT | `expires_at` is 7 days after creation |
+
+An expired row that is not `saved` is deleted with its staged avatar when the backend starts and by the daily backup
+job.
+
+`character_sources`, the original card of an imported character:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `character_id` | TEXT | FK. A purge of the character deletes it |
+| `format`, `container` | TEXT | As in `card_imports` |
+| `source_json` | TEXT | The parsed card, unchanged |
+| `source_sha256` | TEXT | |
+| `imported_at` | TEXT | |
+
+### P11: user personas
+
+[ADR 0048](decisions/0048-user-personas.md).
+
+`user_personas`:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `name` | TEXT | NOT NULL, 1 to 40 characters |
+| `grammatical_gender` | TEXT | `femminile`, `maschile`, `non_indicato` |
+| `age` | INTEGER | NULL, or 18 to 120 by `CHECK` |
+| `appearance` | TEXT | NOT NULL, default empty, up to 600 characters |
+| `about` | TEXT | NOT NULL, default empty, up to 1,200 characters |
+| `is_default` | BOOLEAN | A partial unique index allows one true row |
+| `status` | TEXT | `active`, `archived` |
+| `created_at`, `updated_at` | TEXT | |
+
+New columns:
+
+| Table | Column | Rules |
+| --- | --- | --- |
+| `conversations` | `persona_id` | The conversation's persona, set at creation and never changed |
+| `conversations` | `persona_note` | TEXT NOT NULL, default empty, up to 600 characters |
+| `scenarios` | `persona_id` | NULL, or the persona the new-chat picker preselects |
+| `memories` | `persona_id` | Set for `scope = shared` from the origin conversation, NULL otherwise |
+
+The revision creates the default persona from `user.display_name` and `user.grammatical_gender`, or from their
+defaults when no row exists. It sets the persona on every conversation and every shared memory, and deletes the two
+keys from `application_settings`. A persona that a conversation uses can be archived and not deleted.
+
+### P12: worlds and lore
+
+[ADR 0049](decisions/0049-worlds-and-lore-entries.md).
+
+`lore_books`:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `kind` | TEXT | `character`, `world` |
+| `character_id` | TEXT | FK for `kind = character`, unique, NULL for a world. A purge of the character deletes the book |
+| `name` | TEXT | NOT NULL, 1 to 120 characters |
+| `description` | TEXT | Up to 2,000 characters. Never in a prompt |
+| `scan_depth` | INTEGER | 1 to 20, default 4 |
+| `token_budget` | INTEGER | NULL, or 50 to 900 |
+| `status` | TEXT | `active`, `archived` |
+| `source_json` | TEXT | Book fields kept from an import, such as `recursive_scanning` and `extensions` |
+| `created_at`, `updated_at` | TEXT | |
+
+`lore_entries`:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `book_id` | TEXT | FK, CASCADE: entries belong to their book |
+| `title` | TEXT | Up to 80 characters |
+| `content` | TEXT | NOT NULL, up to 8,000 characters |
+| `keys_json`, `secondary_keys_json`, `exclude_keys_json` | TEXT | Lists of up to 16 keys of up to 60 characters |
+| `keys_stem_json` | TEXT | The stems of all three lists, written by the service |
+| `case_sensitive`, `constant`, `enabled` | BOOLEAN | |
+| `priority`, `insertion_order` | INTEGER | Default 0 and 100 |
+| `note` | TEXT | Up to 500 characters. Never in a prompt |
+| `source_json` | TEXT | Entry fields and decorators kept from an import |
+| `created_at`, `updated_at` | TEXT | |
+
+`lore_links`, a world linked to one target:
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | TEXT | PK |
+| `book_id` | TEXT | FK, CASCADE. Must be a `world` |
+| `character_id`, `scenario_id`, `conversation_id` | TEXT | Exactly one is set, by `CHECK`. Unique with `book_id` |
+| `created_at` | TEXT | |
+
+`prompt_assemblies` gains `lore_refs_json`: for each entry considered, its id, book, content hash, matched key, block,
+and whether it was kept. Deleting a world asks for confirmation and deletes its entries and links. A conversation that
+starts from a scenario copies the scenario's links. Purging a conversation deletes its links.
+
 ## Full-text search
 
 Each FTS table holds stemmed text ([Memory engine](memory-engine.md#stemming)), keeps its
