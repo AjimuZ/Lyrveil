@@ -230,7 +230,7 @@ Exit: every acceptance criterion has dated evidence. The audit is clean.
 **Depends on:** P03 (exchange format, Creator, assisted creation). **Areas:** import, export, Creator, data.
 Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Character cards](character-system.md#character-cards).
 
-- [ ] P10.1 Parser for V1, V2 and V3 JSON and for the `ccv3` and `chara` chunks of PNG and APNG, with the limits and
+- [x] P10.1 Parser for V1, V2 and V3 JSON and for the `ccv3` and `chara` chunks of PNG and APNG, with the limits and
   the content guard on every string.
 - [ ] P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import
   report.

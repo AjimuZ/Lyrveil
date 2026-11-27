@@ -425,8 +425,29 @@ Delivered in P03.5 (backend only; the Creator has no import or export button yet
 
 ### Character cards
 
-Planned for version 1.1, phase P10, and not built. The rules and their reasons are in
+Planned for version 1.1, phase P10. The rules and their reasons are in
 [ADR 0047](decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of ADR 0021.
+Only step 1 and the check of step 2 are built (P10.1, backend only, with no route yet). Steps 3 to 6, the mapping,
+the placeholders and the export are planned.
+
+**Parser (delivered in P10.1).** `lyrveil.domain.tavern_card.parse_card` takes the bytes of a file and returns the
+card. The card comes with its spec (V1, V2 or V3), its container (JSON, PNG or APNG), the chunk it was read from, the
+JSON exactly as read, a typed view and the file's SHA-256.
+
+- **Format.** The format comes from the content. A PNG signature means PNG. A zip signature means CHARX, which is
+  refused. A UTF-8 text that starts with `{` or `[` means JSON. Anything else is refused as not a card file.
+- **PNG chunks.** The PNG is read chunk by chunk up to `IEND`, and each chunk's length and CRC are checked. An `acTL`
+  chunk makes it an APNG. The first `ccv3` `tEXt` chunk is used, otherwise the first `chara` one. A broken `ccv3`
+  is refused, not skipped for `chara`. The image is not decoded here: the avatar step does that with the upload
+  limits.
+- **Spec.** `spec` `chara_card_v2` or `chara_card_v3` needs a `data` object. An object without `spec` is a V1 card
+  when it has a text `name` and at least one other V1 text. Unknown fields are kept, and a null field reads as empty.
+- **Content guard.** Every string of the JSON passes the content guard after the structure checks, envelope, unused
+  fields, `extensions` and lorebook entries included. Only a string that is a whole base64 data URI is skipped. A
+  string that merely starts with `data:` is still checked.
+- **Errors.** Each refusal carries a `CardFailure` reason. A file over 64 MB is `413`, and a file that is neither JSON
+  nor PNG, CHARX included, is `415`. A broken PNG, chunk length, CRC, base64 or JSON, nesting over 64 levels, a
+  missing or unknown `spec`, and a field of the wrong type (named by its path) are `422 IMPORT_INVALID`.
 
 **Import flow.**
 

@@ -358,7 +358,17 @@ def check_card(card: CharacterCard) -> None:
     Raises ContentPolicyBlockedError whose Italian detail names the first offending field in card order, such as
     `traits.0.description`, and never quotes its text.
     """
-    for path, text in _texts(card.model_dump(mode="json"), ""):
+    check_texts(_texts(card.model_dump(mode="json"), ""))
+
+
+def check_texts(texts: Iterable[tuple[str, str]]) -> None:
+    """Returns when no text of `texts`, pairs of a field path and its text, describes a minor; the Character Card
+    parser (lyrveil.domain.tavern_card) passes every string of an imported card with its source path.
+
+    Raises ContentPolicyBlockedError whose Italian detail names the path of the first offending text, and never
+    quotes the text.
+    """
+    for path, text in texts:
         rule = find_violation(text)
         if rule is not None:
             raise ContentPolicyBlockedError(_CARD_DETAILS[rule].format(path=path))

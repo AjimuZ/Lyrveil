@@ -62,6 +62,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The Character Card parser, in the backend only and not yet reachable from the API (P10.1,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `lyrveil.domain.tavern_card` reads V1, V2 and V3
+  cards from JSON, and from the `ccv3` or `chara` `tEXt` chunk of a PNG or APNG (`ccv3` wins). It detects the format
+  from the content and uses its own chunk reader, which checks each chunk's length and CRC, so no Pillow limit changes.
+  A file over 64 MB, a CHARX archive, a broken chunk, bad base64 or JSON, nesting over 64 levels, and a missing or
+  unknown `spec` each get their own refusal reason. Every string of the card except base64 data URIs passes the
+  content guard, which reports the source path, such as `data.character_book.entries[3].content`. The synthetic
+  fixtures are in `backend/tests/fixtures/tavern_cards`, and the tests are in `tests/unit/test_tavern_card.py`.
 - Design of version 1.1, planned and not built: Character Card V1, V2 and V3 import and export as JSON and PNG, with
   the Lyrveil card embedded so that a round trip loses nothing (P10,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of
