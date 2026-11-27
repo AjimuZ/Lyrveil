@@ -19,7 +19,13 @@ class ImportRule:
 
 
 RULES = (
-    ImportRule("lyrveil.domain", forbidden=("lyrveil",), allowed=("lyrveil.domain",)),
+    # The one exception: the Character Card parser runs the content guard of ADR 0037 on every string it reads, and
+    # the guard is pure text rules over domain types, with no I/O and no state (P10.1).
+    ImportRule(
+        "lyrveil.domain",
+        forbidden=("lyrveil",),
+        allowed=("lyrveil.domain", "lyrveil.consistency.content_guard"),
+    ),
     ImportRule("lyrveil.services", forbidden=("lyrveil.persistence.models", "lyrveil.runtimes")),
     ImportRule("lyrveil.api", forbidden=("lyrveil.runtimes",)),
 )
@@ -108,4 +114,11 @@ def test_allowed_imports_are_not_reported(tmp_path: Path) -> None:
     write_module(tmp_path, "lyrveil/domain/enums.py", "from lyrveil.domain.entities import Character\n")
     write_module(tmp_path, "lyrveil/services/chat.py", "from lyrveil.persistence import repositories\n")
     write_module(tmp_path, "lyrveil/api/routes.py", "from lyrveil.services import chat\n")
+    write_module(tmp_path, "lyrveil/domain/parser.py", "from lyrveil.consistency.content_guard import check_texts\n")
     assert find_violations(tmp_path) == []
+
+
+def test_the_content_guard_is_the_only_layer_the_domain_may_reach_out_to(tmp_path: Path) -> None:
+    write_module(tmp_path, "lyrveil/domain/parser.py", "from lyrveil.consistency.checks import run\n")
+    (violation,) = find_violations(tmp_path)
+    assert violation.endswith("imports lyrveil.consistency.checks.run")

@@ -762,7 +762,9 @@ settings are in `backend/pyproject.toml`; mypy uses the Pydantic plugin.
 An import-rule test, `tests/unit/test_import_rules.py`, fails when `domain` imports another
 layer, when `services` imports `persistence.models` or `runtimes`, or when `api` imports
 `runtimes`. It reads imports with `ast`, resolves relative imports, and its own cases show
-that each rule reports a violation.
+that each rule reports a violation. The one exception is `consistency.content_guard`, which the
+Character Card parser (`domain.tavern_card`) imports to check every string of a card; the guard is
+pure text rules over domain types and holds no state.
 
 `tests/unit/test_docker_socket.py` fails when a module of `src/` or `migrations/` could open
 the Docker socket, which only the orchestrator's container gate uses

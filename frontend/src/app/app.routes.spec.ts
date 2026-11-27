@@ -14,6 +14,7 @@ const DOCUMENTED_PATHS = [
   'chats/:conversationId',
   'characters',
   'characters/new',
+  'characters/import/:importId',
   'characters/:id',
   'characters/:id/edit',
   'characters/:id/memory',

@@ -14,7 +14,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P07 | Proactive messages and messaging details | Done |
 | P08 | Obsidian Bloom polish, responsive layout, accessibility | In progress: automated exit passed; hardware and quality part (P08.EXIT-HW) pending |
 | P09 | Audit and public release | Planned |
-| P10 | Version 1.1: Character Card import and export | Planned |
+| P10 | Version 1.1: Character Card import and export | In progress: automated exit passed; manual part (P10.EXIT-HW) pending |
 | P11 | Version 1.1: user personas | Planned |
 | P12 | Version 1.1: worlds and lore | Planned |
 
@@ -243,6 +243,10 @@ Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Charact
 
 Exit: T-CRD-01 to T-CRD-09 pass. A V2 PNG and a V3 JSON card from the test fixtures import, and both directions of
 the round trip hold. AC-21 and AC-22 hold in a manual run.
+
+Evidence:
+
+- [P10 automated exit: the `unit`, `integration`, `e2e` and `lint` levels, with T-CRD-01 to T-CRD-09, a V2 PNG and a V3 JSON card from the test fixtures, and both directions of the round trip](verification/2026-11-27-p10-exit.md). The manual part (AC-21 and AC-22 in a manual run on the real application) is pending with P10.EXIT-HW, so the phase is not done.
 
 ## P11: User personas
 

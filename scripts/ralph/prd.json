@@ -3363,8 +3363,8 @@
         "The P10 section lists the evidence, and the phase table shows the automated part as passed and the manual part (P10.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 140,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Ran the unit, integration, e2e and lint levels for the P10 exit. unit failed on two things and e2e on one, and all three are fixed. All four levels now pass: unit (Pester 262, backend 1179, orchestrator 592, Vitest 247, Node 18), integration (backend 473, orchestrator 209), e2e (112 passed) and lint. T-CRD-01 to T-CRD-09 are covered by those runs. Recorded dated evidence in docs/verification/2026-11-27-p10-exit.md, linked it from the roadmap P10 section and docs/README.md, and set the P10 phase row to \"automated exit passed; manual part (P10.EXIT-HW) pending\". The phase is not marked done. AC-21 and AC-22 (manual run) were not run. The fixtures are JSON only, and the V2 PNG is built from v2.json inside the tests. No third-party card was imported.",
       "dependsOn": [
         "P10.1",
         "P10.2a",

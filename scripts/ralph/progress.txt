@@ -313,6 +313,8 @@
 - Pure import helpers (draft to form model, field marks, token estimate, file name, native-file detection) live in `card-import.model.ts` with a spec; components only call them.
 - Test data for specs that more than one spec needs goes in a `*.fixtures.ts` file with no vitest globals, so the app tsconfig still compiles it; a spec file never exports helpers.
 - A screen that reads an id from the route reacts to a changed id with an effect that calls the loader untracked, so the same component can show a second import without a reload.
+- A file input needs min-width: 0 and max-width: 100% in a flex container, or it pushes the screen sideways at 320 px.
+- A new route must be added to DOCUMENTED_PATHS in app.routes.spec.ts and to the table in docs/frontend.md in the same change.
 
 ---
 
@@ -3046,4 +3048,14 @@ A PNG export for a character with no primary avatar says so.
   - The import actions (Importa una card, Esporta panel) live in `lyr-card-actions`, which takes an optional `characterId`. The profile screen and the characters list can reuse it. The profile's own spec would need no change until it is added.
   - `ApiClient.download` returns a blob response, so a failed download has no server `detail`. The status code gives only the generic text; the PNG 409 is mapped to a specific message by the caller.
   - The Bash tool refused a compound command with `wc` and `ls`; `scripts/lyrveil.cmd test lint` runs as a single command. ESLint rejects `output<void>()`; use `output()`.
+---
+
+## 2026-11-27T16:57:45Z - P10.EXIT
+- Ran the unit, integration, e2e and lint levels for the P10 exit. unit failed on two things and e2e on one, and all three are fixed. All four levels now pass: unit (Pester 262, backend 1179, orchestrator 592, Vitest 247, Node 18), integration (backend 473, orchestrator 209), e2e (112 passed) and lint. T-CRD-01 to T-CRD-09 are covered by those runs. Recorded dated evidence in docs/verification/2026-11-27-p10-exit.md, linked it from the roadmap P10 section and docs/README.md, and set the P10 phase row to "automated exit passed; manual part (P10.EXIT-HW) pending". The phase is not marked done. AC-21 and AC-22 (manual run) were not run. The fixtures are JSON only, and the V2 PNG is built from v2.json inside the tests. No third-party card was imported.
+- Files changed: backend/tests/unit/test_import_rules.py, docs/backend.md, frontend/src/app/app.routes.spec.ts, frontend/src/app/features/characters/card-actions.scss, docs/verification/2026-11-27-p10-exit.md, docs/roadmap.md, docs/README.md
+- **Learnings for future iterations:**
+  - Specs written in an earlier task and not yet run only fail when the orchestrator's levels run them: expect import-rule, route-list and responsive failures from new screens.
+  - `scripts/lyrveil.cmd test <level> 2>&1 | grep -E "..."` is allowed and gives readable counts; `grep -v` in a pipe is denied.
+  - The Vitest, Node and Playwright versions are not printed by the levels; the evidence file lists only versions that were printed.
+  - P10.EXIT-HW (AC-21 and AC-22 in a manual run) is the remaining P10 item; a real-model conversion draft was never observed.
 ---
