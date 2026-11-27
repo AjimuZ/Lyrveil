@@ -7,6 +7,7 @@ and links only to worlds.
 """
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import Connection, RowMapping, text
@@ -212,27 +213,78 @@ def delete_entry(connection: Connection, entry_id: str) -> None:
     connection.execute(text("DELETE FROM lore_entries WHERE id = :id"), {"id": entry_id})
 
 
+_LINK_COLUMNS = "id, book_id, character_id, scenario_id, conversation_id, created_at"
+# The table that holds each link target; names come from this map, never from a request.
+_TARGET_TABLES = {"character_id": "characters", "scenario_id": "scenarios", "conversation_id": "conversations"}
+
+
+def _link(row: RowMapping) -> LoreLink:
+    return LoreLink(
+        id=row["id"],
+        book_id=row["book_id"],
+        character_id=row["character_id"],
+        scenario_id=row["scenario_id"],
+        conversation_id=row["conversation_id"],
+        created_at=row["created_at"],
+    )
+
+
 def list_links(connection: Connection, book_id: str) -> list[LoreLink]:
     """Returns the links of a world, oldest first."""
     rows = (
         connection.execute(
-            text(
-                "SELECT id, book_id, character_id, scenario_id, conversation_id, created_at FROM lore_links "
-                "WHERE book_id = :id ORDER BY created_at, id"
-            ),
+            text(f"SELECT {_LINK_COLUMNS} FROM lore_links WHERE book_id = :id ORDER BY created_at, id"),
             {"id": book_id},
         )
         .mappings()
         .all()
     )
-    return [
-        LoreLink(
-            id=row["id"],
-            book_id=row["book_id"],
-            character_id=row["character_id"],
-            scenario_id=row["scenario_id"],
-            conversation_id=row["conversation_id"],
-            created_at=row["created_at"],
-        )
-        for row in rows
-    ]
+    return [_link(row) for row in rows]
+
+
+def get_link(connection: Connection, link_id: str) -> LoreLink | None:
+    """Returns the link, or None when no row has that id."""
+    row = (
+        connection.execute(text(f"SELECT {_LINK_COLUMNS} FROM lore_links WHERE id = :id"), {"id": link_id})
+        .mappings()
+        .first()
+    )
+    return None if row is None else _link(row)
+
+
+def target_exists(connection: Connection, target: str, target_id: str) -> bool:
+    """Returns whether the row `target_id` exists in the table of `target`, which is `character_id`, `scenario_id` or
+    `conversation_id`. A conversation in the trash counts as missing, because every route hides it. A character or a
+    scenario counts in any status."""
+    condition = " AND deleted_at IS NULL" if target == "conversation_id" else ""
+    found = connection.execute(
+        text(f"SELECT 1 FROM {_TARGET_TABLES[target]} WHERE id = :id{condition}"), {"id": target_id}
+    ).first()
+    return found is not None
+
+
+def insert_link(connection: Connection, link_id: str, book_id: str, target: str, target_id: str, now: str) -> None:
+    """Adds a link from the world to one target (`character_id`, `scenario_id` or `conversation_id`). The database
+    refuses a book that is not a world and a second link of the same pair."""
+    connection.execute(
+        text(f"INSERT INTO lore_links (id, book_id, {target}, created_at) VALUES (:id, :book_id, :target_id, :now)"),
+        {"id": link_id, "book_id": book_id, "target_id": target_id, "now": now},
+    )
+
+
+def delete_link(connection: Connection, link_id: str) -> None:
+    connection.execute(text("DELETE FROM lore_links WHERE id = :id"), {"id": link_id})
+
+
+def copy_scenario_links(
+    connection: Connection, scenario_id: str, conversation_id: str, now: str, new_id: Callable[[], str]
+) -> int:
+    """Gives the conversation its own link to every world the scenario is linked to, with a new id from `new_id` for
+    each, and returns how many it added. The copies do not follow the scenario: a later change of the scenario's links
+    leaves them as they are (ADR 0049)."""
+    rows = connection.execute(
+        text("SELECT book_id FROM lore_links WHERE scenario_id = :id ORDER BY created_at, id"), {"id": scenario_id}
+    ).all()
+    for row in rows:
+        insert_link(connection, new_id(), row[0], "conversation_id", conversation_id, now)
+    return len(rows)

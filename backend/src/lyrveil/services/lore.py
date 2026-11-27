@@ -1,11 +1,12 @@
-"""LoreService: creates, lists, edits and deletes lore books, worlds and entries (ADR 0049).
+"""LoreService: creates, lists, edits and deletes lore books, worlds, entries and links (ADR 0049).
 
 A book is a character's own book or a world. This service owns the rows and the rules the database cannot hold: every
 title, content and world name passes the content guard of ADR 0037, keys are stemmed when an entry is saved and a key
-with no stem is refused, and a book holds at most 500 entries. Links, the matcher and the prompt blocks belong to later
-tasks of P12.
+with no stem is refused, a book holds at most 500 entries, and a link has exactly one target and only a world is
+linked. The matcher and the prompt blocks belong to later tasks of P12.
 """
 
+import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -13,7 +14,7 @@ from typing import Any
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
-from lyrveil.domain.errors import ConflictError, NotFoundError
+from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.lore import (
     DEFAULT_SCAN_DEPTH,
@@ -23,6 +24,7 @@ from lyrveil.domain.lore import (
     BookStatus,
     LoreBook,
     LoreEntry,
+    LoreLink,
 )
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import lore as repository
@@ -31,10 +33,32 @@ from lyrveil.services.lore_rules import checked_book, checked_entry
 NO_BOOK = "Libro di lore non trovato."
 NO_ENTRY = "Voce di lore non trovata."
 NO_CHARACTER = "Personaggio non trovato."
+NO_LINK = "Collegamento non trovato."
+_NO_TARGETS = {
+    "character_id": NO_CHARACTER,
+    "scenario_id": "Scenario non trovato.",
+    "conversation_id": "Conversazione non trovata.",
+}
 
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _fold(value: str) -> str:
+    """Returns `value` lowercase with accents removed, the form search compares."""
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def _contains_every_word(q: str | None, *texts: str) -> bool:
+    """Returns whether every word of `q` appears in the texts, ignoring case and accents. A blank or missing `q`
+    matches everything."""
+    words = _fold(q or "").split()
+    if not words:
+        return True
+    haystack = _fold(" ".join(texts))
+    return all(word in haystack for word in words)
 
 
 class LoreService:
@@ -77,9 +101,11 @@ class LoreService:
 
         return write(self._engine, work)
 
-    def list_worlds(self, status: BookStatus = BookStatus.ACTIVE) -> list[LoreBook]:
-        """Returns the worlds in `status`, by name."""
-        return read(self._engine, lambda connection: repository.list_worlds(connection, status))
+    def list_worlds(self, status: BookStatus = BookStatus.ACTIVE, q: str | None = None) -> list[LoreBook]:
+        """Returns the worlds in `status`, by name. A non-blank `q` keeps those whose name or description contains every
+        word of it, with case and accents ignored; it is plain text."""
+        found = read(self._engine, lambda connection: repository.list_worlds(connection, status))
+        return [book for book in found if _contains_every_word(q, book.name, book.description)]
 
     def get_book(self, book_id: str) -> LoreBook:
         """Returns the book in any status; raises NotFoundError when none has that id."""
@@ -147,15 +173,23 @@ class LoreService:
 
         return write(self._engine, work)
 
-    def list_entries(self, book_id: str, enabled: bool | None = None) -> list[LoreEntry]:
+    def list_entries(self, book_id: str, enabled: bool | None = None, q: str | None = None) -> list[LoreEntry]:
         """Returns the entries of a book by `insertion_order`, only the enabled or the disabled ones when `enabled` is
-        given. Raises NotFoundError for an unknown book."""
+        given. A non-blank `q` keeps those whose title, content, keys or note contains every word of it, with case and
+        accents ignored. Raises NotFoundError for an unknown book."""
 
         def work(connection: Any) -> list[LoreEntry]:
             self._book(connection, book_id)
             return repository.list_entries(connection, book_id, enabled)
 
-        return read(self._engine, work)
+        found = read(self._engine, work)
+        return [
+            entry
+            for entry in found
+            if _contains_every_word(
+                q, entry.title, entry.content, entry.note, *entry.keys, *entry.secondary_keys, *entry.exclude_keys
+            )
+        ]
 
     def get_entry(self, entry_id: str) -> LoreEntry:
         """Returns the entry; raises NotFoundError when none has that id."""
@@ -180,6 +214,73 @@ class LoreService:
         def work(connection: Any) -> None:
             self._entry(connection, entry_id)
             repository.delete_entry(connection, entry_id)
+
+        write(self._engine, work)
+
+    def list_links(self, book_id: str) -> list[LoreLink]:
+        """Returns the links of a book, oldest first; an own book has none. Raises NotFoundError for an unknown book."""
+
+        def work(connection: Any) -> list[LoreLink]:
+            self._book(connection, book_id)
+            return repository.list_links(connection, book_id)
+
+        return read(self._engine, work)
+
+    def add_link(
+        self,
+        book_id: str,
+        *,
+        character_id: str | None = None,
+        scenario_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> LoreLink:
+        """Links the world to exactly one character, scenario or conversation and returns the link.
+
+        Raises ValidationFailedError unless exactly one target is given, NotFoundError for an unknown book or target (a
+        conversation in the trash is unknown), and ConflictError for an own book, which is never linked, and for a
+        target the world is already linked to. A link added to a scenario reaches only the conversations that start
+        afterwards: each copies the scenario's links once, when it starts.
+        """
+        given = {
+            name: value
+            for name, value in (
+                ("character_id", character_id),
+                ("scenario_id", scenario_id),
+                ("conversation_id", conversation_id),
+            )
+            if value is not None
+        }
+        if len(given) != 1:
+            raise ValidationFailedError(
+                "Un collegamento ha una sola destinazione: indica un personaggio, uno scenario o una conversazione."
+            )
+        target, target_id = next(iter(given.items()))
+        now = to_utc_text(self._clock())
+
+        def work(connection: Any) -> LoreLink:
+            if self._book(connection, book_id).kind is not BookKind.WORLD:
+                raise ConflictError("Il libro di un personaggio non si collega: solo i mondi si collegano.")
+            if not repository.target_exists(connection, target, target_id):
+                raise NotFoundError(_NO_TARGETS[target])
+            link_id = new_id()
+            try:
+                repository.insert_link(connection, link_id, book_id, target, target_id, now)
+            except IntegrityError as error:  # The unique index of revision 0021 holds one link per world and target.
+                raise ConflictError("Il mondo è già collegato a questa destinazione.") from error
+            link = repository.get_link(connection, link_id)
+            assert link is not None
+            return link
+
+        return write(self._engine, work)
+
+    def delete_link(self, link_id: str) -> None:
+        """Removes a link; the world, its entries and the target stay. A conversation that already read the world stops
+        reading it from its next reply. Raises NotFoundError for an unknown link."""
+
+        def work(connection: Any) -> None:
+            if repository.get_link(connection, link_id) is None:
+                raise NotFoundError(NO_LINK)
+            repository.delete_link(connection, link_id)
 
         write(self._engine, work)
 

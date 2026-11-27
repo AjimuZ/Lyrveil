@@ -835,7 +835,12 @@ Delivered in revision `0021` (P12.1a):
   prompt builder counts with the runtime when it exists (P12.2).
 - `priority` and `insertion_order` are refused beyond ±1,000,000, a bound the ADR does not give.
 - Titles, contents and world names pass the content guard; descriptions and notes never reach a prompt, so they do not.
-  Not built yet: the routes, links in the service, the matcher and the assembly column below.
+  Not built yet: the matcher and the assembly column below.
+
+Delivered in P12.1b: the routes, `LoreService` links (`add_link`, `list_links`, `delete_link`) and the copy of a
+scenario's links. `ConversationService.create` copies each `lore_links` row of the scenario into a row of the new
+conversation, in the same transaction, with a new id; the copies are independent of the scenario's rows. A link needs
+an existing target (a conversation in the trash does not count) and an active or archived world.
 
 `prompt_assemblies` gains `lore_refs_json`: for each entry considered, its id, book, content hash, matched key, block,
 and whether it was kept. Deleting a world asks for confirmation and deletes its entries and links. A conversation that

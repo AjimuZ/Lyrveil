@@ -695,7 +695,8 @@ the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 
 ### Lore (planned)
 
-Planned for version 1.1, phase P12, and not built ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
+Planned for version 1.1, phase P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The first seven rows are
+delivered (P12.1b); the match, import and export routes and `lore_refs` are not built.
 
 | Method and path | Purpose |
 | --- | --- |
@@ -705,12 +706,29 @@ Planned for version 1.1, phase P12, and not built ([ADR 0049](decisions/0049-wor
 | `GET`, `POST /lore/books/{id}/entries` | List (`q`, `enabled`) and create entries. |
 | `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |
 | `GET`, `POST /lore/books/{id}/links`, `DELETE /lore/links/{id}` | The characters, scenarios and conversations a world is linked to. |
-| `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. |
-| `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. |
-| `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. |
+| `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. Not delivered. |
+| `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. Not delivered. |
+| `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. Not delivered. |
 
 - Entries and book names pass the content guard (`422 CONTENT_POLICY_BLOCKED`). A key with no stem after stop-word
   removal is `422 VALIDATION_ERROR` naming the key.
+- Status codes of the delivered routes:
+  - `POST` of a world, an entry or a link answers `201`; `DELETE` answers `204`; the rest answer `200`.
+  - An unknown book, entry, link, character, scenario or conversation is `404 NOT_FOUND`. `GET /characters/{id}/lore`
+    answers `404` only for an unknown character.
+  - A `PUT` replaces every editable field and a field left out takes its default. An invalid world or entry is
+    `422 VALIDATION_ERROR` and its `detail` names the field and its limit (title 80, content 8,000, note 500, 16 keys of
+    60 characters, `scan_depth` 1 to 20, `token_budget` 50 to 900). An entry over its block's maximum is stored, with
+    `never_inserted` true.
+  - `DELETE /lore/books/{id}` answers `409 CONFLICT` for an own book, which goes only with its character. A 501st entry
+    in a book is `409 CONFLICT`.
+  - A link names exactly one of `character_id`, `scenario_id` and `conversation_id`; none or two is
+    `422 VALIDATION_ERROR`. Linking an own book, or a world to a target it is already linked to, is `409 CONFLICT`. A
+    conversation in the trash is an unknown target. `DELETE /lore/links/{id}` removes only the link.
+  - `q` keeps the worlds whose name or description, or the entries whose title, content, keys or note, contain every
+    word of it, ignoring case and accents.
+- `POST /conversations` with a `scenario_id` copies the scenario's links into the new conversation (one link to each
+  world); a later change to the scenario's links does not reach it.
 - `GET /messages/{id}/diagnostics` gains `lore_refs`.
 
 ### Jobs, scheduling, notifications, settings, data

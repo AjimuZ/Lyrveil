@@ -1426,13 +1426,18 @@ written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
 
 Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). Only T-LOR-04 is written, in P12.1a, and
 it has not run: the P12.1a session could not start a test run, so the first run is the `unit` and `integration` levels of
-the orchestrator. The other tests are not written.
+the orchestrator. The other tests are not written, except the two below from P12.1b.
 
 - **T-LOR-04.** `tests/unit/test_lore_rules.py` holds the limits, the content guard on titles, contents and world names,
   the keys with no stem (`lui`), the stored key text with its stems and the block-maximum flag.
   `tests/integration/test_lore.py` holds the same through `LoreService` on a migrated database, the 500-entry limit
   and an entry over its maximum stored with `never_inserted`. `tests/integration/test_migrations.py` holds the `CHECK`s of
   the three tables, one own book per character, the 500-entry trigger and the links.
+  `tests/integration/test_lore_api.py` (P12.1b, written, not run in that session) holds the API half: the status codes of
+  the lore routes, an invalid entry refused with its field and limit, and the own book that `DELETE` refuses.
+- **T-LOR-02, link part.** The same file holds the links: exactly one target, only a world is linked, and a conversation
+  started from a scenario copies the scenario's links, so a later change of the scenario's links leaves it unchanged. The
+  reply that reads the three kinds of books is not written.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

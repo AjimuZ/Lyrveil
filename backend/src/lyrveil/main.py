@@ -23,6 +23,7 @@ from lyrveil.api import (
     health,
     images,
     jobs,
+    lore,
     media,
     memories,
     messages,
@@ -329,6 +330,7 @@ def create_app(
     app.include_router(assets.router, prefix=API_PREFIX)
     app.include_router(scenarios.router, prefix=API_PREFIX)
     app.include_router(personas.router, prefix=API_PREFIX)
+    app.include_router(lore.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(memories.router, prefix=API_PREFIX)

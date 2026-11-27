@@ -18,6 +18,7 @@ from lyrveil.domain.personas import MAX_NOTE_CHARS, PersonaStatus
 from lyrveil.domain.scenarios import Scenario, ScenarioStatus
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as repository
+from lyrveil.persistence import lore as lore_repository
 from lyrveil.persistence import messages as message_repository
 from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import scenarios as scenario_repository
@@ -125,8 +126,8 @@ class ConversationService:
         language to the scenario's, else to inheriting the character's. A character can have any number of
         conversations; each one has its own history, so none reads another's.
 
-        With a `scenario_id` the conversation stores a copy of the scenario (Scenario.snapshot), and a non-empty
-        opening message becomes its first message, written by the character.
+        With a `scenario_id` the conversation stores a copy of the scenario (Scenario.snapshot) and a copy of its world
+        links (ADR 0049), and a non-empty opening message becomes its first message, written by the character.
 
         The conversation's persona is fixed here (ADR 0048): `persona_id`, else the scenario's persona, else the
         default one. `persona_note` (up to MAX_NOTE_CHARS) is what the character knows of the user at the start; it
@@ -166,6 +167,9 @@ class ConversationService:
                 persona_id=chosen_persona,
                 persona_note=note,
             )
+            if scenario is not None:
+                # ADR 0049: the conversation keeps its own copy of the scenario's world links from here on.
+                lore_repository.copy_scenario_links(connection, scenario.id, conversation_id, now, new_id)
             if scenario is not None and scenario.opening_message:
                 _write_opening_message(connection, conversation_id, scenario.opening_message, now)
             created = repository.get(connection, conversation_id)

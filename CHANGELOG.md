@@ -11,6 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Lore routes and links (P12.1b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). The API now lists,
+  creates, edits and deletes worlds and entries, opens a character's own book (`GET /characters/{id}/lore`, created
+  empty on first use) and links a world to exactly one character, scenario or conversation. An invalid entry is refused
+  with its field and limit, and `DELETE /lore/books/{id}` is refused for an own book. A conversation that starts from a
+  scenario copies the scenario's world links, and later changes to the scenario's links leave it unchanged. There are
+  no screens yet and no prompt reads lore. The new tests (`test_lore_api.py`) have not run.
 - Lore books, entries and links in the database (P12.1a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)).
   Migration 0021 adds `lore_books`, `lore_entries` and `lore_links`, with the field limits, one own book per character
   and at most 500 entries in a book. `LoreService` stores worlds, own books and entries: titles, contents and world

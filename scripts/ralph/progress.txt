@@ -326,6 +326,8 @@
 - When a docs heading changes (for example '(planned)' removed), grep docs/traceability.md for the old anchor in the same change.
 - An exit task that edits docs after the levels have run should re-run lint and state in the evidence file which files changed after the test runs.
 - Run the lint level and read the real [FAIL] lines before fixing: a truncated log hid the actual ruff format and mypy errors.
+- To copy rows that a template owns into a new instance, do it in the same write transaction that creates the instance, with a new id per row. Later edits to the template then cannot reach the copy.
+- Put search `q` filtering in the service with an accent-and-case fold over the row's text fields, as ScenarioService does, instead of writing SQL for it.
 
 ---
 
@@ -3204,4 +3206,36 @@ I did not run the docker and gpu levels, since the P11 exit names no test from t
   - ruff format wants the long f-string inside text(...) kept on one line, with text( wrapped over three lines. An implicit string concatenation inside text() gets joined.
   - Test helpers that accept **overrides must not also have a named parameter that tests override, because mypy --strict rejects the dict unpacking. Put the default in the row and let overrides replace it.
   - Lore has no routes or screens yet, and no prompt reads lore. The next P12 tasks build on LoreService and persistence/lore.py.
+---
+
+## 2026-11-27T18:11:05Z - P12.1b
+- I added the lore routes of docs/api.md except the three later ones (match, import, export). I also made a conversation that starts from a scenario copy the scenario's world links. `scripts/lyrveil.cmd test lint` passes in full. I did not run the new tests (`test_lore_api.py`), so the unit and integration levels will be their first run.
+
+- **Routes.** `backend/src/lyrveil/api/lore.py` has the worlds, books, entries, links and `GET /characters/{id}/lore`, registered in `main.py` with `include_in_schema=False`, like the persona routes. The body fields are untyped, so the service refuses a wrong value with an Italian detail that names the field and its limit.
+- **Status codes.**
+  - `POST` answers 201 and `DELETE` answers 204.
+  - An unknown book, entry, link or target is 404.
+  - A bad entry is 422 `VALIDATION_ERROR`, or `CONTENT_POLICY_BLOCKED` for a minor.
+  - `DELETE /lore/books/{id}` on an own book is 409.
+  - A 501st entry is 409.
+  - A link with zero or two targets is 422.
+  - A duplicate link, or linking an own book, is 409.
+- **Service and persistence.**
+  - `LoreService` gains `list_links`, `add_link` and `delete_link`, and a `q` filter on worlds and entries that ignores case and accents.
+  - `persistence/lore.py` gains the link helpers and `copy_scenario_links`.
+  - A conversation in the trash counts as a missing link target.
+- **Copy at start.** `ConversationService.create` calls `copy_scenario_links` in the same transaction as the insert. Each copy gets a new id, so later edits to the scenario's links don't reach the conversation.
+- **Tests.** `backend/tests/integration/test_lore_api.py` covers the route status codes, an invalid entry refused with its field and limit, the own book refused by `DELETE`, the link rules, and the copy semantics (the link part of T-LOR-02).
+- **Docs.** I updated `docs/api.md`, `docs/data-model.md`, `docs/testing.md` and `CHANGELOG.md`. The `docs/api.md` heading stays "Lore (planned)", because `docs/traceability.md` links to its anchor.
+
+The roadmap checkbox is left for the orchestrator.
+- Files changed: backend/src/lyrveil/api/lore.py, backend/src/lyrveil/main.py, backend/src/lyrveil/services/lore.py, backend/src/lyrveil/persistence/lore.py, backend/src/lyrveil/services/conversations.py, backend/tests/integration/test_lore_api.py, docs/api.md, docs/data-model.md, docs/testing.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Lint passes in full, but test_lore.py, test_lore_rules.py, the lore tests in test_migrations.py and the new test_lore_api.py have not run. If an integration failure appears, check test_lore_api.py first.
+  - The Bash tool refuses a chained `cd x && cmd`. Run `cd` alone first, then `scripts/lyrveil.cmd test lint` from the repo root.
+  - docs/traceability.md links to `api.md#lore-planned`, so keep the heading `### Lore (planned)` until that link changes.
+  - There is no route to archive or restore a world. LoreService.set_archived exists, but docs/api.md lists no archive route, so the `status` filter can only show active worlds for now. A later task should add one, or accept `status` on PUT.
+  - The entry and book request bodies are untyped (`Any`) on purpose, so every refusal comes from lore_rules with the field and limit in the detail. An explicit JSON null is dropped (`exclude_none`) and reads as the default.
+  - A link is refused for an own book but allowed for an archived world. A deleted-in-trash conversation counts as an unknown target (404).
+  - The reply that reads own book, character worlds and conversation worlds (rest of T-LOR-02) needs the matcher and prompt blocks from later P12 tasks; persistence.list_links and the conversation's copied links are the data they will read.
 ---
