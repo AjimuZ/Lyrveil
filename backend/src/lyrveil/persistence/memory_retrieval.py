@@ -33,11 +33,13 @@ m.id, m.kind, m.content, m.subject_key, m.provenance, m.durability, m.status, m.
 m.conflict_group_id, m.language, m.updated_at
 """
 # The shared scope needs both the caller's flag and the conversation's own opt-in, so a wrong flag alone leaks nothing.
+# It is also per persona (ADR 0048): a shared memory is read only by a conversation of the persona it was shared with.
+# `IS` compares NULL safely, so rows written outside the services, with no persona on either side, still match.
 _MEMORY_FILTER = """
 m.character_id = :character_id
 AND (m.conversation_id = :conversation_id OR (:include_shared = 1 AND m.scope = 'shared' AND EXISTS (
     SELECT 1 FROM conversations AS c WHERE c.id = :conversation_id AND c.character_id = :character_id
-    AND c.shares_memory = 1)))
+    AND c.shares_memory = 1 AND m.persona_id IS c.persona_id)))
 AND m.status IN :statuses
 AND (m.expires_at IS NULL OR m.expires_at > :now)
 AND m.kind <> 'identity_candidate'

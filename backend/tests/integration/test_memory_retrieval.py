@@ -46,14 +46,34 @@ def add_character(connection: Connection) -> str:
     return character_id
 
 
-def add_chat(connection: Connection, character_id: str, *, shares_memory: bool = False) -> str:
+def add_persona(connection: Connection, name: str) -> str:
+    persona_id = new_id()
+    connection.execute(
+        text(
+            "INSERT INTO user_personas (id, name, grammatical_gender, is_default, status, created_at, updated_at) "
+            "VALUES (:id, :name, 'non_indicato', 0, 'active', :now, :now)"
+        ),
+        {"id": persona_id, "name": name, "now": to_utc_text(NOW)},
+    )
+    return persona_id
+
+
+def add_chat(
+    connection: Connection, character_id: str, *, shares_memory: bool = False, persona_id: str | None = None
+) -> str:
     conversation_id = new_id()
     connection.execute(
         text(
-            "INSERT INTO conversations (id, character_id, title, language, shares_memory, created_at, updated_at) "
-            "VALUES (:id, :character_id, 'Chat', 'it', :shares, :now, :now)"
+            "INSERT INTO conversations (id, character_id, title, language, shares_memory, persona_id, created_at, "
+            "updated_at) VALUES (:id, :character_id, 'Chat', 'it', :shares, :persona, :now, :now)"
         ),
-        {"id": conversation_id, "character_id": character_id, "shares": int(shares_memory), "now": to_utc_text(NOW)},
+        {
+            "id": conversation_id,
+            "character_id": character_id,
+            "shares": int(shares_memory),
+            "persona": persona_id,
+            "now": to_utc_text(NOW),
+        },
     )
     return conversation_id
 
@@ -74,18 +94,21 @@ def add_memory(
     locked: bool = False,
     conflict_group_id: str | None = None,
     updated_at: datetime = NOW,
+    persona_id: str | None = None,
 ) -> str:
-    """Inserts and indexes a memory (shared when `conversation_id` is None) and returns its id."""
+    """Inserts and indexes a memory (shared when `conversation_id` is None, then with `persona_id`) and returns its
+    id."""
     memory_id = new_id()
     connection.execute(
         text(
             "INSERT INTO memories (id, character_id, scope, conversation_id, kind, content, subject_key, provenance, "
             "durability, status, importance, confidence, locked, expires_at, conflict_group_id, fingerprint, "
-            "language, created_at, updated_at) VALUES (:id, :character_id, :scope, :conversation_id, :kind, :content, "
-            ":subject, :provenance, :durability, :status, :importance, :confidence, :locked, :expires_at, :group, "
-            ":fingerprint, 'it', :updated, :updated)"
+            "language, persona_id, created_at, updated_at) VALUES (:id, :character_id, :scope, :conversation_id, "
+            ":kind, :content, :subject, :provenance, :durability, :status, :importance, :confidence, :locked, "
+            ":expires_at, :group, :fingerprint, 'it', :persona, :updated, :updated)"
         ),
         {
+            "persona": persona_id,
             "id": memory_id,
             "character_id": character_id,
             "scope": "shared" if conversation_id is None else "conversation",
@@ -465,6 +488,29 @@ def test_conversations_are_isolated_and_shared_memory_needs_the_opt_in(migrated:
     assert found("second", include_shared=True) == []
     assert found("sharing", include_shared=False) == []
     assert found("sharing", include_shared=True) == [made["shared"]]
+
+
+def test_shared_memories_are_read_by_persona(migrated: Engine) -> None:
+    """T-PSN-05: with `shares_memory`, a conversation reads the shared memories of its own persona, never another's."""
+
+    def seed(connection: Connection) -> dict[str, str]:
+        character = add_character(connection)
+        marco, anna = add_persona(connection, "Marco"), add_persona(connection, "Anna")
+        return {
+            "character": character,
+            "marco_chat": add_chat(connection, character, shares_memory=True, persona_id=marco),
+            "anna_chat": add_chat(connection, character, shares_memory=True, persona_id=anna),
+            "marco_memory": add_memory(connection, character, None, "Il cane Fido ha dieci anni.", persona_id=marco),
+            "anna_memory": add_memory(connection, character, None, "Il cane Fido ama il mare.", persona_id=anna),
+        }
+
+    made = write(migrated, seed)
+    retriever = FtsMemoryRetriever(migrated)
+    for chat, memory in (("marco_chat", "marco_memory"), ("anna_chat", "anna_memory")):
+        result = retriever.retrieve_relevant_memories(
+            query(made["character"], made[chat], "Come sta Fido?", include_shared=True)
+        )
+        assert ids(result) == [made[memory]]
 
 
 def test_a_fact_told_to_one_character_never_reaches_another(migrated: Engine) -> None:

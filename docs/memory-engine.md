@@ -41,8 +41,10 @@ Sharing is opt-in on both sides:
 - A memory enters the shared scope only through the user's "Condividi" action, which
   copies it and sets `origin_conversation_id`.
 - Extraction never writes to the shared scope.
-- Planned for version 1.1 (P11, [ADR 0048](decisions/0048-user-personas.md)) and not built: "Condividi" also stores
-  the origin conversation's persona, and a conversation reads only the shared memories of its own persona.
+- Per persona ([ADR 0048](decisions/0048-user-personas.md), P11.3): a conversation reads only the shared memories
+  whose `persona_id` is its own persona (`memories.persona_id`, set by revision 0020 for existing rows). The read is
+  delivered and tested (T-PSN-05); "Condividi" itself is not built yet, and when it is it must store the origin
+  conversation's persona.
 
 ## The memory record
 
@@ -529,7 +531,7 @@ The contract is `ports/memory_retriever.py` (`RetrievalQuery`, `RetrievalResult`
 
 - **Scope.** Every candidate query filters in SQL by character, then by conversation, or by `scope = shared` when
   `include_shared` is true **and** the conversation belongs to the character with `shares_memory = 1`, so a wrong flag
-  alone reads nothing shared. Statuses, expiry (`expires_at` after `now`) and `identity_candidate` are filtered in the
+  alone reads nothing shared; the shared memory's `persona_id` must also equal the conversation's. Statuses, expiry (`expires_at` after `now`) and `identity_candidate` are filtered in the
   same query. Episodes have no shared scope and are read only for their own conversation.
 - **Candidates.** Up to 64 FTS matches of the query's stems (at most 48 distinct stems), up to 16 standing memories, the
   other uncertain members of any conflict group a candidate belongs to, and up to 16 matching active episodes. A query

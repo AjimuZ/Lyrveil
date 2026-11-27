@@ -11,6 +11,8 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Memory retrieval reads the shared memories of the conversation's own persona only (P11.3, ADR 0048). Test
+  `test_shared_memories_are_read_by_persona` (T-PSN-05) was written and has not run. "Condividi" is not built yet.
 - The VRAM tuning procedure ran on the reference machine (P02.7). `vram_preferred_mib` of both Rocinante profiles in
   `config/model-catalog.json` is now 9678, the measured level-A peak of `rocinante-x-12b` (9217 MiB) plus 5 %;
   `vram_required_mib` keeps 6000. The launch values stay as they were (level A, context 12288, batch 512, no mmap,
