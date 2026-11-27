@@ -333,7 +333,8 @@ Since P02.5c `ChatInferenceService` renders replies with it; since P04.5 `Contex
 - `formatter_for(family)` returns the formatter of a catalog `template`: `gemma4`, `mistral_v3_tekken` or `chatml`.
   Since ADR 0045 no catalog profile uses `gemma4`; it stays for custom profiles.
 - `chat(parts, current_message)` and `proactive(parts, instruction)` take a `ChatParts`: the stable text, the
-  history as `Turn` values, blocks 4, 5 and 9, the character's first name and the user's display name. They return
+  history as `Turn` values, blocks 4, 5 and 9, the character's first name and the user's display name, and since
+  P12.2b `lore`, block 12, which the frame places after block 5 and before the anchor. They return
   `text` and `prefix`, the start of `text` that ends where the last user turn begins. For `gemma4` and `chatml` the
   prefix holds the stable text and the history, for `mistral_v3_tekken` only the history.
 - `structured(system_text, user_text)` returns one system text and one user turn, with no frame.
@@ -416,8 +417,10 @@ Delivered in P02.5c, in `services/chat_inference.py`, with the event side in `ev
   every length band). Another active profile is not followed yet. Since P11.2 the user is no longer a setting:
   `load_context_request`, the extraction and the summary read the conversation's own persona and note
   (`persistence.personas.chat_persona`), and `reply_request` takes that persona's name for the stop sequence
-  ([Prompting](prompting.md#blocks-10-to-12)). The structured services
-  (`CharacterCreatorService`, `MemoryExtractionService`, `SummaryService`) default to the same family, and the
+  ([Prompting](prompting.md#blocks-10-to-12)). Since P12.2b `load_context_request` also reads the books the reply reads
+  (`persistence.lore.reply_books`) and passes their active entries (`services.lore_matcher.active_lore`), so every
+  reply, proactive message and image caption reads lore; the extraction and summary jobs never do. The structured
+  services (`CharacterCreatorService`, `MemoryExtractionService`, `SummaryService`) default to the same family, and the
   composition root passes them `ReplySettings.template`. `Worker.context` carries the
   `context.*` budgets (`ContextSettings`).
 - Choices the documents did not fix: a crash or a shutdown in the middle of a reply ends its job at the next start

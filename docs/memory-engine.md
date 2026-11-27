@@ -719,8 +719,8 @@ characters keeps this rare.
 
 ### Planned for version 1.1
 
-Block 10 is delivered in P11.2, from [ADR 0048](decisions/0048-user-personas.md); blocks 11 and 12 are not built, and
-P12 adds them, from [ADR 0049](decisions/0049-worlds-and-lore-entries.md). Their texts are in
+Block 10 is delivered in P11.2, from [ADR 0048](decisions/0048-user-personas.md); blocks 11 and 12 and the reduction
+order below are delivered in P12.2b, from [ADR 0049](decisions/0049-worlds-and-lore-entries.md). Their texts are in
 [Prompting](prompting.md#blocks-10-to-12).
 
 | # | Block | Part | Priority when over budget | Min | Target | Max |
@@ -757,6 +757,35 @@ without `appearance`, then without `about`. Step 7 of the order above is the red
 and `state` in `REDUCTION_ORDER`, and `history_below_floor` stays the last resort after them. `Assembly.blocks` and
 the stored assembly count the block as `persona`. Unit tests in `backend/tests/unit/test_context_builder.py` cover
 the cap, the reduction and T-MOD-05 with block 10; they were not run when they were written.
+
+Delivered in P12.2b for blocks 11 and 12 (`lyrveil/context/lore.py` and `lyrveil/context/builder.py`):
+
+- **Order.** Active entries are ordered by `priority`, highest first; on a tie the own book before the worlds; then
+  the lower `insertion_order`; then the book's place in the reply's book order and the entry id, so the order never
+  depends on how the rows were read. Each block keeps and shows its entries in that order.
+- **Budgets.** Each rendered line is counted alone by the runtime, after the placeholders are replaced, and the
+  heading is counted once. Block 11 is chosen with its target of 300 as the budget and block 12 with its target of
+  500, before the memories; neither takes spare room from the history, so block 11 never depends on how long the
+  chat is. Walking the order:
+  - an entry whose line, with the heading, costs more than its block's maximum (600 or 900) never enters and is
+    skipped;
+  - an entry that would take its book over the book's `token_budget` is left out with every later entry of that
+    book, and the other books go on; the book budget counts lines only and applies within each block;
+  - the first entry that would take the block over its target ends the block, so a lower entry is never kept while a
+    higher one is left out for room. An entry over the target still opens an empty block when it fits the maximum,
+    so every entry within its block's maximum, which the editor does not flag, can enter a prompt.
+
+  This walk is a choice the ADR left open: "added until the budget is reached" is read as stopping, not skipping.
+- **Reductions.** `lore_activated` (step 3) and `lore_constant` (step 8) take the last kept entry of block 12 or
+  block 11, the lowest in the order, one at a time; `REDUCTION_ORDER` is examples, summaries, `lore_activated`,
+  memories, history, identity, persona, `lore_constant`, state, then `history_below_floor` as before.
+- **Record.** `Assembly.blocks` counts `lore_constant` and `lore_activated`; `Assembly.lore` holds the kept entries,
+  block 11's first, and `Assembly.lore_cut` the active entries left out by a budget, a maximum or a reduction. The two
+  counts reach the stored assembly's `blocks`, but the diagnostic view of the frontend does not show them yet, as for
+  `persona`. The entries are not stored yet: `lore_refs` is P12.3.
+- **Tests.** `backend/tests/unit/test_lore_prompt.py` (T-LOR-03) and `backend/tests/integration/test_lore_prompts.py`
+  (T-LOR-02, reply part) passed in targeted runs in the P12.2b session, with the existing unit tests of the builder and
+  the formatter, T-MOD-05 included, on version 2 of block 1.
 
 ### Token counting
 

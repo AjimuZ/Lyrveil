@@ -61,6 +61,7 @@ from lyrveil.context.builder import (
     SummaryText,
     split_messages,
 )
+from lyrveil.context.lore import LoreSource
 from lyrveil.context.time_context import time_lines
 from lyrveil.domain.conversations import ConversationStatus
 from lyrveil.domain.errors import ContentPolicyBlockedError
@@ -91,6 +92,7 @@ from lyrveil.memory.summaries import SummarySettings
 from lyrveil.memory.window import ExtractionSettings
 from lyrveil.persistence import characters as character_repository
 from lyrveil.persistence import conversations as conversation_repository
+from lyrveil.persistence import lore as lore_repository
 from lyrveil.persistence import messages as repository
 from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import relationship as state_repository
@@ -117,6 +119,7 @@ from lyrveil.prompts.formatter import PromptFormatter, formatter_for
 from lyrveil.services.diagnostics import DiagnosticsService
 from lyrveil.services.invalidation import InvalidationService
 from lyrveil.services.job_control import Announcement, remove_placeholder
+from lyrveil.services.lore_matcher import active_lore
 from lyrveil.services.memory_extraction import queue_extraction_if_due, queue_reevaluation
 from lyrveil.services.memory_retrieval import FtsMemoryRetriever
 from lyrveil.services.summaries import queue_summary_if_due
@@ -326,6 +329,11 @@ def load_context_request(
 
     With a `zone` (LYRVEIL_TZ) the request carries the time lines of block 4 (docs/scheduler.md, Time context): the
     local date and part of the day of `now`, and the time since the newest history message. Without one it has none.
+
+    `lore` holds the active entries of the books this reply reads (lyrveil.persistence.lore.reply_books): the
+    character's own book and the worlds linked to the character or to this conversation, never another conversation's.
+    Each book's scan window is the newest of the history and the current message, matched in the conversation's
+    language (lyrveil.services.lore_matcher.active_lore).
     """
     conversation = conversation_repository.get(connection, conversation_id)
     assert conversation is not None
@@ -349,6 +357,11 @@ def load_context_request(
     started = active_notes([recorded_checks(checks) for checks in recent])
     notes = tuple(note_text(check, stored.card, persona, language) for check in started)
     time = () if zone is None else time_lines(now, from_utc_text(history[-1].created_at) if history else None, zone)
+    sources = [
+        LoreSource(book, tuple(lore_repository.list_entries(connection, book.id, enabled=True)))
+        for book in lore_repository.reply_books(connection, conversation.character_id, conversation_id)
+    ]
+    window = [message.content for message in (*history, *([] if current is None else [current]))]
     return ContextRequest(
         character_id=conversation.character_id,
         conversation_id=conversation_id,
@@ -370,6 +383,7 @@ def load_context_request(
         instruction=instruction or "",
         hint=hint,
         time=time,
+        lore=active_lore(sources, window, language),
     )
 
 

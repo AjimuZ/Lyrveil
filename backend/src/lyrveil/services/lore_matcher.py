@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from lyrveil.context.lore import LoreItem, LoreSource, ordered
 from lyrveil.domain.lore import LoreEntry
 from lyrveil.memory.text import language_code, stems
 
@@ -158,3 +159,41 @@ def match_entries(
     words times the keys, so it is safe on pasted text."""
     window = ScanWindow.of(messages, scan_depth, language)
     return [match_entry(entry, window) for entry in entries]
+
+
+def active_lore(sources: Sequence[LoreSource], messages: Sequence[str], language: str | None) -> list[LoreItem]:
+    """Returns the active entries of the books a reply reads, in the order blocks 11 and 12 keep them
+    (lyrveil.context.lore.ordered).
+
+    `sources` are the reply's books in their order, own book first; `messages` the conversation's readable messages,
+    oldest first, from both sides, the current message last; `language` the conversation's. Each book reads the newest
+    `scan_depth` of `messages`. A constant entry is always active, a disabled one never. Every other entry is active
+    when match_entry says so, and its item names the key that matched.
+    """
+    windows: dict[int, ScanWindow] = {}
+    items: list[LoreItem] = []
+    for rank, source in enumerate(sources):
+        depth = source.book.scan_depth
+        window = windows.get(depth)
+        if window is None:
+            window = windows[depth] = ScanWindow.of(messages, depth, language)
+        for entry in source.entries:
+            outcome = match_entry(entry, window)
+            if not outcome.active:
+                continue
+            items.append(
+                LoreItem(
+                    entry_id=entry.id,
+                    book_id=source.book.id,
+                    title=entry.title,
+                    content=entry.content,
+                    own=source.own,
+                    constant=outcome.reason is MatchReason.CONSTANT,
+                    priority=entry.priority,
+                    insertion_order=entry.insertion_order,
+                    matched_key=outcome.matched_key,
+                    book_budget=source.book.token_budget,
+                    book_rank=rank,
+                )
+            )
+    return ordered(items)

@@ -11,6 +11,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Replies read lore (P12.2b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). A reply, a proactive message
+  and an image caption read the character's own book, the worlds linked to the character and the worlds linked to
+  their own conversation, never another conversation's. Entries that are always active go in a new block **Il tuo
+  mondo** of the stable text, after the persona, so the cached prefix stays the same between replies; entries that the
+  last messages activate go in **Cose che sai su quello di cui state parlando**, in the context before the reminder.
+  Entries are kept by priority, own book first, then by order, within 300 and 500 tokens and each book's budget, and
+  `{{char}}` and `{{user}}` are replaced as in cards. When the prompt is too long, activated entries are cut after the
+  oldest summaries and before the memories, and constant entries after the persona details. The global instructions
+  are now version 2: the card comes first, then a `[sicuro]` memory, then the world, then an `[incerto]` memory. The
+  new tests (T-LOR-02, T-LOR-03) and the existing prompt tests, T-MOD-05 included, passed in targeted runs; the full
+  test levels have not run. There are no lore screens yet, and assemblies do not record lore yet (P12.3).
 - The lore matcher and `POST /lore/books/{id}/match` (P12.2a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)).
   Sending `{"text", "language"}` to a book answers each entry with the key that matched or the reason it stayed
   inactive, with no model loaded. Keys match by stem sequence in Italian and English, a case-sensitive entry matches its

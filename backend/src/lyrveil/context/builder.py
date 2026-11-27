@@ -1,8 +1,8 @@
 """ContextBuilder: composes the prompt of one reply within the runtime's real window (docs/memory-engine.md, Context
 composition; docs/prompting.md, System blocks and Length bands; ADR 0031).
 
-The blocks fill the four parts of lyrveil.prompts.formatter.ChatParts: the stable text (blocks 1, 2, 3, 10, the
-conversation's scenario copy and block 6), the history (block 7), the dynamic context (blocks 4, 5 and 9) and the
+The blocks fill the four parts of lyrveil.prompts.formatter.ChatParts: the stable text (blocks 1, 2, 3, 10 and 11, the
+conversation's scenario copy and block 6), the history (block 7), the dynamic context (blocks 4, 5, 12 and 9) and the
 current message (block 8). The user every block names is the conversation's persona (ADR 0048). Every count that
 decides is the runtime's (TokenCounter): blocks and messages are counted one by one to choose what to try, and the whole
 prompt is counted with `special` before it is sent. The retriever's estimate only packs block 5. Nothing is written: the
@@ -16,12 +16,15 @@ from datetime import datetime
 from anyio import to_thread
 
 from lyrveil.context.blocks import (
+    ACTIVATED_LORE_HEADER,
+    CONSTANT_LORE_HEADER,
     OPTIONAL_IDENTITY,
     OPTIONAL_PERSONA,
     anchor,
     canonical_identity,
     communication_profile,
     global_instructions,
+    lore_block,
     memory_block,
     persona_block,
     reply_length,
@@ -29,10 +32,12 @@ from lyrveil.context.blocks import (
     state_block,
     summary_block,
 )
+from lyrveil.context.lore import LoreItem, ordered, select
 from lyrveil.context.minimal import scenario_block
 from lyrveil.context.tokens import TokenCounter
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.card_placeholders import render_card, render_text
+from lyrveil.domain.lore import ACTIVATED_BLOCK_MAX_TOKENS, CONSTANT_BLOCK_MAX_TOKENS, rendered_line
 from lyrveil.domain.messages import Author, Message
 from lyrveil.domain.personas import ChatPersona
 from lyrveil.memory.retrieval import is_past_intent
@@ -46,6 +51,10 @@ from lyrveil.prompts.formatter import ChatParts, FormattedPrompt, PromptFormatte
 # (docs/memory-engine.md, Planned for version 1.1): like blocks 1 to 3 it is rendered whole up to its maximum.
 COMMUNICATION_MAX_TOKENS = 500
 PERSONA_MAX_TOKENS = 300
+# Blocks 11 and 12 are chosen with their targets as the budget (docs/memory-engine.md, Planned for version 1.1). Their
+# maxima, CONSTANT_BLOCK_MAX_TOKENS and ACTIVATED_BLOCK_MAX_TOKENS of lyrveil.domain.lore, bound the cost of one entry.
+CONSTANT_LORE_TARGET_TOKENS = 300
+ACTIVATED_LORE_TARGET_TOKENS = 500
 MEMORY_MAX_TOKENS = 1400
 SUMMARY_MAX_TOKENS = 900
 HISTORY_FLOOR_TOKENS = 800
@@ -60,25 +69,41 @@ QUERY_TURNS = 2
 # global instructions, inside the runtime.
 EXAMPLES = "examples"
 SUMMARIES = "summaries"
+LORE_ACTIVATED = "lore_activated"
 MEMORIES = "memories"
 HISTORY = "history"
 IDENTITY = "identity"
 PERSONA = "persona"
+LORE_CONSTANT = "lore_constant"
 STATE = "state"
 HISTORY_BELOW_FLOOR = "history_below_floor"
-REDUCTION_ORDER = (EXAMPLES, SUMMARIES, MEMORIES, HISTORY, IDENTITY, PERSONA, STATE, HISTORY_BELOW_FLOOR)
+REDUCTION_ORDER = (
+    EXAMPLES,
+    SUMMARIES,
+    LORE_ACTIVATED,
+    MEMORIES,
+    HISTORY,
+    IDENTITY,
+    PERSONA,
+    LORE_CONSTANT,
+    STATE,
+    HISTORY_BELOW_FLOOR,
+)
 
-# The keys of Assembly.blocks: the token count of each block of the final prompt.
+# The keys of Assembly.blocks: the token count of each block of the final prompt. `lore_constant` is block 11 and
+# `lore_activated` block 12.
 BLOCK_NAMES = (
     "global",
     "identity",
     "communication",
     "persona",
+    "lore_constant",
     "scenario",
     "summary",
     "history",
     "state",
     "memories",
+    "lore_activated",
     "anchor",
     "current",
 )
@@ -142,6 +167,10 @@ class ContextRequest:
     `card` and `scenario` are the stored texts, `{{char}}` and `{{user}}` included; the build renders them (ADR 0047).
     `persona` is the conversation's own persona with its note (ADR 0048): every block, the frame and the placeholders
     name it, and block 10 describes it.
+
+    `lore` holds the entries active for this reply (lyrveil.services.lore_matcher.active_lore), constant ones included,
+    with their stored texts; the build orders them, renders `{{char}}` and `{{user}}` in them and keeps them within
+    the budgets of blocks 11 and 12 (ADR 0049).
     """
 
     character_id: str
@@ -163,6 +192,7 @@ class ContextRequest:
     instruction: str = ""
     hint: str = ""
     time: Sequence[str] = ()
+    lore: Sequence[LoreItem] = ()
 
     @property
     def messages(self) -> tuple[Message, ...]:
@@ -192,6 +222,9 @@ class Assembly:
     first; `summary_ids` the checkpoints in block 6, oldest first; `gaps` the seq ranges between them and the history
     that no checkpoint covers. `history_seqs` are the messages of block 7. `reductions` names the reductions applied, in
     REDUCTION_ORDER. `current_truncated` tells that the current message was cut to CURRENT_MAX_TOKENS in the prompt.
+    `lore` holds the entries in blocks 11 and 12, block 11's first, each block in the order it shows them; `lore_cut`
+    the active entries left out, by a budget, by their block's maximum or by a reduction, in the order of
+    lyrveil.context.lore.ordered.
     """
 
     prompt: FormattedPrompt
@@ -207,6 +240,8 @@ class Assembly:
     history_seqs: tuple[int, ...]
     reductions: tuple[str, ...]
     current_truncated: bool
+    lore: tuple[LoreItem, ...] = ()
+    lore_cut: tuple[LoreItem, ...] = ()
 
     @property
     def fits(self) -> bool:
@@ -245,6 +280,9 @@ class _Draft:
     dropped: set[str] = field(default_factory=set)
     persona_dropped: set[str] = field(default_factory=set)
     state_details: bool = True
+    # The entries of blocks 11 and 12 in the order they are shown, so the last one is the lowest and goes first.
+    constant_lore: list[LoreItem] = field(default_factory=list)
+    activated_lore: list[LoreItem] = field(default_factory=list)
 
 
 class ContextBuilder:
@@ -270,9 +308,11 @@ class ContextBuilder:
         The window is the context size the runtime reports. The reply reserve is the band's `max_length` capped by
         `llm_max_length`, and the safety margin is kept free too. Blocks 1, 2, 3 (examples in saved order while block 3
         stays within COMMUNICATION_MAX_TOKENS), 10 (without `appearance`, then without `about`, while it is over
-        PERSONA_MAX_TOKENS), 4, 8 (cut to CURRENT_MAX_TOKENS) and 9 are rendered first, memories and
-        summaries are chosen at their targets, and the history takes what is left, from the newest message back,
-        never less than HISTORY_FLOOR_TOKENS. When the whole history fits, the room left goes to memories, then
+        PERSONA_MAX_TOKENS), 4, 8 (cut to CURRENT_MAX_TOKENS) and 9 are rendered first. Blocks 11 and 12 (lore,
+        lyrveil.context.lore.select), memories and summaries are chosen at their targets, and the history takes what
+        is left, from the newest message back, never less than HISTORY_FLOOR_TOKENS. Lore never takes the room the
+        history leaves, so block 11 does not depend on the chat's length. When the whole history fits, the room left
+        goes to memories, then
         summaries, up to their maxima. The whole prompt is then counted; while it is over `available` it is reduced in
         REDUCTION_ORDER and counted again, at most MAX_ROUNDS times. Raises what the runtime or the retriever raise.
         """
@@ -309,6 +349,14 @@ class _Run:
         self._overhead = 0
         self._global = global_instructions(request.card, request.persona, request.language)
         self._scenario = render_text(scenario_block(request.scenario), first_name, user_name)
+        # docs/prompting.md (Placeholders): an entry's title and content are rendered as card texts, before the line
+        # is counted, so its count and its bytes are the prompt's.
+        self._lore_lines = {
+            item.entry_id: rendered_line(
+                render_text(item.title, first_name, user_name), render_text(item.content, first_name, user_name)
+            )
+            for item in request.lore
+        }
         # The extra line closes the dynamic context, so it is counted with the anchor, which is never reduced either.
         extra = " ".join(request.extra_line.split())
         self._anchor = "\n".join(part for part in (anchor(request.card, request.persona, request.notes), extra) if part)
@@ -327,12 +375,25 @@ class _Run:
         candidates = [message for message in request.history if message.seq > boundary]
         summary_budget = settings.summary_target_tokens
         selection = choose_summaries(checkpoints, boundary + 1, summary_budget)
+        lore = ordered(request.lore)
         draft = _Draft(
             current=current,
             examples=await self._examples_that_fit(),
             summaries=[by_id[c.id] for c in selection.checkpoints],
             memories=list(retrieved.items),
             persona_dropped=await self._persona_over_max(),
+            constant_lore=await self._select_lore(
+                [item for item in lore if item.constant],
+                CONSTANT_LORE_HEADER,
+                CONSTANT_LORE_TARGET_TOKENS,
+                CONSTANT_BLOCK_MAX_TOKENS,
+            ),
+            activated_lore=await self._select_lore(
+                [item for item in lore if not item.constant],
+                ACTIVATED_LORE_HEADER,
+                ACTIVATED_LORE_TARGET_TOKENS,
+                ACTIVATED_BLOCK_MAX_TOKENS,
+            ),
         )
         _, base = await self._count(draft)
         room = available - base
@@ -366,6 +427,8 @@ class _Run:
             prompt, total = await self._count(draft)
 
         recent_from = draft.history[0].seq if draft.history else request.next_seq_floor
+        kept_lore = (*draft.constant_lore, *draft.activated_lore)
+        kept_ids = {item.entry_id for item in kept_lore}
         return Assembly(
             prompt=prompt,
             max_length=max_length,
@@ -380,6 +443,8 @@ class _Run:
             history_seqs=tuple(message.seq for message in draft.history),
             reductions=tuple(applied),
             current_truncated=truncated,
+            lore=kept_lore,
+            lore_cut=tuple(item for item in lore if item.entry_id not in kept_ids),
         )
 
     # Rendering
@@ -392,6 +457,12 @@ class _Run:
 
     def _persona(self, draft: _Draft) -> str:
         return persona_block(self._request.persona, frozenset(draft.persona_dropped))
+
+    def _constant_lore(self, draft: _Draft) -> str:
+        return lore_block(CONSTANT_LORE_HEADER, [self._lore_lines[item.entry_id] for item in draft.constant_lore])
+
+    def _activated_lore(self, draft: _Draft) -> str:
+        return lore_block(ACTIVATED_LORE_HEADER, [self._lore_lines[item.entry_id] for item in draft.activated_lore])
 
     def _summary(self, draft: _Draft) -> str:
         return summary_block([summary.text for summary in draft.summaries])
@@ -408,12 +479,14 @@ class _Run:
                 self._identity(draft),
                 self._communication(draft),
                 self._persona(draft),
+                self._constant_lore(draft),
                 self._scenario,
                 self._summary(draft),
             ),
             history=tuple(_turn(message) for message in draft.history),
             state=self._state(draft),
             memories=memory_block(draft.memories),
+            lore=self._activated_lore(draft),
             anchor=self._anchor,
             character_first_name=request.card.identity.first_name,
             user_display_name=request.persona.name,
@@ -470,10 +543,12 @@ class _Run:
             "identity": self._identity(draft),
             "communication": self._communication(draft),
             "persona": self._persona(draft),
+            "lore_constant": self._constant_lore(draft),
             "scenario": self._scenario,
             "summary": self._summary(draft),
             "state": self._state(draft),
             "memories": memory_block(draft.memories),
+            "lore_activated": self._activated_lore(draft),
             "anchor": self._anchor,
             "current": draft.current,
         }
@@ -520,6 +595,15 @@ class _Run:
                 break
             dropped.add(key)
         return dropped
+
+    async def _select_lore(self, items: Sequence[LoreItem], header: str, target: int, maximum: int) -> list[LoreItem]:
+        """Returns the entries of `items`, already ordered, that one lore block holds within `target`, its books'
+        budgets and, for one entry, `maximum` (lyrveil.context.lore.select). Each rendered line is counted alone by the
+        runtime, so the counts of lines that do not change are reused from one reply to the next."""
+        if not items:
+            return []
+        costs = {item.entry_id: await self._tokens(self._lore_lines[item.entry_id]) for item in items}
+        return list(select(items, costs, await self._tokens(header), target, maximum))
 
     async def _retrieve(self, budget: int) -> RetrievalResult:
         if budget <= 0:
@@ -586,6 +670,15 @@ class _Run:
             before = await self._tokens(self._summary(draft))
             del draft.summaries[0]
             return before - await self._tokens(self._summary(draft))
+        if name in (LORE_ACTIVATED, LORE_CONSTANT):
+            # The kept entries are in the order of lyrveil.context.lore.ordered: the last is the lowest priority.
+            kept = draft.activated_lore if name == LORE_ACTIVATED else draft.constant_lore
+            render = self._activated_lore if name == LORE_ACTIVATED else self._constant_lore
+            if not kept:
+                return None
+            before = await self._tokens(render(draft))
+            kept.pop()
+            return before - await self._tokens(render(draft))
         if name == MEMORIES:
             if not draft.memories:
                 return None

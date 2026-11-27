@@ -330,6 +330,9 @@
 - Put search `q` filtering in the service with an accent-and-case fold over the row's text fields, as ScenarioService does, instead of writing SQL for it.
 - Keep matching and selection logic in a pure module (no engine, no model) so the service, the API and the future prompt builder share it and unit tests need no database.
 - Reasons for an inactive result are a StrEnum code returned by the API, so the interface can localize the text itself.
+- Keep context/ free of services/ imports. Pure selection lives in context/, matching in services/, and the loader (load_context_request) passes pre-matched items through ContextRequest.
+- A block in the stable text must never depend on the room the history leaves. Choose it with a fixed budget so the prefix stays byte-identical across replies (ADR 0031).
+- Count each rendered line separately with the TokenCounter so unchanged lines are cache hits from one reply to the next. The whole prompt is still counted at the end.
 
 ---
 
@@ -3262,4 +3265,42 @@ The roadmap checkbox is left for the orchestrator.
   - The matcher's ScanWindow.of(messages, scan_depth, language) and match_entry(entry, window) are meant for the later prompt builder, which reads the real message list. match_entries takes messages oldest first with the current message last.
   - The match route treats the pasted text as one message, so the book's scan_depth does not limit it there. The unit tests cover depth.
   - The Bash tool refuses file writes through printf and redirects. Use Edit or Write instead.
+---
+
+## 2026-11-27T18:33:30Z - P12.2b
+- Replies now read lore. A reply, a proactive message or an image caption loads three kinds of books in load_context_request: the character's own book, the worlds linked to the character, and the worlds linked to its own conversation. The new persistence.lore.reply_books reads them, own book first, then worlds by name, each once. services.lore_matcher.active_lore finds the active entries over each book's scan window.
+
+The new module context/lore.py orders entries by priority, then own book first, then insertion order, then book rank and id. Its `select` keeps entries within the block target and each book's token_budget:
+- An entry over its block's maximum is skipped.
+- When a book is full, the rest of that book is left out.
+- The first entry over the target ends the block. An entry over the target can still open an empty block if it is within the maximum.
+
+The builder places block 11 (`Il tuo mondo:`, target 300) in the stable text after block 10 and before the scenario. Block 12 (target 500) goes in the dynamic frame after block 5 and before the anchor, through a new `ChatParts.lore` field. `{{char}}` and `{{user}}` are replaced before each line is counted.
+
+REDUCTION_ORDER is now: examples, summaries, lore_activated, memories, history, identity, persona, lore_constant, state, history_below_floor. Each lore step removes the lowest kept entry. Assembly gains block counts `lore_constant` and `lore_activated`, plus `lore` (kept) and `lore_cut` (left out) for P12.3.
+
+Block 1 is now version 2 for every reply. I added one sentence beyond the documented text, "Il tuo mondo vale più di un ricordo [incerto].", so the instructions state the full ADR order: card, [sicuro], lore, [incerto]. docs/prompting.md records it.
+
+Verified in this session:
+- Lint passes in full (ran twice).
+- The new tests/unit/test_lore_prompt.py (T-LOR-03) passed: 11 tests.
+- The new tests/integration/test_lore_prompts.py (T-LOR-02 reply part) passed: 1 test.
+- The existing unit tests passed (114): test_context_builder (T-MOD-05 included), test_prompt_formatter, test_lore_matcher, test_tokenization_fixtures and test_card_mapping.
+- These integration files passed (38): test_persona_prompts, test_context_builder, test_image_caption, test_character_state, test_lore and test_lore_api.
+
+The full unit and integration levels did not run.
+
+Assumptions I documented:
+- Worlds are read in any status, as personas are, because the ADR does not say archiving stops them.
+- The book budget applies within each block.
+- "Added until the budget is reached" is read as stopping at the first entry that does not fit, not skipping it.
+
+The roadmap checkbox is left for the orchestrator. Nothing in the repository tried to give instructions.
+- Files changed: backend/src/lyrveil/context/lore.py, backend/src/lyrveil/context/blocks.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/prompts/formatter.py, backend/src/lyrveil/persistence/lore.py, backend/src/lyrveil/services/lore_matcher.py, backend/src/lyrveil/services/lore.py, backend/src/lyrveil/services/chat_inference.py, backend/tests/unit/test_lore_prompt.py, backend/tests/integration/test_lore_prompts.py, CHANGELOG.md, docs/prompting.md, docs/memory-engine.md, docs/data-model.md, docs/testing.md, docs/backend.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <path>` passes paths straight to pytest in the backend test stage. It also runs a single integration file (for example tests/integration/test_lore_prompts.py), which works around the integration level taking no filter.
+  - Assembly.lore (kept entries, block 11's first) and Assembly.lore_cut (active entries left out by a budget, a maximum or a reduction) are LoreItems with entry_id, book_id, matched_key and constant (which gives the block). P12.3 can build lore_refs from them; the content hash must come from the stored entry content, because LoreItem keeps the stored, unrendered text.
+  - The frontend diagnostic view lists PROMPT_BLOCKS in frontend/src/app/features/memory/memory.model.ts. It shows neither `persona` nor the new `lore_constant` and `lore_activated` counts yet.
+  - load_context_request now reads lore for replies, proactive messages and image captions. The extraction and summary jobs do not use it, so lore never reaches them.
+  - The builder ignores LoreEntry.never_inserted and uses the runtime count of each rendered line against the block maximum.
 ---

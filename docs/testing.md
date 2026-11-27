@@ -1424,9 +1424,9 @@ written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
 
 ### Lore
 
-Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). Only T-LOR-04 is written, in P12.1a, and
-it has not run: the P12.1a session could not start a test run, so the first run is the `unit` and `integration` levels of
-the orchestrator. The other tests are not written, except the two below from P12.1b.
+Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). T-LOR-04 is written in P12.1a; the
+P12.1a session could not start a test run, so its first run is the `unit` and `integration` levels of the orchestrator.
+T-LOR-01 to T-LOR-03 are written in P12.2a and P12.2b, as below. T-LOR-05 to T-LOR-08 are not written.
 
 - **T-LOR-04.** `tests/unit/test_lore_rules.py` holds the limits, the content guard on titles, contents and world names,
   the keys with no stem (`lui`), the stored key text with its stems and the block-maximum flag.
@@ -1442,8 +1442,22 @@ the orchestrator. The other tests are not written, except the two below from P12
   `POST /lore/books/{id}/match`; it was written and not run in that session, because the integration level takes no
   test filter.
 - **T-LOR-02, link part.** The same file holds the links: exactly one target, only a world is linked, and a conversation
-  started from a scenario copies the scenario's links, so a later change of the scenario's links leaves it unchanged. The
-  reply that reads the three kinds of books is not written.
+  started from a scenario copies the scenario's links, so a later change of the scenario's links leaves it unchanged.
+- **T-LOR-02, reply part.** `tests/integration/test_lore_prompts.py` (P12.2b) builds the prompts of three chats of one
+  character as a reply loads them: each reads the own book and the world linked to the character, the first chat reads
+  its own linked world once more without a duplicate and its activated entry in block 12, the second chat reads only its
+  own linked world, the chat started from a scenario reads the copy of the scenario's link, and an unlinked world reaches
+  no prompt.
+- **T-LOR-03.** `tests/unit/test_lore_prompt.py` (P12.2b) holds the order (priority, own book first, insertion order),
+  the walk within the block and book budgets, an entry over its maximum, block 11 after block 10 in the stable text and
+  block 12 after block 5 in the frame with the placeholders rendered, the targets of 300 and 500, the reduction order
+  (`lore_activated` before the memories, `lore_constant` after the persona) and, for every template family, a prefix
+  that stays byte-identical over twelve replies while the activated entry changes with each message.
+- **P12.2b run.** The two files above passed in targeted runs in the P12.2b session (11 unit tests and 1 integration
+  test), and so did the unit tests of the builder, the formatter, the matcher and the tokenization fixtures, T-MOD-05
+  included, with version 2 of block 1, and the integration files `test_persona_prompts.py`, `test_context_builder.py`,
+  `test_image_caption.py`, `test_character_state.py`, `test_lore.py` and `test_lore_api.py` (38 passed). The full
+  `unit` and `integration` levels did not run in that session.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

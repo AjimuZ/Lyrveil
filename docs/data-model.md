@@ -831,8 +831,9 @@ Delivered in revision `0021` (P12.1a):
   refused on save.
 - "Over its block's maximum" is a save-time estimate on the rendered line `- {title}: {content}` with
   `estimate_tokens` (one token per three characters, rounded up, plus one), against 600 tokens for a constant entry
-  (block 11) and 900 for the others (block 12). It is read with the entry as `never_inserted` and is not a column. The
-  prompt builder counts with the runtime when it exists (P12.2).
+  (block 11) and 900 for the others (block 12). It is read with the entry as `never_inserted` and is not a column. Since
+  P12.2b the prompt builder counts each rendered line with the runtime instead and does not read the flag
+  ([Planned for version 1.1](memory-engine.md#planned-for-version-11)).
 - `priority` and `insertion_order` are refused beyond ±1,000,000, a bound the ADR does not give.
 - Titles, contents and world names pass the content guard; descriptions and notes never reach a prompt, so they do not.
   The matcher is built (P12.2a, `services/lore_matcher.py`); the assembly column below is not.

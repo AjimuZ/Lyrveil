@@ -121,6 +121,29 @@ def list_worlds(connection: Connection, status: BookStatus) -> list[LoreBook]:
     return [_book(row) for row in rows]
 
 
+def reply_books(connection: Connection, character_id: str, conversation_id: str) -> list[LoreBook]:
+    """Returns the books a reply of `conversation_id` with `character_id` reads (ADR 0049, Links): the character's own
+    book first when it has one, then each world linked to the character or to this conversation once, by name and id.
+
+    A link of another conversation, or of a scenario, never applies: a conversation started from a scenario holds its
+    own copies of the scenario's links. A world is read in any status, as the links decide, and an own book follows
+    its character."""
+    own = get_character_book(connection, character_id)
+    rows = (
+        connection.execute(
+            text(
+                f"{_BOOK_SELECT} WHERE b.kind = 'world' AND b.id IN (SELECT l.book_id FROM lore_links AS l "
+                "WHERE l.character_id = :character_id OR l.conversation_id = :conversation_id) "
+                "ORDER BY b.name COLLATE NOCASE, b.id"
+            ),
+            {"character_id": character_id, "conversation_id": conversation_id},
+        )
+        .mappings()
+        .all()
+    )
+    return ([] if own is None else [own]) + [_book(row) for row in rows]
+
+
 def update_book(connection: Connection, book_id: str, now: str, **columns: object) -> None:
     """Sets the given columns and `updated_at`. Column names come from the service, never from a request."""
     assignments = ", ".join(f"{name} = :{name}" for name in columns)

@@ -195,7 +195,8 @@ every reply sends it and reserves it in the window. The target medians are measu
 
 ### Block 1: global instructions
 
-`system_global.v1.j2`, Italian:
+`system_global.v1.j2`, Italian. Since P12.2b block 1 is version 2, which changes the first two lines under `Cosa sai:`
+([Version 2 of block 1](#blocks-10-to-12)); the other lines below are unchanged:
 
 ```jinja
 Stai interpretando {{ character.full_name }} in una chat privata con {{ user.display_name }}.
@@ -368,9 +369,10 @@ first ([Delivered in P04.8b](consistency-engine.md#delivered-in-p048b)):
 
 ### Blocks 10 to 12
 
-Version 1.1. Block 10 is delivered in P11.2 ([ADR 0048](decisions/0048-user-personas.md)); blocks 11 and 12 are
-planned for P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) and not built. Their budgets and their place in
-the reduction order are in [Context composition](memory-engine.md#planned-for-version-11). Since P11.2,
+Version 1.1. Block 10 is delivered in P11.2 ([ADR 0048](decisions/0048-user-personas.md)); blocks 11 and 12 and
+version 2 of block 1 are delivered in P12.2b ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). Their budgets
+and their place in the reduction order are in [Context composition](memory-engine.md#planned-for-version-11). Since
+P11.2,
 `user.display_name` and `user.grammatical_gender` in the templates of this document,
 [Image generation](image-generation.md#caption) and [Scheduler](scheduler.md#generation-flow) stand for the `name` and
 `grammatical_gender` of the conversation's persona.
@@ -432,12 +434,33 @@ Cose che sai su quello di cui state parlando:
 
 ```text
 - Conosci solo la tua scheda, le cose del tuo mondo, il vostro stato, i ricordi nel contesto e i messaggi di questa chat.
-- La tua scheda ha sempre la precedenza. Se un ricordo [sicuro] contraddice il tuo mondo, vale il ricordo: è successo dopo.
+- La tua scheda ha sempre la precedenza. Se un ricordo [sicuro] contraddice il tuo mondo, vale il ricordo: è successo dopo. Il tuo mondo vale più di un ricordo [incerto].
 ```
+
+The last sentence was added in P12.2b, so that the line states the whole precedence of ADR 0049: the card, then a
+`[sicuro]` memory, then the lore, then an `[incerto]` memory.
 
 **Placeholders.** `{{char}}` and `{{user}}` inside card and lore text are replaced with the first name and the user's
 display name before a block is counted ([Character cards](character-system.md#character-cards)). The frame-marker
 escape of `PromptFormatter` applies to persona and lore text as it does to card text.
+
+Delivered in P12.2b:
+
+- **Block 1.** `global_instructions` in `lyrveil/context/blocks.py` writes version 2 for every reply, with or without
+  lore, so block 1 does not change when a world is linked.
+- **Which books.** `load_context_request` reads the character's own book, then each world linked to the character or
+  to the conversation once, by name (`reply_books` in `lyrveil/persistence/lore.py`), with their enabled entries. A
+  conversation started from a scenario reads its own copies of the scenario's links; a link of another conversation
+  never applies. Worlds are read in any status, as personas are: the ADR does not say that an archived world stops
+  applying, so archiving only hides it until that is decided.
+- **Which entries.** `active_lore` in `lyrveil/services/lore_matcher.py` runs the matcher on each book's scan window,
+  the newest `scan_depth` messages of the history and the current message, in the conversation's language. A
+  proactive message's window is the newest history.
+- **Blocks 11 and 12.** `lore_block` renders the heading and one line per entry; an empty block adds nothing, heading
+  included. The builder renders the placeholders in the title and the content before it counts a line. Block 11 is
+  in the stable text after block 10 and before the scenario; block 12 is in the frame after block 5 and before the
+  anchor. `Assembly.blocks` counts them as `lore_constant` and `lore_activated`, and `Assembly.lore` and
+  `Assembly.lore_cut` hold the kept and the left-out entries for `lore_refs` (P12.3).
 
 ## Structured tasks
 

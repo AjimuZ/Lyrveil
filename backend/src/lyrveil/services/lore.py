@@ -3,8 +3,8 @@
 A book is a character's own book or a world. This service owns the rows and the rules the database cannot hold: every
 title, content and world name passes the content guard of ADR 0037, keys are stemmed when an entry is saved and a key
 with no stem is refused, a book holds at most 500 entries, and a link has exactly one target and only a world is
-linked. `match` runs the keyword matcher of `lore_matcher` on a pasted text; the selection and the prompt blocks belong
-to later tasks of P12.
+linked. `match` runs the keyword matcher of `lore_matcher` on a pasted text. A reply reads its books in
+lyrveil.services.chat_inference.load_context_request, and lyrveil.context.builder places them in blocks 11 and 12.
 """
 
 import unicodedata

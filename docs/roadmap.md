@@ -273,7 +273,7 @@ Evidence:
 [ADR 0049](decisions/0049-worlds-and-lore-entries.md).
 
 - [x] P12.1 `lore_books`, `lore_entries` and `lore_links`, with the content guard and the stemmed keys.
-- [ ] P12.2 The matcher, the selection by budget and priority, and blocks 11 and 12 with the new reduction order and
+- [x] P12.2 The matcher, the selection by budget and priority, and blocks 11 and 12 with the new reduction order and
   version 2 of the global instructions.
 - [ ] P12.3 `lore_refs` in the assemblies and **Voci di lore** in diagnostic mode.
 - [ ] P12.4 `character_book` and `lorebook_v3` import and export, and the migration of the books stored by P10.

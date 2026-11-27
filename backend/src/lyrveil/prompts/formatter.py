@@ -45,9 +45,9 @@ class Turn:
 class ChatParts:
     """The parts of a chat prompt that a reply and a proactive message share (docs/prompting.md, Prompt format).
 
-    `stable_text` is blocks 1, 2, 3 and 6. `history` is block 7, oldest first. `state`, `memories` and `anchor` are
-    blocks 4, 5 and 9 of the dynamic context: an empty block is left out of the frame, and trailing line breaks of a
-    block are dropped. The names fill the frame markers.
+    `stable_text` is blocks 1, 2, 3, 10 and 11, the scenario and block 6. `history` is block 7, oldest first. `state`,
+    `memories`, `lore` and `anchor` are blocks 4, 5, 12 and 9 of the dynamic context, in that order: an empty block is
+    left out of the frame, and trailing line breaks of a block are dropped. The names fill the frame markers.
     """
 
     stable_text: str
@@ -57,6 +57,7 @@ class ChatParts:
     anchor: str
     character_first_name: str
     user_display_name: str
+    lore: str = ""
 
 
 @dataclass(frozen=True)
@@ -105,7 +106,7 @@ class PromptFormatter(ABC):
 
     def _chat_prompt(self, parts: ChatParts, closing: str) -> FormattedPrompt:
         header = f"[Contesto per {parts.character_first_name}, non scritto da {parts.user_display_name}]"
-        blocks = (parts.state, parts.memories, parts.anchor)
+        blocks = (parts.state, parts.memories, parts.lore, parts.anchor)
         kept = [neutralize_frame_markers(block.rstrip("\r\n")) for block in blocks if block.strip()]
         frame = "\n".join([header, *kept, closing])
         history = tuple(Turn(turn.role, neutralize_frame_markers(turn.text)) for turn in parts.history)

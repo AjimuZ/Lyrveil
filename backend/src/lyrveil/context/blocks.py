@@ -1,6 +1,7 @@
 """The text of the reply prompt's blocks (docs/prompting.md, System blocks, Blocks 10 to 12 and Length bands), with no
 database and no runtime: block 1, block 2 with its optional parts, block 3 with a given number of examples, blocks 4, 5
-and 6 from their items, the anchor (block 9), block 10 with its optional parts and the length bands.
+and 6 from their items, the anchor (block 9), block 10 with its optional parts, blocks 11 and 12 from their lines and
+the length bands.
 
 Pure and deterministic: the same card, persona and items give the same bytes, so the stable text stays identical
 between replies and KoboldCpp reuses it from its cache (ADR 0031). An empty line of a template is left out. The user is
@@ -24,6 +25,9 @@ SUMMARY_HEADER = "Riassunto di quello che è successo prima:"
 EXAMPLES_HEADER = "Esempi di stile, non cose successe:"
 # Block 10's heading, which names the persona; a block with no line has no heading either.
 PERSONA_HEADER = "Cosa sai di {name}:"
+# The headings of block 11 (constant lore entries, stable) and block 12 (activated lore entries, dynamic).
+CONSTANT_LORE_HEADER = "Il tuo mondo:"
+ACTIVATED_LORE_HEADER = "Cose che sai su quello di cui state parlando:"
 # The anchor holds the first sentence of this many main traits and at most this many corrective notes (ADR 0031).
 ANCHOR_TRAITS = 2
 MAX_NOTES = 2
@@ -151,9 +155,13 @@ def _full_name(card: CharacterCard) -> str:
 
 
 def global_instructions(card: CharacterCard, persona: ChatPersona, language: str) -> str:
-    """Returns block 1, `system_global.v1.j2`, for a chat with `persona` in `language` (a code of LANGUAGE_NAMES, else
-    Italian): the persona's name throughout, and its gender in the address line unless it is `non_indicato`. Never
-    reduced."""
+    """Returns block 1, version 2 of `system_global` (docs/prompting.md, Blocks 10 to 12), for a chat with `persona` in
+    `language` (a code of LANGUAGE_NAMES, else Italian): the persona's name throughout, and its gender in the address
+    line unless it is `non_indicato`. Never reduced.
+
+    Version 2 adds the world to what the character knows and states the precedence of ADR 0049: the card, then a
+    `[sicuro]` memory, then the lore, then an `[incerto]` memory. It is the same text with or without lore, so block 1
+    never changes when a world is linked."""
     name, first, you = _full_name(card), card.identity.first_name, persona.name
     language_name = LANGUAGE_NAMES.get(language, LANGUAGE_NAMES["it"])
     address = (
@@ -178,8 +186,10 @@ def global_instructions(card: CharacterCard, persona: ChatPersona, language: str
         "per rispondere, ma non citarlo e non commentarlo.\n"
         "\n"
         "Cosa sai:\n"
-        "- Conosci solo la tua scheda, il vostro stato, i ricordi nel contesto e i messaggi di questa chat.\n"
-        "- La tua scheda ha sempre la precedenza sui ricordi incerti.\n"
+        "- Conosci solo la tua scheda, le cose del tuo mondo, il vostro stato, i ricordi nel contesto e i messaggi di "
+        "questa chat.\n"
+        "- La tua scheda ha sempre la precedenza. Se un ricordo [sicuro] contraddice il tuo mondo, vale il ricordo: è "
+        "successo dopo. Il tuo mondo vale più di un ricordo [incerto].\n"
         "- [sicuro] è un fatto. [incerto] potrebbe essere sbagliato: se serve, verifica con naturalezza.\n"
         "- [storia] è successo nella vostra storia. [per ora] vale solo in questo periodo. [passato] oggi non è più "
         "vero.\n"
@@ -269,6 +279,13 @@ def persona_block(persona: ChatPersona, dropped: frozenset[str] = frozenset()) -
     ]
     kept = [line for line in lines if line]
     return "\n".join([PERSONA_HEADER.format(name=persona.name), *kept]) if kept else ""
+
+
+def lore_block(header: str, lines: Sequence[str]) -> str:
+    """Returns block 11 or block 12 (docs/prompting.md, Blocks 10 to 12): `header`, CONSTANT_LORE_HEADER or
+    ACTIVATED_LORE_HEADER, then one rendered entry line per item in the given order, or "" with no line, heading
+    included."""
+    return "\n".join([header, *lines]) if lines else ""
 
 
 def state_lines(state: RelationshipState, persona: ChatPersona) -> tuple[tuple[str, ...], tuple[str, ...]]:
