@@ -30,6 +30,21 @@ class MemoryUsed(BaseModel):
     content: str | None
 
 
+class LoreUsed(BaseModel):
+    """A lore entry that was active for the reply. `block` is `lore_constant` or `lore_activated`; `status` is `kept`
+    (it is in the prompt) or `cut` (a budget, its block's maximum or a reduction left it out). `content_hash` is the
+    SHA-256 of its content then; `title` and `book_name` are the current ones, null once the entry is deleted."""
+
+    entry_id: str
+    book_id: str
+    content_hash: str
+    matched_key: str | None
+    block: str
+    status: str
+    title: str | None
+    book_name: str | None
+
+
 class SummaryUsed(BaseModel):
     id: str
     level: int
@@ -61,6 +76,7 @@ class Diagnostics(BaseModel):
     history_count: int
     current_truncated: bool
     memories: list[MemoryUsed]
+    lore_refs: list[LoreUsed]
     summaries: list[SummaryUsed]
     prompt_text: str | None
 

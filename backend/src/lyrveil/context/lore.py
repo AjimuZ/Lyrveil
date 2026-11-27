@@ -7,6 +7,7 @@ entries are active; the builder (lyrveil.context.builder) counts every rendered 
 the next (ADR 0031).
 """
 
+import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
@@ -49,6 +50,12 @@ class LoreItem:
     matched_key: str | None = None
     book_budget: int | None = None
     book_rank: int = 0
+
+
+def content_hash(content: str) -> str:
+    """Returns the SHA-256 of an entry's stored content, as 64 lowercase hex digits. `lore_refs` records it instead of
+    the text, so a reader can tell whether the entry changed since a reply without the assembly keeping the text."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def _order_key(item: LoreItem) -> tuple[int, int, int, int, str]:

@@ -782,10 +782,24 @@ Delivered in P12.2b for blocks 11 and 12 (`lyrveil/context/lore.py` and `lyrveil
 - **Record.** `Assembly.blocks` counts `lore_constant` and `lore_activated`; `Assembly.lore` holds the kept entries,
   block 11's first, and `Assembly.lore_cut` the active entries left out by a budget, a maximum or a reduction. The two
   counts reach the stored assembly's `blocks`, but the diagnostic view of the frontend does not show them yet, as for
-  `persona`. The entries are not stored yet: `lore_refs` is P12.3.
+  `persona`. The entries are stored as `lore_refs` since P12.3, below.
 - **Tests.** `backend/tests/unit/test_lore_prompt.py` (T-LOR-03) and `backend/tests/integration/test_lore_prompts.py`
   (T-LOR-02, reply part) passed in targeted runs in the P12.2b session, with the existing unit tests of the builder and
   the formatter, T-MOD-05 included, on version 2 of block 1.
+
+Delivered in P12.3 (`lyrveil/services/diagnostics.py`, `lyrveil/persistence/assemblies.py`, migration 0022):
+
+- **`lore_refs`.** `assembly_record` writes one item for each entry that was active for the reply: the kept entries
+  first (block 11's, then block 12's), then the cut ones, as in `Assembly.lore` and `Assembly.lore_cut`. An item holds
+  `entry_id`, `book_id`, `content_hash` (the SHA-256 of the stored content, not the rendered line), `matched_key` (null
+  for a constant entry), `block` (`lore_constant` or `lore_activated`) and `status` (`kept` or `cut`). It never holds
+  the text of the entry. Inactive entries are not recorded: the matcher drops them before the builder sees them.
+- **Reading.** `GET /messages/{id}/diagnostics` answers `lore_refs` apart from `memories`, adding each entry's current
+  `title` and its book's `book_name`, null once the entry is deleted. Like the rest of the assembly, it answers 404
+  while diagnostic mode is off. The Memory Studio lists them under **Voci di lore**.
+- **Extraction.** The extraction and summary jobs do not load lore, so lore never reaches their prompts.
+  `tests/integration/test_lore_diagnostics.py` runs an extraction on a chat with a constant and a keyed entry and checks
+  that neither reaches the request.
 
 ### Token counting
 

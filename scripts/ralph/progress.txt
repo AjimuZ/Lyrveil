@@ -333,6 +333,8 @@
 - Keep context/ free of services/ imports. Pure selection lives in context/, matching in services/, and the loader (load_context_request) passes pre-matched items through ContextRequest.
 - A block in the stable text must never depend on the room the history leaves. Choose it with a fixed budget so the prefix stays byte-identical across replies (ADR 0031).
 - Count each rendered line separately with the TokenCounter so unchanged lines are cache hits from one reply to the next. The whole prompt is still counted at the end.
+- Store references to content that can change as ids plus a content hash, and look up display names (titles, book names) when reading, so a deleted record reads as null and no text is copied into the diagnostic record.
+- A column added by migration that needs a validity check should carry a column-level CHECK so the SQLite downgrade can drop it.
 
 ---
 
@@ -3303,4 +3305,25 @@ The roadmap checkbox is left for the orchestrator. Nothing in the repository tri
   - The frontend diagnostic view lists PROMPT_BLOCKS in frontend/src/app/features/memory/memory.model.ts. It shows neither `persona` nor the new `lore_constant` and `lore_activated` counts yet.
   - load_context_request now reads lore for replies, proactive messages and image captions. The extraction and summary jobs do not use it, so lore never reaches them.
   - The builder ignores LoreEntry.never_inserted and uses the runtime count of each rendered line against the block maximum.
+---
+
+## 2026-11-27T18:41:11Z - P12.3
+- Each stored assembly now records `lore_refs`, `GET /messages/{id}/diagnostics` returns them apart from `memories`, and the Memory Studio lists them under **Voci di lore**. Extraction never reads lore. Lint passes in full. The new T-LOR-06 file (3 tests) passed, and so did `test_migrations.py` and `test_diagnostics.py` (69 together). The frontend spec I extended did not run, and neither did the full unit, integration, e2e and docker levels.
+
+What was built:
+- **Migration 0022** adds `prompt_assemblies.lore_refs_json` (a JSON array, default `[]`, with a column-level JSON check). Assemblies stored before it show an empty list. The migration test confirms the downgrade drops the column.
+- **What is recorded.** `assembly_record` writes one item per active entry: kept entries first (block 11's, then block 12's), then the cut ones. Each item has `entry_id`, `book_id`, `content_hash`, `matched_key`, `block` (`lore_constant` or `lore_activated`) and `status` (`kept` or `cut`). The hash is the SHA-256 of the stored content, and the text is never stored.
+- **What the API returns.** `GET /messages/{id}/diagnostics` adds the entry's current `title` and its book's `book_name`, both null once the entry is deleted.
+- **Frontend.** The diagnostic view has a **Voci di lore** section, separate from the memories list. It shows the title, book, kept or cut, block and matched key, and the spec fixture and a check for it are extended.
+- **Tests.** `tests/integration/test_lore_diagnostics.py` has three tests: a reply with a kept constant entry, a kept keyed entry and a keyed entry cut by a 50-token book budget; a reply with no lore; and a memory extraction on a chat with lore, which never sends it to the runtime.
+- **Docs.** CHANGELOG, `api.md`, `data-model.md`, `memory-engine.md`, `prompting.md`, `testing.md` and `frontend.md` are updated.
+
+Assumption: only entries active for the reply are recorded, because the matcher drops inactive ones before the builder sees them. I left the roadmap checkbox alone for the orchestrator.
+- Files changed: backend/migrations/versions/0022_assembly_lore_refs.py, backend/src/lyrveil/persistence/assemblies.py, backend/src/lyrveil/context/lore.py, backend/src/lyrveil/services/diagnostics.py, backend/src/lyrveil/api/diagnostics.py, backend/tests/integration/test_lore_diagnostics.py, backend/tests/integration/test_migrations.py, frontend/src/app/features/memory/memory.model.ts, frontend/src/app/features/memory/memory-studio-screen.ts, frontend/src/app/features/memory/memory-studio-screen.html, frontend/src/app/features/memory/memory-studio-screen.spec.ts, frontend/src/i18n/it.json, CHANGELOG.md, docs/api.md, docs/data-model.md, docs/memory-engine.md, docs/prompting.md, docs/testing.md, docs/frontend.md
+- **Learnings for future iterations:**
+  - `scripts/lyrveil.cmd test unit <path>` runs inside Docker with paths relative to `backend/` (for example `tests/integration/test_x.py`). It runs `tests/unit` as well as the given path, and it can run integration files, which the integration level cannot filter.
+  - Migration 0022 adds the column with raw SQL (`ALTER TABLE ... ADD COLUMN ... CHECK (json_valid(...))`). With a column-level CHECK, SQLite's `DROP COLUMN` works in the downgrade, and the migration test passes.
+  - `NewAssembly.lore_refs` has a default, so existing positional `NewAssembly(...)` calls are unchanged. `DiagnosticsService.reply` adds `title` and `book_name` at read time from `lore_entries` and `lore_books`; the stored refs hold ids and a hash only.
+  - The frontend diagnostic view still does not show the `persona`, `lore_constant` and `lore_activated` block token counts, because `PROMPT_BLOCKS` in `memory.model.ts` does not list them. The frontend spec edited in this task was not run; only the lint and strict build passed.
+  - T-LOR-07 (the E2E test) is the next lore test still to write. It can look for an entry under **Voci di lore** using `data-testid="diagnostics-lore-entry"`.
 ---

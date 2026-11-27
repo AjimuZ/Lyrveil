@@ -39,7 +39,8 @@ NOTIFICATIONS = "0017"
 CARD_IMPORTS = "0018"
 CARD_CONVERSION = "0019"
 PERSONAS = "0020"
-HEAD = "0021"
+LORE = "0021"
+HEAD = "0022"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -121,6 +122,7 @@ def test_the_revisions_follow_one_another() -> None:
         CARD_IMPORTS,
         CARD_CONVERSION,
         PERSONAS,
+        LORE,
         HEAD,
     }
 
@@ -153,6 +155,11 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    with sqlite3.connect(database_path) as connection:
+        assert "lore_refs_json" in [row[1] for row in connection.execute("PRAGMA table_info(prompt_assemblies)")]
+    assert alembic(database_path, "downgrade", LORE, cwd=tmp_path).returncode == 0
+    with sqlite3.connect(database_path) as connection:
+        assert "lore_refs_json" not in [row[1] for row in connection.execute("PRAGMA table_info(prompt_assemblies)")]
     assert alembic(database_path, "downgrade", PERSONAS, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES_WITH_PERSONAS
     assert alembic(database_path, "downgrade", CARD_CONVERSION, cwd=tmp_path).returncode == 0

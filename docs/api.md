@@ -696,7 +696,8 @@ the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 ### Lore (planned)
 
 Planned for version 1.1, phase P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The first seven rows are
-delivered (P12.1b), and so is the match route (P12.2a); the import and export routes and `lore_refs` are not built.
+delivered (P12.1b), and so are the match route (P12.2a) and `lore_refs` (P12.3); the import and export routes are not
+built.
 
 | Method and path | Purpose |
 | --- | --- |
@@ -738,7 +739,11 @@ delivered (P12.1b), and so is the match route (P12.2a); the import and export ro
   - A missing or over-long `text` is `422 VALIDATION_ERROR`; an unknown book is `404`.
 - `POST /conversations` with a `scenario_id` copies the scenario's links into the new conversation (one link to each
   world); a later change to the scenario's links does not reach it.
-- `GET /messages/{id}/diagnostics` gains `lore_refs`.
+- `GET /messages/{id}/diagnostics` gains `lore_refs` (P12.3), a list apart from `memories`: for each entry that was
+  active for the reply, `entry_id`, `book_id`, `content_hash`, `matched_key` (null for a constant entry), `block`
+  (`lore_constant` or `lore_activated`), `status` (`kept` or `cut`) and the entry's current `title` and its book's
+  `book_name`, both null once the entry is deleted. The kept entries come first. It is `[]` for a reply that read no lore
+  and for an assembly stored before migration 0022.
 
 ### Jobs, scheduling, notifications, settings, data
 

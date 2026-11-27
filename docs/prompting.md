@@ -460,7 +460,8 @@ Delivered in P12.2b:
   included. The builder renders the placeholders in the title and the content before it counts a line. Block 11 is
   in the stable text after block 10 and before the scenario; block 12 is in the frame after block 5 and before the
   anchor. `Assembly.blocks` counts them as `lore_constant` and `lore_activated`, and `Assembly.lore` and
-  `Assembly.lore_cut` hold the kept and the left-out entries for `lore_refs` (P12.3).
+  `Assembly.lore_cut` hold the kept and the left-out entries, which the stored assembly records as `lore_refs` (P12.3,
+  [Context composition](memory-engine.md#planned-for-version-11)).
 
 ## Structured tasks
 

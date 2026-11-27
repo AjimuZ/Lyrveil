@@ -235,6 +235,22 @@ export interface DiagnosticMemory {
   readonly content: string | null;
 }
 
+/**
+ * A lore entry that was active for the reply. `status` tells whether it is in the prompt (`kept`) or a budget, its
+ * block's maximum or a reduction left it out (`cut`); `block` is `lore_constant` (block 11) or `lore_activated`
+ * (block 12). `title` and `book_name` are the current ones, null once the entry is deleted.
+ */
+export interface DiagnosticLore {
+  readonly entry_id: string;
+  readonly book_id: string;
+  readonly content_hash: string;
+  readonly matched_key: string | null;
+  readonly block: 'lore_constant' | 'lore_activated';
+  readonly status: 'kept' | 'cut';
+  readonly title: string | null;
+  readonly book_name: string | null;
+}
+
 export interface DiagnosticSummary {
   readonly id: string;
   readonly level: number;
@@ -258,6 +274,7 @@ export interface Diagnostics {
   readonly history_count: number;
   readonly current_truncated: boolean;
   readonly memories: readonly DiagnosticMemory[];
+  readonly lore_refs: readonly DiagnosticLore[];
   readonly summaries: readonly DiagnosticSummary[];
   /** Null unless diagnostic mode was on when the reply was built. */
   readonly prompt_text: string | null;

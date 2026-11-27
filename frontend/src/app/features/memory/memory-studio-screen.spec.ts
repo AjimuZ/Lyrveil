@@ -355,6 +355,10 @@ describe('MemoryStudioScreen', () => {
           content: 'Ha un gatto di nome Briciola.',
         },
       ],
+      lore_refs: [
+        { entry_id: 'e1', book_id: 'b1', content_hash: 'a'.repeat(64), matched_key: 'faro', block: 'lore_activated', status: 'kept', title: 'Il faro', book_name: 'Genova' },
+        { entry_id: 'e2', book_id: 'b1', content_hash: 'b'.repeat(64), matched_key: null, block: 'lore_constant', status: 'cut', title: null, book_name: null },
+      ],
       summaries: [{ id: 's1', level: 0, from_seq: 1, to_seq: 2, version: 1, status: 'active', token_count: 20 }],
       prompt_text: null,
     });
@@ -372,6 +376,17 @@ describe('MemoryStudioScreen', () => {
     expect(memoryCard?.textContent).toContain('[sicuro]');
     expect(memoryCard?.textContent).toContain('Punteggio 0.81');
     expect(memoryCard?.textContent).toContain('Somiglianza col testo');
+    const loreCards = [...root.querySelectorAll('[data-testid="diagnostics-lore-entry"]')].map((card) => card.textContent ?? '');
+    expect(root.textContent).toContain('Voci di lore');
+    expect(loreCards).toHaveLength(2);
+    expect(loreCards[0]).toContain('Il faro');
+    expect(loreCards[0]).toContain('Genova');
+    expect(loreCards[0]).toContain('Nel prompt');
+    expect(loreCards[0]).toContain('Parola chiave: faro');
+    expect(loreCards[1]).toContain('Voce eliminata dopo la risposta');
+    expect(loreCards[1]).toContain('Tagliata');
+    expect(loreCards[1]).toContain('Sempre presente');
+    expect(root.querySelectorAll('[data-testid="diagnostics-memory"]')).toHaveLength(1);
     expect(root.querySelector('[data-testid="diagnostics-summaries"]')?.textContent).toContain('Messaggi da 1 a 2');
     expect(root.textContent).toContain('Evita le ripetizioni.');
     expect(root.textContent).toContain('Messaggi non coperti da nessun riassunto: 3–7');

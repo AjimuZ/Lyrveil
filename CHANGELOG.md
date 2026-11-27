@@ -11,6 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Lore in diagnostic mode (P12.3, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). Each stored assembly now
+  records `lore_refs`: for every entry that was active for the reply, its book, a hash of its content, the key that
+  matched, its block, and whether it was kept or cut. `GET /messages/{id}/diagnostics` returns them apart from the
+  memories, and the Memory Studio lists them under **Voci di lore** with the entry's title and book. Migration 0022 adds
+  the column; assemblies stored earlier show an empty list. Memory extraction never reads lore. The new backend tests
+  (T-LOR-06) and the migration tests passed in targeted runs; the frontend spec and the full test levels have not run.
 - Replies read lore (P12.2b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). A reply, a proactive message
   and an image caption read the character's own book, the worlds linked to the character and the worlds linked to
   their own conversation, never another conversation's. Entries that are always active go in a new block **Il tuo
@@ -21,7 +27,7 @@ an entry says "not yet run", the test was written and has not run.
   oldest summaries and before the memories, and constant entries after the persona details. The global instructions
   are now version 2: the card comes first, then a `[sicuro]` memory, then the world, then an `[incerto]` memory. The
   new tests (T-LOR-02, T-LOR-03) and the existing prompt tests, T-MOD-05 included, passed in targeted runs; the full
-  test levels have not run. There are no lore screens yet, and assemblies do not record lore yet (P12.3).
+  test levels have not run. There are no lore screens yet.
 - The lore matcher and `POST /lore/books/{id}/match` (P12.2a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)).
   Sending `{"text", "language"}` to a book answers each entry with the key that matched or the reason it stayed
   inactive, with no model loaded. Keys match by stem sequence in Italian and English, a case-sensitive entry matches its

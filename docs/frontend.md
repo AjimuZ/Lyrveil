@@ -533,7 +533,9 @@ Planned for version 1.1, P12, and not built ([ADR 0049](decisions/0049-worlds-an
   the reason they stayed inactive.
 - The character profile opens the own book at `/characters/:id/lore` with the same editor.
 - The scenario form and the conversation's context panel get a **Mondi** choice.
-- Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories.
+- Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories (built in P12.3): for each entry
+  that was active for the reply, its title, its book, whether it was in the prompt or cut, its block and the key that
+  matched. The block token counts of that view do not show `lore_constant` and `lore_activated` yet.
 
 ### 12. Personas
 

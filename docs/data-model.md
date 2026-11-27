@@ -836,15 +836,18 @@ Delivered in revision `0021` (P12.1a):
   ([Planned for version 1.1](memory-engine.md#planned-for-version-11)).
 - `priority` and `insertion_order` are refused beyond ±1,000,000, a bound the ADR does not give.
 - Titles, contents and world names pass the content guard; descriptions and notes never reach a prompt, so they do not.
-  The matcher is built (P12.2a, `services/lore_matcher.py`); the assembly column below is not.
+  The matcher is built (P12.2a, `services/lore_matcher.py`), and so is the assembly column below (P12.3).
 
 Delivered in P12.1b: the routes, `LoreService` links (`add_link`, `list_links`, `delete_link`) and the copy of a
 scenario's links. `ConversationService.create` copies each `lore_links` row of the scenario into a row of the new
 conversation, in the same transaction, with a new id; the copies are independent of the scenario's rows. A link needs
 an existing target (a conversation in the trash does not count) and an active or archived world.
 
-`prompt_assemblies` gains `lore_refs_json`: for each entry considered, its id, book, content hash, matched key, block,
-and whether it was kept. Deleting a world asks for confirmation and deletes its entries and links. A conversation that
+`prompt_assemblies` gains `lore_refs_json` (migration 0022, P12.3): a JSON array, `[]` by default, with one object for
+each entry that was active for the reply: `entry_id`, `book_id`, `content_hash` (SHA-256 of the stored content),
+`matched_key` (null for a constant entry), `block` (`lore_constant` or `lore_activated`) and `status` (`kept` or `cut`).
+The kept entries come first, then the cut ones; the text is never stored. The column has a `CHECK` that it is valid
+JSON. Deleting a world asks for confirmation and deletes its entries and links. A conversation that
 starts from a scenario copies the scenario's links. Purging a conversation deletes its links.
 
 ## Full-text search

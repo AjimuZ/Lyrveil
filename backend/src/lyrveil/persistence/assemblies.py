@@ -6,7 +6,7 @@ RETENTION rows of a conversation are kept.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import Connection, RowMapping, bindparam, text
@@ -19,8 +19,8 @@ EXCERPT_CHARS = 80
 
 @dataclass(frozen=True)
 class NewAssembly:
-    """The columns of an assembly that a reply writes. `blocks`, `memory_refs` and `summary_ids` are stored as JSON.
-    `prompt_text` is None unless diagnostic mode was on."""
+    """The columns of an assembly that a reply writes. `blocks`, `memory_refs`, `summary_ids` and `lore_refs` are stored
+    as JSON. `prompt_text` is None unless diagnostic mode was on."""
 
     id: str
     conversation_id: str
@@ -32,6 +32,7 @@ class NewAssembly:
     token_total: int
     context_limit: int
     prompt_text: str | None
+    lore_refs: list[dict[str, Any]] = field(default_factory=list)
 
 
 def insert(connection: Connection, new: NewAssembly, now: str) -> None:
@@ -39,9 +40,10 @@ def insert(connection: Connection, new: NewAssembly, now: str) -> None:
     connection.execute(
         text(
             "INSERT INTO prompt_assemblies (id, conversation_id, message_id, variant_id, blocks_json, "
-            "memory_refs_json, summary_ids_json, token_total, context_limit, prompt_text, created_at) "
+            "memory_refs_json, summary_ids_json, token_total, context_limit, prompt_text, lore_refs_json, "
+            "created_at) "
             "VALUES (:id, :conversation_id, :message_id, :variant_id, :blocks, :memory_refs, :summary_ids, "
-            ":token_total, :context_limit, :prompt_text, :now)"
+            ":token_total, :context_limit, :prompt_text, :lore_refs, :now)"
         ),
         {
             "id": new.id,
@@ -54,6 +56,7 @@ def insert(connection: Connection, new: NewAssembly, now: str) -> None:
             "token_total": new.token_total,
             "context_limit": new.context_limit,
             "prompt_text": new.prompt_text,
+            "lore_refs": json.dumps(new.lore_refs, ensure_ascii=False),
             "now": now,
         },
     )
@@ -80,6 +83,7 @@ def _decoded(row: RowMapping) -> dict[str, Any]:
     assembly["blocks"] = json.loads(assembly.pop("blocks_json"))
     assembly["memory_refs"] = json.loads(assembly.pop("memory_refs_json"))
     assembly["summary_ids"] = json.loads(assembly.pop("summary_ids_json"))
+    assembly["lore_refs"] = json.loads(assembly.pop("lore_refs_json"))
     return assembly
 
 
@@ -93,7 +97,7 @@ def for_message(connection: Connection, message_id: str) -> dict[str, Any] | Non
         connection.execute(
             text(
                 "SELECT a.id, a.conversation_id, a.message_id, a.variant_id, a.blocks_json, a.memory_refs_json, "
-                "a.summary_ids_json, a.token_total, a.context_limit, a.prompt_text, a.created_at "
+                "a.summary_ids_json, a.token_total, a.context_limit, a.prompt_text, a.lore_refs_json, a.created_at "
                 "FROM prompt_assemblies AS a JOIN messages AS m ON m.id = a.message_id "
                 "LEFT JOIN message_variants AS v ON v.id = m.active_variant_id "
                 "WHERE a.message_id = :id "
@@ -137,6 +141,18 @@ def memory_lines(connection: Connection, ids: list[str]) -> dict[str, str]:
         for row in connection.execute(statement, {"ids": ids}):
             found[row[0]] = row[1]
     return found
+
+
+def lore_names(connection: Connection, ids: list[str]) -> dict[str, tuple[str, str]]:
+    """Returns the current title of the lore entries among `ids` and the name of their book, by entry id. An id with no
+    row (the entry was deleted since the reply) is absent."""
+    if not ids:
+        return {}
+    statement = text(
+        "SELECT e.id, e.title, b.name FROM lore_entries AS e JOIN lore_books AS b ON b.id = e.book_id "
+        "WHERE e.id IN :ids"
+    ).bindparams(bindparam("ids", expanding=True))
+    return {row[0]: (row[1], row[2]) for row in connection.execute(statement, {"ids": ids})}
 
 
 def summary_rows(connection: Connection, ids: list[str]) -> list[dict[str, Any]]:

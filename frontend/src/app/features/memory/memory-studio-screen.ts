@@ -7,6 +7,7 @@ import { ApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, Translator } from '../../core/i18n/translator';
 import {
+  DiagnosticLore,
   EpisodeLink,
   MAX_MEMORY_CHARS,
   MEMORY_KINDS,
@@ -58,7 +59,17 @@ const BLOCK_LABEL: Readonly<Record<PromptBlock, TextKey>> = {
   current: 'memory.diag.block.current',
 };
 
-const BUDGET_LABEL: Readonly<Record<PromptBudget, TextKey>> = {
+const LORE_STATUS_LABEL: Readonly<Record<DiagnosticLore['status'], TextKey>> = {
+  kept: 'memory.diag.lore.kept',
+  cut: 'memory.diag.lore.cut',
+};
+
+const LORE_BLOCK_LABEL: Readonly<Record<DiagnosticLore['block'], TextKey>> = {
+  lore_constant: 'memory.diag.lore.block.constant',
+  lore_activated: 'memory.diag.lore.block.activated',
+};
+
+const BUDGET_LABEL:Readonly<Record<PromptBudget, TextKey>> = {
   context_limit: 'memory.diag.budget.context_limit',
   reply_reserve: 'memory.diag.budget.reply_reserve',
   safety_margin: 'memory.diag.budget.safety_margin',
@@ -379,6 +390,14 @@ export class MemoryStudioScreen {
 
   protected blockLabel(block: PromptBlock): TextKey {
     return BLOCK_LABEL[block];
+  }
+
+  protected loreStatusName(status: DiagnosticLore['status']): TextKey {
+    return LORE_STATUS_LABEL[status];
+  }
+
+  protected loreBlockName(block: DiagnosticLore['block']): TextKey {
+    return LORE_BLOCK_LABEL[block];
   }
 
   protected budgetLabel(budget: PromptBudget): TextKey {

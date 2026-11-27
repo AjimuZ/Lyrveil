@@ -15,7 +15,8 @@ from typing import Any
 
 from sqlalchemy import Connection, Engine
 
-from lyrveil.context.builder import Assembly, ContextSettings
+from lyrveil.context.builder import LORE_ACTIVATED, LORE_CONSTANT, Assembly, ContextSettings
+from lyrveil.context.lore import LoreItem, content_hash
 from lyrveil.domain.errors import NotFoundError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.jobs.scheduler import read, write
@@ -34,6 +35,21 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+KEPT = "kept"
+CUT = "cut"
+
+
+def _lore_ref(item: LoreItem, status: str) -> dict[str, Any]:
+    return {
+        "entry_id": item.entry_id,
+        "book_id": item.book_id,
+        "content_hash": content_hash(item.content),
+        "matched_key": item.matched_key,
+        "block": LORE_CONSTANT if item.constant else LORE_ACTIVATED,
+        "status": status,
+    }
+
+
 def assembly_record(
     assembly: Assembly,
     settings: ContextSettings,
@@ -49,8 +65,10 @@ def assembly_record(
     `blocks` holds the token count of each block, the budgets (the window, the reply reserve, the safety margin, the
     room left for the prompt and the targets of memories and summaries), the corrective `notes` of the anchor, the
     reductions applied, the history size and the gaps no summary covers. `memory_refs` holds each memory or episode with
-    its score and the parts of the score, but not its text, which is read from the memory when shown. The prompt text is
-    kept only when `keep_prompt` is true (diagnostic mode).
+    its score and the parts of the score, but not its text, which is read from the memory when shown. `lore_refs` holds
+    each lore entry that was active for the reply: the kept ones first (block 11's, then block 12's), then the cut ones,
+    each with its id, book, `content_hash`, `matched_key`, `block` (`lore_constant` or `lore_activated`) and `status`
+    (`kept` or `cut`), and never its text. The prompt text is kept only when `keep_prompt` is true (diagnostic mode).
     """
     blocks = {
         "blocks": dict(assembly.blocks),
@@ -82,6 +100,10 @@ def assembly_record(
         }
         for item in assembly.memories
     ]
+    lore_refs = [
+        *(_lore_ref(item, KEPT) for item in assembly.lore),
+        *(_lore_ref(item, CUT) for item in assembly.lore_cut),
+    ]
     return NewAssembly(
         id=new_id(),
         conversation_id=conversation_id,
@@ -93,6 +115,7 @@ def assembly_record(
         token_total=assembly.token_total,
         context_limit=assembly.context_limit,
         prompt_text=assembly.prompt.text if keep_prompt else None,
+        lore_refs=lore_refs,
     )
 
 
@@ -131,7 +154,9 @@ class DiagnosticsService:
         """Returns the stored assembly of a reply: its ids, `token_total`, `context_limit`, the `blocks` token counts,
         the `budgets`, the `notes`, `reductions`, `gaps`, `example_count`, `history_count`, `current_truncated`, the
         `memories` (id, type, kind, status, label, score, parts, token cost and the memory's current `content`, null
-        once it is deleted), the `summaries` it used and the `prompt_text`, null unless it was stored. Raises
+        once it is deleted), the `lore_refs` (as stored, with the entry's current `title` and its book's `book_name`,
+        both null once the entry is deleted), the `summaries` it used and the `prompt_text`, null unless it was
+        stored. Raises
         NotFoundError while the mode is off and for a reply with no stored assembly."""
 
         def work(connection: Connection) -> dict[str, Any]:
@@ -142,6 +167,16 @@ class DiagnosticsService:
             refs: list[dict[str, Any]] = stored["memory_refs"]
             lines = repository.memory_lines(connection, [ref["id"] for ref in refs])
             memories = [{**ref, "content": lines.get(ref["id"])} for ref in refs]
+            stored_lore: list[dict[str, Any]] = stored["lore_refs"]
+            names = repository.lore_names(connection, [ref["entry_id"] for ref in stored_lore])
+            lore = [
+                {
+                    **ref,
+                    "title": names[ref["entry_id"]][0] if ref["entry_id"] in names else None,
+                    "book_name": names[ref["entry_id"]][1] if ref["entry_id"] in names else None,
+                }
+                for ref in stored_lore
+            ]
             detail = dict(stored["blocks"])
             return {
                 "message_id": stored["message_id"],
@@ -152,6 +187,7 @@ class DiagnosticsService:
                 "context_limit": stored["context_limit"],
                 **detail,
                 "memories": memories,
+                "lore_refs": lore,
                 "summaries": repository.summary_rows(connection, stored["summary_ids"]),
                 "prompt_text": stored["prompt_text"],
             }

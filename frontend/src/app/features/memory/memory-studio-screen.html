@@ -612,6 +612,39 @@
               </ul>
             }
 
+            <h3 class="section">{{ 'memory.diag.lore' | t }}</h3>
+            @if (assembly.lore_refs.length === 0) {
+              <p class="note">{{ 'memory.diag.lore.empty' | t }}</p>
+            } @else {
+              <ul class="list" data-testid="diagnostics-lore">
+                @for (entry of assembly.lore_refs; track entry.entry_id) {
+                  <li class="card" data-testid="diagnostics-lore-entry">
+                    <p class="content">
+                      @if (entry.title !== null) {
+                        {{ entry.title || ('memory.diag.lore.untitled' | t) }}
+                      } @else {
+                        <em>{{ 'memory.diag.lore.gone' | t }}</em>
+                      }
+                    </p>
+                    <div class="pills">
+                      @if (entry.book_name !== null) {
+                        <span class="pill">{{ entry.book_name }}</span>
+                      }
+                      <span class="pill">{{ loreStatusName(entry.status) | t }}</span>
+                      <span class="pill">{{ loreBlockName(entry.block) | t }}</span>
+                    </div>
+                    <p class="meta">
+                      @if (entry.matched_key !== null) {
+                        {{ 'memory.diag.lore.key' | t: { key: entry.matched_key } }}
+                      } @else {
+                        {{ 'memory.diag.lore.constant' | t }}
+                      }
+                    </p>
+                  </li>
+                }
+              </ul>
+            }
+
             <h3 class="section">{{ 'memory.diag.summaries' | t }}</h3>
             @if (assembly.summaries.length === 0) {
               <p class="note">{{ 'memory.diag.summaries.empty' | t }}</p>
