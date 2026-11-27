@@ -26,6 +26,7 @@ from lyrveil.media.store import MediaStore
 from lyrveil.services.card_conversion import CardConversionService
 from lyrveil.services.card_export import CardExportService
 from lyrveil.services.card_import import CardImportService, ImportView
+from lyrveil.services.card_roundtrip import EmbeddedLyrveil
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
 from lyrveil.services.characters import CharacterService
@@ -144,10 +145,19 @@ class ConversionOut(BaseModel):
     result: dict[str, Any] | None
 
 
+class EmbeddedLyrveilOut(BaseModel):
+    """The Lyrveil card embedded in an imported card, already validated: the card to preselect, whether the file's text
+    still matches it, and the texts that were edited elsewhere."""
+
+    text_matches: bool
+    changed_fields: list[str]
+    card: dict[str, Any]
+
+
 class CardImportOut(BaseModel):
     """An import of docs/api.md (Character cards). `direct_draft` and `report` hold the direct mapping (null only for a
-    row stored before P10.2b), `embedded_lyrveil` is null until the round trip exists, and `conversion_job_id` and
-    `conversion` until a conversion starts."""
+    row stored before P10.2b), `embedded_lyrveil` is null for a card without a usable Lyrveil card, and
+    `conversion_job_id` and `conversion` until a conversion starts."""
 
     id: str
     status: str
@@ -157,7 +167,7 @@ class CardImportOut(BaseModel):
     preview: CardPreviewOut
     direct_draft: dict[str, Any] | None
     report: dict[str, Any] | None
-    embedded_lyrveil: dict[str, Any] | None
+    embedded_lyrveil: EmbeddedLyrveilOut | None
     conversion_job_id: str | None
     conversion: ConversionOut | None
     expires_at: str
@@ -203,6 +213,14 @@ def _out(character: CharacterSummary) -> CharacterOut:
     )
 
 
+def _embedded_out(embedded: EmbeddedLyrveil) -> EmbeddedLyrveilOut:
+    return EmbeddedLyrveilOut(
+        text_matches=embedded.text_matches,
+        changed_fields=list(embedded.changed_fields),
+        card=embedded.card.model_dump(mode="json"),
+    )
+
+
 def _import_out(view: ImportView) -> CardImportOut:
     stored = view.stored
     return CardImportOut(
@@ -214,7 +232,7 @@ def _import_out(view: ImportView) -> CardImportOut:
         preview=CardPreviewOut(**asdict(view.preview)),
         direct_draft=None if stored.direct_draft_json is None else json.loads(stored.direct_draft_json),
         report=None if stored.report_json is None else json.loads(stored.report_json),
-        embedded_lyrveil=None,
+        embedded_lyrveil=None if view.embedded is None else _embedded_out(view.embedded),
         conversion_job_id=stored.conversion_job_id,
         conversion=None if view.conversion is None else ConversionOut(**asdict(view.conversion)),
         expires_at=stored.expires_at,
@@ -378,7 +396,8 @@ async def import_card(
     `PAYLOAD_TOO_LARGE` over 64 MB (or for an avatar over the upload limits), 415 `UNSUPPORTED_MEDIA` for a file that is
     neither JSON nor PNG, a CHARX archive included, 422 `IMPORT_INVALID` for a broken chunk, base64 or JSON or a missing
     or unknown `spec`, and 422 `CONTENT_POLICY_BLOCKED` naming the source path when a string describes a minor. Nothing
-    is stored in those cases."""
+    is stored in those cases. A card with `extensions.lyrveil` also answers `embedded_lyrveil` with the validated native
+    card; one whose hash matches but whose embedded card breaks a card rule is 422 `IMPORT_INVALID` as a whole."""
     data = await file.read(MAX_IMPORT_BYTES + 1)
     return _import_out(await run_in_threadpool(card_imports.import_file, data))
 

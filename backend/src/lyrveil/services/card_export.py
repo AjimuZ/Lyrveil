@@ -23,14 +23,13 @@ from lyrveil.domain.characters import StoredCharacter
 from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.exchange import FORMAT_NAME, FORMAT_VERSION
 from lyrveil.domain.scenarios import Scenario
-from lyrveil.domain.tavern_card import SPEC_V2, SPEC_V3, CardData
+from lyrveil.domain.tavern_card import SPEC_V2, SPEC_V3, CardData, card_data
 from lyrveil.jobs.scheduler import read
 from lyrveil.media import images
 from lyrveil.media.store import MediaPathError, MediaStore
 from lyrveil.persistence import card_imports as import_repository
 from lyrveil.persistence import characters as character_repository
 from lyrveil.services.assets import CharacterAssetService
-from lyrveil.services.card_import import card_data
 from lyrveil.services.character_exchange import file_stem
 from lyrveil.services.scenarios import ScenarioService
 

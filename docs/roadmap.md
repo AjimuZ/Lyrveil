@@ -237,7 +237,7 @@ Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Charact
 - [x] P10.3 The `card_conversion` job with the assisted creation's grammar and repair, and `CARD_TOO_LONG`.
 - [x] P10.4 Saving an import through `POST /characters` with `import_id`: avatar, scenarios from greetings, and the
   age rule.
-- [ ] P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an
+- [x] P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an
   embedded Lyrveil card.
 - [ ] P10.6 The Creator's import preview, and its import and export actions, including those of the native format.
 

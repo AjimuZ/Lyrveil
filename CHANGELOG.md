@@ -62,6 +62,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Import of an embedded Lyrveil card, in the backend only (P10.5b,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). A card with `extensions.lyrveil` now answers
+  `embedded_lyrveil` with the native card, validated like any native import, `text_matches`, and `changed_fields`
+  when the description, personality or examples were edited elsewhere. The direct draft stays in the answer, which
+  the screen will offer as **Usa i testi modificati**. A card whose hash matches but whose embedded card breaks a card
+  rule or the content guard is refused as a whole. No screen shows it yet.
 - Card export, in the backend only (P10.5a,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `GET /characters/{id}/card?format=&scenario_ids=`
   writes a character as Character Card V3 JSON (the default), V2 JSON or a PNG of its primary avatar with a `ccv3` and a

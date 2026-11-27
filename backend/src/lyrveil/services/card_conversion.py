@@ -27,6 +27,7 @@ from lyrveil.domain.card_placeholders import expand_macros
 from lyrveil.domain.errors import ConflictError, NotFoundError
 from lyrveil.domain.identifiers import to_utc_text
 from lyrveil.domain.messages import JobRef
+from lyrveil.domain.tavern_card import card_data
 from lyrveil.jobs.handlers import INTERNAL, JobDone, JobFailedError, JobOutcome, RunContext
 from lyrveil.jobs.policy import JobKind
 from lyrveil.jobs.queue import ACTIVE_STATUSES, Job, JobQueue, QueueFullError
@@ -38,7 +39,6 @@ from lyrveil.ports.text_runtime import TextRuntime
 from lyrveil.prompts import card_conversion
 from lyrveil.prompts.card_conversion import CardText
 from lyrveil.prompts.structured import STRUCTURED_OUTPUT_INVALID, StructuredOutputInvalidError, generate_structured
-from lyrveil.services.card_import import card_data
 from lyrveil.services.character_creator import CONTENT_POLICY_BLOCKED, DRAFT_GRAMMAR, DraftBlockedError, check_draft
 
 # The job error code of a card that leaves too little room for the conversion (docs/api.md, Errors).

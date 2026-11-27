@@ -35,10 +35,10 @@ from lyrveil.domain.tavern_card import (
     SPEC_V2,
     SPEC_V3,
     CardContainer,
-    CardData,
     CardFailure,
     CardInvalidError,
     CardSpec,
+    card_data,
     parse_card,
 )
 from lyrveil.jobs.queue import JobQueue
@@ -49,6 +49,7 @@ from lyrveil.media.store import MediaStore
 from lyrveil.persistence import card_imports as repository
 from lyrveil.persistence import characters as character_repository
 from lyrveil.services.assets import CharacterAssetService
+from lyrveil.services.card_roundtrip import EmbeddedLyrveil, read_embedded
 from lyrveil.services.card_rules import validate_card
 from lyrveil.services.characters import CharacterService
 from lyrveil.services.scenarios import ScenarioService
@@ -88,17 +89,13 @@ class CardPreview:
 
 @dataclass(frozen=True)
 class ImportView:
-    """A stored import with its preview and, once a conversion was started, the state of its job."""
+    """A stored import with its preview, the Lyrveil card embedded in the file when it has a usable one, and, once a
+    conversion was started, the state of its job."""
 
     stored: StoredCardImport
     preview: CardPreview
     conversion: ConversionState | None = None
-
-
-def card_data(source: dict[str, Any]) -> CardData:
-    """Returns the typed fields of a stored card `source`, which already passed the parser: the `data` of a V2 or V3
-    envelope, or the card itself for V1."""
-    return CardData.model_validate(source if "spec" not in source else source["data"])
+    embedded: EmbeddedLyrveil | None = None
 
 
 def _main_icon(source: dict[str, Any]) -> bytes | None:
@@ -151,8 +148,13 @@ class CardImportService:
         is written last. Raises what parse_card raises (CardRefusedError, ContentPolicyBlockedError naming the source
         path) and what prepare_upload raises (PayloadTooLargeError, UnsupportedMediaError). In every refusal no row and
         no file is left behind. The card is only read: no remote `uri` is fetched, and no character is written.
+
+        A card with `extensions.lyrveil` also has its embedded card read (read_embedded) before anything is stored: it
+        goes through validate_card, so when its `text_sha256` matches the file's text and a card rule or the content
+        guard refuses it, the whole import is refused (ImportInvalidError, ContentPolicyBlockedError).
         """
         parsed = parse_card(content)
+        embedded = read_embedded(parsed.data, refuse=True)
         try:
             source_json = json.dumps(parsed.source, ensure_ascii=True, allow_nan=False)
         except ValueError as error:
@@ -187,7 +189,7 @@ class CardImportService:
             if staged is not None:
                 self._media.discard_import_avatar(import_id)
             raise
-        return self._view(stored)
+        return self._view(stored, embedded)
 
     def save(self, import_id: str, raw_card: Mapping[str, Any], *, create_scenarios: bool) -> CharacterSummary:
         """Returns the new active character that `raw_card`, the reviewed draft, makes of import `import_id`: the normal
@@ -259,11 +261,12 @@ class CardImportService:
         NotFoundError for an unknown id and for an import that expired without being saved, even before the daily
         clean-up removes its row."""
         stored = self._live(import_id)
-        view = self._view(stored)
+        view = self._view(stored, read_embedded(card_data(json.loads(stored.source_json)), refuse=False))
         if stored.conversion_job_id is None:
             return view
         job_id = stored.conversion_job_id
-        return ImportView(view.stored, view.preview, read(self._engine, lambda c: self._conversion(c, job_id)))
+        conversion = read(self._engine, lambda c: self._conversion(c, job_id))
+        return ImportView(view.stored, view.preview, conversion, view.embedded)
 
     def source_json(self, import_id: str) -> str:
         """Returns the parsed card of the import as the JSON text that was stored. Raises NotFoundError as `get`."""
@@ -361,6 +364,6 @@ class CardImportService:
         )
 
     @staticmethod
-    def _view(stored: StoredCardImport) -> ImportView:
+    def _view(stored: StoredCardImport, embedded: EmbeddedLyrveil | None) -> ImportView:
         preview = build_preview(json.loads(stored.source_json), has_avatar=stored.avatar_staging_path is not None)
-        return ImportView(stored=stored, preview=preview)
+        return ImportView(stored=stored, preview=preview, embedded=embedded)

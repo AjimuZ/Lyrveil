@@ -308,6 +308,8 @@
 - A step that writes files and rows together removes the files itself if its own write fails. The caller removes them if the outer transaction fails later, and deletes a staged file only after the commit.
 - A pure renderer next to a thin service that loads the data (`render_texts`, `build_v2`, `build_v3` and `CardExportService`) keeps export output deterministic and testable without a database.
 - JSON bytes try `ensure_ascii=False` and fall back to ASCII escapes on `UnicodeEncodeError`, so a stored lone surrogate cannot turn an export into a 500.
+- Data read from a file never skips a rule because a hash or signature matches. The hash only chooses which source is preselected, and the data is validated with the same function as a native import.
+- To break an import cycle between services, move the small pure helper down into the domain module both sides can import, rather than importing lazily.
 
 ---
 
@@ -2991,4 +2993,17 @@ The V3 dates in a `character_book`-less export are in Unix seconds. A source `cr
   - The route takes `format` through `Query(alias="format")` as `card_format`, and `scenario_ids` as a repeated or comma-separated list.
   - The exported V3 `creation_date` of an imported card is the source's value as read, whatever its unit.
   - The Bash tool refuses write commands such as `sed -i`; use Edit for every file change.
+---
+
+## 2026-11-27T16:28:01Z - P10.5b
+- Import now reads `extensions.lyrveil` and returns it as `embedded_lyrveil` with the validated native card, `text_matches` and `changed_fields`. The direct draft stays in the answer for **Usa i testi modificati**. The embedded card always goes through `validate_card`. If its hash matches and it breaks a rule, the whole import is refused with 422. If the text was edited, an embedded card that fails is dropped. `test lint` passes (docs checks, ruff, mypy strict, frontend lint and build). The new integration tests are written but not run: the integration level takes no file argument, and the orchestrator runs it.
+- Files changed: backend/src/lyrveil/services/card_roundtrip.py, backend/src/lyrveil/services/card_import.py, backend/src/lyrveil/services/card_export.py, backend/src/lyrveil/services/card_conversion.py, backend/src/lyrveil/domain/tavern_card.py, backend/src/lyrveil/api/characters.py, backend/tests/integration/test_card_roundtrip.py, CHANGELOG.md, docs/api.md, docs/character-system.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The new integration tests were not run. `scripts/lyrveil.cmd test integration` takes no file argument, so the orchestrator's full integration run is their first run.
+  - The hash check hashes the file's own description, personality and mes_example. Hashing the embedded card's rendering would always match, so it cannot detect an edit.
+  - `card_data` now lives in `lyrveil.domain.tavern_card`. `card_import` no longer defines it, so card_export and card_roundtrip can use it without an import cycle.
+  - `CardImportService.import_file` calls `read_embedded(refuse=True)` before writing anything. `get` calls it with `refuse=False`, so a later read never raises.
+  - `embedded_lyrveil.card` is the validated card. The future Creator screen should send it as the body of `POST /characters` with `import_id`. **Usa i testi modificati** switches to `direct_draft`.
+  - The hash does not cover scenario, first_mes or alternate_greetings, so an edit there is not reported as a changed field. This is the decision from P10.5a, still open for the owner.
+  - The Bash tool refuses chained commands. `test lint` runs fine as a single command.
 ---

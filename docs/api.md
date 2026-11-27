@@ -270,8 +270,7 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
 
 - **Delivered in P10.2a** (not in `backend/openapi.json`): `POST /characters/imports`, `GET` and `DELETE
   /characters/imports/{id}`, `GET /characters/imports/{id}/source` and `GET /characters/{id}/source`.
-  - The import answer has every field below. `embedded_lyrveil` is null, and so is `conversion_job_id`, until their
-    steps exist. `preview` has the keys `name`, `nickname`, `creator`, `version`, `tags`, `creator_notes`,
+  - The import answer has every field below. `conversion_job_id` is null until a conversion starts. `preview` has the keys `name`, `nickname`, `creator`, `version`, `tags`, `creator_notes`,
     `system_prompt`, `post_history_instructions`, `greeting_count`, `has_avatar` and `has_lorebook`.
   - **Delivered in P10.2b:** `direct_draft` and `report`. They are null only for an import stored before P10.2b.
     - `direct_draft` is `{"draft", "card_fields", "scenarios"}`. `draft` has the shape of a `CharacterDraft`
@@ -300,7 +299,19 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
   "report", "embedded_lyrveil", "conversion_job_id", "conversion", "expires_at"}`.
   - `preview` holds the source fields that no draft uses: name, nickname, creator, version, tags, creator notes, the
     two prompt fields, the number of greetings, and whether there is an avatar or a lorebook.
-  - `embedded_lyrveil` is null, or `{"text_matches": true|false, "changed_fields": [...]}`.
+  - `embedded_lyrveil` is null, or `{"text_matches": true|false, "changed_fields": [...], "card": {...}}`.
+    - **Delivered in P10.5b.** It is null for a card without `extensions.lyrveil`, with another `format` or a
+      `format_version` newer than the build, with a malformed block, and when the text was edited and the embedded
+      card no longer passes the card rules or the content guard.
+    - `card` is the embedded native card after `validate_card`, the same rules and content guard as a native import:
+      the screen preselects it, and **Salva personaggio** sends it as the card with `import_id`.
+    - `text_matches` is true when the file's `description`, `personality` and `mes_example` hash to
+      `extensions.lyrveil.text_sha256`. `changed_fields` then is empty. Otherwise it lists, among `description`,
+      `personality` and `mes_example`, those that differ from what the embedded card renders. It can be empty without a
+      match when only the embedded card was changed. **Usa i testi modificati** switches to `direct_draft`, which
+      always reads the file's own text.
+    - A card whose hash matches and whose embedded card breaks a card rule answers `422 IMPORT_INVALID`, or `422
+      CONTENT_POLICY_BLOCKED` for the content guard, and stores nothing. The hash never skips a rule.
 - **Errors.**
   - `413 PAYLOAD_TOO_LARGE` over 64 MB.
   - `415 UNSUPPORTED_MEDIA` for a file that is neither JSON nor PNG, a CHARX archive included.

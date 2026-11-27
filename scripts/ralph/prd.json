@@ -3317,8 +3317,8 @@
         "The embedded card goes through the same validation and content guard as a native import, so a tampered embedded card with a matching hash cannot bypass a card rule."
       ],
       "priority": 138,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Import now reads `extensions.lyrveil` and returns it as `embedded_lyrveil` with the validated native card, `text_matches` and `changed_fields`. The direct draft stays in the answer for **Usa i testi modificati**. The embedded card always goes through `validate_card`. If its hash matches and it breaks a rule, the whole import is refused with 422. If the text was edited, an embedded card that fails is dropped. `test lint` passes (docs checks, ruff, mypy strict, frontend lint and build). The new integration tests are written but not run: the integration level takes no file argument, and the orchestrator runs it.",
       "dependsOn": [
         "P10.5a"
       ],

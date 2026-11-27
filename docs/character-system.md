@@ -431,7 +431,7 @@ Built so far, backend only: step 1 and the check of step 2 (P10.1), and the part
 and stages the avatar, with the routes to read, discard and expire an import (P10.2a, `lyrveil.services.card_import`).
 P10.2b added the direct mapping and its report (`lyrveil.domain.card_mapping`), the macros and the placeholders
 rendered in the reply prompt (`lyrveil.domain.card_placeholders`). The conversion (P10.3) and the save (P10.4) are
-delivered in the backend, and so is the export (P10.5a). The import of an exported card (the round trip) is planned.
+delivered in the backend, and so is the export (P10.5a) and the import of an exported card, the round trip (P10.5b).
 
 **Parser (delivered in P10.1).** `lyrveil.domain.tavern_card.parse_card` takes the bytes of a file and returns the
 card. The card comes with its spec (V1, V2 or V3), its container (JSON, PNG or APNG), the chunk it was read from, the
@@ -570,6 +570,16 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
   `creator_notes`, `source`, `character_version` and `creation_date`.
 - **On the way back.** A card whose hash matches imports from the embedded card. A card whose text changed elsewhere
   shows the changed fields and offers **Usa i testi modificati**.
+  - **Delivered in P10.5b** (backend only, `lyrveil.services.card_roundtrip`, [API](api.md#character-cards-planned)).
+    The import hashes the file's own `description`, `personality` and `mes_example` with `text_sha256` and compares
+    the result with `extensions.lyrveil.text_sha256`. The hash of the embedded card's rendering would always match,
+    so it is not the comparison. A mismatch lists, as `changed_fields`, the texts that differ from what the embedded
+    card renders. The scenario and greetings are outside the hash, so an edit there is not reported.
+  - **Same rules.** The embedded card goes through `validate_card` (card rules and content guard) whatever the hash
+    says. When the hash matches and a rule refuses it, the whole import is refused. When the text was edited, an
+    embedded card that fails is dropped, and the import offers the direct mapping alone.
+  - **Not covered.** The embedded `format_version` must be an integer from 1 to the one this build reads; any other
+    block is ignored. The screen with the two choices is not built.
 
 **Scarica la card originale** on the profile returns the stored source as it was imported.
 

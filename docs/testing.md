@@ -1367,8 +1367,10 @@ which also checks the delimited card text in the prompt, and the downgrade of re
 saving an import) is written in `backend/tests/integration/test_card_save.py` (P10.4), with the avatar, the scenarios
 from greetings and the one-save rule. T-CRD-07 is written in `backend/tests/integration/test_card_export.py` (P10.5a):
 the V3 and V2 envelopes, the required fields, both PNG chunks, the native card and its hash, the source fields and
-unknown `extensions` keys of an imported character, and the error for `png` without an avatar. The other tests are
-not written yet. The
+unknown `extensions` keys of an imported character, and the error for `png` without an avatar. T-CRD-08 is written in `backend/tests/integration/test_card_roundtrip.py`
+(P10.5b): Lyrveil, then a V3 PNG, then Lyrveil gives an equal card; an edited card names its changed fields; and a
+tampered embedded card with a matching hash is refused. Its last clause, a card then Lyrveil then a card keeping every
+unknown field, is checked in `test_card_export.py`. The other tests are not written yet. The
 fixtures are original synthetic cards written for the tests. No community card is committed
 ([R-PUB-06](requirements.md#17-publication)). The V1, V2 and V3 JSON cards are in `backend/tests/fixtures/tavern_cards`.
 The PNG and APNG cards are built from them, chunk by chunk, by the test module.

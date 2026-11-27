@@ -231,6 +231,12 @@ class ParsedCard:
     sha256: str
 
 
+def card_data(source: dict[str, Any]) -> CardData:
+    """Returns the typed fields of a stored card `source`, which already passed the parser: the `data` of a V2 or V3
+    envelope, or the card itself for V1."""
+    return CardData.model_validate(source if "spec" not in source else source["data"])
+
+
 def parse_card(content: bytes) -> ParsedCard:
     """Returns the card in `content`, the bytes of an uploaded file.
 
