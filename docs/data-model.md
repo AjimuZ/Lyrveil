@@ -850,6 +850,21 @@ The kept entries come first, then the cut ones; the text is never stored. The co
 JSON. Deleting a world asks for confirmation and deletes its entries and links. A conversation that
 starts from a scenario copies the scenario's links. Purging a conversation deletes its links.
 
+Imports fill `source_json` (P12.4, [Lorebooks](character-system.md#lorebooks)), written with ASCII escapes:
+
+- A book holds `fields`, the book fields Lyrveil does not map (such as `recursive_scanning` and `extensions`), and
+  the file's `name`, `description`, `scan_depth` or `token_budget` when Lyrveil stored another value.
+- An entry holds `file_index` (its place in the file), `fields` (every field Lyrveil does not map: `id`, `position`,
+  `extensions`, `use_regex` and unknown ones), `decorators` (the kept `@@` lines), `selective` as the file had it,
+  `secondary_keys` when they were not applied, `left_out_keys` and `file_keys` when keys were left out,
+  `disabled_on_import` (`use_regex` or `no_usable_key`), and the file's `name`, `comment`, `priority` or
+  `insertion_order` when Lyrveil stored another value.
+
+Migration 0023 (P12.4) changes no schema. For every `character_sources` row whose card has a `character_book`, it writes
+the character's own book with `lyrveil.services.lorebook`, the converter of the card save, so the revision imports the
+application. A character whose own book already has entries is skipped, and an empty own book is filled, so a second
+run converts nothing. The downgrade keeps the books.
+
 ## Full-text search
 
 Each FTS table holds stemmed text ([Memory engine](memory-engine.md#stemming)), keeps its

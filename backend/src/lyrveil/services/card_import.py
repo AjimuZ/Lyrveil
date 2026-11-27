@@ -5,7 +5,8 @@ An import parses the file with lyrveil.domain.tavern_card, stores the parsed car
 format and the time, with the direct draft and the import report of lyrveil.domain.card_mapping, and stages the avatar
 of a PNG card through the upload path, whose re-encode removes every chunk. It never writes a character and never
 fetches a remote `uri` of the card: nothing here opens a connection. Only `save` writes a character, in the one
-transaction that links the import's source, avatar and scenarios to it (P10.4).
+transaction that links the import's source, avatar and scenarios to it (P10.4) and turns its `character_book` into the
+character's own lore book (P12.4).
 """
 
 import base64
@@ -52,6 +53,8 @@ from lyrveil.services.assets import CharacterAssetService
 from lyrveil.services.card_roundtrip import EmbeddedLyrveil, read_embedded
 from lyrveil.services.card_rules import validate_card
 from lyrveil.services.characters import CharacterService
+from lyrveil.services.lore import LoreService
+from lyrveil.services.lorebook import character_book_of, convert_book
 from lyrveil.services.scenarios import ScenarioService
 
 _NO_IMPORT = "L'importazione non esiste o è scaduta."
@@ -143,7 +146,8 @@ class CardImportService:
         """Returns the new `ready` import made from the bytes of an uploaded card file.
 
         The card is parsed and checked first (parse_card) and mapped to the direct draft with its report (map_card,
-        which needs no model), then the avatar of a PNG card is re-encoded through the
+        which needs no model). A card with a `character_book` adds `lore` to the report: what the save will make of the
+        book, stemmed in the draft's language (convert_book). Then the avatar of a PNG card is re-encoded through the
         upload path (images.prepare_upload: 15 MB and 8192 pixels, one frame, no chunk survives) and staged; the row
         is written last. Raises what parse_card raises (CardRefusedError, ContentPolicyBlockedError naming the source
         path) and what prepare_upload raises (PayloadTooLargeError, UnsupportedMediaError). In every refusal no row and
@@ -161,9 +165,14 @@ class CardImportService:
             # A number such as 1e999 reads as infinity, which JSON text cannot hold.
             raise CardInvalidError(CardFailure.BAD_JSON) from error
         mapping = map_card(parsed.data, prefix="" if parsed.spec is CardSpec.V1 else "data")
+        report = mapping.report_json()
+        book = character_book_of(parsed.source)
+        if book is not None:
+            # The draft's language: the save stems the keys again with the character's language.
+            report["lore"] = convert_book(book, mapping.draft.identity.primary_language, parsed.data.name).report_json()
         # ASCII escapes keep a lone surrogate of the card's text storable, as for the source.
         draft_json = json.dumps(mapping.draft_json(), ensure_ascii=True)
-        report_json = json.dumps(mapping.report_json(), ensure_ascii=True)
+        report_json = json.dumps(report, ensure_ascii=True)
         avatar = None if parsed.container is CardContainer.JSON else images.prepare_upload(content, None)
         import_id = new_id()
         now = self._clock()
@@ -196,7 +205,9 @@ class CardImportService:
         create with every card rule (validate_card, the content guard), at version 1 with actor `import`.
 
         One transaction writes the character, its version, the `character_sources` row (the stored card unchanged),
-        the primary avatar and, when `create_scenarios`, a scenario for each greeting of the direct mapping
+        the character's own lore book made from the card's `character_book` when it has one (lyrveil.services.lorebook,
+        keys stemmed with the card's primary language), the primary avatar and, when `create_scenarios`, a scenario for
+        each greeting of the direct mapping
         (`group_only_greetings` is never one), and sets the import `saved`. The avatar is the staged image of a PNG
         card, or for a JSON card the V3 `icon` asset named `main` when its uri is a data URI of a PNG, JPEG or WebP
         that decodes; an icon that does not decode gives no avatar rather than refusing the save. The staged file is
@@ -234,6 +245,11 @@ class CardImportService:
                     imported_at=now,
                 ),
             )
+            book = character_book_of(json.loads(current.source_json))
+            if book is not None:
+                identity = card.identity
+                imported = convert_book(book, identity.primary_language, identity.first_name)
+                LoreService.store_own_book_in(connection, character_id, imported, now)
             if image is not None:
                 written.append(assets.store_primary_avatar_in(connection, character_id, image, now=now))
             for proposal in proposals:

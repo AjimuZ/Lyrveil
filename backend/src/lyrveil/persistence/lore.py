@@ -76,17 +76,30 @@ def _entry(row: RowMapping) -> LoreEntry:
 
 
 def insert_book(
-    connection: Connection, book_id: str, kind: BookKind, character_id: str | None, fields: dict[str, Any], now: str
+    connection: Connection,
+    book_id: str,
+    kind: BookKind,
+    character_id: str | None,
+    fields: dict[str, Any],
+    now: str,
+    source_json: str = "{}",
 ) -> None:
-    """Adds a book. `fields` holds `name`, `description`, `scan_depth` and `token_budget`; the database refuses a
-    second own book for a character and a world with a character."""
+    """Adds a book. `fields` holds `name`, `description`, `scan_depth` and `token_budget`; `source_json` the book fields
+    kept from an import. The database refuses a second own book for a character and a world with a character."""
     connection.execute(
         text(
             "INSERT INTO lore_books (id, kind, character_id, name, description, scan_depth, token_budget, status, "
-            "created_at, updated_at) VALUES (:id, :kind, :character_id, :name, :description, :scan_depth, "
-            ":token_budget, 'active', :now, :now)"
+            "source_json, created_at, updated_at) VALUES (:id, :kind, :character_id, :name, :description, "
+            ":scan_depth, :token_budget, 'active', :source_json, :now, :now)"
         ),
-        {**fields, "id": book_id, "kind": kind.value, "character_id": character_id, "now": now},
+        {
+            **fields,
+            "id": book_id,
+            "kind": kind.value,
+            "character_id": character_id,
+            "source_json": source_json,
+            "now": now,
+        },
     )
 
 
@@ -180,18 +193,21 @@ def count_entries(connection: Connection, book_id: str) -> int:
     return int(count.scalar_one())
 
 
-def insert_entry(connection: Connection, entry_id: str, book_id: str, columns: dict[str, Any], now: str) -> None:
+def insert_entry(
+    connection: Connection, entry_id: str, book_id: str, columns: dict[str, Any], now: str, source_json: str = "{}"
+) -> None:
     """Adds an entry. `columns` holds the editable columns the service validated: `title`, `content`, the three
-    `*_keys_json` lists, `keys_stem_json`, the three flags, `priority`, `insertion_order` and `note`."""
+    `*_keys_json` lists, `keys_stem_json`, the three flags, `priority`, `insertion_order` and `note`; `source_json` the
+    entry fields and decorators kept from an import."""
     connection.execute(
         text(
             "INSERT INTO lore_entries (id, book_id, title, content, keys_json, secondary_keys_json, exclude_keys_json, "
-            "keys_stem_json, case_sensitive, constant, enabled, priority, insertion_order, note, created_at, "
-            "updated_at) VALUES (:id, :book_id, :title, :content, :keys_json, :secondary_keys_json, "
+            "keys_stem_json, case_sensitive, constant, enabled, priority, insertion_order, note, source_json, "
+            "created_at, updated_at) VALUES (:id, :book_id, :title, :content, :keys_json, :secondary_keys_json, "
             ":exclude_keys_json, :keys_stem_json, :case_sensitive, :constant, :enabled, :priority, :insertion_order, "
-            ":note, :now, :now)"
+            ":note, :source_json, :now, :now)"
         ),
-        {**columns, "id": entry_id, "book_id": book_id, "now": now},
+        {**columns, "id": entry_id, "book_id": book_id, "source_json": source_json, "now": now},
     )
 
 

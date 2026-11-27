@@ -4,7 +4,8 @@ carries both (ADR 0047, Export; docs/character-system.md, Character cards).
 The free text is rendered from the current card by pure, deterministic functions, so two exports of an unchanged card
 differ only in `modification_date`. `extensions.lyrveil` holds the complete native card and the hash of the rendered
 text, which the import's round trip compares. An imported character keeps the fields of its stored source that the ADR
-lists. A card never holds a conversation, a memory, a persona, another image or the user's name.
+lists. A character whose own lore book has entries carries it as `character_book` (ADR 0049). A card never holds a
+conversation, a memory, a persona, another image or the user's name.
 """
 
 import base64
@@ -29,8 +30,10 @@ from lyrveil.media import images
 from lyrveil.media.store import MediaPathError, MediaStore
 from lyrveil.persistence import card_imports as import_repository
 from lyrveil.persistence import characters as character_repository
+from lyrveil.persistence import lore as lore_repository
 from lyrveil.services.assets import CharacterAssetService
 from lyrveil.services.character_exchange import file_stem
+from lyrveil.services.lorebook import export_book
 from lyrveil.services.scenarios import ScenarioService
 
 FORMAT_V3_JSON = "v3json"
@@ -175,12 +178,14 @@ def build_v2(
     texts: CardTexts,
     scenarios: Sequence[Scenario],
     kept: KeptFields,
+    character_book: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Returns the Character Card V2 envelope of `card`.
 
     The first of `scenarios` gives `scenario` and `first_mes`, each later one an alternate greeting when it has an
     opening message; a scenario's description and setting make its text. `system_prompt` and
-    `post_history_instructions` are empty, and `character_book` is absent until the character has its own lore book.
+    `post_history_instructions` are empty. `character_book` is the character's own lore book as
+    lyrveil.services.lorebook.export_book writes it, and the field is absent when it is None.
     """
     first = scenarios[0] if scenarios else None
     extensions = {
@@ -192,6 +197,7 @@ def build_v2(
             "text_sha256": text_sha256(texts),
         },
     }
+    book = {} if character_book is None else {"character_book": character_book}
     return {
         "spec": SPEC_V2,
         "spec_version": "2.0",
@@ -210,6 +216,7 @@ def build_v2(
             "creator": kept.creator,
             "character_version": kept.character_version,
             "extensions": extensions,
+            **book,
         },
     }
 
@@ -219,12 +226,13 @@ def build_v3(
     texts: CardTexts,
     scenarios: Sequence[Scenario],
     kept: KeptFields,
+    character_book: dict[str, Any] | None = None,
     *,
     modified: int,
 ) -> dict[str, Any]:
     """Returns the Character Card V3 envelope: the fields of `build_v2` plus `source`, `group_only_greetings` (empty),
     `creation_date` and `modification_date`, the time of the export in Unix seconds."""
-    document = build_v2(card, texts, scenarios, kept)
+    document = build_v2(card, texts, scenarios, kept, character_book)
     data: dict[str, Any] = document["data"]
     data.update(
         source=kept.source,
@@ -272,17 +280,17 @@ class CardExportService:
         found = read(self._engine, lambda connection: self._load(connection, character_id))
         if found is None:
             raise NotFoundError(_NO_CHARACTER)
-        stored, source = found
+        stored, source, book = found
         scenarios = self._pick_scenarios(character_id, scenario_ids)
         avatar = self._primary_avatar(character_id) if card_format == FORMAT_PNG else None
         card = stored.card
         texts = render_texts(card)
         kept = kept_fields(stored, source)
         stem = file_stem(card.identity.first_name)
-        v2 = build_v2(card, texts, scenarios, kept)
+        v2 = build_v2(card, texts, scenarios, kept, book)
         if card_format == FORMAT_V2_JSON:
             return ExportedCard(_json_bytes(v2), "application/json", f"{stem}.v2.json")
-        v3 = build_v3(card, texts, scenarios, kept, modified=int(self._clock().timestamp()))
+        v3 = build_v3(card, texts, scenarios, kept, book, modified=int(self._clock().timestamp()))
         if card_format == FORMAT_V3_JSON:
             return ExportedCard(_json_bytes(v3), "application/json", f"{stem}.json")
         assert avatar is not None
@@ -290,14 +298,20 @@ class CardExportService:
         return ExportedCard(images.to_png_with_text(avatar, chunks), "image/png", f"{stem}.png")
 
     @staticmethod
-    def _load(connection: Connection, character_id: str) -> tuple[StoredCharacter, dict[str, Any] | None] | None:
-        """Returns the character and the parsed stored source card of an imported one (None for another), or None for an
-        unknown character."""
+    def _load(
+        connection: Connection, character_id: str
+    ) -> tuple[StoredCharacter, dict[str, Any] | None, dict[str, Any] | None] | None:
+        """Returns the character, the parsed stored source card of an imported one (None for another) and its own lore
+        book as a `character_book` (None without an own book or when it has no entry, so opening an empty editor
+        changes no export), or None for an unknown character."""
         stored = character_repository.get_card(connection, character_id)
         if stored is None:
             return None
         row = import_repository.source_of_character(connection, character_id)
-        return stored, None if row is None else json.loads(row.source_json)
+        own = lore_repository.get_character_book(connection, character_id)
+        entries = [] if own is None else lore_repository.list_entries(connection, own.id)
+        book = export_book(own, entries) if own is not None and entries else None
+        return stored, None if row is None else json.loads(row.source_json), book
 
     def _pick_scenarios(self, character_id: str, scenario_ids: Sequence[str]) -> list[Scenario]:
         picked: list[Scenario] = []

@@ -364,7 +364,8 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
     Without ids the three are empty. A scenario must exist and be usable with the character.
   - **Content.** The V3 file has every required field of the specification plus `source`, `group_only_greetings` (empty),
     `creation_date` and `modification_date`, the time of the export in Unix seconds. The V2 file has the V2 fields only.
-    `character_book` is absent. `system_prompt` and `post_history_instructions` are empty. The PNG holds `ccv3` (the V3
+    `character_book` is the character's own lore book as `lorebook_v3` writes it (P12.4), and absent when that book
+    does not exist or has no entry. `system_prompt` and `post_history_instructions` are empty. The PNG holds `ccv3` (the V3
     JSON) and `chara` (the V2 JSON), each as base64 of UTF-8 JSON, and no other chunk.
   - **Errors.** `404 NOT_FOUND` for an unknown character, for a scenario that does not exist or belongs to another
     character, and for an avatar whose file is missing, `409 CONFLICT` for `png` without a primary avatar, and
@@ -696,8 +697,7 @@ the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 ### Lore (planned)
 
 Planned for version 1.1, phase P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The first seven rows are
-delivered (P12.1b), and so are the match route (P12.2a) and `lore_refs` (P12.3); the import and export routes are not
-built.
+delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3) and the import and export routes (P12.4).
 
 | Method and path | Purpose |
 | --- | --- |
@@ -708,8 +708,8 @@ built.
 | `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |
 | `GET`, `POST /lore/books/{id}/links`, `DELETE /lore/links/{id}` | The characters, scenarios and conversations a world is linked to. |
 | `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. |
-| `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. Not delivered. |
-| `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. Not delivered. |
+| `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. |
+| `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. |
 
 - Entries and book names pass the content guard (`422 CONTENT_POLICY_BLOCKED`). A key with no stem after stop-word
   removal is `422 VALIDATION_ERROR` naming the key.
@@ -737,6 +737,17 @@ built.
     constant), `no_key_matched`, `secondary_not_matched` or `excluded`.
   - A disabled entry stays inactive even when it is constant, and a constant entry ignores its exclude keys.
   - A missing or over-long `text` is `422 VALIDATION_ERROR`; an unknown book is `404`.
+- `POST /lore/worlds/import` (P12.4) takes the file as multipart field `file`: UTF-8 JSON
+  `{"spec": "lorebook_v3", "data": {...}}`. It answers `201` `{"book", "report"}`: the new active world, with keys
+  stemmed in Italian, and the report `{"entries", "disabled", "items"}` of
+  [Lorebooks](character-system.md#lorebooks). It answers `413 PAYLOAD_TOO_LARGE` over 64 MB, `422 IMPORT_INVALID` for a
+  file that is not UTF-8 JSON, nests over 64 levels, has another `spec` or no `data` object, or has a known field of the
+  wrong type (the detail names its path), and `422 CONTENT_POLICY_BLOCKED` naming the path of a string that describes a
+  minor. Nothing is stored then.
+- `GET /lore/books/{id}/export` (P12.4) answers a world or an own book as `application/json`, a `lorebook_v3` file named
+  `<name>.lorebook.json` in ASCII, with the fields kept from an import written back. An unknown book is `404`.
+- Saving a card import (`POST /characters` with `import_id`) also writes the card's `character_book` as the
+  character's own book, and the import answer's `report` has a `lore` object of the same form when the card has one.
 - `POST /conversations` with a `scenario_id` copies the scenario's links into the new conversation (one link to each
   world); a later change to the scenario's links does not reach it.
 - `GET /messages/{id}/diagnostics` gains `lore_refs` (P12.3), a list apart from `memories`: for each entry that was

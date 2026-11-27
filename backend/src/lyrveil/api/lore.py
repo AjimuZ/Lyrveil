@@ -1,16 +1,18 @@
 """Lore routes of docs/api.md (Lore): worlds, books, entries and links, and a character's own book.
 
-The match route runs the keyword matcher with no model. The import and export routes belong to later tasks of P12. Not
-in the committed OpenAPI document yet, like the persona routes: `include_in_schema` is off until `backend/openapi.json`
-is regenerated with Docker.
+The match route runs the keyword matcher with no model. The import and export routes read and write `lorebook_v3`
+files (lyrveil.services.lorebook). Not in the committed OpenAPI document yet, like the persona routes:
+`include_in_schema` is off until `backend/openapi.json` is regenerated with Docker.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
+from starlette.concurrency import run_in_threadpool
 
+from lyrveil.domain.exchange import MAX_IMPORT_BYTES
 from lyrveil.domain.lore import BookKind, BookStatus, LoreBook, LoreEntry, LoreLink
 from lyrveil.services.lore import LoreService
 from lyrveil.services.lore_matcher import MatchReason
@@ -41,6 +43,14 @@ class BookOut(BaseModel):
 
 class BookList(BaseModel):
     items: list[BookOut]
+
+
+class WorldImportOut(BaseModel):
+    """The world a `lorebook_v3` file became, and the import report: `entries` imported, how many of them are
+    `disabled`, and `items`, each with `index`, `title`, `reason`, `keys` and an Italian `detail`."""
+
+    book: BookOut
+    report: dict[str, Any]
 
 
 class BookIn(BaseModel):
@@ -228,6 +238,30 @@ def create_world(body: BookIn, service: LoreService = Service) -> BookOut:
     """Creates an active world: 422 `VALIDATION_ERROR` for a blank name or a value out of its limit, naming the field,
     and 422 `CONTENT_POLICY_BLOCKED` for a name that describes a minor."""
     return _book_out(service.create_world(body.model_dump(exclude_none=True)))
+
+
+@router.post("/lore/worlds/import", response_model=WorldImportOut, status_code=201)
+async def import_world(file: Annotated[UploadFile, File()], service: LoreService = Service) -> WorldImportOut:
+    """Creates an active world from an uploaded `lorebook_v3` file and answers `201` with it and the import report.
+    Answers 413 `PAYLOAD_TOO_LARGE` over 64 MB, 422 `IMPORT_INVALID` for a file that is not UTF-8 JSON, has another
+    `spec` or a known field of the wrong type, and 422 `CONTENT_POLICY_BLOCKED` naming the path of a string that
+    describes a minor. Nothing is written in those cases."""
+    # One byte over the limit is enough to refuse, so a larger file is never read whole into memory.
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    book, report = await run_in_threadpool(service.import_world, data)
+    return WorldImportOut(book=_book_out(book), report=report)
+
+
+@router.get("/lore/books/{book_id}/export")
+def export_book(book_id: str, service: LoreService = Service) -> Response:
+    """Answers the book, a world or an own book, as a `lorebook_v3` JSON download named after it; 404 for an unknown
+    book."""
+    file_name, content = service.export_book(book_id)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
 
 
 @router.get("/lore/books/{book_id}", response_model=BookOut)

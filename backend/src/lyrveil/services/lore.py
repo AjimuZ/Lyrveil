@@ -7,6 +7,7 @@ linked. `match` runs the keyword matcher of `lore_matcher` on a pasted text. A r
 lyrveil.services.chat_inference.load_context_request, and lyrveil.context.builder places them in blocks 11 and 12.
 """
 
+import json
 import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -29,8 +30,16 @@ from lyrveil.domain.lore import (
 )
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import lore as repository
+from lyrveil.services.character_exchange import file_stem
 from lyrveil.services.lore_matcher import EntryMatch, match_entries
 from lyrveil.services.lore_rules import checked_book, checked_entry
+from lyrveil.services.lorebook import (
+    DEFAULT_WORLD_NAME,
+    ImportedBook,
+    convert_book,
+    lorebook_document,
+    parse_lorebook,
+)
 
 NO_BOOK = "Libro di lore non trovato."
 NO_ENTRY = "Voce di lore non trovata."
@@ -45,6 +54,16 @@ _NO_TARGETS = {
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _source_json(source: dict[str, Any]) -> str:
+    """Returns `source` as JSON text with ASCII escapes, which keep a lone surrogate of an imported file storable."""
+    return json.dumps(source, ensure_ascii=True)
+
+
+def _insert_entries(connection: Any, book_id: str, imported: ImportedBook, now: str) -> None:
+    for entry in imported.entries:
+        repository.insert_entry(connection, new_id(), book_id, entry.columns, now, _source_json(entry.source))
 
 
 def _fold(value: str) -> str:
@@ -102,6 +121,61 @@ class LoreService:
             return self._book(connection, book_id)
 
         return write(self._engine, work)
+
+    def import_world(self, content: bytes) -> tuple[LoreBook, dict[str, Any]]:
+        """Returns the new active world made from the bytes of a `lorebook_v3` file, with its import report
+        (lyrveil.services.lorebook): keys stemmed in Italian, at most 500 entries, the disabled and left-out ones
+        listed.
+
+        Raises what `parse_lorebook` raises (PayloadTooLargeError, ImportInvalidError, ContentPolicyBlockedError naming
+        the path); nothing is written then."""
+        imported = convert_book(parse_lorebook(content), WORLD_KEY_LANGUAGE, DEFAULT_WORLD_NAME)
+        now = to_utc_text(self._clock())
+
+        def work(connection: Any) -> LoreBook:
+            book_id = new_id()
+            repository.insert_book(
+                connection, book_id, BookKind.WORLD, None, imported.columns, now, _source_json(imported.source)
+            )
+            _insert_entries(connection, book_id, imported, now)
+            return self._book(connection, book_id)
+
+        return write(self._engine, work), imported.report_json()
+
+    @staticmethod
+    def store_own_book_in(connection: Any, character_id: str, imported: ImportedBook, now: str) -> str | None:
+        """Writes `imported` as the character's own book inside the caller's transaction and returns its id, or None
+        when the character's own book already has entries, which an import never replaces. An empty own book, made by
+        opening the editor, takes the imported settings and entries."""
+        existing = repository.get_character_book(connection, character_id)
+        source_json = _source_json(imported.source)
+        if existing is None:
+            book_id = new_id()
+            repository.insert_book(
+                connection, book_id, BookKind.CHARACTER, character_id, imported.columns, now, source_json
+            )
+        elif existing.entry_count == 0:
+            book_id = existing.id
+            repository.update_book(connection, book_id, now, **imported.columns, source_json=source_json)
+        else:
+            return None
+        _insert_entries(connection, book_id, imported, now)
+        return book_id
+
+    def export_book(self, book_id: str) -> tuple[str, bytes]:
+        """Returns the file name and the UTF-8 JSON of the book, a world or an own book, as a `lorebook_v3` file
+        (lyrveil.services.lorebook.lorebook_document). Raises NotFoundError for an unknown book."""
+
+        def work(connection: Any) -> tuple[LoreBook, list[LoreEntry]]:
+            return self._book(connection, book_id), repository.list_entries(connection, book_id, None)
+
+        book, entries = read(self._engine, work)
+        document = lorebook_document(book, entries)
+        try:
+            content = json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8")
+        except UnicodeEncodeError:  # A lone surrogate kept from an imported file cannot be UTF-8.
+            content = json.dumps(document, ensure_ascii=True, indent=2).encode("ascii")
+        return f"{file_stem(book.name)}.lorebook.json", content
 
     def list_worlds(self, status: BookStatus = BookStatus.ACTIVE, q: str | None = None) -> list[LoreBook]:
         """Returns the worlds in `status`, by name. A non-blank `q` keeps those whose name or description contains every

@@ -40,7 +40,8 @@ CARD_IMPORTS = "0018"
 CARD_CONVERSION = "0019"
 PERSONAS = "0020"
 LORE = "0021"
-HEAD = "0022"
+LORE_REFS = "0022"
+HEAD = "0023"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -123,6 +124,7 @@ def test_the_revisions_follow_one_another() -> None:
         CARD_CONVERSION,
         PERSONAS,
         LORE,
+        LORE_REFS,
         HEAD,
     }
 
@@ -851,6 +853,69 @@ def test_a_book_holds_at_most_500_entries_in_the_database(database_path: Path, t
         with pytest.raises(sqlite3.IntegrityError, match="at most 500"):
             insert_entry(connection, "e500")
         insert_entry(connection, "o0", book_id="other")
+    finally:
+        connection.close()
+
+
+CARD_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "tavern_cards"
+SOURCE_INSERT = (
+    "INSERT INTO character_sources (id, character_id, format, container, source_json, source_sha256, imported_at) "
+    "VALUES (?, ?, 'chara_card_v2', 'json', ?, 'h', ?)"
+)
+
+
+def test_the_character_books_stored_by_earlier_imports_become_own_books(database_path: Path, tmp_path: Path) -> None:
+    """T-LOR-05, migration half: revision 0023 turns the `character_book` of a source stored by P10 into the
+    character's own book, keeps the fields it does not use, skips a card without a book, and converts nothing more
+    when run again."""
+    assert alembic(database_path, "upgrade", LORE_REFS, cwd=tmp_path).returncode == 0
+    with_book = (CARD_FIXTURES / "v2.json").read_text(encoding="utf-8")
+    without_book = json.dumps({"spec": "chara_card_v2", "spec_version": "2.0", "data": {"name": "Bruno"}})
+    connection = open_database(database_path)
+    try:
+        seed_chat(connection)
+        connection.execute(
+            "INSERT INTO characters (id, first_name, age, created_at, updated_at) VALUES ('d', 'Bruno', 30, ?, ?)",
+            (NOW, NOW),
+        )
+        connection.execute(SOURCE_INSERT, ("source-c", "c", with_book, NOW))
+        connection.execute(SOURCE_INSERT, ("source-d", "d", without_book, NOW))
+    finally:
+        connection.close()
+
+    result = alembic(database_path, "upgrade", "head", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    connection = open_database(database_path)
+    try:
+        books = connection.execute(
+            "SELECT character_id, kind, name, description, scan_depth, token_budget, source_json FROM lore_books"
+        ).fetchall()
+        assert [row[:6] for row in books] == [
+            ("c", "character", "Lighthouse notes", "Places and people around the island.", 4, 512)
+        ]
+        assert json.loads(books[0][6]) == {"fields": {"recursive_scanning": False, "extensions": {}}}
+        entries = connection.execute(
+            "SELECT title, keys_json, note, priority, enabled, source_json FROM lore_entries "
+            "ORDER BY json_extract(source_json, '$.file_index')"
+        ).fetchall()
+        summary = [(row[0], json.loads(row[1]), *row[2:5]) for row in entries]
+        assert len(summary) == 4
+        assert summary[:2] == [("The lamp", ["lamp", "light"], "Core fact", 10, 1), ("", ["ferry"], "", 0, 1)]
+        assert json.loads(entries[0][5]) == {
+            "file_index": 0,
+            "fields": {"extensions": {}, "id": 1, "position": "before_char"},
+            "selective": False,
+        }
+    finally:
+        connection.close()
+
+    assert alembic(database_path, "downgrade", LORE_REFS, cwd=tmp_path).returncode == 0
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        assert connection.execute("SELECT count(*) FROM lore_books").fetchone() == (1,)
+        assert connection.execute("SELECT count(*) FROM lore_entries").fetchone() == (4,)
     finally:
         connection.close()
 

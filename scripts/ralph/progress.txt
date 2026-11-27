@@ -335,6 +335,8 @@
 - Count each rendered line separately with the TokenCounter so unchanged lines are cache hits from one reply to the next. The whole prompt is still counted at the end.
 - Store references to content that can change as ids plus a content hash, and look up display names (titles, book names) when reading, so a deleted record reads as null and no text is copied into the diagnostic record.
 - A column added by migration that needs a validity check should carry a column-level CHECK so the SQLite downgrade can drop it.
+- When a migration needs Python-only logic such as stemming, put that logic in a pure module the application also uses, and call it from the migration through `op.get_bind()` with the repository functions, so the migration and the live code path cannot drift apart.
+- For lossless round trips of external formats, store the unmapped fields verbatim under `fields`, and store the original value only where Lyrveil changed it. On export, write that original back only while Lyrveil's value is still the one the import derived.
 
 ---
 
@@ -3326,4 +3328,53 @@ Assumption: only entries active for the reply are recorded, because the matcher 
   - `NewAssembly.lore_refs` has a default, so existing positional `NewAssembly(...)` calls are unchanged. `DiagnosticsService.reply` adds `title` and `book_name` at read time from `lore_entries` and `lore_books`; the stored refs hold ids and a hash only.
   - The frontend diagnostic view still does not show the `persona`, `lore_constant` and `lore_activated` block token counts, because `PROMPT_BLOCKS` in `memory.model.ts` does not list them. The frontend spec edited in this task was not run; only the lint and strict build passed.
   - T-LOR-07 (the E2E test) is the next lore test still to write. It can look for an entry under **Voci di lore** using `data-testid="diagnostics-lore-entry"`.
+---
+
+## 2026-11-27T19:02:26Z - P12.4
+- P12.4 is in place. One new module, `backend/src/lyrveil/services/lorebook.py`, converts in both directions between Lyrveil lore books and both a card's `character_book` and a standalone `lorebook_v3` file. It touches no database, so the card save, the world import, both exports and the migration all use the same code.
+
+**Import**
+- **Field mapping:** `name` becomes the title and `comment` the note. `secondary_keys` apply only when `selective` is true; otherwise they are kept for export only.
+- **Decorators:** `@@activate`, `@@dont_activate`, `@@additional_keys` and `@@exclude_keys` are applied and removed from the content. Other leading `@@` lines are kept in order. A `@@@` fallback line is kept after a kept decorator and dropped after an applied one.
+- **Disabled entries:** entries with `use_regex: true`, and entries with no usable key that are not constant, are imported disabled and listed in the report.
+- **Limits** (my choices; the ADR doesn't cover them):
+  - Keys that are too long, have no stem, or come after the 16th usable one are left out of the stored list and reported.
+  - Titles over 80 characters and notes over 500 are shortened.
+  - Entries with no content, or over 8,000 characters, are skipped.
+  - At most 500 entries are imported.
+  - Book values out of range take the defaults.
+- **Kept data:** `source_json` keeps every field Lyrveil does not map, plus the file's own values wherever Lyrveil stored something different.
+
+**Export**
+- Kept fields are written back, then the mapped ones.
+- The content starts with the kept decorator lines, then an `@@exclude_keys` line, because the format has no field for exclude keys.
+- Keys left out on import return to their lists in file order.
+- An entry Lyrveil disabled on import is exported enabled, as the file had it.
+- Applied decorators come back as fields (for example `@@activate` as `constant: true`).
+
+**Wiring**
+- Saving a card import now writes the card's `character_book` as the character's own book, in the same transaction, with keys stemmed in the card's primary language.
+- The import answer's `report` gains a `lore` section, worked out at upload with the draft's language.
+- New routes: `POST /lore/worlds/import` (upload a file, get the world and its report) and `GET /lore/books/{id}/export` (download `<name>.lorebook.json`).
+- The V3 and V2 card exports include `character_book` when the own book has at least one entry. It is absent otherwise, so the existing T-CRD-07 check still holds.
+- `insert_book` and `insert_entry` in `persistence/lore.py` take an optional `source_json`.
+
+**Migration 0023** changes no schema. It converts the `character_book` of every `character_sources` row using the same converter, so it imports application code. It skips characters whose own book already has entries, fills an empty own book, and converts nothing on a second run. Its downgrade leaves the books in place.
+
+**Checks I ran**
+- `scripts/lyrveil.cmd test lint` passes.
+- Targeted run of 119 tests, all passed: the new `tests/unit/test_lorebook.py` and `tests/integration/test_lorebook.py`, plus `test_card_export.py` (T-CRD-07), `test_card_roundtrip.py` (T-CRD-08), `test_card_save.py`, `test_card_imports.py` and `test_migrations.py`.
+- `test_lore.py`, `test_lore_api.py`, `test_lore_rules.py` and `test_lorebook.py` (unit) also passed: 62 tests.
+- The full unit, integration, E2E and Docker levels did not run.
+
+Docs updated: CHANGELOG, `api.md`, `character-system.md` (new Lorebooks section), `data-model.md`, `security.md` and `testing.md`. I left the roadmap checkbox for the orchestrator. No frontend work was done: there is still no import or export button.
+- Files changed: backend/src/lyrveil/services/lorebook.py, backend/src/lyrveil/services/lore.py, backend/src/lyrveil/services/card_import.py, backend/src/lyrveil/services/card_export.py, backend/src/lyrveil/persistence/lore.py, backend/src/lyrveil/api/lore.py, backend/migrations/versions/0023_character_books.py, backend/tests/unit/test_lorebook.py, backend/tests/integration/test_lorebook.py, backend/tests/integration/test_migrations.py, CHANGELOG.md, docs/api.md, docs/character-system.md, docs/data-model.md, docs/security.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The pure converter is `lyrveil.services.lorebook`. `convert_book(raw, language, fallback_name)` returns an `ImportedBook` (columns, source, entries, report). `export_book` and `lorebook_document` write it back. `LoreService.store_own_book_in(connection, character_id, imported, now)` writes an own book inside the caller's transaction.
+  - Head revision is now 0023, a data-only migration that imports application code (`LoreService`, `lorebook`). `test_migrations.py` has `LORE_REFS = "0022"` and `HEAD = "0023"`.
+  - The card import `report` has a new optional `lore` key (`{entries, disabled, items}`). The frontend review screen does not show it yet, and the lore import and export routes have no screens.
+  - Entry `source_json` keys: `file_index`, `fields`, `decorators`, `selective`, `secondary_keys`, `left_out_keys`, `file_keys`, `disabled_on_import`, plus `name`, `comment`, `priority` and `insertion_order` when the import changed them. Export orders entries by `insertion_order`, then `file_index`.
+  - The card export writes `character_book` only when the own book has at least one entry, so `GET /characters/{id}/lore`, which creates an empty book, does not change exports.
+  - The lore routes still have `include_in_schema=False`; `backend/openapi.json` was not regenerated.
+  - This session, `scripts/lyrveil.cmd test unit <paths>` ran only the given paths (119 tests), not all of `tests/unit`.
 ---

@@ -482,7 +482,7 @@ JSON exactly as read, a typed view and the file's SHA-256.
 | `mes_example` | `communication.examples` | One pair per `<START>` block: the first `{{user}}:` line, then the `{{char}}:` lines joined. A block with no user line gives `user` null. Up to 8 pairs. A pair over the field limits is left out and reported |
 | `scenario`, `first_mes` | A scenario titled with the name | Description and opening message. A text over the scenario limit of 2,000 characters is left out and reported |
 | `alternate_greetings` | One more scenario each | Same description, titled `<name> (saluto 2)`, `(saluto 3)` and so on |
-| `character_book` | Kept in the source | Becomes the own lore book in P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) |
+| `character_book` | The character's own lore book, and kept in the source | Written when the import is saved (P12.4, [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [Lorebooks](#lorebooks)) |
 | `system_prompt`, `post_history_instructions`, `creator_notes`, `creator_notes_multilingual`, `tags`, `creator`, `character_version`, `nickname`, `source`, `group_only_greetings`, the dates, `extensions`, other `assets` | Kept in the source | Shown in the preview and the profile, and never sent to a model |
 | None | `identity.age` | Empty unless the text states an adult age as `N years old`, `N anni` or `age: N` |
 | None | `identity.grammatical_gender` | `non_indicato`, chosen by the user ([R-LNG-08](requirements.md#5-language)) |
@@ -564,8 +564,9 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
   - **Dates and defaults.** `creation_date` is the source's when it has one, else the character's `created_at`.
     `modification_date` is the export time, so it is the only field that differs between two exports of an unchanged
     card. `character_version` is the source's, or the version number of a character without a source.
-  - **Not exported.** `character_book` (until P12), `nickname`, `creator_notes_multilingual` and `group_only_greetings`
-    of the source are not written back: only the fields listed below are kept.
+  - **Not exported.** `nickname`, `creator_notes_multilingual` and `group_only_greetings` of the source are not
+    written back: only the fields listed below are kept. The source's own `character_book` is not written back either:
+    since P12.4 the export writes the character's own lore book instead ([Lorebooks](#lorebooks)).
 - **Scenarios.** The scenarios the user picks become `scenario`, `first_mes` and `alternate_greetings`.
 - **Embedded card.** `extensions.lyrveil` holds the complete card and the hash of the rendered text.
 - **Imported characters.** An imported character keeps its source's unknown `extensions` keys, `tags`, `creator`,
@@ -585,6 +586,44 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
     **Usa i testi modificati** switches the form to the direct mapping.
 
 **Scarica la card originale** on the profile returns the stored source as it was imported.
+
+### Lorebooks
+
+Delivered in P12.4 (backend only, `lyrveil.services.lorebook`, [ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
+A card's `character_book` and a standalone `lorebook_v3` file are read and written by the same pure converter.
+
+- **Where books go.** Saving a card import writes the card's `character_book` as the character's own book, in the
+  save's transaction, with the keys stemmed in the card's primary language. The import answer already carries
+  `report.lore`, made with the draft's language. `POST /lore/worlds/import` makes a world, with Italian stems. A world
+  or an own book exports as `lorebook_v3` (`GET /lore/books/{id}/export`), and the card export writes the own book as
+  `character_book` when it has at least one entry ([API](api.md#lore-planned)).
+- **Field mapping.** `name` becomes `title`, `comment` becomes `note`, and `keys`, `content`, `enabled`,
+  `insertion_order`, `priority`, `case_sensitive` and `constant` keep their names. `secondary_keys` apply only when
+  `selective` is `true`; otherwise they are kept for the export only.
+- **Decorators.** The `@@` lines at the start of the content are read up to the first other line. `@@activate` sets
+  `constant`, `@@dont_activate` clears `enabled`, `@@additional_keys a,b` adds keys and `@@exclude_keys a,b` fills
+  `exclude_keys`; these lines leave the content. Every other `@@` line is kept, in order. A `@@@` fallback line is
+  kept after a kept decorator and dropped after an applied one.
+- **Disabled entries.** An entry with `use_regex: true`, and an entry left with no usable key that is not constant,
+  is imported disabled and listed in the report.
+- **Limits.** A key over 60 characters, with no stem, or after the 16th usable one is left out of the stored list and
+  listed (`keys_left_out`). A title over 80 characters or a note over 500 is cut. An entry with no content, or over
+  8,000 characters of it, is not imported. At most 500 entries are imported. A book `scan_depth` outside 1 to 20 takes
+  4, a `token_budget` outside 50 to 900 leaves the book without one, a name over 120 characters and a description over
+  2,000 are cut, and a blank name takes the character's first name, or `Lorebook importato` for a world.
+- **Kept fields.** `source_json` keeps every field Lyrveil does not map (`id`, `position`, `extensions`, `use_regex`,
+  `recursive_scanning` and unknown ones), the kept decorators, and the file's values that Lyrveil changed: the
+  left-out keys, the full title, note, name and description, an unusable number, and the reason an entry was disabled.
+- **Export.** The kept fields come back, then the mapped ones. The content starts with the kept decorator lines,
+  then `@@exclude_keys` for the exclude keys, which the format has no field for. Left-out keys return to their lists,
+  an entry disabled by the import is exported enabled as the file had it, and a value cut or replaced on import comes
+  back while Lyrveil's value is unedited. Applied decorators come back as fields: `@@activate` as `constant: true`.
+  Entries are written by `insertion_order`, imported ones in file order. A V2 card carries the same object.
+- **The report.** `{"entries", "disabled", "items"}`: each item has the entry's `index` in the file, `title`,
+  `reason` (`use_regex`, `no_usable_key`, `keys_left_out`, `title_cut`, `note_cut`, `empty_content`,
+  `content_too_long`, `refused`, `too_many_entries`), `keys` and an Italian `detail`.
+- **Earlier imports.** Migration 0023 converts the `character_book` of every `character_sources` row with the same
+  converter, in the character's primary language. A character whose own book has entries is left as it is.
 
 ## Demo characters
 

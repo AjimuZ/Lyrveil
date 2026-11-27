@@ -1426,8 +1426,8 @@ written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
 
 Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). T-LOR-04 is written in P12.1a; the
 P12.1a session could not start a test run, so its first run is the `unit` and `integration` levels of the orchestrator.
-T-LOR-01 to T-LOR-03 are written in P12.2a and P12.2b, and T-LOR-06 in P12.3, as below. T-LOR-05, T-LOR-07 and
-T-LOR-08 are not written.
+T-LOR-01 to T-LOR-03 are written in P12.2a and P12.2b, T-LOR-06 in P12.3, and T-LOR-05 and T-LOR-08 in P12.4, as
+below. T-LOR-07 is not written.
 
 - **T-LOR-04.** `tests/unit/test_lore_rules.py` holds the limits, the content guard on titles, contents and world names,
   the keys with no stem (`lui`), the stored key text with its stems and the block-maximum flag.
@@ -1469,6 +1469,21 @@ T-LOR-08 are not written.
   that the downgrade drops it. The frontend spec `memory-studio-screen.spec.ts` checks **Voci di lore**. In the P12.3
   session the new file passed (3 tests), and so did `test_migrations.py` and `test_diagnostics.py` (69); the frontend
   spec and the full levels did not run. T-LOR-07 (E2E) is not written.
+- **T-LOR-05.** `tests/unit/test_lorebook.py` (P12.4) holds the converter: the field mapping, the four applied
+  decorators and the kept ones with their `@@@` fallbacks, `secondary_keys` only with `selective`, the `use_regex` and
+  keyless entries disabled and reported, the unknown fields in `source_json`, the entries left out for their content
+  and the book values out of range. `tests/integration/test_lorebook.py` saves a card import whose `character_book`
+  has one entry per rule and reads the own book, its entries and their kept sources back, checks `report.lore`, and
+  checks that the V3 and V2 card exports carry the book as `character_book` and that a character with an empty own
+  book exports none. `tests/integration/test_migrations.py` checks that migration 0023 converts a source stored at
+  revision 0022, skips a card without a book, and converts nothing more on a second run.
+- **T-LOR-08.** `tests/unit/test_lorebook.py` and `tests/integration/test_lorebook.py` import a `lorebook_v3` file
+  with kept decorators, a regex entry, a keyless entry, unapplied secondary keys, an out-of-range `token_budget` and
+  unknown book and entry fields, export it, and find every field of the file again; a second import and export gives
+  the same file. A wrong `spec`, a field of the wrong type and a minor in the content are refused, and nothing is
+  stored. In the P12.4 session the two new files passed (13 tests), and so did `test_card_export.py` (T-CRD-07),
+  `test_card_roundtrip.py` (T-CRD-08), `test_card_save.py`, `test_card_imports.py` and `test_migrations.py`, 119 in
+  all, and `test_lore.py`, `test_lore_api.py` and `test_lore_rules.py`; the full levels did not run.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

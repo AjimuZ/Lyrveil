@@ -11,6 +11,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Lorebooks in and out of cards (P12.4, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). Saving a card
+  import now turns the card's `character_book` into the character's own lore book, and the import report has a `lore`
+  section that lists what will be disabled or left out. `POST /lore/worlds/import` reads a `lorebook_v3` file as a new
+  world, and `GET /lore/books/{id}/export` writes a world or an own book as `lorebook_v3`. The card export carries the
+  own book as `character_book` when it has entries. `name` becomes the title and `comment` the note, `secondary_keys`
+  apply only with `selective`, and `@@activate`, `@@dont_activate`, `@@additional_keys` and `@@exclude_keys` are
+  applied. Entries with `use_regex`, and entries with no usable key that are not constant, are imported disabled and
+  reported. Everything Lyrveil does not use is kept and written back on export, the other decorators as lines at the
+  start of the content. Migration 0023 converts the books of characters imported before. The new tests (T-LOR-05,
+  T-LOR-08) and the card export, round-trip, import, save and migration tests passed in targeted runs; the full test
+  levels have not run. There are no lore screens yet.
 - Lore in diagnostic mode (P12.3, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). Each stored assembly now
   records `lore_refs`: for every entry that was active for the reply, its book, a hash of its content, the key that
   matched, its block, and whether it was kept or cut. `GET /messages/{id}/diagnostics` returns them apart from the

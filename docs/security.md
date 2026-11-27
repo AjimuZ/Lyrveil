@@ -285,7 +285,7 @@ same lists and the same `422 CONTENT_POLICY_BLOCKED`:
 | Card text in prompts, P10 | Card text is data: block 1 precedes it and it cannot replace it. `system_prompt`, `post_history_instructions` and `creator_notes` never reach a model. Macros are resolved on import, so no card text runs at prompt time except `{{char}}` and `{{user}}`. |
 | Card export, P10 | Holds the card, the chosen scenarios, the own lore book and the primary avatar. Never conversations, memories, personas or the user's name. |
 | Persona, P11 ([ADR 0048](decisions/0048-user-personas.md)) | Age NULL or 18 to 120 in schema and database. Name, appearance, about and the conversation note pass the content guard. |
-| Lore entries and books, P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) | Titles, contents and names pass the content guard with the card rules. Keys are plain words: regular expressions are not supported, so an imported pattern cannot stall the worker. A book holds at most 500 entries. |
+| Lore entries and books, P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)) | Titles, contents and names pass the content guard with the card rules. Keys are plain words: regular expressions are not supported, so an imported pattern cannot stall the worker. A book holds at most 500 entries. A `lorebook_v3` import (P12.4) has the card import's limits: 64 MB, 64 nesting levels, and every string of the file passes the guard before anything is stored. |
 
 ## Secrets
 
