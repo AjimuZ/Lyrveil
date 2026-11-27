@@ -5,6 +5,8 @@ import { RouterLink } from '@angular/router';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey } from '../../core/i18n/translator';
+import { PERSONA_LIMITS, Persona } from '../personas/persona.model';
+import { PersonasStore } from '../personas/personas-store';
 import { Scenario } from '../scenarios/scenario.model';
 import { ScenariosStore } from '../scenarios/scenarios-store';
 import { ChatsStore } from './chats-store';
@@ -46,6 +48,11 @@ type Step = 'pick' | 'create';
  * then becomes the selected one. A link opens the full Creator (`/characters/new`) for everything the minimal form
  * leaves out; the form stays for the quick start. A start or a save that the server refuses
  * keeps the dialog open and shows the reason; success on a start closes it, and the new row appears in the list.
+ *
+ * The picker also asks **Persona** (active personas only, so an archived one is never offered) and **Cosa sa di te
+ * all'inizio**. The persona is preselected: the scenario's, when the chosen scenario names an offered one, otherwise
+ * the default; until the user picks one by hand, choosing another scenario moves it again. The chat's persona is fixed
+ * at the start, which is why this is the only place that chooses it.
  */
 @Component({
   selector: 'lyr-new-chat-dialog',
@@ -57,6 +64,7 @@ type Step = 'pick' | 'create';
 export class NewChatDialog {
   private readonly store = inject(ChatsStore);
   private readonly scenarioStore = inject(ScenariosStore);
+  private readonly personaStore = inject(PersonasStore);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly genders = GENDER_OPTIONS;
@@ -76,6 +84,14 @@ export class NewChatDialog {
   protected readonly choices = computed(() =>
     this.scenarios().filter((scenario) => scenario.character_id === null || scenario.character_id === this.characterId()),
   );
+
+  /** The active personas, the default first. Empty when they could not be loaded: the server then picks the default. */
+  protected readonly personas = signal<readonly Persona[]>([]);
+  protected readonly personaId = signal('');
+  protected readonly personaNote = signal('');
+  protected readonly noteLimit = PERSONA_LIMITS.note;
+  /** True once the user chose a persona by hand, so a later scenario choice no longer moves it. */
+  private personaChosen = false;
 
   protected readonly firstName = signal('');
   protected readonly lastName = signal('');
@@ -106,23 +122,30 @@ export class NewChatDialog {
     this.language.set('');
     this.scenarioId.set('');
     this.scenarios.set([]);
+    this.personas.set([]);
+    this.personaId.set('');
+    this.personaNote.set('');
+    this.personaChosen = false;
     this.resetForm();
     this.step.set('pick');
     this.loading.set(true);
     this.dialog().nativeElement.showModal();
     try {
-      const [found, offered] = await Promise.all([
+      const [found, offered, offeredPersonas] = await Promise.all([
         this.store.listCharacters(),
         this.scenarioStore.listActive().catch((): readonly Scenario[] => []),
+        this.personaStore.listActive().catch((): readonly Persona[] => []),
       ]);
       this.characters.set(found);
       this.scenarios.set(offered);
+      this.personas.set(offeredPersonas);
       const preselected = offered.find((scenario) => scenario.id === scenarioId);
       const forCharacter = found.find((character) => character.id === preselected?.character_id);
       this.characterId.set(forCharacter?.id ?? found[0]?.id ?? '');
       if (preselected !== undefined && this.choices().includes(preselected)) {
         this.scenarioId.set(preselected.id);
       }
+      this.preselectPersona();
       // Only an empty list changes the step. showModal can paint the previous view before the loading state, and a
       // click on "new character" there must not be undone when the list arrives.
       if (found.length === 0) {
@@ -157,7 +180,13 @@ export class NewChatDialog {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.store.startChat(this.characterId(), this.language() || null, this.scenarioId() || null);
+      await this.store.startChat(
+        this.characterId(),
+        this.language() || null,
+        this.scenarioId() || null,
+        this.personaId() || null,
+        this.personaNote(),
+      );
       this.close();
     } catch (failure) {
       this.error.set(toApiError(failure));
@@ -198,10 +227,37 @@ export class NewChatDialog {
     if (!this.choices().some((scenario) => scenario.id === this.scenarioId())) {
       this.scenarioId.set('');
     }
+    this.preselectPersona();
+  }
+
+  /** Chooses a scenario (empty for none); the persona follows it until the user picks one by hand. */
+  protected chooseScenario(id: string): void {
+    this.scenarioId.set(id);
+    this.preselectPersona();
+  }
+
+  /** Records a persona the user picked, which later scenario choices leave alone. */
+  protected choosePersona(id: string): void {
+    this.personaChosen = true;
+    this.personaId.set(id);
+  }
+
+  /**
+   * Sets the persona to the chosen scenario's when that persona is offered (active), else to the default, unless the
+   * user already picked one. The server applies the same rule when no persona is sent.
+   */
+  private preselectPersona(): void {
+    if (this.personaChosen) {
+      return;
+    }
+    const scenario = this.scenarios().find((item) => item.id === this.scenarioId());
+    const named = this.personas().find((persona) => persona.id === scenario?.persona_id);
+    const fallback = this.personas().find((persona) => persona.is_default) ?? this.personas()[0];
+    this.personaId.set(named?.id ?? fallback?.id ?? '');
   }
 
   protected valueOf(event: Event): string {
-    return (event.target as HTMLInputElement | HTMLSelectElement).value;
+    return (event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
   }
 
   protected asGender(value: string): GrammaticalGender {

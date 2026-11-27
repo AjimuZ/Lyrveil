@@ -659,7 +659,8 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
 
 Version 1.1, phase P11 ([ADR 0048](decisions/0048-user-personas.md)). The routes below, the persona of a conversation
 and `persona_id` of scenarios are built (P11.1b); like the scenario and conversation routes they are not in the committed
-OpenAPI document yet. Prompts still read the default name and gender (P11.2) and no screen manages personas (P11.4).
+OpenAPI document yet. Prompts read the conversation's persona (P11.2), and **Le tue persone**, the new-chat picker and
+the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 
 | Method and path | Purpose |
 | --- | --- |

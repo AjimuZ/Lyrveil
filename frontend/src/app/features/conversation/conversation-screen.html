@@ -264,6 +264,27 @@
   <ng-template #panel>
     <h2 class="context-title">{{ 'conv.context.title' | t }}</h2>
     <p class="context-name">{{ name() }}</p>
+    <h3 class="context-heading">{{ 'conv.context.persona' | t }}</h3>
+    <p class="context-persona" data-testid="context-persona">
+      {{ conversation.persona_name || ('conv.context.personaNone' | t) }}
+    </p>
+    <form class="context-note" (submit)="$event.preventDefault(); saveNote()">
+      <label class="context-heading" for="context-note">{{ 'conv.context.note' | t }}</label>
+      <textarea
+        id="context-note"
+        class="control"
+        rows="4"
+        aria-describedby="context-note-hint"
+        [attr.maxlength]="noteLimit"
+        [value]="noteText()"
+        (input)="typedNote($event)"
+      ></textarea>
+      <p class="context-hint" id="context-note-hint">{{ 'conv.context.noteHint' | t }}</p>
+      <button type="submit" class="button" [disabled]="!noteChanged()">{{ 'conv.context.noteSave' | t }}</button>
+      @if (noteSaved()) {
+        <p class="context-hint" role="status">{{ 'conv.context.noteSaved' | t }}</p>
+      }
+    </form>
     <ul class="context-links">
       <li>
         <a class="button" [routerLink]="['/characters', conversation.character_id]">{{ 'conv.context.profile' | t }}</a>

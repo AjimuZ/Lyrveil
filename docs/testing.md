@@ -1406,8 +1406,10 @@ were not run when they were written. T-PSN-03 and the prompt half of T-PSN-04 ar
 block 3, its 300-token cap, the `persona` reduction after `identity`, and T-MOD-05 with block 10), and the integration
 half in `backend/tests/integration/test_persona_prompts.py` (a reply through the scheduler with its stop sequences and
 check V12, the extraction, summary and proactive prompts, and a persona and note edit seen by the next prompt only,
-with a second persona whose texts never appear). They were not run when they were written. T-PSN-05 and T-PSN-06 are
-not written yet.
+with a second persona whose texts never appear). They were not run when they were written. T-PSN-05 is written in
+`backend/tests/integration/test_memory_retrieval.py` (P11.3) and T-PSN-06 in `tests/e2e/specs/personas.spec.mjs`
+(P11.4: a second persona, a chat with it and a note, both in the context panel, the note edited there, and an archived
+persona hidden from the picker), with `personas-store.spec.ts` for the store. Neither ran when they were written.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

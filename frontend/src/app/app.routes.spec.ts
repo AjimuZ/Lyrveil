@@ -23,6 +23,7 @@ const DOCUMENTED_PATHS = [
   'settings',
   'settings/models',
   'settings/resources',
+  'settings/personas',
   'settings/data',
 ];
 

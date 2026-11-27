@@ -258,7 +258,7 @@ Evidence:
 - [x] P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and
   proactive prompts, and the new block 10.
 - [x] P11.3 Shared memories read by persona.
-- [ ] P11.4 **Le tue persone**, the persona and note in the new-chat picker, and the note in the context panel.
+- [x] P11.4 **Le tue persone**, the persona and note in the new-chat picker, and the note in the context panel.
 
 Exit: T-PSN-01 to T-PSN-06 pass. The stable-prefix test still passes with block 10 (T-MOD-05). AC-23 holds in a
 manual run.

@@ -322,6 +322,8 @@
 - Keep database rules, such as CHECKs and triggers, as the backstop and enforce the same rules first in the service so the user gets a specific 409 or 422 instead of an IntegrityError.
 - A stable block with a maximum is cut at render time (like block 3's examples or block 10's appearance and about) and is not reported as a reduction; Assembly.reductions only names the cuts the budget loop makes under pressure.
 - Per-conversation prompt inputs (persona, note) are read in the same transaction that builds the prompt, never cached in a service constructor, so an edit applies from the next reply.
+- Run `scripts/lyrveil.cmd test lint` after frontend changes: it also runs the strict Angular build, which catches template type errors and renamed doc anchors.
+- When a docs heading changes (for example '(planned)' removed), grep docs/traceability.md for the old anchor in the same change.
 
 ---
 
@@ -3140,4 +3142,32 @@ Not in this task: prompts still use the default `Utente` and `non_indicato`, and
   - The retrieval filter uses `m.persona_id IS c.persona_id`, so a NULL on both sides still matches.
   - Valid grammatical_gender values for test persona inserts are femminile, maschile and non_indicato.
   - The new test and the lint checks were not run in this session.
+---
+
+## 2026-11-27T17:42:48Z - P11.4
+- Built the **Le tue persone** screen at /settings/personas, added **Persona** and **Cosa sa di te all'inizio** to the new-chat picker, and added the persona name and an editable note to the context panel. `scripts/lyrveil.cmd test lint` passed, including the strict frontend build. I did not run the unit or e2e specs, so T-PSN-06 has not run.
+
+**Le tue persone.** The list has the **Attive** and **Archiviate** tabs, and **Predefinita** marks the default persona. The form has Nome, Come rivolgersi a te, Età (optional, 18 to 120), Aspetto and Di te. It shows the ADR 0048 warning "Ciò che scrivi qui lo sa ogni personaggio che parla con questa persona." The default persona offers no archive or delete, and a persona with a conversation offers no delete.
+
+**Picker.** It lists active personas only, so archived ones are hidden. It preselects the scenario's persona when the chosen scenario names an offered one, and the default otherwise. Choosing another scenario moves the preselection until the user picks a persona by hand. It sends `persona_id` and `persona_note` to `POST /conversations`.
+
+**Context panel.** It shows the persona name as plain text, with no control to change it. A **Cosa sa di te** field with **Salva la nota** sends `PATCH` with `persona_note`.
+
+**Link.** The **Impostazioni** screen is still the "not available" placeholder, so the link to **Le tue persone** is an entry in the main navigation, next to **Modelli** and **Risorse AI**. This is the one place the task's wording is not met literally. docs/frontend.md says so.
+
+**Not covered.** The scenario form has no **Persona** choice, although the API accepts `persona_id` on scenarios.
+
+**Tests added.** Unit spec `personas-store.spec.ts` and e2e spec `tests/e2e/specs/personas.spec.mjs`, both unrun. The e2e spec covers the T-PSN-06 flow: create a second persona, start a chat with it and a note, and see both in the panel. It also covers editing the note, no combobox in the panel, and archived personas hidden from the picker.
+
+**Docs.** Updated docs/frontend.md, docs/api.md, docs/testing.md, docs/traceability.md (fixed an anchor) and CHANGELOG.md. The roadmap checkbox is left for the orchestrator.
+- Files changed: frontend/src/app/features/personas/persona.model.ts, frontend/src/app/features/personas/personas-store.ts, frontend/src/app/features/personas/personas-store.spec.ts, frontend/src/app/features/personas/personas-screen.ts, frontend/src/app/features/personas/personas-screen.html, frontend/src/app/features/personas/personas-screen.scss, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/app/app.html, frontend/src/i18n/it.json, frontend/src/app/features/chats/chats.model.ts, frontend/src/app/features/chats/chats-store.ts, frontend/src/app/features/chats/new-chat-dialog.ts, frontend/src/app/features/chats/new-chat-dialog.html, frontend/src/app/features/scenarios/scenario.model.ts, frontend/src/app/features/conversation/conversation-store.ts, frontend/src/app/features/conversation/conversation-screen.ts, frontend/src/app/features/conversation/conversation-screen.html, frontend/src/app/features/conversation/conversation-screen.scss, tests/e2e/specs/personas.spec.mjs, docs/frontend.md, docs/api.md, docs/testing.md, docs/traceability.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The Impostazioni screen (/settings) is still the UnavailableScreen placeholder. When it is built it must link to /settings/personas, and the nav entry 'Le tue persone' can then move there.
+  - Plural catalog keys (objects with one/other) are PluralKey, not TextKey: use Translator.plural() from component code, never the `t` pipe.
+  - The frontend scenario form does not send persona_id yet, although the API accepts it; the picker already reads Scenario.persona_id.
+  - The new-chat picker always sends the preselected persona_id explicitly; if GET /personas fails, the persona and note fields are hidden and the server picks the default.
+  - ConversationStore.saveNote reports failures through the chat's actionError banner, not next to the note field.
+  - The unit spec personas-store.spec.ts and the e2e spec personas.spec.mjs have not been run. Only lint and the strict frontend build were run, and both passed.
+  - The extra nav link adds an eighth item to the narrow-screen bottom bar. The responsive e2e specs have not been run against it.
+  - e2e: getByLabel('Persona', { exact: true }) is needed because 'Personaggio' is another label in the same dialog.
 ---

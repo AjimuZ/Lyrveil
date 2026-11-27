@@ -64,6 +64,13 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- **Le tue persone** (`/settings/personas`, P11.4, [ADR 0048](docs/decisions/0048-user-personas.md)): create, edit,
+  archive, restore, delete and set the default persona, with a warning that every character who talks with a persona
+  knows what is written in it. A new chat asks **Persona** (archived ones hidden, the scenario's or the default
+  preselected) and **Cosa sa di te all'inizio**, and the conversation's context panel shows the persona and edits the
+  note. The persona of an existing chat cannot be changed. The link is in the main navigation, because **Impostazioni**
+  is not built yet. The unit spec `personas-store.spec.ts` and the end-to-end spec `personas.spec.mjs` (T-PSN-06) were
+  written and have not run.
 - Characters now know who they are talking to (P11.2, [ADR 0048](docs/decisions/0048-user-personas.md)). Every prompt
   of a conversation names its own persona: the instructions, the style lines and examples, the relationship lines, the
   closing reminder, the `{{user}}` placeholder of cards and scenarios, the image caption, the stop sequence that ends a

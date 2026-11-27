@@ -65,7 +65,7 @@ All feature routes load lazily.
 | `/characters/import/:importId` | The Creator with the import preview of a Character Card (P10.6) |
 | `/characters/:id/lore` | Planned (P12): 11. the character's own lore book |
 | `/worlds`, `/worlds/:id` | Planned (P12): 11. Worlds and lore |
-| `/settings/personas` | Planned (P11): 12. Personas |
+| `/settings/personas` | 12. Personas (P11.4) |
 
 Technical screens are reached only from `/settings`. Any other path redirects to `/chats`.
 
@@ -464,7 +464,9 @@ delivered: scenario text in the conversation's context panel (that panel is plan
 Display name, **Come rivolgersi a te** (**Al femminile**, **Al maschile** or **Non indicato**), time zone view, interface language (`it` in 1.0), default language for new characters, first-start notice, global proactive switch, image auto-detect, contextual images, diagnostic mode, and links to the other sections.
 
 From P11 the display name and **Come rivolgersi a te** move to the default persona, and this screen links to
-**Le tue persone**.
+**Le tue persone**. This screen is still the "not available" placeholder, so since P11.4 the link is the **Le tue
+persone** entry of the main navigation, next to **Modelli** and **Risorse AI**; it moves onto this screen when the screen
+is built.
 
 ### 9. Model settings
 
@@ -533,9 +535,9 @@ Planned for version 1.1, P12, and not built ([ADR 0049](decisions/0049-worlds-an
 - The scenario form and the conversation's context panel get a **Mondi** choice.
 - Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories.
 
-### 12. Personas (planned)
+### 12. Personas
 
-Planned for version 1.1, P11, and not built ([ADR 0048](decisions/0048-user-personas.md)).
+Version 1.1, P11 ([ADR 0048](decisions/0048-user-personas.md)). The screens below are built (P11.4).
 
 - **Le tue persone** (`/settings/personas`) lists personas with **Predefinita**, **Archivia** and **Elimina**, the
   last offered only for a persona with no conversation.
@@ -543,6 +545,30 @@ Planned for version 1.1, P11, and not built ([ADR 0048](decisions/0048-user-pers
   shows the note "Ciò che scrivi qui lo sa ogni personaggio che parla con questa persona."
 - The new-chat picker gets **Persona**, preselected from the scenario or the default, and **Cosa sa di te all'inizio**.
 - The conversation's context panel shows the persona and lets the user edit the note.
+
+Delivered in P11.4 (`features/personas/`, the new-chat dialog and the context panel):
+
+- The route `/settings/personas` loads `personas-screen.ts` over `GET /personas`. **Nuova persona** opens the form above
+  the list (**Nome** 1 to 40 characters, **Come rivolgersi a te**, **Età (facoltativa)** blank or 18 to 120, **Aspetto**,
+  **Di te**); a refusal of the server, such as a text about a minor, stays on the form with its reason. The form shows
+  the warning "Ciò che scrivi qui lo sa ogni personaggio che parla con questa persona." and the **Attive** and
+  **Archiviate** tabs work as on the scenario screen. Each row shows the name, **Predefinita** on the default, and how
+  many conversations use it; its actions are **Modifica**, **Rendi predefinita** (an active persona that is not the
+  default), **Archivia** or **Ripristina**, and **Elimina** with an inline confirmation. The default persona offers
+  neither archive nor delete, and a persona with a conversation offers no delete. Not delivered: the link from the
+  **Impostazioni** screen, which is still the placeholder (the navigation links to **Le tue persone** instead), and a
+  **Persona** choice on the scenario form (the API takes `persona_id` for scenarios; the screen does not send it).
+- The new-chat picker has **Persona** (the active personas only, so an archived one never shows) and **Cosa sa di te
+  all'inizio** (up to 600 characters, optional). The persona is the chosen scenario's when that scenario names an
+  offered one, otherwise the default; choosing another scenario moves it until the user picks a persona by hand. The
+  dialog sends `persona_id` and `persona_note` to `POST /conversations`. If the personas cannot be loaded the two fields
+  are left out and the server takes the default persona.
+- The context panel shows the chat's persona name as plain text, the only place it appears, so an existing conversation
+  offers no way to change it, and a **Cosa sa di te** field with **Salva la nota** (`PATCH /conversations/{id}` with
+  `persona_note`; a blank note clears it). The note applies from the next reply, and a refusal appears in the chat's
+  error banner.
+- **Tests:** `personas-store.spec.ts` (unit) and `tests/e2e/specs/personas.spec.mjs` (T-PSN-06). Both were written but
+  not run in this change.
 
 ## Keyboard
 

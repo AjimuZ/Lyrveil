@@ -33,6 +33,30 @@
   color: var(--ob-text-muted);
 }
 
+.context-heading {
+  display: block;
+  margin: 0 0 var(--ob-space-1);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.context-persona,
+.context-hint {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-text-muted);
+}
+
+.context-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0 0 var(--ob-space-3);
+
+  .control {
+    align-self: stretch;
+  }
+}
+
 .context-links {
   display: flex;
   flex-direction: column;

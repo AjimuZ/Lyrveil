@@ -12,6 +12,8 @@ export interface Scenario {
   readonly opening_message: string;
   readonly character_id: string | null;
   readonly language: string | null;
+  /** The persona the picker preselects for this scenario; null (or absent) means the default persona. */
+  readonly persona_id?: string | null;
   readonly status: ScenarioStatus;
   readonly created_at: string;
   readonly updated_at: string;

@@ -28,7 +28,7 @@
             id="new-chat-scenario"
             class="control"
             aria-describedby="new-chat-scenario-hint"
-            (change)="scenarioId.set(valueOf($event))"
+            (change)="chooseScenario(valueOf($event))"
           >
             <option value="" [selected]="scenarioId() === ''">{{ 'newChat.scenarioNone' | t }}</option>
             @for (scenario of choices(); track scenario.id) {
@@ -36,6 +36,35 @@
             }
           </select>
           <p class="hint" id="new-chat-scenario-hint">{{ 'newChat.scenarioHint' | t }}</p>
+        </div>
+      }
+      @if (personas().length > 0) {
+        <div class="field">
+          <label for="new-chat-persona">{{ 'newChat.persona' | t }}</label>
+          <select
+            id="new-chat-persona"
+            class="control"
+            aria-describedby="new-chat-persona-hint"
+            (change)="choosePersona(valueOf($event))"
+          >
+            @for (persona of personas(); track persona.id) {
+              <option [value]="persona.id" [selected]="persona.id === personaId()">{{ persona.name }}</option>
+            }
+          </select>
+          <p class="hint" id="new-chat-persona-hint">{{ 'newChat.personaHint' | t }}</p>
+        </div>
+        <div class="field">
+          <label for="new-chat-persona-note">{{ 'newChat.personaNote' | t }}</label>
+          <textarea
+            id="new-chat-persona-note"
+            class="control"
+            rows="2"
+            aria-describedby="new-chat-persona-note-hint"
+            [attr.maxlength]="noteLimit"
+            [value]="personaNote()"
+            (input)="personaNote.set(valueOf($event))"
+          ></textarea>
+          <p class="hint" id="new-chat-persona-note-hint">{{ 'newChat.personaNoteHint' | t }}</p>
         </div>
       }
       <div class="field">

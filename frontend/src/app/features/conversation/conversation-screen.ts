@@ -26,6 +26,7 @@ import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Translator } from '../../core/i18n/translator';
 import { Announcer } from '../../core/shell/announcer';
 import { WIDE_QUERY, matchesMedia, watchMedia } from '../../core/shell/viewport';
+import { PERSONA_LIMITS } from '../personas/persona.model';
 import { ShortcutService } from '../shortcuts/shortcut-service';
 import { ChatFind, foldText } from './chat-find';
 import { ConversationStore, isActive } from './conversation-store';
@@ -112,7 +113,8 @@ export interface DayRow {
  * the rows drawn so far and an estimate for the others. A shorter list is drawn whole.
  *
  * The context panel (P08.2) holds links to the character's profile and Memory Studio, the part of the panel that
- * other screens back today. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
+ * other screens back today, and from P11.4 the chat's persona (a name only: it never changes) with an editable note of
+ * what the character knows of the user, saved with `PATCH` and applied from the next reply. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
  * per browser; below that the same content opens in a dialog on request.
  *
  * Keyboard and assistive technology (P08.3): the messages are a `role="log"` that is not live itself, so a streaming
@@ -192,6 +194,16 @@ export class ConversationScreen {
   protected readonly panelDialogOpen = signal(false);
   /** What the header button reports as expanded, for the layout in use. */
   protected readonly panelShown = computed(() => (this.wide() ? !this.panelCollapsed() : this.panelDialogOpen()));
+
+  /** The text in the note field of the context panel while it differs from the saved note; null when it does not. */
+  protected readonly noteDraft = signal<string | null>(null);
+  protected readonly noteSaved = signal(false);
+  protected readonly noteLimit = PERSONA_LIMITS.note;
+  /** What the note field holds: the unsaved text, else the conversation's note. */
+  protected readonly noteText = computed(() => this.noteDraft() ?? this.store.conversation()?.persona_note ?? '');
+  protected readonly noteChanged = computed(
+    () => this.noteDraft() !== null && this.noteDraft() !== (this.store.conversation()?.persona_note ?? ''),
+  );
 
   protected readonly length = computed(() => this.draft().length);
   protected readonly tooLong = computed(() => this.length() > MAX_MESSAGE_CHARS);
@@ -380,6 +392,8 @@ export class ConversationScreen {
         this.follow.set(true);
         this.closeFind(false);
         this.draft.set(loadDraft(id));
+        this.noteDraft.set(null);
+        this.noteSaved.set(false);
         void this.store.open(id);
       });
     });
@@ -397,6 +411,20 @@ export class ConversationScreen {
         afterNextRender(() => this.scrollToBottom(), { injector: this.injector });
       }
     });
+  }
+
+  protected typedNote(event: Event): void {
+    this.noteSaved.set(false);
+    this.noteDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /** Saves the note; on success the field shows the saved text again and says so, on failure the draft stays. */
+  protected async saveNote(): Promise<void> {
+    const saved = await this.store.saveNote(this.noteText());
+    if (saved) {
+      this.noteDraft.set(null);
+      this.noteSaved.set(true);
+    }
   }
 
   /** The header button: collapses or restores the desktop column, or opens the dialog on a narrower screen. */

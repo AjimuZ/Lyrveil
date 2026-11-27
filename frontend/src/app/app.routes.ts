@@ -82,6 +82,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/resources/resources-screen').then((module) => module.ResourcesScreen),
     data: { screen: 'screen.settingsResources' satisfies TextKey },
   },
+  {
+    path: 'settings/personas',
+    loadComponent: () => import('./features/personas/personas-screen').then((module) => module.PersonasScreen),
+    data: { screen: 'screen.settingsPersonas' satisfies TextKey },
+  },
   unavailable('settings/data', 'screen.settingsData'),
   { path: '**', redirectTo: 'chats' },
 ];

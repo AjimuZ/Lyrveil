@@ -38,6 +38,11 @@ export interface Conversation {
   /** The finished messages of the character after the read mark; the user's own messages never count. */
   readonly last_message?: LastMessage | null;
   readonly activity?: ConversationActivity | null;
+  /** The persona the chat started with, which never changes; null (or absent) only for a row older than P11. */
+  readonly persona_id?: string | null;
+  readonly persona_name?: string | null;
+  /** What the character knows of the user from the start of this chat only; empty when nothing was written. */
+  readonly persona_note?: string;
 }
 
 export interface ConversationList {

@@ -338,6 +338,23 @@ export class ConversationStore {
     });
   }
 
+  /**
+   * Saves what the character knows of the user in this chat (a blank note clears it); the server applies it from the
+   * next reply. The conversation's persona is not part of the request: it never changes. Resolves false and sets
+   * `actionError` on failure, for example when the text describes a minor.
+   */
+  saveNote(note: string): Promise<boolean> {
+    const ticket = this.generation;
+    return this.act(async () => {
+      const updated = await firstValueFrom(
+        this.api.patch<Conversation>(`/conversations/${this.conversationId}`, { persona_note: note.trim() || null }),
+      );
+      if (ticket === this.generation) {
+        this.conversationState.set(updated);
+      }
+    });
+  }
+
   /** Deletes a message. Resolves false and sets `actionError` on failure. */
   remove(message: Message): Promise<boolean> {
     return this.act(async () => {

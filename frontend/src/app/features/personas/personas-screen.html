@@ -1,0 +1,167 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.settingsPersonas' | t }}</h1>
+    <button type="button" class="button primary" (click)="newPersona()">{{ 'personas.new' | t }}</button>
+  </header>
+
+  <p class="note">{{ 'personas.intro' | t }}</p>
+
+  @if (editing() !== null) {
+    <form class="form" novalidate aria-labelledby="persona-form-title" (submit)="submit($event)">
+      <h2 class="subtitle" id="persona-form-title">
+        {{ (editing() === 'new' ? 'personas.form.new' : 'personas.form.edit') | t }}
+      </h2>
+
+      <p class="warning" id="persona-knowledge">{{ 'personas.knowledgeWarning' | t }}</p>
+
+      @if (store.actionError(); as failure) {
+        <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+      }
+
+      <div class="field">
+        <label for="persona-name">{{ 'personas.name' | t }}</label>
+        <input
+          id="persona-name"
+          class="control"
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="limits.name"
+          [value]="name()"
+          [attr.aria-invalid]="attempted() && !nameValid()"
+          [attr.aria-describedby]="attempted() && !nameValid() ? 'persona-name-error' : null"
+          (input)="name.set(valueOf($event))"
+        />
+        @if (attempted() && !nameValid()) {
+          <p class="field-error" id="persona-name-error">{{ 'personas.error.name' | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="persona-gender">{{ 'personas.gender' | t }}</label>
+        <select id="persona-gender" class="control" (change)="gender.set(asGender(valueOf($event)))">
+          @for (option of genders; track option.value) {
+            <option [value]="option.value" [selected]="option.value === gender()">{{ option.label | t }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="persona-age">{{ 'personas.age' | t }}</label>
+        <input
+          id="persona-age"
+          class="control"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          [value]="age()"
+          [attr.aria-invalid]="attempted() && !ageValid()"
+          [attr.aria-describedby]="attempted() && !ageValid() ? 'persona-age-hint persona-age-error' : 'persona-age-hint'"
+          (input)="age.set(valueOf($event))"
+        />
+        <p class="hint" id="persona-age-hint">{{ 'personas.ageHint' | t }}</p>
+        @if (attempted() && !ageValid()) {
+          <p class="field-error" id="persona-age-error">{{ 'personas.error.age' | t }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="persona-appearance">{{ 'personas.appearance' | t }}</label>
+        <textarea
+          id="persona-appearance"
+          class="control"
+          rows="3"
+          aria-describedby="persona-knowledge"
+          [attr.maxlength]="limits.appearance"
+          [value]="appearance()"
+          (input)="appearance.set(valueOf($event))"
+        ></textarea>
+      </div>
+      <div class="field">
+        <label for="persona-about">{{ 'personas.about' | t }}</label>
+        <textarea
+          id="persona-about"
+          class="control"
+          rows="5"
+          aria-describedby="persona-knowledge"
+          [attr.maxlength]="limits.about"
+          [value]="about()"
+          (input)="about.set(valueOf($event))"
+        ></textarea>
+      </div>
+      <div class="actions">
+        <button type="button" class="button" (click)="cancel()">{{ 'personas.cancel' | t }}</button>
+        <button type="submit" class="button primary" [disabled]="busy()">{{ 'personas.save' | t }}</button>
+      </div>
+    </form>
+  }
+
+  <div class="tabs" role="group" [attr.aria-label]="'personas.tabs.label' | t">
+    @for (tab of tabs; track tab.status) {
+      <button type="button" class="tab" [attr.aria-pressed]="store.tab() === tab.status" (click)="store.showTab(tab.status)">
+        {{ tab.label | t }}
+      </button>
+    }
+  </div>
+
+  @if (editing() === null && store.actionError(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (store.loading()) {
+    <ob-skeleton [lines]="3" [label]="'personas.loading' | t" />
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.reload()">{{ 'personas.retry' | t }}</button>
+    </div>
+  } @else if (store.items().length === 0) {
+    <ob-empty-state
+      icon="empty-chat"
+      [message]="(store.tab() === 'archived' ? 'personas.empty.archived' : 'personas.empty.active') | t"
+    />
+  } @else {
+    <ul class="list">
+      @for (persona of store.items(); track persona.id) {
+        <li class="card">
+          <div class="card-text">
+            <h2 class="card-title">
+              {{ persona.name }}
+              @if (persona.is_default) {
+                <span class="badge">{{ 'personas.default' | t }}</span>
+              }
+            </h2>
+            <p class="meta">{{ usedBy(persona) }}</p>
+            @if (persona.about) {
+              <p class="excerpt">{{ persona.about }}</p>
+            }
+          </div>
+          <div class="card-actions">
+            <button type="button" class="button" (click)="edit(persona)">{{ 'personas.edit' | t }}</button>
+            @if (persona.status === 'active' && !persona.is_default) {
+              <button type="button" class="button" (click)="makeDefault(persona)">{{ 'personas.makeDefault' | t }}</button>
+            }
+            @if (!persona.is_default) {
+              <button type="button" class="button" (click)="toggleArchive(persona)">
+                {{ (persona.status === 'archived' ? 'personas.unarchive' : 'personas.archive') | t }}
+              </button>
+            }
+            @if (!persona.is_default && persona.conversation_count === 0) {
+              @if (confirmingDelete() === persona.id) {
+                <span class="confirm" role="group" [attr.aria-label]="'personas.delete.confirm' | t: { name: persona.name }">
+                  <span>{{ 'personas.delete.confirm' | t: { name: persona.name } }}</span>
+                  <button type="button" class="button danger" (click)="confirmRemove(persona)">
+                    {{ 'personas.delete.yes' | t }}
+                  </button>
+                  <button type="button" class="button" (click)="confirmingDelete.set(null)">
+                    {{ 'personas.delete.no' | t }}
+                  </button>
+                </span>
+              } @else {
+                <button type="button" class="button danger" (click)="confirmingDelete.set(persona.id)">
+                  {{ 'personas.delete' | t }}
+                </button>
+              }
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>
