@@ -174,6 +174,48 @@ class CharacterAssetService:
             raise NotFoundError(_NO_ASSET)
         return asset
 
+    def store_primary_avatar_in(
+        self, connection: Connection, character_id: str, image: EncodedImage, *, now: str
+    ) -> StoredAsset:
+        """Stores the already validated `image` as the primary avatar of a character that has none, inside the
+        caller's transaction `connection`, and returns the asset. The files are written first. When this fails the
+        files are removed again; when the caller's transaction fails later, the caller removes `file_path` and
+        `thumb_path` of the returned asset. The character must exist in `connection`'s transaction."""
+        asset_id = new_id()
+        folder = f"assets/{character_id}"
+        file_path = f"{folder}/{asset_id}.{image.format.extension}"
+        thumb_path = f"{folder}/{asset_id}.thumb.webp"
+        self._media.save(file_path, image.data)
+        try:
+            self._media.save(thumb_path, image.thumbnail)
+            repository.insert(
+                connection,
+                StoredAsset(
+                    id=asset_id,
+                    character_id=character_id,
+                    kind="avatar",
+                    source="upload",
+                    file_path=file_path,
+                    thumb_path=thumb_path,
+                    media_type=image.format.media_type,
+                    width=image.width,
+                    height=image.height,
+                    byte_size=len(image.data),
+                    sha256=image.sha256,
+                    crop=None,
+                    is_primary=False,
+                    created_at=now,
+                ),
+            )
+            repository.set_primary(connection, character_id=character_id, asset_id=asset_id, now=now)
+            stored = repository.get(connection, asset_id)
+            assert stored is not None
+            return stored
+        except BaseException:
+            self._media.delete(file_path)
+            self._media.delete(thumb_path)
+            raise
+
     def _store(
         self, character_id: str, kind: str, source: str, image: EncodedImage, *, crop: dict[str, int | str] | None
     ) -> StoredAsset:

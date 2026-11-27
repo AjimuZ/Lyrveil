@@ -304,6 +304,8 @@
 - A new job kind needs five edits: the JobKind and policy entries (with the expected mapping in test_job_policy), a migration that extends the generation_jobs kind CHECK, the handler registration in main._job_worker, the docs tables (gpu-orchestration, backend) and a test.
 - Put untrusted card or user text in a prompt between explicit delimiter lines, break the delimiter sequences inside the text, and test that a hostile string stays inside the data section.
 - Make a service the JobHandler of its own kind: the same class has `start()` that queues in one write transaction and `__call__` that runs under the lease. Keep private text out of the job payload and re-read it from the database in the handler.
+- When a create needs several tables in one commit, give the service a `within(connection, id, now)` hook that runs inside its transaction instead of opening a second transaction.
+- A step that writes files and rows together removes the files itself if its own write fails. The caller removes them if the outer transaction fails later, and deletes a staged file only after the commit.
 
 ---
 
@@ -2931,4 +2933,28 @@ Docs updated: `docs/character-system.md` (new "Delivered in P10.2b" rules), `doc
   - The CARD_TOO_LONG check does not reserve room for the repair prompt. A card that barely fits can still fail its repair with a runtime error.
   - Targeted integration tests can run through `scripts/lyrveil.cmd test unit tests/integration/<file>`. The integration level itself takes no arguments.
   - The backend still has no `characters.default_language`, so the conversion writes Italian (DEFAULT_LANGUAGE in services/card_conversion.py). No screen starts the conversion yet.
+---
+
+## 2026-11-27T16:16:11Z - P10.4
+- `POST /characters` now accepts `import_id` and `create_scenarios` (default true) beside the reviewed card. One transaction writes the character at version 1 with actor `import`, its `character_sources` row, the primary avatar and the scenarios, and marks the import `saved`. The 8 new tests in `test_card_save.py` and `scripts/lyrveil.cmd test lint` pass. The full unit, integration, e2e and docker levels were not run, and no screen sends the new request yet.
+
+- **Age and card rules:** a missing or under-18 age gives 422 `VALIDATION_ERROR` and nothing is written.
+- **Scenarios:** they come from the greetings of the direct mapping only when asked. `group_only_greetings` never becomes one.
+- **Avatar:**
+  - A PNG card's staged image becomes the primary avatar, with no chunk left.
+  - A JSON card gets its V3 `icon` named `main` when that is a data URI that decodes.
+  - An icon that does not decode gives no avatar and does not refuse the save.
+- **One save per import:** the saved or expired check runs again inside the transaction. An unknown import is 404, and a saved or expired one is 409.
+- **Cleanup:** the staged file is removed after the commit. If the transaction fails, the asset files it wrote are removed.
+- **Bad fields:** a blank or non-text `import_id`, a non-boolean `create_scenarios`, or `create_scenarios` without `import_id` is 422.
+
+Docs updated: CHANGELOG.md, docs/api.md, docs/data-model.md, docs/testing.md and docs/character-system.md.
+- Files changed: backend/src/lyrveil/api/characters.py, backend/src/lyrveil/persistence/card_imports.py, backend/src/lyrveil/services/assets.py, backend/src/lyrveil/services/card_import.py, backend/src/lyrveil/services/characters.py, backend/src/lyrveil/services/scenarios.py, backend/tests/integration/test_card_save.py, CHANGELOG.md, docs/api.md, docs/data-model.md, docs/testing.md, docs/character-system.md
+- **Learnings for future iterations:**
+  - The save is `CardImportService.save`, called from `POST /characters` when `import_id` is present. It runs through `CharacterService.create_from_import(card, within)`, where `within(connection, character_id, now)` writes the source, avatar and scenarios in the same transaction.
+  - `CharacterAssetService.store_primary_avatar_in` and `ScenarioService.create_in` are the in-transaction writers other multi-table saves can reuse.
+  - The avatar of a JSON card comes only from a V3 `icon` asset `main` whose uri is a base64 data URI. Remote uris are never fetched, and an icon that does not decode gives no avatar rather than failing the save.
+  - Placeholders in the scenarios' opening messages are not rewritten on save. The docs say so.
+  - The Creator screen should send `import_id` and `create_scenarios` in the create body. The scenarios saved are those of the import's direct mapping, not the conversion result's.
+  - Targeted integration tests run with `scripts/lyrveil.cmd test unit tests/integration/<file>`. The Bash tool refused a grep-style command during this session, so use the Grep tool for searches.
 ---

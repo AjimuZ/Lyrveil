@@ -1363,7 +1363,9 @@ of T-CRD-04 are written, in `backend/tests/unit/test_tavern_card.py` (P10.1), an
 in `backend/tests/unit/test_card_mapping.py` (P10.2b). That file also covers T-MOD-05 with an imported card. T-CRD-05
 and the conversion-model part of T-CRD-04 are written in `backend/tests/integration/test_card_conversion.py` (P10.3),
 which also checks the delimited card text in the prompt, and the downgrade of revision `0019` is in
-`backend/tests/integration/test_migrations.py`. The other tests are not written yet. The
+`backend/tests/integration/test_migrations.py`. The API part of T-CRD-04 (a missing or under-18 age refused when
+saving an import) is written in `backend/tests/integration/test_card_save.py` (P10.4), with the avatar, the scenarios
+from greetings and the one-save rule. The other tests are not written yet. The
 fixtures are original synthetic cards written for the tests. No community card is committed
 ([R-PUB-06](requirements.md#17-publication)). The V1, V2 and V3 JSON cards are in `backend/tests/fixtures/tavern_cards`.
 The PNG and APNG cards are built from them, chunk by chunk, by the test module.

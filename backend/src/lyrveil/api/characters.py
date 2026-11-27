@@ -1,7 +1,8 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
 versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
 draft, the exchange routes (export, import and the JSON Schema of the format), the card import routes (P10.2a), the
-card conversion route (P10.3) and the load of the demo characters.
+card conversion route (P10.3), the save of an import through the create route (P10.4) and the load of the demo
+characters.
 Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
@@ -18,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from lyrveil.api.jobs import JobOut, wake_worker
 from lyrveil.domain.card import CharacterCard
 from lyrveil.domain.characters import CharacterSummary, StoredCharacter, VersionSummary
+from lyrveil.domain.errors import ValidationFailedError
 from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
 from lyrveil.images.tags import CARD_CATEGORIES, load_vocabulary
 from lyrveil.media.store import MediaStore
@@ -287,13 +289,34 @@ def list_characters(
 
 
 @router.post("", response_model=CharacterOut, status_code=201)
-def create_character(body: Annotated[dict[str, Any], Body()], service: CharacterService = Service) -> CharacterOut:
+def create_character(
+    body: Annotated[dict[str, Any], Body()],
+    service: CharacterService = Service,
+    card_imports: CardImportService = CardImports,
+) -> CharacterOut:
     """Creates an active character from a card. The body is either `{"identity": {...}, "traits": [...],
     "communication": {...}, "visual": {...}}` or the flat form with the identity fields at the top level; only the first
     name and the age are required. Answers 422 `VALIDATION_ERROR` with an Italian detail for an age under 18 or over
     120, an empty name, a value outside the closed lists, an unknown field, a slot tag the vocabulary lacks or an outfit
-    with a reserved key, and 422 `CONTENT_POLICY_BLOCKED`, naming the field, when a text describes a minor."""
-    return _out(service.create(_as_card(body)))
+    with a reserved key, and 422 `CONTENT_POLICY_BLOCKED`, naming the field, when a text describes a minor.
+
+    With `import_id` (beside the card, in either form) the card is the reviewed draft of that card import, and the save
+    is one transaction: the character at version 1 with actor `import`, the source card, the avatar of the import and,
+    unless `create_scenarios` is `false` (default `true`), the scenarios of its greetings. The import becomes `saved`.
+    Also answers 404 `NOT_FOUND` for an unknown import and 409 `CONFLICT` for one that was saved or has expired; a
+    blank or non-text `import_id` or a non-boolean `create_scenarios` is 422 `VALIDATION_ERROR`."""
+    fields = dict(body)
+    import_id = fields.pop("import_id", None)
+    create_scenarios = fields.pop("create_scenarios", None)
+    if import_id is None:
+        if create_scenarios is not None:
+            raise ValidationFailedError("«create_scenarios» richiede «import_id».")
+        return _out(service.create(_as_card(fields)))
+    if not isinstance(import_id, str) or not import_id.strip():
+        raise ValidationFailedError("Il campo «import_id» non è valido.")
+    if create_scenarios is not None and not isinstance(create_scenarios, bool):
+        raise ValidationFailedError("Il campo «create_scenarios» deve essere vero o falso.")
+    return _out(card_imports.save(import_id.strip(), _as_card(fields), create_scenarios=create_scenarios is not False))
 
 
 @router.post("/drafts", response_model=JobOut, status_code=202)

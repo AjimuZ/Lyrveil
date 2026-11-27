@@ -62,6 +62,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Saving an imported card, in the backend only (P10.4,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `POST /characters` takes `import_id` and
+  `create_scenarios` (default `true`) beside the reviewed card. One transaction writes the character at version 1 with
+  the actor `import`, its `character_sources` row, the avatar and the scenarios, and sets the import `saved`. Every
+  card rule applies, so a missing or under-18 age is `422 VALIDATION_ERROR` and nothing is written. The avatar is the
+  staged image of a PNG card, with no chunk, or the V3 `icon` asset `main` of a JSON card when it is a data URI that
+  decodes. `first_mes` and each alternate greeting become scenarios, `group_only_greetings` never does. A saved or
+  expired import answers `409 CONFLICT`, so an import is saved once. No screen sends it yet.
 - The structured conversion of an imported card, in the backend only (P10.3,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `POST /characters/imports/{id}/conversion`
   queues the new `card_conversion` job (migration 0019), which has the text model rewrite the card as a draft in
@@ -80,7 +88,6 @@ an entry says "not yet run", the test was written and has not run.
   keep their first option, and `reverse` is evaluated. The report lists each one. Reply, proactive and caption
   prompts now render `{{char}}` and `{{user}}` in the card and the scenario with the character's first name and the
   user's display name. `system_prompt`, `post_history_instructions` and `creator_notes` never reach a prompt.
-  Imported characters cannot be saved yet (P10.4).
 - Card imports, in the backend only (P10.2a, [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)).
   `POST /characters/imports` reads a V1, V2 or V3 card and stores it in the new `card_imports` table (migration 0018)
   unchanged, with the file's SHA-256, its format and the time. `GET /characters/imports/{id}` answers the import with a

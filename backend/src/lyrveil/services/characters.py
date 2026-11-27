@@ -76,6 +76,16 @@ class CharacterService:
         already validated with validate_card. An import never overwrites: the character always has a new id."""
         return self._insert_new(card, actor="import", summary="Importazione")
 
+    def create_from_import(
+        self, card: CharacterCard, within: Callable[[Connection, str, str], None]
+    ) -> CharacterSummary:
+        """Returns a new active character at version 1 with actor `import`, holding `card`, which the caller has
+        already validated with validate_card. `within(connection, character_id, now)` runs in the same transaction,
+        after the character and its version exist, so the source, avatar and scenarios of an import commit with it;
+        anything `within` raises rolls the character back too. Raises ContentPolicyBlockedError, writing nothing, when
+        a text of `card` describes a minor."""
+        return self._insert_new(card, actor="import", summary="Importazione", within=within)
+
     def duplicate(self, character_id: str) -> CharacterSummary:
         """Returns a new active character holding a copy of the current card of `character_id`, at version 1 with actor
         `duplicate`. Conversations, memories and the version history are not copied. The first name gets the suffix
@@ -160,9 +170,18 @@ class CharacterService:
         """Returns the (first name, last name) of every demo character, whatever its status."""
         return read(self._engine, repository.demo_names)
 
-    def _insert_new(self, card: CharacterCard, *, actor: str, summary: str, demo: bool = False) -> CharacterSummary:
-        """Stores `card` as a new active character at version 1 and returns it, flagged as a demo when `demo`. Raises
-        ContentPolicyBlockedError, writing nothing, when a text of `card` describes a minor."""
+    def _insert_new(
+        self,
+        card: CharacterCard,
+        *,
+        actor: str,
+        summary: str,
+        demo: bool = False,
+        within: Callable[[Connection, str, str], None] | None = None,
+    ) -> CharacterSummary:
+        """Stores `card` as a new active character at version 1 and returns it, flagged as a demo when `demo`, after
+        running `within` in the same transaction. Raises ContentPolicyBlockedError, writing nothing, when a text of
+        `card` describes a minor."""
         # This service is the only writer of cards, so its two write paths check every card, whatever the caller did.
         check_card(card)
         character_id = new_id()
@@ -181,6 +200,8 @@ class CharacterService:
                 actor=actor,
                 now=now,
             )
+            if within is not None:
+                within(connection, character_id, now)
             created = repository.get(connection, character_id)
             assert created is not None
             return created

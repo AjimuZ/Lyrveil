@@ -95,6 +95,15 @@ class ScenarioService:
 
         return write(self._engine, work)
 
+    @staticmethod
+    def create_in(connection: Any, fields: dict[str, Any], now: str) -> str:
+        """Adds an active scenario inside the caller's transaction `connection` and returns its id. `fields` is as for
+        `create`; the character it names must already be written in that transaction. Raises what `_checked` raises."""
+        clean = _checked(fields)
+        scenario_id = new_id()
+        repository.insert(connection, scenario_id, clean, now)
+        return scenario_id
+
     def list_scenarios(
         self,
         status: ScenarioStatus = ScenarioStatus.ACTIVE,

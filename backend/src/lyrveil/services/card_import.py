@@ -4,20 +4,32 @@ ones nobody saved (ADR 0047; docs/character-system.md, Character cards).
 An import parses the file with lyrveil.domain.tavern_card, stores the parsed card unchanged with the file's SHA-256, its
 format and the time, with the direct draft and the import report of lyrveil.domain.card_mapping, and stages the avatar
 of a PNG card through the upload path, whose re-encode removes every chunk. It never writes a character and never
-fetches a remote `uri` of the card: nothing here opens a connection.
+fetches a remote `uri` of the card: nothing here opens a connection. Only `save` writes a character, in the one
+transaction that links the import's source, avatar and scenarios to it (P10.4).
 """
 
+import base64
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Connection, Engine
 
-from lyrveil.domain.card_imports import IMPORT_LIFETIME, READY, SAVED, ConversionState, StoredCardImport
-from lyrveil.domain.card_mapping import map_card
-from lyrveil.domain.errors import ConflictError, NotFoundError
+from lyrveil.domain.assets import StoredAsset
+from lyrveil.domain.card_imports import (
+    IMPORT_LIFETIME,
+    READY,
+    SAVED,
+    ConversionState,
+    StoredCardImport,
+    StoredCharacterSource,
+)
+from lyrveil.domain.card_mapping import ScenarioProposal, map_card
+from lyrveil.domain.characters import CharacterSummary
+from lyrveil.domain.errors import ConflictError, NotFoundError, PayloadTooLargeError, UnsupportedMediaError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.tavern_card import (
     SPEC_V2,
@@ -32,14 +44,22 @@ from lyrveil.domain.tavern_card import (
 from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.media import images
+from lyrveil.media.images import EncodedImage
 from lyrveil.media.store import MediaStore
 from lyrveil.persistence import card_imports as repository
 from lyrveil.persistence import characters as character_repository
+from lyrveil.services.assets import CharacterAssetService
+from lyrveil.services.card_rules import validate_card
+from lyrveil.services.characters import CharacterService
+from lyrveil.services.scenarios import ScenarioService
 
 _NO_IMPORT = "L'importazione non esiste o è scaduta."
 _NO_CHARACTER = "Il personaggio non esiste."
 _NO_SOURCE = "Il personaggio non è stato importato da una card."
 _SAVED_IMPORT = "L'importazione è già stata salvata come personaggio."
+_EXPIRED_IMPORT = "L'importazione è scaduta e non può più essere salvata."
+# A base64 data URI, with any media type and parameters; group 1 is the base64 text.
+_DATA_URI = re.compile(r"data:[^,;]+(?:;[^,;]*)*;base64,([A-Za-z0-9+/]*={0,2})")
 
 _FORMATS = {CardSpec.V1: "chara_card_v1", CardSpec.V2: SPEC_V2, CardSpec.V3: SPEC_V3}
 
@@ -79,6 +99,21 @@ def card_data(source: dict[str, Any]) -> CardData:
     """Returns the typed fields of a stored card `source`, which already passed the parser: the `data` of a V2 or V3
     envelope, or the card itself for V1."""
     return CardData.model_validate(source if "spec" not in source else source["data"])
+
+
+def _main_icon(source: dict[str, Any]) -> bytes | None:
+    """Returns the bytes of the V3 asset of type `icon` named `main` in a stored card `source` when its uri is a base64
+    data URI, else None. Only the first such asset counts; a remote or `ccdefault:` uri is never fetched."""
+    for asset in card_data(source).assets:
+        if asset.type == "icon" and asset.name == "main":
+            matched = _DATA_URI.fullmatch(asset.uri.strip())
+            if matched is None:
+                return None
+            try:
+                return base64.b64decode(matched.group(1), validate=True)
+            except ValueError:
+                return None
+    return None
 
 
 def build_preview(source: dict[str, Any], *, has_avatar: bool) -> CardPreview:
@@ -154,6 +189,71 @@ class CardImportService:
             raise
         return self._view(stored)
 
+    def save(self, import_id: str, raw_card: Mapping[str, Any], *, create_scenarios: bool) -> CharacterSummary:
+        """Returns the new active character that `raw_card`, the reviewed draft, makes of import `import_id`: the normal
+        create with every card rule (validate_card, the content guard), at version 1 with actor `import`.
+
+        One transaction writes the character, its version, the `character_sources` row (the stored card unchanged),
+        the primary avatar and, when `create_scenarios`, a scenario for each greeting of the direct mapping
+        (`group_only_greetings` is never one), and sets the import `saved`. The avatar is the staged image of a PNG
+        card, or for a JSON card the V3 `icon` asset named `main` when its uri is a data URI of a PNG, JPEG or WebP
+        that decodes; an icon that does not decode gives no avatar rather than refusing the save. The staged file is
+        removed after the commit, and the asset files if the transaction fails.
+
+        Raises NotFoundError for an unknown import, ConflictError for one that was already saved or has expired (the
+        check repeats inside the transaction, so two saves of the same import never both win), ValidationFailedError
+        for what validate_card refuses (a missing or under-18 age among them) and ContentPolicyBlockedError when a text
+        describes a minor. Nothing is written in those cases.
+        """
+        stored = read(self._engine, lambda connection: repository.get(connection, import_id))
+        if stored is None:
+            raise NotFoundError(_NO_IMPORT)
+        self._require_savable(stored)
+        card = validate_card(raw_card)
+        image = self._avatar_image(stored)
+        proposals = self._scenario_proposals(stored) if create_scenarios else []
+        assets = CharacterAssetService(self._engine, self._media, self._clock)
+        written: list[StoredAsset] = []
+
+        def within(connection: Connection, character_id: str, now: str) -> None:
+            current = repository.get(connection, import_id)
+            if current is None:
+                raise NotFoundError(_NO_IMPORT)
+            self._require_savable(current, now)
+            repository.insert_source(
+                connection,
+                StoredCharacterSource(
+                    id=new_id(),
+                    character_id=character_id,
+                    format=current.format,
+                    container=current.container,
+                    source_json=current.source_json,
+                    source_sha256=current.source_sha256,
+                    imported_at=now,
+                ),
+            )
+            if image is not None:
+                written.append(assets.store_primary_avatar_in(connection, character_id, image, now=now))
+            for proposal in proposals:
+                fields = {
+                    "title": proposal.title,
+                    "description": proposal.description,
+                    "opening_message": proposal.opening_message,
+                    "character_id": character_id,
+                }
+                ScenarioService.create_in(connection, fields, now)
+            repository.mark_saved(connection, import_id, character_id)
+
+        try:
+            created = CharacterService(self._engine, self._clock, self._media).create_from_import(card, within)
+        except BaseException:
+            for asset in written:
+                self._media.delete(asset.file_path)
+                self._media.delete(asset.thumb_path)
+            raise
+        self._media.discard_import_avatar(import_id)
+        return created
+
     def get(self, import_id: str) -> ImportView:
         """Returns the import with its preview and the state of its conversion job, if one was started. Raises
         NotFoundError for an unknown id and for an import that expired without being saved, even before the daily
@@ -216,6 +316,35 @@ class CardImportService:
         if stored is None or (stored.status != SAVED and stored.expires_at <= now):
             raise NotFoundError(_NO_IMPORT)
         return stored
+
+    def _require_savable(self, stored: StoredCardImport, now: str | None = None) -> None:
+        """Raises ConflictError for an import that was saved already, or that expired unsaved at `now` (the clock's
+        time when None)."""
+        if stored.status == SAVED:
+            raise ConflictError(_SAVED_IMPORT)
+        if stored.expires_at <= (now or to_utc_text(self._clock())):
+            raise ConflictError(_EXPIRED_IMPORT)
+
+    def _avatar_image(self, stored: StoredCardImport) -> EncodedImage | None:
+        """Returns the avatar the import will give its character, or None: the staged image of a PNG card, which the
+        upload path already re-encoded without chunks, else the V3 `icon` asset `main` of a JSON card."""
+        if stored.container == "png":
+            data = self._media.read_import_avatar(stored.id)
+        else:
+            data = _main_icon(json.loads(stored.source_json))
+        if data is None:
+            return None
+        try:
+            return images.prepare_upload(data, None)
+        except (PayloadTooLargeError, UnsupportedMediaError):
+            return None
+
+    @staticmethod
+    def _scenario_proposals(stored: StoredCardImport) -> list[ScenarioProposal]:
+        """Returns the scenarios of the import's direct mapping; none for a row stored before P10.2b."""
+        if stored.direct_draft_json is None:
+            return []
+        return [ScenarioProposal(**item) for item in json.loads(stored.direct_draft_json)["scenarios"]]
 
     @staticmethod
     def _conversion(connection: Connection, job_id: str) -> ConversionState | None:

@@ -3273,8 +3273,8 @@
         "A PNG card's image becomes the primary avatar with every chunk removed, a JSON card with a V3 `icon` `main` data URI gets that avatar, otherwise there is none, and an import cannot be saved twice."
       ],
       "priority": 136,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "`POST /characters` now accepts `import_id` and `create_scenarios` (default true) beside the reviewed card. One transaction writes the character at version 1 with actor `import`, its `character_sources` row, the primary avatar and the scenarios, and marks the import `saved`. The 8 new tests in `test_card_save.py` and `scripts/lyrveil.cmd test lint` pass. The full unit, integration, e2e and docker levels were not run, and no screen sends the new request yet.\n\n- **Age and card rules:** a missing or under-18 age gives 422 `VALIDATION_ERROR` and nothing is written.\n- **Scenarios:** they come from the greetings of the direct mapping only when asked. `group_only_greetings` never becomes one.\n- **Avatar:**\n  - A PNG card's staged image becomes the primary avatar, with no chunk left.\n  - A JSON card gets its V3 `icon` named `main` when that is a data URI that decodes.\n  - An icon that does not decode gives no avatar and does not refuse the save.\n- **One save per import:** the saved or expired check runs again inside the transaction. An unknown import is 404, and a saved or expired one is 409.\n- **Cleanup:** the staged file is removed after the commit. If the transaction fails, the asset files it wrote are removed.\n- **Bad fields:** a blank or non-text `import_id`, a non-boolean `create_scenarios`, or `create_scenarios` without `import_id` is 422.\n\nDocs updated: CHANGELOG.md, docs/api.md, docs/data-model.md, docs/testing.md and docs/character-system.md.",
       "dependsOn": [
         "P10.2b"
       ],

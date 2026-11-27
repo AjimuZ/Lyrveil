@@ -52,6 +52,30 @@ def set_conversion_job(connection: Connection, import_id: str, job_id: str) -> N
     )
 
 
+def mark_saved(connection: Connection, import_id: str, character_id: str) -> None:
+    """Sets the import `saved`, links it to the character it became and clears its staged avatar path: the file is
+    removed after the commit. A saved import is never expired or discarded."""
+    connection.execute(
+        text(
+            "UPDATE card_imports SET status = :saved, character_id = :character, avatar_staging_path = NULL "
+            "WHERE id = :id"
+        ),
+        {"saved": SAVED, "character": character_id, "id": import_id},
+    )
+
+
+def insert_source(connection: Connection, source: StoredCharacterSource) -> None:
+    """Writes the `character_sources` row of an imported character. The database refuses a format or container outside
+    the documented lists and a `source_json` that is not JSON."""
+    connection.execute(
+        text(
+            f"INSERT INTO character_sources ({_SOURCE_COLUMNS}) VALUES (:id, :character_id, :format, :container, "
+            ":source_json, :source_sha256, :imported_at)"
+        ),
+        {name: getattr(source, name) for name in StoredCharacterSource.__dataclass_fields__},
+    )
+
+
 def delete(connection: Connection, import_id: str) -> None:
     """Removes the import row."""
     connection.execute(text("DELETE FROM card_imports WHERE id = :id"), {"id": import_id})

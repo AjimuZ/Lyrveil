@@ -289,7 +289,8 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
         the Italian text.
       - `age` is `{"status", "value", "source"}`. `status` is `stated`, `not_stated`, `conflicting` or `not_adult`.
   - `GET .../imports/{id}/source` returns the stored card as JSON, exactly as stored. It is the import's own route: the
-    character's `GET /characters/{id}/source` answers `404 NOT_FOUND` until the save step (P10.4) writes a source.
+    character's `GET /characters/{id}/source` answers `404 NOT_FOUND` for a character that was not imported, and the
+    stored card for one saved from an import (P10.4).
   - `GET` answers `404 NOT_FOUND` for an unknown import and for one that expired unsaved. `DELETE` answers `204`, `404`
     for an unknown import and `409 CONFLICT` for a saved one, and removes the row.
   - The avatar of a PNG card is re-encoded by the upload path, so `413 PAYLOAD_TOO_LARGE` also covers a PNG card over
@@ -326,8 +327,22 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
   - **Failures.** Not retried: `STRUCTURED_OUTPUT_INVALID` and `CONTENT_POLICY_BLOCKED` after the repair, and
     `CARD_TOO_LONG` when the runtime's count of the first prompt plus the draft's `max_length` (1500) exceeds the
     context, before any generation.
-- **Saving.** `POST /characters` takes two optional fields, `import_id` and `create_scenarios` (default `true`). The
-  import must be `ready` and not expired, or the answer is `409 CONFLICT`. Saving sets it to `saved`.
+- **Saving.** `POST /characters` takes two optional fields, `import_id` and `create_scenarios` (default `true`),
+  beside the reviewed card in either body form. It is the normal create, so every card rule applies (P10.4).
+  - One transaction writes the character at version 1 with the actor `import`, its `character_sources` row (the
+    stored card, unchanged), the primary avatar, the scenarios when `create_scenarios` is true, and sets the import
+    `saved` and linked to the character. If anything fails, nothing is written.
+  - The avatar is the staged image of a PNG card, re-encoded without any chunk, or for a JSON card the V3 `icon`
+    asset named `main` when its `uri` is a base64 data URI of a PNG, JPEG or WebP that decodes. Otherwise there is no
+    avatar. An icon that does not decode gives no avatar and does not refuse the save. A remote `uri` is never
+    fetched.
+  - The scenarios are the ones of the direct mapping: `first_mes` with `scenario`, and each `alternate_greetings`
+    entry with the same description. `group_only_greetings` is never a scenario.
+  - Answers `422 VALIDATION_ERROR` for a missing or under-18 age and for the other card rules, `422
+    CONTENT_POLICY_BLOCKED` for a text that describes a minor, `404 NOT_FOUND` for an unknown import, and `409
+    CONFLICT` for an import that was saved or has expired. `import_id` that is blank or not text, a non-boolean
+    `create_scenarios`, and `create_scenarios` without `import_id`, are `422 VALIDATION_ERROR`.
+  - The import must be `ready` and not expired, or the answer is `409 CONFLICT`. Saving sets it to `saved`.
 - **Export.** It answers `application/json` or `image/png` with a `Content-Disposition` file name made from the
   character's name. `png` answers `409 CONFLICT` for a character without a primary avatar.
 

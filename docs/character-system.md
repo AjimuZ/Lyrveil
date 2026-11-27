@@ -465,7 +465,8 @@ JSON exactly as read, a typed view and the file's SHA-256.
 5. **Save.** In the Creator the age is empty and required unless the card states an adult age explicitly.
    **Salva personaggio** sends `POST /characters` with `import_id`. That one transaction stores the character as
    version 1, actor `import`, the `character_sources` row, the avatar, and the scenarios from the greetings when
-   **Crea gli scenari dai saluti** is on, which is the default.
+   **Crea gli scenari dai saluti** is on, which is the default. The backend route is delivered in P10.4 ([API](api.md#character-cards-planned));
+   the screen is not.
 6. **Expiry.** An unsaved import expires after 7 days.
 
 **Direct mapping.** It is deterministic, and the text stays in its source language:
@@ -517,7 +518,7 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
   summary and the proactive decision read no card text. `system_prompt`, `post_history_instructions`,
   `creator_notes` and the other kept fields are not in the card, so no prompt can carry them.
 - **Not yet.** The opening message of a scenario becomes a stored chat message when a conversation starts, so its
-  placeholders are not rendered there yet. The save step (P10.4) handles them. The `characters.default_language`
+  placeholders are not rendered there yet, and the save step (P10.4) does not change them. The `characters.default_language`
   setting does not exist yet, so `primary_language` is `it`.
 
 **Delivered in P10.3.** `POST /characters/imports/{id}/conversion` queues the `card_conversion` job

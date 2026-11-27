@@ -694,7 +694,9 @@ Delivered in revision `0018` (P10.2a), together with `character_sources`:
 - The staged avatar is the re-encoded image, at `.staging/imports/<id>/avatar.png`. `clear_staging` leaves that folder
   alone.
 - The `DELETE` route removes the row, so `discarded` is not written yet. The index `(expires_at)` serves the expiry.
-- Nothing writes `character_sources` yet: the save step (P10.4) does. A purge of the character deletes its row.
+- `POST /characters` with `import_id` (P10.4) writes `character_sources` in the transaction that creates the
+  character, and sets the import `saved` with its `character_id` and no `avatar_staging_path`. A purge of the
+  character deletes its row.
 
 Delivered in revision `0019` (P10.3): the `kind` `CHECK` of `generation_jobs` also lists `card_conversion`. SQLite
 cannot alter a `CHECK`, and rebuilding the table would null the `SET NULL` references to it (`card_imports`,
