@@ -42,7 +42,7 @@ Errors use `application/problem+json`:
 | `UNSUPPORTED_MEDIA` | 415 | Upload is not PNG, JPEG or WebP, or its bytes disagree. |
 | `CONTENT_POLICY_BLOCKED` | 422 | A safeguard refused the data ([ADR 0018](decisions/0018-adult-only-characters-and-content-safeguards.md)). |
 | `IMPORT_INVALID` | 422 | Character file invalid or of an unsupported version. |
-| `CARD_TOO_LONG` | 422 | Planned for 1.1 (P10). The card's text leaves too little room for the structured conversion in the active context. `detail` suggests the direct mapping. |
+| `CARD_TOO_LONG` | 422 | Planned for 1.1 (P10). The card's text leaves too little room for the structured conversion in the active context. `detail` suggests the direct mapping. Since P10.3 it is a **job error** (the runtime that counts the tokens is only usable under the job's lease), not an HTTP answer. |
 | `PROMPT_SYNTAX_REFUSED` | 422 | An edited image prompt holds `embedding:` or a weight outside 0.5 to 1.5 ([Image generation](image-generation.md#sanitizer)). |
 | `FORBIDDEN_ORIGIN` | 403 | Host or Origin not allowed. |
 | `ORCHESTRATOR_UNAVAILABLE` | 503 | The control API does not answer. |
@@ -63,6 +63,7 @@ Job errors, reported through `job.updated`:
 | `STRUCTURED_OUTPUT_INVALID` | JSON failed validation after all attempts. |
 | `REPLY_EMPTY` | A reply was empty again after its retry (check V1). Not retried; the interface offers regeneration. |
 | `CONTENT_POLICY_BLOCKED` | A safeguard refused generated text: a draft after its repair, or a reply sentence (check V4). Not retried. |
+| `CARD_TOO_LONG` | Since P10.3: a `card_conversion` job counted its first prompt with the runtime and found less room than the draft's `max_length`. Nothing was generated. Not retried. `error_detail` suggests the direct mapping. |
 | `RUNTIME_UNAVAILABLE` | Runtime stopped responding. |
 | `LEASE_LOST` | The lease expired or the orchestrator restarted. |
 | `JOB_CANCELLED` | The user cancelled. Since P06.3, set by `POST /jobs/{id}/cancel` on a queued job, or by the worker once it has stopped a running one. |
@@ -295,7 +296,7 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
     15 MB or 8192 x 8192 pixels, and `415 UNSUPPORTED_MEDIA` a PNG whose pixels do not decode.
   - An import only reads the card: no remote `uri` is fetched.
 - **The import answer.** It is `{"id", "status", "format", "container", "source_sha256", "preview", "direct_draft",
-  "report", "embedded_lyrveil", "conversion_job_id", "expires_at"}`.
+  "report", "embedded_lyrveil", "conversion_job_id", "conversion", "expires_at"}`.
   - `preview` holds the source fields that no draft uses: name, nickname, creator, version, tags, creator notes, the
     two prompt fields, the number of greetings, and whether there is an avatar or a lorebook.
   - `embedded_lyrveil` is null, or `{"text_matches": true|false, "changed_fields": [...]}`.
@@ -304,9 +305,27 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
   - `415 UNSUPPORTED_MEDIA` for a file that is neither JSON nor PNG, a CHARX archive included.
   - `422 IMPORT_INVALID` for a broken chunk, base64 or JSON, or a missing or unknown `spec`.
   - `422 CONTENT_POLICY_BLOCKED` with the source path, such as `data.description`. Nothing is stored.
-- **Conversion.** `conversion` answers `422 CARD_TOO_LONG` when the text does not fit, and `409 CONFLICT` while a
-  conversion of the same import runs. The finished job's `result_json` has the shape of a draft
-  ([Assisted creation](character-system.md#assisted-creation)), with `age` removed.
+- **Conversion.** `POST .../conversion` answers `409 CONFLICT` while a conversion of the same import is queued or
+  running. The text that does not fit is the job's failure `CARD_TOO_LONG`, not an HTTP answer (see below). The finished
+  job's `result_json` has the shape of a draft ([Assisted creation](character-system.md#assisted-creation)), with
+  `age` removed.
+  - **Delivered in P10.3** (not in `backend/openapi.json`). `POST /characters/imports/{id}/conversion` has no body and
+    answers `202` with `{"id", "kind": "card_conversion", "status", "queue_position"}`, as `POST /characters/drafts`
+    does. It reads no card text. It answers `404 NOT_FOUND` for an unknown or expired import and `409 CONFLICT` for a
+    saved import, while a conversion of the same import is queued or running, and when the queue is full. A conversion
+    that ended, failed or was cancelled can be started again.
+  - **State and result.** The import answer has `conversion_job_id` and `conversion`, null until a conversion starts.
+    `conversion` is `{"job_id", "status", "error_code", "error_detail", "result"}`, with the job's `status` (`queued`,
+    `running`, `completed`, `failed`, `cancelled`). The job is also read with `GET /jobs/{id}`. The import's own
+    `status` stays `ready`: the job is the state of the conversion.
+  - **Result.** The completed job's `result` is `{"draft", "proposed_fields", "import_id", "attempts"}`. `draft` has
+    the shape of `direct_draft.draft`, in the character's language (Italian), and `identity.age` is the age of the
+    direct mapping, null unless the card states an adult age: the age that the model wrote is dropped.
+    `proposed_fields` lists the dotted paths the Creator marks **proposto**, never `identity.age`. `attempts` is 1, or 2
+    after the repair.
+  - **Failures.** Not retried: `STRUCTURED_OUTPUT_INVALID` and `CONTENT_POLICY_BLOCKED` after the repair, and
+    `CARD_TOO_LONG` when the runtime's count of the first prompt plus the draft's `max_length` (1500) exceeds the
+    context, before any generation.
 - **Saving.** `POST /characters` takes two optional fields, `import_id` and `create_scenarios` (default `true`). The
   import must be `ready` and not expired, or the answer is `409 CONFLICT`. Saving sets it to `saved`.
 - **Export.** It answers `application/json` or `image/png` with a `Content-Disposition` file name made from the

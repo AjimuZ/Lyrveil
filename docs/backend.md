@@ -556,6 +556,7 @@ Since P06.5 ([Safe shutdown](gpu-orchestration.md#safe-shutdown)):
 | --- | --- |
 | `chat_reply`, `chat_regenerate` | Lease, `ContextBuilder`, stream through `ReplyNormalizer`, reply checks, at most one corrective regeneration, commit, release, then extraction trigger. |
 | `character_draft` | Lease, structured generation, safety check, store draft in `result_json`. |
+| `card_conversion` | Lease, count the first prompt with the runtime (`CARD_TOO_LONG` before any generation), structured generation of `CharacterDraft` under the draft's grammar with one repair, drop the model's age, store the draft in `result_json`. Since P10.3. |
 | `image_request` | Stages in [Image generation](image-generation.md#job-stages). |
 | `visual_profile_translate` | Lease, structured generation of `VisualIdentityResult` under a vocabulary grammar, sanitizer, store the identity slots and wardrobe tags that are not locked. The generation and the merge exist since P05.3b ([Visual consistency](#visual-consistency)); the handler does not. |
 | `image_proposal` | Lease, structured generation, store a proposal when valid. |
@@ -584,6 +585,10 @@ Since P03.6a the safety check is the content guard, run inside the draft's valid
 repair; a repair the guard refuses too fails the job with `CONTENT_POLICY_BLOCKED`, without a retry. The route checks
 the description with the same guard before it queues the job, and the handler checks it again before it generates, for
 a job queued before a list entry existed.
+
+Delivered in P10.3: `card_conversion`, run by `CardConversionService` (`services/card_conversion.py`) and registered in
+the lifespan beside `character_draft`, with the same priority 20, foreground class and two attempts. Revision `0019`
+adds the kind to the `CHECK` list of `generation_jobs`. See [Character cards](character-system.md#character-cards).
 
 Delivered in P04.2a: `memory_extraction`, run by `MemoryExtractionService` (`services/memory_extraction.py`) and
 registered in the lifespan beside the others. `ChatInferenceService` runs the extraction trigger after a reply is
@@ -691,7 +696,7 @@ Choices the documents did not fix:
 
 - `stage` names the step that runs next, from which `required_mode` derives. [Job stages](image-generation.md#job-stages)
   says it records the last finished step; the two agree once a stage writes its results before the job moves on.
-- Backoffs the retry table does not give: 5 s for `character_draft`, `visual_profile_translate` and
+- Backoffs the retry table does not give: 5 s for `character_draft`, `card_conversion`, `visual_profile_translate` and
   `proactive_message`, like a reply. `image_proposal` and `maintenance` have one attempt and no backoff.
 - Extraction and summaries list three waits, 1, 5 and 30 min, but have 3 attempts, so only the first two are used.
   The third applies if the maximum is raised.

@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlalchemy import Connection, Engine
 
-from lyrveil.domain.card_imports import IMPORT_LIFETIME, READY, SAVED, StoredCardImport
+from lyrveil.domain.card_imports import IMPORT_LIFETIME, READY, SAVED, ConversionState, StoredCardImport
 from lyrveil.domain.card_mapping import map_card
 from lyrveil.domain.errors import ConflictError, NotFoundError
 from lyrveil.domain.identifiers import new_id, to_utc_text
@@ -29,6 +29,7 @@ from lyrveil.domain.tavern_card import (
     CardSpec,
     parse_card,
 )
+from lyrveil.jobs.queue import JobQueue
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.media import images
 from lyrveil.media.store import MediaStore
@@ -67,16 +68,22 @@ class CardPreview:
 
 @dataclass(frozen=True)
 class ImportView:
-    """A stored import with its preview."""
+    """A stored import with its preview and, once a conversion was started, the state of its job."""
 
     stored: StoredCardImport
     preview: CardPreview
+    conversion: ConversionState | None = None
+
+
+def card_data(source: dict[str, Any]) -> CardData:
+    """Returns the typed fields of a stored card `source`, which already passed the parser: the `data` of a V2 or V3
+    envelope, or the card itself for V1."""
+    return CardData.model_validate(source if "spec" not in source else source["data"])
 
 
 def build_preview(source: dict[str, Any], *, has_avatar: bool) -> CardPreview:
     """Returns the preview of a stored card `source`, which already passed the parser."""
-    fields = source if "spec" not in source else source["data"]
-    data = CardData.model_validate(fields)
+    data = card_data(source)
     return CardPreview(
         name=data.name,
         nickname=data.nickname,
@@ -148,9 +155,15 @@ class CardImportService:
         return self._view(stored)
 
     def get(self, import_id: str) -> ImportView:
-        """Returns the import with its preview. Raises NotFoundError for an unknown id and for an import that expired
-        without being saved, even before the daily clean-up removes its row."""
-        return self._view(self._live(import_id))
+        """Returns the import with its preview and the state of its conversion job, if one was started. Raises
+        NotFoundError for an unknown id and for an import that expired without being saved, even before the daily
+        clean-up removes its row."""
+        stored = self._live(import_id)
+        view = self._view(stored)
+        if stored.conversion_job_id is None:
+            return view
+        job_id = stored.conversion_job_id
+        return ImportView(view.stored, view.preview, read(self._engine, lambda c: self._conversion(c, job_id)))
 
     def source_json(self, import_id: str) -> str:
         """Returns the parsed card of the import as the JSON text that was stored. Raises NotFoundError as `get`."""
@@ -203,6 +216,20 @@ class CardImportService:
         if stored is None or (stored.status != SAVED and stored.expires_at <= now):
             raise NotFoundError(_NO_IMPORT)
         return stored
+
+    @staticmethod
+    def _conversion(connection: Connection, job_id: str) -> ConversionState | None:
+        """Returns the state of job `job_id`, or None when the job row is gone."""
+        job = JobQueue().get(connection, job_id)
+        if job is None:
+            return None
+        return ConversionState(
+            job_id=job.id,
+            status=job.status.value,
+            error_code=job.error_code,
+            error_detail=job.error_detail,
+            result=job.result,
+        )
 
     @staticmethod
     def _view(stored: StoredCardImport) -> ImportView:

@@ -301,6 +301,9 @@
 - When a nested macro or brace syntax must be parsed from untrusted text, pair the tokens in one stack pass and cap the evaluation depth. Never rescan from each opener: that is quadratic on unpaired braces and recursive on deep nesting.
 - Render per-user values (names) into a prompt-only copy of the domain model at the one place prompts are built. Keep stored text unrendered and the rendering pure, so the stable prefix stays byte-identical (ADR 0031).
 - The project has no `type: ignore`. When a variant of a model needs a looser field type (for example an optional age), define a sibling model and add a test that its field names mirror the original. Do not override the field in a subclass.
+- A new job kind needs five edits: the JobKind and policy entries (with the expected mapping in test_job_policy), a migration that extends the generation_jobs kind CHECK, the handler registration in main._job_worker, the docs tables (gpu-orchestration, backend) and a test.
+- Put untrusted card or user text in a prompt between explicit delimiter lines, break the delimiter sequences inside the text, and test that a hostile string stays inside the data section.
+- Make a service the JobHandler of its own kind: the same class has `start()` that queues in one write transaction and `__call__` that runs under the lease. Keep private text out of the job payload and re-read it from the database in the handler.
 
 ---
 
@@ -2915,4 +2918,17 @@ Docs updated: `docs/character-system.md` (new "Delivered in P10.2b" rules), `doc
   - `characters.default_language` is not implemented in the backend. `map_card` takes `language` and the service passes nothing, so it is `it`. P10.3 or settings work should wire it.
   - Import rows stored before P10.2b keep NULL `direct_draft_json` and `report_json`, and the API answers null for them.
   - Reply checks such as the `avoid` phrases still compare against the stored card text. A placeholder in `avoid` would be compared literally (edge case, not addressed).
+---
+
+## 2026-11-27T16:06:57Z - P10.3
+- Added the optional `card_conversion` job and `POST /characters/imports/{id}/conversion` (202). The job reuses the assisted creation's `CharacterDraft` grammar, validation and single repair. It reads the card text as `<<<CARD`…`CARD>>>` delimited data and writes an Italian draft with proper names kept. It fails with `CARD_TOO_LONG` before any generation when the runtime's count of the first prompt plus `max_length` (1500) exceeds the context. The model's age is dropped: the result keeps the direct mapping's age, which is null unless the card states an adult age. `GET /characters/imports/{id}` now returns `conversion` with the job's state, errors and result. Revision 0019 adds the job kind to the `generation_jobs` kind CHECK. Targeted tests passed: `test_card_conversion.py` (10 new), `test_migrations.py` (28, one new), `test_card_imports.py`, `test_character_drafts.py` and `test_job_policy.py`. `scripts/lyrveil.cmd test lint` passed. The full unit, integration, e2e and docker levels were not run. The `CARD_TOO_LONG` check does not reserve room for the repair prompt. No screen starts the conversion yet.
+- Files changed: backend/src/lyrveil/jobs/policy.py, backend/migrations/versions/0019_card_conversion_job.py, backend/src/lyrveil/prompts/card_conversion.py, backend/src/lyrveil/services/card_conversion.py, backend/src/lyrveil/services/card_import.py, backend/src/lyrveil/domain/card_imports.py, backend/src/lyrveil/persistence/card_imports.py, backend/src/lyrveil/api/characters.py, backend/src/lyrveil/main.py, backend/tests/integration/test_card_conversion.py, backend/tests/integration/test_migrations.py, backend/tests/unit/test_job_policy.py, CHANGELOG.md, docs/api.md, docs/backend.md, docs/character-system.md, docs/data-model.md, docs/gpu-orchestration.md, docs/prompting.md, docs/testing.md
+- **Learnings for future iterations:**
+  - CARD_TOO_LONG is a job error, not a synchronous 422: only the job holds the llm lease needed to count tokens. docs/api.md says so.
+  - The conversion result is {draft, proposed_fields, import_id, attempts}. `draft` is an ImportedDraft whose identity.age comes from direct_draft_json, and `proposed_fields` never lists identity.age. P10.4 and the Creator should use `conversion.result.draft` and mark `proposed_fields` as proposto.
+  - The import's `status` stays `ready` during and after a conversion; the `converting` status is unused. The job's state is read through conversion_job_id and exposed as `conversion` in the import answer.
+  - Migration 0019 uses PRAGMA writable_schema to relax the generation_jobs kind CHECK. A table rebuild would null the SET NULL references from card_imports, generated_images, image_proposals and scheduled_events. A future job kind needs the same approach: update the replaced string and add a migration test.
+  - The CARD_TOO_LONG check does not reserve room for the repair prompt. A card that barely fits can still fail its repair with a runtime error.
+  - Targeted integration tests can run through `scripts/lyrveil.cmd test unit tests/integration/<file>`. The integration level itself takes no arguments.
+  - The backend still has no `characters.default_language`, so the conversion writes Italian (DEFAULT_LANGUAGE in services/card_conversion.py). No screen starts the conversion yet.
 ---

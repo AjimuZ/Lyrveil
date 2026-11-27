@@ -70,6 +70,7 @@ from lyrveil.runtimes.comfyui import ComfyUiRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.scheduling.service import SchedulerService
 from lyrveil.services.ai_resources import AiResources
+from lyrveil.services.card_conversion import CardConversionService
 from lyrveil.services.card_import import CardImportService
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
@@ -165,8 +166,8 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
     """Runs the job worker while the context is open (startup step 7), when the app has a database and a Worker.
 
     The worker runs `chat_reply` and `chat_regenerate` with ChatInferenceService, `proactive_message` with
-    ProactiveMessageService, `character_draft` with
-    CharacterCreatorService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
+    ProactiveMessageService, `character_draft` with CharacterCreatorService, `card_conversion` with
+    CardConversionService, `memory_extraction` and `memory_reevaluation` with MemoryExtractionService,
     `summary_checkpoint` with SummaryService, `image_request` with ImageGenerationService when the Worker has an
     image runtime, and is kept in `app.state.scheduler` meanwhile. The scheduler aborts a stopped run's work through
     the same runtimes (preemption and cancellation). When the Worker has `gpu_states`, the
@@ -196,6 +197,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             zone=app.state.settings.zone,
         )
         drafts = CharacterCreatorService(engine, runtime, template=worker.replies.template)
+        conversions = CardConversionService(engine, runtime, template=worker.replies.template)
         memories = MemoryExtractionService(
             engine,
             runtime,
@@ -220,6 +222,7 @@ async def _job_worker(app: FastAPI) -> AsyncIterator[None]:
             JobKind.CHAT_REGENERATE: replies,
             JobKind.PROACTIVE_MESSAGE: proactive_messages,
             JobKind.CHARACTER_DRAFT: drafts,
+            JobKind.CARD_CONVERSION: conversions,
             JobKind.MEMORY_EXTRACTION: memories,
             JobKind.MEMORY_REEVALUATION: memories,
             JobKind.SUMMARY_CHECKPOINT: summaries,

@@ -3251,8 +3251,8 @@
         "The card text reaches the conversion prompt as delimited data, and the job's state and result appear in `GET /characters/imports/{id}`."
       ],
       "priority": 135,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Added the optional `card_conversion` job and `POST /characters/imports/{id}/conversion` (202). The job reuses the assisted creation's `CharacterDraft` grammar, validation and single repair. It reads the card text as `<<<CARD`…`CARD>>>` delimited data and writes an Italian draft with proper names kept. It fails with `CARD_TOO_LONG` before any generation when the runtime's count of the first prompt plus `max_length` (1500) exceeds the context. The model's age is dropped: the result keeps the direct mapping's age, which is null unless the card states an adult age. `GET /characters/imports/{id}` now returns `conversion` with the job's state, errors and result. Revision 0019 adds the job kind to the `generation_jobs` kind CHECK. Targeted tests passed: `test_card_conversion.py` (10 new), `test_migrations.py` (28, one new), `test_card_imports.py`, `test_character_drafts.py` and `test_job_policy.py`. `scripts/lyrveil.cmd test lint` passed. The full unit, integration, e2e and docker levels were not run. The `CARD_TOO_LONG` check does not reserve room for the repair prompt. No screen starts the conversion yet.",
       "dependsOn": [
         "P10.2b"
       ],

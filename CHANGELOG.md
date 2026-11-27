@@ -62,6 +62,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The structured conversion of an imported card, in the backend only (P10.3,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `POST /characters/imports/{id}/conversion`
+  queues the new `card_conversion` job (migration 0019), which has the text model rewrite the card as a draft in
+  Italian, keeping proper names, with the grammar, validation and single repair of assisted creation. The card text
+  reaches the prompt only as delimited data. `GET /characters/imports/{id}` shows the job's state and result under
+  `conversion`. The age that the model writes is never used: the draft keeps the age of the direct mapping. A card that
+  leaves too little room in the context fails the job with `CARD_TOO_LONG` before any generation. No screen starts
+  it yet.
 - The direct mapping of an imported card, in the backend only (P10.2b,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). The import answer now carries `direct_draft`,
   a draft with the fields it took from the card (marked **dalla card**) and the scenarios offered from the greetings,

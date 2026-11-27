@@ -14,6 +14,7 @@ def test_every_kind_has_the_documented_priority_class_and_attempts() -> None:
         JobKind.CHAT_REPLY: (10, JobClass.FOREGROUND, 2),
         JobKind.CHAT_REGENERATE: (10, JobClass.FOREGROUND, 2),
         JobKind.CHARACTER_DRAFT: (20, JobClass.FOREGROUND, 2),
+        JobKind.CARD_CONVERSION: (20, JobClass.FOREGROUND, 2),
         JobKind.IMAGE_REQUEST: (30, JobClass.FOREGROUND, 2),
         JobKind.VISUAL_PROFILE_TRANSLATE: (40, JobClass.FOREGROUND, 2),
         JobKind.PROACTIVE_MESSAGE: (50, JobClass.SOFT, 2),

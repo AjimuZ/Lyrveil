@@ -184,7 +184,7 @@ Lower numbers run first. Values are configurable under `jobs.priority.*`.
 | Kind | `required_mode` | Priority | Class | Max attempts |
 | --- | --- | --- | --- | --- |
 | `chat_reply`, `chat_regenerate` | `llm` | 10 | Foreground | 2 |
-| `character_draft` | `llm` | 20 | Foreground | 2 |
+| `character_draft`, `card_conversion` | `llm` | 20 | Foreground | 2 |
 | `image_request` | By stage | 30 | Foreground | 2 |
 | `visual_profile_translate` | `llm` | 40 | Foreground | 2 |
 | `proactive_message` | `llm` | 50 | Soft | 2 |

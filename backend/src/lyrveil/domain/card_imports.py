@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 # An import that is not saved expires this long after it was made (ADR 0047), with its staged avatar.
 IMPORT_LIFETIME = timedelta(days=7)
@@ -30,6 +31,19 @@ class StoredCardImport:
     character_id: str | None
     created_at: str
     expires_at: str
+
+
+@dataclass(frozen=True)
+class ConversionState:
+    """The `card_conversion` job of an import, as `GET /characters/imports/{id}` shows it. `status` is the job's.
+    `result` is the finished job's result (lyrveil.services.card_conversion) and None until it completes;
+    `error_code` and `error_detail` hold the last failure, `CARD_TOO_LONG` among them."""
+
+    job_id: str
+    status: str
+    error_code: str | None
+    error_detail: str | None
+    result: dict[str, Any] | None
 
 
 @dataclass(frozen=True)

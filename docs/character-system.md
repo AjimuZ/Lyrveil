@@ -520,6 +520,29 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
   placeholders are not rendered there yet. The save step (P10.4) handles them. The `characters.default_language`
   setting does not exist yet, so `primary_language` is `it`.
 
+**Delivered in P10.3.** `POST /characters/imports/{id}/conversion` queues the `card_conversion` job
+([API](api.md#character-cards-planned)). These are its rules:
+
+- **What the model reads.** The card's `name`, `description`, `personality`, `scenario`, `first_mes` and `mes_example`,
+  after the macros of the import, with `{{char}}` and `{{user}}` kept. Nothing else of the card is read. The text sits
+  between `<<<CARD` and `CARD>>>` lines after the rules, a delimiter inside it is broken (`< < <`, `> > >`), and the
+  rules say that it is data.
+- **Grammar and repair.** It is the assisted creation's: the same `CharacterDraft` grammar, validation (card rules and
+  content guard) and single repair, with a lower temperature (0.2) and rules that tell the model to use only what the
+  card says. Two refusals fail the job with `STRUCTURED_OUTPUT_INVALID`, or `CONTENT_POLICY_BLOCKED` when the guard
+  refused the last one.
+- **Language.** The draft is written in Italian, and `identity.primary_language` is `it`: the setting for new characters
+  does not exist yet. Proper names are kept.
+- **Age.** The model must write an age to satisfy the grammar and the card rules, so an age under 18 is refused and
+  repaired like in the assisted creation. The result never carries it: `identity.age` is the age of the direct mapping,
+  null unless the card states an adult age, and `proposed_fields` never lists it.
+- **`CARD_TOO_LONG`.** The handler counts the whole first prompt, rules, example and card, with the runtime's tokenizer
+  and compares it with the context size that the runtime reports, leaving room for `max_length` (1500). When it does
+  not fit, the job fails at once, before any generation, and is not retried. The count needs the loaded model, which
+  only the job holds, so this is a job error and not an HTTP answer. The repair prompt also carries the refused output,
+  so a card that barely fits can still fail its repair with a runtime error: the check does not reserve room for it.
+- **State.** The import's `status` stays `ready`. `conversion_job_id` and `conversion` show the job.
+
 **Export.** `GET /characters/{id}/card` writes V3 JSON (the default), V2 JSON or a PNG of the primary avatar with a
 `ccv3` and a `chara` chunk:
 

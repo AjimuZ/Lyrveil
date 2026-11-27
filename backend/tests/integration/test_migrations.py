@@ -34,7 +34,8 @@ PROPOSALS = "0014"
 LIFECYCLE = "0015"
 SCHEDULING = "0016"
 NOTIFICATIONS = "0017"
-HEAD = "0018"
+CARD_IMPORTS = "0018"
+HEAD = "0019"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -111,6 +112,7 @@ def test_the_revisions_follow_one_another() -> None:
         LIFECYCLE,
         SCHEDULING,
         NOTIFICATIONS,
+        CARD_IMPORTS,
         HEAD,
     }
 
@@ -232,6 +234,48 @@ def test_the_job_table_refuses_unknown_values_and_duplicate_idempotency_keys(
                 connection.execute(insert, row)
         with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
             connection.execute(insert, ("h", "chat_reply", "queued", "llm", "{}", now, "k"))
+
+
+def test_the_card_conversion_kind_is_accepted_and_a_downgrade_drops_its_jobs_without_touching_other_references(
+    database_path: Path, tmp_path: Path
+) -> None:
+    """Revision 0019 edits the CHECK list in place. Its downgrade deletes the new kind's jobs: an import that pointed at
+    one loses only that pointer, and the rows that reference other jobs keep theirs."""
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    columns = "id, kind, status, stage, required_mode, priority, payload_json, attempt, max_attempts, created_at"
+    insert = f"INSERT INTO generation_jobs ({columns}) VALUES (?, ?, 'queued', 'run', 'llm', 20, '{{}}', 0, 2, ?)"
+    insert_import = (
+        "INSERT INTO card_imports (id, status, format, container, source_json, source_sha256, conversion_job_id, "
+        "created_at, expires_at) VALUES (?, 'ready', 'chara_card_v2', 'json', '{}', 'h', ?, ?, ?)"
+    )
+    connection = open_database(database_path)
+    try:
+        connection.execute(insert, ("job-conversion", "card_conversion", NOW))
+        connection.execute(insert, ("job-reply", "chat_reply", NOW))
+        connection.execute(insert_import, ("import-a", "job-conversion", NOW, NOW))
+        connection.execute(insert_import, ("import-b", "job-reply", NOW, NOW))
+    finally:
+        connection.close()
+
+    assert alembic(database_path, "downgrade", CARD_IMPORTS, cwd=tmp_path).returncode == 0
+
+    connection = open_database(database_path)
+    try:
+        assert connection.execute("SELECT id FROM generation_jobs ORDER BY id").fetchall() == [("job-reply",)]
+        assert connection.execute("SELECT id, conversion_job_id FROM card_imports ORDER BY id").fetchall() == [
+            ("import-a", None),
+            ("import-b", "job-reply"),
+        ]
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            connection.execute(insert, ("job-again", "card_conversion", NOW))
+    finally:
+        connection.close()
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        connection.execute(insert, ("job-again", "card_conversion", NOW))
+    finally:
+        connection.close()
 
 
 def test_the_code_migrates_an_engine_and_reports_the_state(engine: Engine, database_path: Path) -> None:

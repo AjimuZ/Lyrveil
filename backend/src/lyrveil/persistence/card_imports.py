@@ -45,6 +45,13 @@ def get(connection: Connection, import_id: str) -> StoredCardImport | None:
     return None if row is None else _card_import(row)
 
 
+def set_conversion_job(connection: Connection, import_id: str, job_id: str) -> None:
+    """Points the import at its newest `card_conversion` job, replacing the pointer to an earlier one."""
+    connection.execute(
+        text("UPDATE card_imports SET conversion_job_id = :job WHERE id = :id"), {"job": job_id, "id": import_id}
+    )
+
+
 def delete(connection: Connection, import_id: str) -> None:
     """Removes the import row."""
     connection.execute(text("DELETE FROM card_imports WHERE id = :id"), {"id": import_id})

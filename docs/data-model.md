@@ -696,6 +696,14 @@ Delivered in revision `0018` (P10.2a), together with `character_sources`:
 - The `DELETE` route removes the row, so `discarded` is not written yet. The index `(expires_at)` serves the expiry.
 - Nothing writes `character_sources` yet: the save step (P10.4) does. A purge of the character deletes its row.
 
+Delivered in revision `0019` (P10.3): the `kind` `CHECK` of `generation_jobs` also lists `card_conversion`. SQLite
+cannot alter a `CHECK`, and rebuilding the table would null the `SET NULL` references to it (`card_imports`,
+`generated_images`, `image_proposals`, `scheduled_events`), so the revision edits the stored schema text in place with
+`PRAGMA writable_schema`, as the SQLite documentation describes for relaxing a `CHECK`. Its downgrade deletes the
+`card_conversion` jobs first, which sets an import's `conversion_job_id` to NULL. `start` sets `conversion_job_id` to the
+newest job. The `converting` status is not written: the job's own status is the state of the conversion, and the
+import stays `ready`.
+
 `character_sources`, the original card of an imported character:
 
 | Column | Type | Rules |

@@ -1,7 +1,7 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
 versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
-draft, the exchange routes (export, import and the JSON Schema of the format), the card import routes (P10.2a) and the
-load of the demo characters.
+draft, the exchange routes (export, import and the JSON Schema of the format), the card import routes (P10.2a), the
+card conversion route (P10.3) and the load of the demo characters.
 Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
@@ -21,6 +21,7 @@ from lyrveil.domain.characters import CharacterSummary, StoredCharacter, Version
 from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
 from lyrveil.images.tags import CARD_CATEGORIES, load_vocabulary
 from lyrveil.media.store import MediaStore
+from lyrveil.services.card_conversion import CardConversionService
 from lyrveil.services.card_import import CardImportService, ImportView
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
@@ -130,10 +131,20 @@ class CardPreviewOut(BaseModel):
     has_lorebook: bool
 
 
+class ConversionOut(BaseModel):
+    """The `card_conversion` job of an import: its state, its failure and, once it completed, its result."""
+
+    job_id: str
+    status: str
+    error_code: str | None
+    error_detail: str | None
+    result: dict[str, Any] | None
+
+
 class CardImportOut(BaseModel):
     """An import of docs/api.md (Character cards). `direct_draft` and `report` hold the direct mapping (null only for a
-    row stored before P10.2b), `embedded_lyrveil` is null until the round trip exists, and `conversion_job_id` until a
-    conversion starts."""
+    row stored before P10.2b), `embedded_lyrveil` is null until the round trip exists, and `conversion_job_id` and
+    `conversion` until a conversion starts."""
 
     id: str
     status: str
@@ -145,6 +156,7 @@ class CardImportOut(BaseModel):
     report: dict[str, Any] | None
     embedded_lyrveil: dict[str, Any] | None
     conversion_job_id: str | None
+    conversion: ConversionOut | None
     expires_at: str
 
 
@@ -201,6 +213,7 @@ def _import_out(view: ImportView) -> CardImportOut:
         report=None if stored.report_json is None else json.loads(stored.report_json),
         embedded_lyrveil=None,
         conversion_job_id=stored.conversion_job_id,
+        conversion=None if view.conversion is None else ConversionOut(**asdict(view.conversion)),
         expires_at=stored.expires_at,
     )
 
@@ -339,6 +352,21 @@ def read_card_import(import_id: str, card_imports: CardImportService = CardImpor
     """Returns the import with its preview. Answers 404 `NOT_FOUND` for an unknown import and for one that expired
     unsaved. Declared before `/{character_id}`, so "imports" is no id."""
     return _import_out(card_imports.get(import_id))
+
+
+@router.post("/imports/{import_id}/conversion", response_model=JobOut, status_code=202)
+def start_card_conversion(import_id: str, request: Request) -> JobOut:
+    """Queues a `card_conversion` job that has the text model write the import's card as a draft in Italian, and answers
+    it with `202`. The card text is not read here. `GET /characters/imports/{id}` shows the job's state and result, and
+    the job fails with `CARD_TOO_LONG` before any generation when the card leaves too little room in the context.
+    Answers 404 `NOT_FOUND` for an unknown or expired import and 409 `CONFLICT` for a saved import, while a conversion
+    of the same import is queued or running, and when the queue is full."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    job = CardConversionService(engine).start(import_id)
+    wake_worker(request)
+    return JobOut(id=job.id, kind=job.kind, status=job.status, queue_position=job.queue_position)
 
 
 @router.get("/imports/{import_id}/source")

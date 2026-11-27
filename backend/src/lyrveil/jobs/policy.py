@@ -14,6 +14,7 @@ class JobKind(StrEnum):
     CHAT_REPLY = "chat_reply"
     CHAT_REGENERATE = "chat_regenerate"
     CHARACTER_DRAFT = "character_draft"
+    CARD_CONVERSION = "card_conversion"
     IMAGE_REQUEST = "image_request"
     VISUAL_PROFILE_TRANSLATE = "visual_profile_translate"
     PROACTIVE_MESSAGE = "proactive_message"
@@ -96,6 +97,8 @@ POLICIES: Mapping[JobKind, KindPolicy] = MappingProxyType(
         JobKind.CHAT_REPLY: KindPolicy(10, JobClass.FOREGROUND, 2, _TEXT_FOREGROUND_BACKOFF_S),
         JobKind.CHAT_REGENERATE: KindPolicy(10, JobClass.FOREGROUND, 2, _TEXT_FOREGROUND_BACKOFF_S),
         JobKind.CHARACTER_DRAFT: KindPolicy(20, JobClass.FOREGROUND, 2, _TEXT_FOREGROUND_BACKOFF_S),
+        # ADR 0047: the user waits for it in the card preview, as for a draft.
+        JobKind.CARD_CONVERSION: KindPolicy(20, JobClass.FOREGROUND, 2, _TEXT_FOREGROUND_BACKOFF_S),
         # docs/image-generation.md (Job stages): the stage decides the mode.
         JobKind.IMAGE_REQUEST: KindPolicy(
             30,
