@@ -131,8 +131,9 @@ class CardPreviewOut(BaseModel):
 
 
 class CardImportOut(BaseModel):
-    """An import of docs/api.md (Character cards). `direct_draft` and `report` are null until the direct mapping exists,
-    `embedded_lyrveil` until the round trip does, and `conversion_job_id` until a conversion starts."""
+    """An import of docs/api.md (Character cards). `direct_draft` and `report` hold the direct mapping (null only for a
+    row stored before P10.2b), `embedded_lyrveil` is null until the round trip exists, and `conversion_job_id` until a
+    conversion starts."""
 
     id: str
     status: str

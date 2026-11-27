@@ -62,6 +62,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- The direct mapping of an imported card, in the backend only (P10.2b,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). The import answer now carries `direct_draft`,
+  a draft with the fields it took from the card (marked **dalla card**) and the scenarios offered from the greetings,
+  and `report`. Traits come from the paragraphs of `personality` and examples from the `<START>` blocks of
+  `mes_example`. Texts over the card's limits are left out and reported. The age stays empty unless the card states
+  an adult age as `27 years old`, `27 anni` or `age: 27`. On import, `<BOT>`, `<USER>` and `<char>` become
+  `{{char}}` and `{{user}}`. Comment and hidden-key macros, `roll` and unknown macros are removed, `random` and `pick`
+  keep their first option, and `reverse` is evaluated. The report lists each one. Reply, proactive and caption
+  prompts now render `{{char}}` and `{{user}}` in the card and the scenario with the character's first name and the
+  user's display name. `system_prompt`, `post_history_instructions` and `creator_notes` never reach a prompt.
+  Imported characters cannot be saved yet (P10.4).
 - Card imports, in the backend only (P10.2a, [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)).
   `POST /characters/imports` reads a V1, V2 or V3 card and stores it in the new `card_imports` table (migration 0018)
   unchanged, with the file's SHA-256, its format and the time. `GET /characters/imports/{id}` answers the import with a

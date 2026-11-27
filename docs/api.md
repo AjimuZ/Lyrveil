@@ -269,10 +269,24 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
 
 - **Delivered in P10.2a** (not in `backend/openapi.json`): `POST /characters/imports`, `GET` and `DELETE
   /characters/imports/{id}`, `GET /characters/imports/{id}/source` and `GET /characters/{id}/source`.
-  - The import answer has every field below; `direct_draft`, `report` and `embedded_lyrveil` are null and
-    `conversion_job_id` is null until their steps exist. `preview` has the keys `name`, `nickname`, `creator`, `version`,
-    `tags`, `creator_notes`, `system_prompt`, `post_history_instructions`, `greeting_count`, `has_avatar` and
-    `has_lorebook`.
+  - The import answer has every field below. `embedded_lyrveil` is null, and so is `conversion_job_id`, until their
+    steps exist. `preview` has the keys `name`, `nickname`, `creator`, `version`, `tags`, `creator_notes`,
+    `system_prompt`, `post_history_instructions`, `greeting_count`, `has_avatar` and `has_lorebook`.
+  - **Delivered in P10.2b:** `direct_draft` and `report`. They are null only for an import stored before P10.2b.
+    - `direct_draft` is `{"draft", "card_fields", "scenarios"}`. `draft` has the shape of a `CharacterDraft`
+      ([Assisted creation](character-system.md#assisted-creation)), except that `identity.first_name` may be `""` and
+      `identity.age` is null unless the card states an adult age. `card_fields` lists the dotted paths that the Creator
+      marks **dalla card**. `scenarios` is a list of `{"title", "description", "opening_message", "source"}`, which the
+      save creates only when asked.
+    - `report` is `{"macros", "left_out", "age"}`.
+      - `macros` is a list of `{"source", "macro", "replacement", "action", "count"}`. `source` is the card path, such
+        as `data.description`. `action` is `placeholder`, `removed`, `first_option` or `reversed`. Equal replacements
+        in one source count once, with `count`.
+      - `left_out` is a list of `{"source", "target", "reason", "item", "detail"}`. `item` is the number of the
+        `<START>` block, or null. `reason` is `name_empty`, `name_too_long`, `no_character_line`,
+        `example_user_too_long`, `example_character_too_long`, `too_many_examples` or `scenario_too_long`. `detail` is
+        the Italian text.
+      - `age` is `{"status", "value", "source"}`. `status` is `stated`, `not_stated`, `conflicting` or `not_adult`.
   - `GET .../imports/{id}/source` returns the stored card as JSON, exactly as stored. It is the import's own route: the
     character's `GET /characters/{id}/source` answers `404 NOT_FOUND` until the save step (P10.4) writes a source.
   - `GET` answers `404 NOT_FOUND` for an unknown import and for one that expired unsaved. `DELETE` answers `204`, `404`

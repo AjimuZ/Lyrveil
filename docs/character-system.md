@@ -429,7 +429,8 @@ Planned for version 1.1, phase P10. The rules and their reasons are in
 [ADR 0047](decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of ADR 0021.
 Built so far, backend only: step 1 and the check of step 2 (P10.1), and the part of step 3 that stores the parsed card
 and stages the avatar, with the routes to read, discard and expire an import (P10.2a, `lyrveil.services.card_import`).
-The direct mapping and its report, the placeholders, the conversion, the save and the export are planned.
+P10.2b added the direct mapping and its report (`lyrveil.domain.card_mapping`), the macros and the placeholders
+rendered in the reply prompt (`lyrveil.domain.card_placeholders`). The conversion, the save and the export are planned.
 
 **Parser (delivered in P10.1).** `lyrveil.domain.tavern_card.parse_card` takes the bytes of a file and returns the
 card. The card comes with its spec (V1, V2 or V3), its container (JSON, PNG or APNG), the chunk it was read from, the
@@ -489,6 +490,35 @@ every field of `CharacterDraft` in the character's language instead. It does not
 **Placeholders.** `{{char}}` and `{{user}}`, in any case, stay in the stored text, and the prompt renderer replaces them
 with the first name and the user's display name. The legacy `<BOT>`, `<USER>` and `<char>` become these two on import.
 The other macros are removed or replaced as ADR 0047 lists, and each one is named in the report.
+
+**Delivered in P10.2b.** `map_card` runs on every import, needs no model, and the import stores its result
+([API](api.md#character-cards-planned)). These rules are not in the table above:
+
+- **The draft.** The draft is a `CharacterDraft` whose `identity.first_name` may be empty and whose `identity.age` may
+  be null. `card_fields` names the fields it took from the card, which the Creator marks **dalla card**. A blank name
+  or one over 80 characters is left empty and reported.
+- **Traits.** Paragraphs are separated by a blank line. A paragraph over 500 characters is cut into runs of whole
+  sentences that fit. A sentence over 500 characters is cut at spaces, so no text is lost.
+- **Examples.** A text without `<START>` is one block. A line without a speaker continues the turn above it, and
+  later `{{user}}:` turns of a block are not used. The `{{char}}:` turns are joined with line breaks. A block with no
+  `{{char}}:` line is left out and reported.
+- **Age.** The age is read from `description`, `personality` and `scenario` after the macros. `27-year-old` counts as
+  `27 years old`. `N anni` after `da`, `per`, `dopo`, `tra` or `fra`, or before `fa`, states a time span, not an age.
+  The age is filled only when every explicit age agrees and is between 18 and 120. The report says `stated`,
+  `not_stated`, `conflicting` or `not_adult`.
+- **Scenarios.** The first scenario needs a description or an opening message. An alternate greeting over 2,000
+  characters gives no scenario. The title is `<name> (saluto N)`, where N is the greeting's place (2 for the first
+  alternate). The import offers the scenarios, and `scenarios_to_create` returns them only when the save asks.
+- **Macros.** `random` and `pick` split their options at `::` when there is one, else at `,`. Inner macros run first.
+  A macro nested over 16 levels deep is removed whole, and a brace without its pair stays as text.
+- **Placeholders at prompt time.** The context builder renders `{{char}}` and `{{user}}` in the card and in the
+  conversation's scenario copy, for replies, proactive messages and image captions. The stored texts keep the
+  placeholders. The assisted creation's draft prompt shows the stored text, so a rewrite keeps them. Extraction,
+  summary and the proactive decision read no card text. `system_prompt`, `post_history_instructions`,
+  `creator_notes` and the other kept fields are not in the card, so no prompt can carry them.
+- **Not yet.** The opening message of a scenario becomes a stored chat message when a conversation starts, so its
+  placeholders are not rendered there yet. The save step (P10.4) handles them. The `characters.default_language`
+  setting does not exist yet, so `primary_language` is `it`.
 
 **Export.** `GET /characters/{id}/card` writes V3 JSON (the default), V2 JSON or a PNG of the primary avatar with a
 `ccv3` and a `chara` chunk:

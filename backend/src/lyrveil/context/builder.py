@@ -29,6 +29,7 @@ from lyrveil.context.blocks import (
 from lyrveil.context.minimal import UserProfile, scenario_block
 from lyrveil.context.tokens import TokenCounter
 from lyrveil.domain.card import CharacterCard
+from lyrveil.domain.card_placeholders import render_card, render_text
 from lyrveil.domain.messages import Author, Message
 from lyrveil.memory.retrieval import is_past_intent
 from lyrveil.memory.summaries import ACTIVE, Checkpoint, choose_summaries, coverage_gaps
@@ -129,6 +130,8 @@ class ContextRequest:
 
     `time` holds the time lines of block 4 (lyrveil.context.time_context.time_lines), never reduced; empty leaves
     them out.
+
+    `card` and `scenario` are the stored texts, `{{char}}` and `{{user}}` included; the build renders them (ADR 0047).
     """
 
     character_id: str
@@ -278,6 +281,12 @@ class _Run:
         formatter: PromptFormatter,
         tokenizer_id: str,
     ) -> None:
+        # ADR 0047: the stored card and scenario keep `{{char}}` and `{{user}}`; every block of this prompt reads them
+        # rendered with the first name and the user's display name. Rendering is pure, so the stable text stays the same
+        # bytes from one reply to the next (ADR 0031).
+        user_name = request.user.display_name
+        request = replace(request, card=render_card(request.card, user_name))
+        first_name = request.card.identity.first_name
         self._counter = counter
         self._retriever = retriever
         self._settings = settings
@@ -287,7 +296,7 @@ class _Run:
         self._turn_costs: dict[str, int] = {}
         self._overhead = 0
         self._global = global_instructions(request.card, request.user, request.language)
-        self._scenario = scenario_block(request.scenario)
+        self._scenario = render_text(scenario_block(request.scenario), first_name, user_name)
         # The extra line closes the dynamic context, so it is counted with the anchor, which is never reduced either.
         extra = " ".join(request.extra_line.split())
         self._anchor = "\n".join(part for part in (anchor(request.card, request.user, request.notes), extra) if part)

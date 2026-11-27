@@ -124,6 +124,40 @@ def test_an_import_stores_the_parsed_card_unchanged_with_the_file_hash(
     assert staged_files(media_root) == []
 
 
+def test_the_import_answers_the_direct_draft_and_its_report(client: TestClient) -> None:
+    """P10.2b: the import stores the direct mapping, and the card-only fields stay out of the draft."""
+    document = card("v2.json")
+    document["data"]["personality"] = "<BOT> ride {{random: spesso, mai}}."
+    body = upload(client, card_bytes(document)).json()
+
+    direct = body["direct_draft"]
+    assert direct["draft"]["identity"]["first_name"] == "Livia Sarno"
+    assert direct["draft"]["identity"]["age"] == 31
+    assert direct["draft"]["traits"] == [{"category": "main_trait", "description": "{{char}} ride spesso."}]
+    assert direct["card_fields"] == [
+        "identity.first_name",
+        "identity.age",
+        "identity.biography",
+        "traits",
+        "communication.examples",
+    ]
+    assert [scenario["title"] for scenario in direct["scenarios"]] == [
+        "Livia Sarno",
+        "Livia Sarno (saluto 2)",
+        "Livia Sarno (saluto 3)",
+    ]
+    assert body["report"]["age"] == {"status": "stated", "value": 31, "source": "data.description"}
+    assert [(item["macro"], item["action"]) for item in body["report"]["macros"]] == [
+        ("<BOT>", "placeholder"),
+        ("{{random: spesso, mai}}", "first_option"),
+    ]
+    assert body["report"]["left_out"] == []
+    draft_text = json.dumps(direct)
+    for card_only in ("Write as", "Keep replies under three paragraphs.", "Synthetic card written"):
+        assert card_only not in draft_text
+    assert client.get(f"{IMPORTS}/{body['id']}").json() == body
+
+
 @pytest.mark.parametrize(("name", "format_name"), [("v1.json", "chara_card_v1"), ("v3.json", "chara_card_v3")])
 def test_v1_and_v3_cards_keep_their_own_format(client: TestClient, name: str, format_name: str) -> None:
     body = upload(client, card_bytes(card(name))).json()

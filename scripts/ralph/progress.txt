@@ -298,6 +298,9 @@
 - Delete a row in its transaction first and its staged file after the commit, so a crash leaves at most an orphan file. The same ordering as the asset service.
 - To run cleanup after the daily backup, pass a callable as `DailyBackup(housekeeping=...)`. It runs in the backup's worker thread, and a failure is logged and never fails the backup.
 - In integration tests, make 'no outbound request' observable by monkeypatching `socket.socket.connect`, `connect_ex`, `socket.getaddrinfo` and `socket.create_connection` to record and raise. `TestClient` stays in-process, so it is unaffected.
+- When a nested macro or brace syntax must be parsed from untrusted text, pair the tokens in one stack pass and cap the evaluation depth. Never rescan from each opener: that is quadratic on unpaired braces and recursive on deep nesting.
+- Render per-user values (names) into a prompt-only copy of the domain model at the one place prompts are built. Keep stored text unrendered and the rendering pure, so the stable prefix stays byte-identical (ADR 0031).
+- The project has no `type: ignore`. When a variant of a model needs a looser field type (for example an optional age), define a sibling model and add a test that its field names mirror the original. Do not override the field in a subclass.
 
 ---
 
@@ -2885,4 +2888,31 @@ I updated the changelog under Added, plus `docs/character-system.md` (a new pars
   - A crash between staging the avatar and committing the row, or between deleting the row and deleting the file, can leave an orphan folder in `.staging/imports/`. Nothing sweeps those yet; the expiry only removes folders of rows it deletes.
   - `scripts/lyrveil.cmd test integration` takes no arguments. Run a single integration file with `scripts/lyrveil.cmd test unit tests/integration/<file>`, which works.
   - A PNG card also goes through the upload limits: 15 MB and 8192 x 8192 pixels give 413, and pixels that do not decode give 415. The 64 MB file limit applies to JSON cards.
+---
+
+## 2026-11-27T15:55:44Z - P10.2b
+- P10.2b is done, in the backend only. Every card import now builds a deterministic direct mapping and its report, and the answer of `GET /characters/imports/{id}` carries them as `direct_draft` and `report`.
+
+What it does:
+- **Mapping** (`lyrveil.domain.card_mapping.map_card`): `name` becomes the first name and `description` the biography. Each paragraph of `personality` becomes a `main_trait`, and one over 500 characters is cut at sentence ends. Each `<START>` block of `mes_example` becomes one example pair: the first `{{user}}:` turn and the `{{char}}:` lines joined. Blocks over 300 or 500 characters, past the 8-pair limit, or with no `{{char}}:` line are left out and reported. The greetings become scenario proposals titled with the name and `(saluto N)`; a text over 2,000 characters is left out and reported. `scenarios_to_create(mapping, create_scenarios)` returns them only when asked.
+- **Draft shape:** `card_fields` lists the paths marked **dalla card**. The draft is an `ImportedDraft`: the shape of `CharacterDraft`, except the name may be empty and the age may be null. A test checks that it keeps the same fields as `CharacterDraft`.
+- **Age:** filled only from an explicit form (`27 years old`, `27-year-old`, `27 anni`, `age: 27`) in `description`, `personality` or `scenario`, and only when every explicit age agrees and is between 18 and 120. `da/per/tra/fra/dopo N anni` and `N anni fa` are skipped as time spans. The report says `stated`, `not_stated`, `conflicting` or `not_adult`.
+- **Macros** (`lyrveil.domain.card_placeholders.expand_macros`): every rule in ADR 0047 is applied, with inner macros first. The braces are paired in one pass and nesting stops at 16 levels, so a crafted text cannot cause deep recursion. The report lists each replacement per source path with a count.
+- **Placeholders at prompt time:** the context builder renders `{{char}}` and `{{user}}` in the card and the scenario copy, with the first name and the user's display name. That covers replies, proactive messages and image captions. The stored text keeps the placeholders. `system_prompt`, `post_history_instructions` and `creator_notes` are never read into the draft or the card, so no prompt can carry them.
+
+Checks I ran:
+- `scripts/lyrveil.cmd test lint` passed (ruff, format, mypy --strict, docs, frontend).
+- Targeted tests passed: `tests/unit/test_card_mapping.py` (38 tests, new), the unit and integration `test_context_builder.py` (includes T-MOD-05), `test_prompt_formatter.py`, `test_proactive_messages.py` and `tests/integration/test_card_imports.py` (18 tests, one new). 105 + 18 passed.
+- Not run: the full unit, integration, e2e and docker levels.
+
+Docs updated: `docs/character-system.md` (new "Delivered in P10.2b" rules), `docs/api.md` (shapes of `direct_draft` and `report`), `docs/data-model.md`, `docs/testing.md` and `CHANGELOG.md`.
+- Files changed: backend/src/lyrveil/domain/card_mapping.py, backend/src/lyrveil/domain/card_placeholders.py, backend/src/lyrveil/domain/card_imports.py, backend/src/lyrveil/services/card_import.py, backend/src/lyrveil/context/builder.py, backend/src/lyrveil/api/characters.py, backend/tests/unit/test_card_mapping.py, backend/tests/integration/test_card_imports.py, docs/character-system.md, docs/api.md, docs/data-model.md, docs/testing.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The direct draft is stored as `{draft, card_fields, scenarios}`. `draft` is an `ImportedDraft`, whose `identity.first_name` may be "" and whose `identity.age` may be null. P10.4's save must require both, then validate through the normal `POST /characters` card rules.
+  - `scenarios_to_create(mapping, create_scenarios)` is the hook for P10.4. A scenario's `opening_message` still holds `{{char}}` and `{{user}}`. It becomes a stored chat message when a conversation starts, so P10.4, or the conversation start, should render it there with `render_text`. The builder renders only the card and the scenario copy.
+  - Placeholders are rendered once, in `context.builder._Run.__init__` (with `render_card` and `render_text` from `lyrveil.domain.card_placeholders`). Every ContextBuilder user (replies, proactive, captions) gets this. The assisted-creation draft prompt deliberately shows the stored text, so a rewrite keeps the placeholders. Extraction, summary and the proactive decision read no card text.
+  - `render_card` copies the card with `model_copy(update=...)` and does not validate again. A rendered text may exceed a field limit, so the copy is for prompts only and must never be stored.
+  - `characters.default_language` is not implemented in the backend. `map_card` takes `language` and the service passes nothing, so it is `it`. P10.3 or settings work should wire it.
+  - Import rows stored before P10.2b keep NULL `direct_draft_json` and `report_json`, and the API answers null for them.
+  - Reply checks such as the `avoid` phrases still compare against the stored card text. A placeholder in `avoid` would be compared literally (edge case, not addressed).
 ---

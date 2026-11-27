@@ -13,7 +13,8 @@ SAVED = "saved"
 @dataclass(frozen=True)
 class StoredCardImport:
     """An import waiting for review. `source_json` is the parsed card unchanged, as JSON text, and `source_sha256` the
-    hash of the file's bytes. `direct_draft_json` and `report_json` are None until the direct mapping fills them.
+    hash of the file's bytes. `direct_draft_json` and `report_json` are the direct mapping as JSON text
+    (lyrveil.domain.card_mapping); they are None only in a row stored before P10.2b.
     `avatar_staging_path` is relative to the media root and None without an avatar."""
 
     id: str

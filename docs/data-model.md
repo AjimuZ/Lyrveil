@@ -674,8 +674,8 @@ which would drop its search triggers (see [`scenarios`](#scenarios)). The servic
 | `container` | TEXT | `json`, `png` |
 | `source_json` | TEXT | The parsed card, unchanged. `json_valid` |
 | `source_sha256` | TEXT | Hash of the file's bytes |
-| `direct_draft_json` | TEXT | The direct mapping: card, proposed fields, scenarios |
-| `report_json` | TEXT | Fields left out, macros replaced, warnings |
+| `direct_draft_json` | TEXT | The direct mapping: draft, fields from the card, scenarios |
+| `report_json` | TEXT | Macros replaced, texts left out, the age found |
 | `conversion_job_id` | TEXT | FK `generation_jobs`, SET NULL |
 | `avatar_staging_path` | TEXT | NULL without an avatar. Below `data/media/.staging` |
 | `character_id` | TEXT | Set when saved. FK, SET NULL |
@@ -686,7 +686,9 @@ job.
 
 Delivered in revision `0018` (P10.2a), together with `character_sources`:
 
-- `direct_draft_json` and `report_json` are nullable and stay NULL until the direct mapping (P10.2b) fills them.
+- `direct_draft_json` and `report_json` are nullable. Since P10.2b every import fills them with the direct mapping
+  (`draft`, `card_fields` and `scenarios`) and its report (`macros`, `left_out` and `age`), as JSON text with
+  non-ASCII characters escaped. A row stored before P10.2b keeps NULL.
 - `container` is `png` for a PNG and for an APNG. `source_json` is the parsed card as JSON text with non-ASCII
   characters escaped, so every string stores whatever the file held.
 - The staged avatar is the re-encoded image, at `.staging/imports/<id>/avatar.png`. `clear_staging` leaves that folder

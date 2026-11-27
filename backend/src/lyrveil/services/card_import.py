@@ -2,8 +2,9 @@
 ones nobody saved (ADR 0047; docs/character-system.md, Character cards).
 
 An import parses the file with lyrveil.domain.tavern_card, stores the parsed card unchanged with the file's SHA-256, its
-format and the time, and stages the avatar of a PNG card through the upload path, whose re-encode removes every chunk.
-It never writes a character and never fetches a remote `uri` of the card: nothing here opens a connection.
+format and the time, with the direct draft and the import report of lyrveil.domain.card_mapping, and stages the avatar
+of a PNG card through the upload path, whose re-encode removes every chunk. It never writes a character and never
+fetches a remote `uri` of the card: nothing here opens a connection.
 """
 
 import json
@@ -15,6 +16,7 @@ from typing import Any
 from sqlalchemy import Connection, Engine
 
 from lyrveil.domain.card_imports import IMPORT_LIFETIME, READY, SAVED, StoredCardImport
+from lyrveil.domain.card_mapping import map_card
 from lyrveil.domain.errors import ConflictError, NotFoundError
 from lyrveil.domain.identifiers import new_id, to_utc_text
 from lyrveil.domain.tavern_card import (
@@ -101,7 +103,8 @@ class CardImportService:
     def import_file(self, content: bytes) -> ImportView:
         """Returns the new `ready` import made from the bytes of an uploaded card file.
 
-        The card is parsed and checked first (parse_card), then the avatar of a PNG card is re-encoded through the
+        The card is parsed and checked first (parse_card) and mapped to the direct draft with its report (map_card,
+        which needs no model), then the avatar of a PNG card is re-encoded through the
         upload path (images.prepare_upload: 15 MB and 8192 pixels, one frame, no chunk survives) and staged; the row
         is written last. Raises what parse_card raises (CardRefusedError, ContentPolicyBlockedError naming the source
         path) and what prepare_upload raises (PayloadTooLargeError, UnsupportedMediaError). In every refusal no row and
@@ -113,6 +116,10 @@ class CardImportService:
         except ValueError as error:
             # A number such as 1e999 reads as infinity, which JSON text cannot hold.
             raise CardInvalidError(CardFailure.BAD_JSON) from error
+        mapping = map_card(parsed.data, prefix="" if parsed.spec is CardSpec.V1 else "data")
+        # ASCII escapes keep a lone surrogate of the card's text storable, as for the source.
+        draft_json = json.dumps(mapping.draft_json(), ensure_ascii=True)
+        report_json = json.dumps(mapping.report_json(), ensure_ascii=True)
         avatar = None if parsed.container is CardContainer.JSON else images.prepare_upload(content, None)
         import_id = new_id()
         now = self._clock()
@@ -124,8 +131,8 @@ class CardImportService:
             container="json" if parsed.container is CardContainer.JSON else "png",
             source_json=source_json,
             source_sha256=parsed.sha256,
-            direct_draft_json=None,
-            report_json=None,
+            direct_draft_json=draft_json,
+            report_json=report_json,
             conversion_job_id=None,
             avatar_staging_path=staged,
             character_id=None,

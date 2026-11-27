@@ -232,7 +232,7 @@ Design: [ADR 0047](decisions/0047-character-card-import-and-export.md), [Charact
 
 - [x] P10.1 Parser for V1, V2 and V3 JSON and for the `ccv3` and `chara` chunks of PNG and APNG, with the limits and
   the content guard on every string.
-- [ ] P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import
+- [x] P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import
   report.
 - [ ] P10.3 The `card_conversion` job with the assisted creation's grammar and repair, and `CARD_TOO_LONG`.
 - [ ] P10.4 Saving an import through `POST /characters` with `import_id`: avatar, scenarios from greetings, and the
