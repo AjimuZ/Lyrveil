@@ -1,8 +1,8 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
 versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
 draft, the exchange routes (export, import and the JSON Schema of the format), the card import routes (P10.2a), the
-card conversion route (P10.3), the save of an import through the create route (P10.4) and the load of the demo
-characters.
+card conversion route (P10.3), the save of an import through the create route (P10.4), the card export (P10.5a) and the
+load of the demo characters.
 Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
@@ -24,6 +24,7 @@ from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
 from lyrveil.images.tags import CARD_CATEGORIES, load_vocabulary
 from lyrveil.media.store import MediaStore
 from lyrveil.services.card_conversion import CardConversionService
+from lyrveil.services.card_export import CardExportService
 from lyrveil.services.card_import import CardImportService, ImportView
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
@@ -279,6 +280,18 @@ def get_card_imports(request: Request) -> CardImportService:
 CardImports = Depends(get_card_imports)
 
 
+def get_card_exports(request: Request) -> CardExportService:
+    """Returns the card export service on the application's engine and media store."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    media: MediaStore = request.app.state.media
+    return CardExportService(engine, media)
+
+
+CardExports = Depends(get_card_exports)
+
+
 @router.get("", response_model=CharacterList)
 def list_characters(
     status: str = "active", q: str | None = Query(default=None, max_length=200), service: CharacterService = Service
@@ -461,6 +474,30 @@ def read_character_source(character_id: str, card_imports: CardImportService = C
     """Returns the card an imported character came from, exactly as it was stored. Answers 404 `NOT_FOUND` for an
     unknown character and for one that was not imported from a card."""
     return Response(content=card_imports.character_source_json(character_id), media_type="application/json")
+
+
+@router.get("/{character_id}/card")
+def export_card(
+    character_id: str,
+    card_format: Annotated[str, Query(alias="format")] = "v3json",
+    scenario_ids: Annotated[list[str] | None, Query()] = None,
+    cards: CardExportService = CardExports,
+) -> Response:
+    """Returns the character as a Character Card, sent as a download named after its first name. `format` is `v3json`
+    (the default), `v2json` or `png`: the PNG is the primary avatar with a `ccv3` and a `chara` chunk. The free text is
+    rendered from the current card, `extensions.lyrveil` holds the complete native card, and an imported character keeps
+    its source's unknown `extensions` keys, tags, creator, creator notes, source, version and creation date.
+    `scenario_ids`, repeated or separated by commas, picks the scenarios that become `scenario`, `first_mes` and the
+    alternate greetings. Conversations, memories, personas, other images and the user's name are never included. Answers
+    404 `NOT_FOUND` for an unknown character or scenario, 409 `CONFLICT` for `png` without a primary avatar and 422
+    `VALIDATION_ERROR` for another format."""
+    ids = [item.strip() for value in scenario_ids or [] for item in value.split(",") if item.strip()]
+    exported = cards.export(character_id, card_format, ids)
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.file_name}"'},
+    )
 
 
 @router.get("/{character_id}/export")

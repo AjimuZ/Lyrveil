@@ -4,9 +4,10 @@
 import hashlib
 import io
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, PngImagePlugin
 
 from lyrveil.domain.errors import PayloadTooLargeError, UnsupportedMediaError, ValidationFailedError
 
@@ -141,6 +142,26 @@ def prepare_upload(data: bytes, declared_type: str | None) -> EncodedImage:
     if image_format is None or (declared_type is not None and declared_type != image_format.media_type):
         raise UnsupportedMediaError(_UNSUPPORTED)
     return _encode(_open_clean(data, image_format), image_format)
+
+
+def to_png_with_text(data: bytes, text: Mapping[str, str]) -> bytes:
+    """Returns the PNG of the stored image `data`, whatever its format, whose only metadata is one `tEXt` chunk per item
+    of `text` (keyword and value, in order). The value must be Latin-1, which base64 is: another one would become an
+    `iTXt` chunk. The image is decoded with the upload limits and keeps no metadata of its own, so a card PNG never
+    carries more than the card.
+
+    Raises UnsupportedMediaError for bytes that are not PNG, JPEG or WebP or do not decode, and PayloadTooLargeError
+    over the pixel limits.
+    """
+    image_format = sniff(data)
+    if image_format is None:
+        raise UnsupportedMediaError(_UNSUPPORTED)
+    info = PngImagePlugin.PngInfo()
+    for keyword, value in text.items():
+        info.add_text(keyword, value)
+    buffer = io.BytesIO()
+    _open_clean(data, image_format).save(buffer, "PNG", pnginfo=info)
+    return buffer.getvalue()
 
 
 def _carries_metadata(data: bytes, image_format: ImageFormat) -> bool:

@@ -62,11 +62,16 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def file_stem(first_name: str) -> str:
+    """Returns the ASCII, lower-case file name stem for an export of the character named `first_name`; `personaggio`
+    when the name has no ASCII letter or digit."""
+    ascii_name = unicodedata.normalize("NFKD", first_name).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-") or "personaggio"
+
+
 def _file_name(first_name: str) -> str:
     """Returns an ASCII file name for the export of the character named `first_name`."""
-    ascii_name = unicodedata.normalize("NFKD", first_name).encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-")
-    return f"{slug or 'personaggio'}{FILE_SUFFIX}"
+    return f"{file_stem(first_name)}{FILE_SUFFIX}"
 
 
 @dataclass(frozen=True)

@@ -430,7 +430,8 @@ Planned for version 1.1, phase P10. The rules and their reasons are in
 Built so far, backend only: step 1 and the check of step 2 (P10.1), and the part of step 3 that stores the parsed card
 and stages the avatar, with the routes to read, discard and expire an import (P10.2a, `lyrveil.services.card_import`).
 P10.2b added the direct mapping and its report (`lyrveil.domain.card_mapping`), the macros and the placeholders
-rendered in the reply prompt (`lyrveil.domain.card_placeholders`). The conversion, the save and the export are planned.
+rendered in the reply prompt (`lyrveil.domain.card_placeholders`). The conversion (P10.3) and the save (P10.4) are
+delivered in the backend, and so is the export (P10.5a). The import of an exported card (the round trip) is planned.
 
 **Parser (delivered in P10.1).** `lyrveil.domain.tavern_card.parse_card` takes the bytes of a file and returns the
 card. The card comes with its spec (V1, V2 or V3), its container (JSON, PNG or APNG), the chunk it was read from, the
@@ -549,6 +550,20 @@ The other macros are removed or replaced as ADR 0047 lists, and each one is name
 
 - **Rendered text.** The free text is rendered from the current card with the texts of blocks 2 and 3
   ([Prompting](prompting.md#system-blocks)). The examples become `<START>` blocks.
+  - **Delivered in P10.5a** (backend only, `lyrveil.services.card_export`, [API](api.md#character-cards-planned)).
+    `description` is block 2 without its traits, followed by an `Aspetto:` list of the Italian visual fields (face,
+    hair, eyes, body, clothing, accessories, distinctive marks). `personality` is the trait lines of block 2, one per
+    category. `mes_example` has one `<START>` block per example, with a `{{user}}:` line when the example has a user
+    message and a `{{char}}:` line. The placeholders are written as they are.
+  - **The hash.** `text_sha256` is the SHA-256 of the compact JSON, with sorted keys and ASCII escapes, of these three
+    texts. It leaves out `scenario`, `first_mes` and `alternate_greetings`, because they come from the scenarios the user
+    picks and cannot be rendered again from the embedded card. `text_sha256(render_texts(card))` is what the import
+    must compare (P10.5b).
+  - **Dates and defaults.** `creation_date` is the source's when it has one, else the character's `created_at`.
+    `modification_date` is the export time, so it is the only field that differs between two exports of an unchanged
+    card. `character_version` is the source's, or the version number of a character without a source.
+  - **Not exported.** `character_book` (until P12), `nickname`, `creator_notes_multilingual` and `group_only_greetings`
+    of the source are not written back: only the fields listed below are kept.
 - **Scenarios.** The scenarios the user picks become `scenario`, `first_mes` and `alternate_greetings`.
 - **Embedded card.** `extensions.lyrveil` holds the complete card and the hash of the rendered text.
 - **Imported characters.** An imported character keeps its source's unknown `extensions` keys, `tags`, `creator`,

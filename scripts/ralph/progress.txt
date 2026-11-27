@@ -306,6 +306,8 @@
 - Make a service the JobHandler of its own kind: the same class has `start()` that queues in one write transaction and `__call__` that runs under the lease. Keep private text out of the job payload and re-read it from the database in the handler.
 - When a create needs several tables in one commit, give the service a `within(connection, id, now)` hook that runs inside its transaction instead of opening a second transaction.
 - A step that writes files and rows together removes the files itself if its own write fails. The caller removes them if the outer transaction fails later, and deletes a staged file only after the commit.
+- A pure renderer next to a thin service that loads the data (`render_texts`, `build_v2`, `build_v3` and `CardExportService`) keeps export output deterministic and testable without a database.
+- JSON bytes try `ensure_ascii=False` and fall back to ASCII escapes on `UnicodeEncodeError`, so a stored lone surrogate cannot turn an export into a 500.
 
 ---
 
@@ -2957,4 +2959,36 @@ Docs updated: CHANGELOG.md, docs/api.md, docs/data-model.md, docs/testing.md and
   - Placeholders in the scenarios' opening messages are not rewritten on save. The docs say so.
   - The Creator screen should send `import_id` and `create_scenarios` in the create body. The scenarios saved are those of the import's direct mapping, not the conversion result's.
   - Targeted integration tests run with `scripts/lyrveil.cmd test unit tests/integration/<file>`. The Bash tool refused a grep-style command during this session, so use the Grep tool for searches.
+---
+
+## 2026-11-27T16:22:56Z - P10.5a
+- Added `lyrveil.services.card_export` and `GET /characters/{id}/card?format=&scenario_ids=`. It exports V3 JSON (the default), V2 JSON, or a PNG of the primary avatar with `ccv3` and `chara` chunks. The 7 new tests in `test_card_export.py` and `scripts/lyrveil.cmd test lint` pass. The full unit, integration, e2e and docker levels were not run, and no screen calls the route yet.
+
+**What the export does**
+- **Rendered text:**
+  - `description` is block 2 without its traits, plus an `Aspetto:` list of the Italian visual fields.
+  - `personality` is the trait lines of block 2.
+  - `mes_example` has one `<START>` block per example, with `{{user}}:` and `{{char}}:` lines.
+  - Two exports of an unchanged card differ only in `modification_date`.
+- **Scenarios:** the first of `scenario_ids` gives `scenario` and `first_mes`, and each later one with an opening message gives an alternate greeting. Ids can be repeated or comma-separated.
+- **`extensions.lyrveil`:** `{format, format_version, card, text_sha256}` with the complete native card. `character_book` is absent until P12.
+- **Imported character:** keeps its source's `extensions` keys other than `lyrveil`, plus `tags`, `creator`, `creator_notes`, `source`, `character_version` and `creation_date`.
+- **No source:** an empty `creator`, the version number as `character_version`, and `created_at` as `creation_date`.
+- **PNG:** the avatar is re-decoded with the upload limits, so it carries no metadata beyond the two card chunks.
+- **Errors:**
+  - `png` without a primary avatar gives `409 CONFLICT`, and JSON still exports.
+  - An unknown character, an unknown scenario, or a scenario of another character gives `404`.
+  - An unknown `format` gives `422`.
+
+**Decision to confirm:** `text_sha256` hashes only `description`, `personality` and `mes_example`, not the scenario texts. Those come from the scenarios the user picks, so P10.5b cannot render them again from the embedded card. This is documented in `docs/character-system.md`; if the ADR meant the greetings to be covered too, the hash needs to change.
+
+The V3 dates in a `character_book`-less export are in Unix seconds. A source `creation_date` is kept as read, even if another tool wrote milliseconds.
+- Files changed: backend/src/lyrveil/services/card_export.py, backend/src/lyrveil/api/characters.py, backend/src/lyrveil/media/images.py, backend/src/lyrveil/services/character_exchange.py, backend/tests/integration/test_card_export.py, CHANGELOG.md, docs/api.md, docs/character-system.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `card_export.render_texts(card)` and `text_sha256(texts)` are public. P10.5b should call them on the embedded `extensions.lyrveil.card` and compare with `extensions.lyrveil.text_sha256`.
+  - `text_sha256` covers only description, personality and mes_example; scenario, first_mes and alternate_greetings depend on the picked scenarios, so a round trip cannot re-render them.
+  - `images.to_png_with_text(data, {keyword: value})` re-encodes any stored avatar as PNG with only the given tEXt chunks. `character_exchange.file_stem` is now public for export file names.
+  - The route takes `format` through `Query(alias="format")` as `card_format`, and `scenario_ids` as a repeated or comma-separated list.
+  - The exported V3 `creation_date` of an imported card is the source's value as read, whatever its unit.
+  - The Bash tool refuses write commands such as `sed -i`; use Edit for every file change.
 ---

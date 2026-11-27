@@ -62,6 +62,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Card export, in the backend only (P10.5a,
+  [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `GET /characters/{id}/card?format=&scenario_ids=`
+  writes a character as Character Card V3 JSON (the default), V2 JSON or a PNG of its primary avatar with a `ccv3` and a
+  `chara` chunk. The free text is rendered from the current card, `extensions.lyrveil` holds the complete native card
+  and the hash of the rendered text, and the scenarios picked give `scenario`, `first_mes` and the alternate greetings.
+  An imported character keeps its source's unknown `extensions` keys, tags, creator, creator notes, source, version and
+  creation date. A character without an avatar answers `409 CONFLICT` for `png` and still exports JSON. No screen calls
+  it yet, and the import side of the round trip (P10.5b) is not built.
 - Saving an imported card, in the backend only (P10.4,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `POST /characters` takes `import_id` and
   `create_scenarios` (default `true`) beside the reviewed card. One transaction writes the character at version 1 with

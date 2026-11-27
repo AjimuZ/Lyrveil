@@ -345,6 +345,19 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
   - The import must be `ready` and not expired, or the answer is `409 CONFLICT`. Saving sets it to `saved`.
 - **Export.** It answers `application/json` or `image/png` with a `Content-Disposition` file name made from the
   character's name. `png` answers `409 CONFLICT` for a character without a primary avatar.
+  - **Delivered in P10.5a** (not in `backend/openapi.json`). `GET /characters/{id}/card` takes `format` (`v3json` by
+    default, `v2json` or `png`) and `scenario_ids`, repeated or separated by commas. The file name is `<first name>.json`,
+    `<first name>.v2.json` or `<first name>.png`, in ASCII.
+  - **Scenarios.** The first scenario of `scenario_ids` gives `scenario` (its description, then its setting) and
+    `first_mes`, and each later one with an opening message gives an alternate greeting. A repeated id counts once.
+    Without ids the three are empty. A scenario must exist and be usable with the character.
+  - **Content.** The V3 file has every required field of the specification plus `source`, `group_only_greetings` (empty),
+    `creation_date` and `modification_date`, the time of the export in Unix seconds. The V2 file has the V2 fields only.
+    `character_book` is absent. `system_prompt` and `post_history_instructions` are empty. The PNG holds `ccv3` (the V3
+    JSON) and `chara` (the V2 JSON), each as base64 of UTF-8 JSON, and no other chunk.
+  - **Errors.** `404 NOT_FOUND` for an unknown character, for a scenario that does not exist or belongs to another
+    character, and for an avatar whose file is missing, `409 CONFLICT` for `png` without a primary avatar, and
+    `422 VALIDATION_ERROR` for another `format`.
 
 ### Scenarios
 
