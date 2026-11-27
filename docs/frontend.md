@@ -63,8 +63,8 @@ All feature routes load lazily.
 | `/settings/resources` | 10. AI resource monitoring |
 | `/settings/data` | Backup, export, deleted conversations |
 | `/characters/import/:importId` | The Creator with the import preview of a Character Card (P10.6) |
-| `/characters/:id/lore` | Planned (P12): 11. the character's own lore book |
-| `/worlds`, `/worlds/:id` | Planned (P12): 11. Worlds and lore |
+| `/characters/:id/lore` | 11. the character's own lore book (P12.5a) |
+| `/worlds`, `/worlds/:id` | 11. Worlds and lore (P12.5a: list and editor) |
 | `/settings/personas` | 12. Personas (P11.4) |
 
 Technical screens are reached only from `/settings`. Any other path redirects to `/chats`.
@@ -518,9 +518,10 @@ could not read shows **Non disponibile**. Not delivered: the memory and disk gau
 retry (the list and retry routes are planned), tokens per second, recent transitions, preflight results and the
 **Riprova** action during `ERROR` (the recover route is planned).
 
-### 11. Worlds and lore (planned)
+### 11. Worlds and lore (partly built)
 
-Planned for version 1.1, P12, and not built ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)).
+Version 1.1, P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The list, the world editor and the own book
+are built (P12.5a, below); the rest of the list is planned.
 
 - **Mondi** (`/worlds`) lists worlds with search, the **Attivi** and **Archiviati** tabs, **Nuovo mondo** and
   **Importa un lorebook**.
@@ -536,6 +537,31 @@ Planned for version 1.1, P12, and not built ([ADR 0049](decisions/0049-worlds-an
 - Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories (built in P12.3): for each entry
   that was active for the reply, its title, its book, whether it was in the prompt or cut, its block and the key that
   matched. The block token counts of that view do not show `lore_constant` and `lore_activated` yet.
+
+Delivered in P12.5a (`features/lore/`, over the routes of [API](api.md#lore-planned)):
+
+- `/worlds` (`worlds-screen.ts`, `worlds-store.ts`) lists the worlds of a tab (**Attivi** or **Archiviati**) with a
+  search over name and description that waits 250 ms after typing. A row shows the name, how many entries the world
+  holds and an excerpt of the description; its actions are **Apri**, **Archivia** or **Ripristina**, and **Elimina**
+  with an inline confirmation. **Nuovo mondo** asks for the name and the description; a created world opens its page.
+- `/worlds/:id` (`world-screen.ts`) and `/characters/:id/lore` (`character-lore-screen.ts`) both show the book editor
+  (`book-editor.ts`, with `book-editor-store.ts`). A world has **Nome**, **Descrizione**, **Messaggi da leggere** (1 to
+  20) and **Budget di token** (blank, or 50 to 900), and the archive and delete actions; the own book has only the last
+  two settings, because it follows its character. Entries have a search over title, content, keys and note, **Nuova
+  voce**, and per row **Modifica**, an **Attiva** switch and **Elimina** with a confirmation. A row marks **Sempre
+  attiva** and **Disattivata**.
+- The entry form (`entry-form.ts`) has the fields listed above. Keys are typed separated by commas. It checks the
+  server's limits before it sends (title 80, content 1 to 8,000, note 500, 16 keys of 60 characters, whole numbers up to
+  one million for **Priorità** and **Ordine**) and shows each message in Italian next to its field. A refusal of the
+  server is placed by the field its detail names (`lore.model.ts`, `entryFieldOf` and `bookFieldOf`); one that names no
+  field shows above the form.
+- An entry the server flags `never_inserted` (its line is over its block's maximum) shows a warning in the form and in
+  its row, and saving one shows a notice, because it is stored but no reply reads it. The editor takes the flag from the
+  server and does not estimate tokens itself, so it appears after the entry is saved.
+- The character profile has a **Lore** button, and the navigation a **Mondi** link.
+- Not delivered: the world's links to characters, scenarios and conversations, **Importa un lorebook** and the export
+  button, **Prova le parole chiave**, the **Mondi** choice in the scenario form and the context panel, and the
+  `backend/openapi.json` types (the interfaces are in `lore.model.ts`).
 
 ### 12. Personas
 

@@ -1,0 +1,221 @@
+@if (store.loading()) {
+  <ob-skeleton [lines]="4" [label]="'lore.loading' | t" />
+} @else if (store.error(); as failure) {
+  <div class="error" role="alert">
+    <p>{{ failure.textKey | t }}</p>
+    <button type="button" class="button" (click)="store.load(bookId())">{{ 'lore.retry' | t }}</button>
+  </div>
+} @else if (store.book(); as book) {
+  @if (archived()) {
+    <p class="banner">{{ 'lore.archivedNote' | t }}</p>
+  }
+
+  <section class="panel" aria-labelledby="book-settings-title">
+    <h2 class="section" id="book-settings-title">{{ 'lore.settings' | t }}</h2>
+    <form class="form" novalidate (submit)="saveSettings($event)">
+      @if (store.bookError(); as failure) {
+        @if (serverField() === null) {
+          <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+        }
+      }
+
+      @if (isWorld()) {
+        <div class="field">
+          <label for="book-name">{{ 'worlds.name' | t }}</label>
+          <input
+            id="book-name"
+            class="control"
+            type="text"
+            autocomplete="off"
+            [attr.maxlength]="limits.name"
+            [value]="name()"
+            [attr.aria-invalid]="(attempted() && !nameValid()) || serverField() === 'name'"
+            [attr.aria-describedby]="(attempted() && !nameValid()) || serverField() === 'name' ? 'book-name-error' : null"
+            (input)="name.set(valueOf($event))"
+          />
+          @if (attempted() && !nameValid()) {
+            <p class="field-error" id="book-name-error">{{ 'worlds.error.name' | t }}</p>
+          } @else if (serverField() === 'name') {
+            <p class="field-error" id="book-name-error">{{ store.bookError()?.detail }}</p>
+          }
+        </div>
+        <div class="field">
+          <label for="book-description">{{ 'worlds.description' | t }}</label>
+          <textarea
+            id="book-description"
+            class="control"
+            rows="3"
+            [attr.maxlength]="limits.description"
+            [value]="description()"
+            [attr.aria-invalid]="!descriptionValid() || serverField() === 'description'"
+            [attr.aria-describedby]="!descriptionValid() || serverField() === 'description' ? 'book-description-error' : null"
+            (input)="description.set(valueOf($event))"
+          ></textarea>
+          @if (!descriptionValid()) {
+            <p class="field-error" id="book-description-error">{{ 'worlds.error.description' | t }}</p>
+          } @else if (serverField() === 'description') {
+            <p class="field-error" id="book-description-error">{{ store.bookError()?.detail }}</p>
+          }
+        </div>
+      }
+
+      <div class="pair">
+        <div class="field">
+          <label for="book-scan-depth">{{ 'lore.scanDepth' | t }}</label>
+          <input
+            id="book-scan-depth"
+            class="control"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            [value]="scanDepth()"
+            [attr.aria-invalid]="(attempted() && !scanDepthValid()) || serverField() === 'scan_depth'"
+            [attr.aria-describedby]="
+              (attempted() && !scanDepthValid()) || serverField() === 'scan_depth' ? 'book-scan-depth-hint book-scan-depth-error' : 'book-scan-depth-hint'
+            "
+            (input)="scanDepth.set(valueOf($event))"
+          />
+          <p class="hint" id="book-scan-depth-hint">{{ 'lore.scanDepthHint' | t }}</p>
+          @if (attempted() && !scanDepthValid()) {
+            <p class="field-error" id="book-scan-depth-error">{{ 'lore.error.scanDepth' | t }}</p>
+          } @else if (serverField() === 'scan_depth') {
+            <p class="field-error" id="book-scan-depth-error">{{ store.bookError()?.detail }}</p>
+          }
+        </div>
+        <div class="field">
+          <label for="book-budget">{{ 'lore.budget' | t }}</label>
+          <input
+            id="book-budget"
+            class="control"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            [value]="tokenBudget()"
+            [attr.aria-invalid]="(attempted() && !tokenBudgetValid()) || serverField() === 'token_budget'"
+            [attr.aria-describedby]="
+              (attempted() && !tokenBudgetValid()) || serverField() === 'token_budget' ? 'book-budget-hint book-budget-error' : 'book-budget-hint'
+            "
+            (input)="tokenBudget.set(valueOf($event))"
+          />
+          <p class="hint" id="book-budget-hint">{{ 'lore.budgetHint' | t }}</p>
+          @if (attempted() && !tokenBudgetValid()) {
+            <p class="field-error" id="book-budget-error">{{ 'lore.error.budget' | t }}</p>
+          } @else if (serverField() === 'token_budget') {
+            <p class="field-error" id="book-budget-error">{{ store.bookError()?.detail }}</p>
+          }
+        </div>
+      </div>
+
+      <div class="actions">
+        @if (bookSaved()) {
+          <span class="saved" role="status">{{ 'lore.settingsSaved' | t }}</span>
+        }
+        <button type="submit" class="button primary" [disabled]="savingBook()">{{ 'lore.saveSettings' | t }}</button>
+      </div>
+    </form>
+
+    @if (isWorld()) {
+      <div class="card-actions">
+        <button type="button" class="button" (click)="toggleArchive()">
+          {{ (archived() ? 'worlds.unarchive' : 'worlds.archive') | t }}
+        </button>
+        @if (confirmingBookDelete()) {
+          <span class="confirm" role="group" [attr.aria-label]="'worlds.delete.confirm' | t: { name: book.name }">
+            <span>{{ 'worlds.delete.confirm' | t: { name: book.name } }}</span>
+            <button type="button" class="button danger" (click)="confirmRemoveBook()">{{ 'worlds.delete.yes' | t }}</button>
+            <button type="button" class="button" (click)="confirmingBookDelete.set(false)">{{ 'worlds.delete.no' | t }}</button>
+          </span>
+        } @else {
+          <button type="button" class="button danger" (click)="confirmingBookDelete.set(true)">{{ 'worlds.delete' | t }}</button>
+        }
+      </div>
+    }
+  </section>
+
+  <section class="panel" aria-labelledby="book-entries-title">
+    <div class="header">
+      <h2 class="section" id="book-entries-title">{{ 'lore.entries' | t }} <span class="count">{{ countOf(book) }}</span></h2>
+      <button type="button" class="button primary" (click)="newEntry()">{{ 'lore.new' | t }}</button>
+    </div>
+
+    @if (store.actionError(); as failure) {
+      <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+    }
+    @if (tooLongTitle(); as title) {
+      <p class="warning" role="status">{{ 'lore.savedTooLong' | t: { title: title } }}</p>
+    }
+
+    @for (target of formTarget(); track target) {
+      <lyr-entry-form
+        [entry]="target === 'new' ? null : entryOf(target)"
+        [error]="store.entryError()"
+        [busy]="savingEntry()"
+        (saved)="saveEntry(target, $event)"
+        (closed)="closeForm()"
+      />
+    }
+
+    <div class="search">
+      <label class="search-label" for="entry-search">{{ 'lore.search.label' | t }}</label>
+      <input
+        id="entry-search"
+        class="control"
+        type="search"
+        autocomplete="off"
+        [placeholder]="'lore.search.placeholder' | t"
+        [value]="store.query()"
+        (input)="search($event)"
+      />
+    </div>
+
+    @if (store.entries().length === 0) {
+      <ob-empty-state icon="empty-chat" [message]="(store.query().trim() !== '' ? 'lore.empty.search' : 'lore.empty') | t" />
+    } @else {
+      <ul class="list">
+        @for (entry of store.entries(); track entry.id) {
+          <li class="card">
+            <div class="card-text">
+              <h3 class="card-title">
+                {{ titleOf(entry) }}
+                @if (entry.constant) {
+                  <span class="badge">{{ 'lore.constant' | t }}</span>
+                }
+                @if (!entry.enabled) {
+                  <span class="badge">{{ 'lore.disabled' | t }}</span>
+                }
+              </h3>
+              @if (entry.keys.length > 0) {
+                <p class="meta">{{ 'lore.keys' | t }}: {{ entry.keys.join(', ') }}</p>
+              }
+              <p class="excerpt">{{ entry.content }}</p>
+              @if (entry.never_inserted) {
+                <p class="warning">{{ 'lore.neverInserted' | t }}</p>
+              }
+            </div>
+            <div class="card-actions">
+              <button type="button" class="button" (click)="edit(entry)">{{ 'lore.edit' | t }}</button>
+              <button
+                type="button"
+                class="button"
+                [attr.aria-pressed]="entry.enabled"
+                [attr.aria-label]="'lore.toggle' | t: { title: titleOf(entry) }"
+                (click)="store.toggleEnabled(entry)"
+              >
+                {{ 'lore.enabled' | t }}
+              </button>
+              @if (confirmingDelete() === entry.id) {
+                <span class="confirm" role="group" [attr.aria-label]="'lore.delete.confirm' | t: { title: titleOf(entry) }">
+                  <span>{{ 'lore.delete.confirm' | t: { title: titleOf(entry) } }}</span>
+                  <button type="button" class="button danger" (click)="confirmRemoveEntry(entry)">{{ 'lore.delete.yes' | t }}</button>
+                  <button type="button" class="button" (click)="confirmingDelete.set(null)">{{ 'lore.delete.no' | t }}</button>
+                </span>
+              } @else {
+                <button type="button" class="button danger" (click)="confirmingDelete.set(entry.id)">{{ 'lore.delete' | t }}</button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}

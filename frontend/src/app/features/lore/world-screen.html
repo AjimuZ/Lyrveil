@@ -1,0 +1,8 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.world' | t }}</h1>
+    <a class="button" routerLink="/worlds">{{ 'lore.backToWorlds' | t }}</a>
+  </header>
+
+  <lyr-book-editor [bookId]="id()" (removed)="leave()" />
+</section>

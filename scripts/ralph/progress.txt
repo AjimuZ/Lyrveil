@@ -337,6 +337,9 @@
 - A column added by migration that needs a validity check should carry a column-level CHECK so the SQLite downgrade can drop it.
 - When a migration needs Python-only logic such as stemming, put that logic in a pure module the application also uses, and call it from the migration through `op.get_bind()` with the repository functions, so the migration and the live code path cannot drift apart.
 - For lossless round trips of external formats, store the unmapped fields verbatim under `fields`, and store the original value only where Lyrveil changed it. On export, write that original back only while Lyrveil's value is still the one the import derived.
+- An editor that several screens share is a component with a component-level store (`providers: [Store]`), so each open book or document has its own state.
+- Show server validation next to the right field by mapping the Italian detail's quoted label to a field name in a pure, unit-tested function, with a general error above the form for anything unmapped.
+- A form component that re-reads its inputs only at init is recreated with `@for (target of [id]; track target)`, so a change of target gives it fresh fields.
 
 ---
 
@@ -3377,4 +3380,30 @@ Docs updated: CHANGELOG, `api.md`, `character-system.md` (new Lorebooks section)
   - The card export writes `character_book` only when the own book has at least one entry, so `GET /characters/{id}/lore`, which creates an empty book, does not change exports.
   - The lore routes still have `include_in_schema=False`; `backend/openapi.json` was not regenerated.
   - This session, `scripts/lyrveil.cmd test unit <paths>` ran only the given paths (119 tests), not all of `tests/unit`.
+---
+
+## 2026-11-27T19:12:44Z - P12.5a
+- I built **Mondi** (`/worlds`), the world editor (`/worlds/:id`) and the character's own lore book (`/characters/:id/lore`), all using one book editor. `scripts/lyrveil.cmd test lint` passes, including the strict frontend build and the style check for design-token colors. I did not run the new frontend specs or the new backend archive test. The sandbox denied the frontend test command, and the backend integration level takes no path arguments.
+
+- **Backend:** I added `POST /lore/books/{id}/archive` and `/unarchive`, because `LoreService.set_archived` existed but had no route. An own book answers 409 and an unknown book 404. A test for it is in `test_lore_api.py`, and the route is in the API doc.
+- **`/worlds`:** it lists worlds with a debounced search and the **Attivi** and **Archiviati** tabs. **Nuovo mondo** takes a name and description, and a created world opens its page. Each row can be opened, archived or restored, and deleted after a confirmation.
+- **`/worlds/:id` and `/characters/:id/lore`:**
+  - A world has **Nome**, **Descrizione**, **Messaggi da leggere** and **Budget di token**, plus archive and delete.
+  - The own book has only the last two settings, no archive and no delete.
+  - Entries have a search, **Nuova voce**, edit, an **Attiva** switch and a confirmed delete.
+  - The character profile has a **Lore** button, and the navigation has a **Mondi** link.
+- **Entry form:** it has all the requested fields. It checks the server's limits first and shows each message in Italian next to its field. A server refusal is placed by the field its detail names. One that names no field shows above the form.
+- **Entries too long to be inserted:** these are marked in the form, in their row and in a notice after saving. The editor reads the server's `never_inserted` flag, so the warning appears only after the entry is saved.
+- **Tests added:** frontend specs for the model, the worlds store, the worlds screen, the entry form, the book editor and the own-book screen. The route spec lists the three new routes.
+- **Docs and Italian texts:** I added the Italian texts, a CHANGELOG entry, the frontend doc section and an API doc row. I also repointed the traceability link after renaming the section heading.
+- **Not built:** the world's links to characters, scenarios and conversations, **Prova le parole chiave**, the import and export buttons, and the **Mondi** choice in the scenario form and context panel.
+- Files changed: backend/src/lyrveil/api/lore.py, backend/tests/integration/test_lore_api.py, frontend/src/app/app.routes.ts, frontend/src/app/app.routes.spec.ts, frontend/src/app/app.html, frontend/src/app/features/characters/character-profile-screen.html, frontend/src/i18n/it.json, frontend/src/app/features/lore/lore.model.ts, frontend/src/app/features/lore/worlds-store.ts, frontend/src/app/features/lore/worlds-screen.ts, frontend/src/app/features/lore/worlds-screen.html, frontend/src/app/features/lore/worlds-screen.scss, frontend/src/app/features/lore/entry-form.ts, frontend/src/app/features/lore/entry-form.html, frontend/src/app/features/lore/entry-form.scss, frontend/src/app/features/lore/book-editor-store.ts, frontend/src/app/features/lore/book-editor.ts, frontend/src/app/features/lore/book-editor.html, frontend/src/app/features/lore/book-editor.scss, frontend/src/app/features/lore/world-screen.ts, frontend/src/app/features/lore/world-screen.html, frontend/src/app/features/lore/character-lore-screen.ts, frontend/src/app/features/lore/character-lore-screen.html, frontend/src/app/features/lore/lore-screen.scss, frontend/src/app/features/lore/lore.model.spec.ts, frontend/src/app/features/lore/worlds-store.spec.ts, frontend/src/app/features/lore/worlds-screen.spec.ts, frontend/src/app/features/lore/entry-form.spec.ts, frontend/src/app/features/lore/book-editor.spec.ts, frontend/src/app/features/lore/character-lore-screen.spec.ts, CHANGELOG.md, docs/api.md, docs/frontend.md, docs/traceability.md
+- **Learnings for future iterations:**
+  - The frontend lore code is in `frontend/src/app/features/lore/`. `BookEditor` (`lyr-book-editor`, input `bookId`) is the shared editor and provides its own `BookEditorStore`. The next tasks (links, **Prova le parole chiave**, import and export) can add sections to it.
+  - `lore.model.ts` holds the interfaces, `LORE_LIMITS`, the key helpers and the two functions that place a server refusal on a field: `entryFieldOf` and `bookFieldOf`. They work from the Italian detail wording in `lore_rules.py`, so changing that wording breaks them.
+  - The lore routes are not in `backend/openapi.json`, so the frontend uses hand-written interfaces. Replace them with the generated types once the file is regenerated.
+  - The sandbox denied `ng test`, so the frontend specs have never run. They were checked only by `test lint` and the strict build, which do not type-check specs. Run `npm test` in `frontend` at the end of the plan and fix any spec failures.
+  - The backend integration level takes no path arguments. Only the `unit` level accepts paths, and they are passed to pytest inside `backend/`.
+  - An Angular output named like a native event (for example `cancel`) is flagged by lint, and `output<void>()` is flagged by `no-invalid-void-type`. Use `closed` and `output()`.
+  - Renaming a `###` heading in `docs/frontend.md` breaks anchors elsewhere. The lint level catches this; `docs/traceability.md` linked to the old anchor.
 ---

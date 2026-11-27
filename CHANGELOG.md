@@ -11,6 +11,17 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- **Mondi** and the lore book editor (P12.5a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). The new
+  **Mondi** screen (`/worlds`) lists worlds with a search and the **Attivi** and **Archiviati** tabs, and creates,
+  archives, restores and deletes them. A world's page (`/worlds/:id`) edits its name, description, **Messaggi da
+  leggere** and **Budget di token**, and its entries: **Titolo**, **Contenuto**, **Parole chiave**, **Parole
+  secondarie**, **Parole escluse**, **Sempre attiva**, **Attiva**, **Maiuscole esatte**, **Priorità**, **Ordine** and
+  **Nota**, with a search and an **Attiva** switch on each row. Each error appears in Italian next to its field, and an
+  entry too long to ever enter a prompt is marked and announced when saved. The character profile has a **Lore** button
+  that opens the character's own book at `/characters/:id/lore` with the same editor. Two new routes,
+  `POST /lore/books/{id}/archive` and `/unarchive`, serve the archive button. Not built yet: the links to characters,
+  scenarios and conversations, **Prova le parole chiave**, and the import and export buttons. The new frontend specs and
+  the archive route test have not run, and the full test levels have not run.
 - Lorebooks in and out of cards (P12.4, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). Saving a card
   import now turns the card's `character_book` into the character's own lore book, and the import report has a `lore`
   section that lists what will be disabled or left out. `POST /lore/worlds/import` reads a `lorebook_v3` file as a new

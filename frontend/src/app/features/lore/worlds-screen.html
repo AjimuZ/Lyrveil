@@ -1,0 +1,135 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.worlds' | t }}</h1>
+    <button type="button" class="button primary" (click)="newWorld()">{{ 'worlds.new' | t }}</button>
+  </header>
+
+  <p class="note">{{ 'worlds.intro' | t }}</p>
+
+  @if (creating()) {
+    <form class="form" novalidate aria-labelledby="world-form-title" (submit)="submit($event)">
+      <h2 class="subtitle" id="world-form-title">{{ 'worlds.form.new' | t }}</h2>
+
+      @if (store.actionError(); as failure) {
+        @if (serverField() === null) {
+          <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+        }
+      }
+
+      <div class="field">
+        <label for="world-name">{{ 'worlds.name' | t }}</label>
+        <input
+          id="world-name"
+          class="control"
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="limits.name"
+          [value]="name()"
+          [attr.aria-invalid]="(attempted() && !nameValid()) || serverField() === 'name'"
+          [attr.aria-describedby]="(attempted() && !nameValid()) || serverField() === 'name' ? 'world-name-error' : null"
+          (input)="name.set(valueOf($event))"
+        />
+        @if (attempted() && !nameValid()) {
+          <p class="field-error" id="world-name-error">{{ 'worlds.error.name' | t }}</p>
+        } @else if (serverField() === 'name') {
+          <p class="field-error" id="world-name-error">{{ store.actionError()?.detail }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="world-description">{{ 'worlds.description' | t }}</label>
+        <textarea
+          id="world-description"
+          class="control"
+          rows="3"
+          [attr.maxlength]="limits.description"
+          [value]="description()"
+          [attr.aria-invalid]="!descriptionValid() || serverField() === 'description'"
+          [attr.aria-describedby]="!descriptionValid() || serverField() === 'description' ? 'world-description-error' : null"
+          (input)="description.set(valueOf($event))"
+        ></textarea>
+        @if (!descriptionValid()) {
+          <p class="field-error" id="world-description-error">{{ 'worlds.error.description' | t }}</p>
+        } @else if (serverField() === 'description') {
+          <p class="field-error" id="world-description-error">{{ store.actionError()?.detail }}</p>
+        }
+      </div>
+      <div class="actions">
+        <button type="button" class="button" (click)="cancel()">{{ 'worlds.cancel' | t }}</button>
+        <button type="submit" class="button primary" [disabled]="busy()">{{ 'worlds.create' | t }}</button>
+      </div>
+    </form>
+  }
+
+  <div class="search">
+    <label class="search-label" for="world-search">{{ 'worlds.search.label' | t }}</label>
+    <input
+      id="world-search"
+      class="control"
+      type="search"
+      autocomplete="off"
+      [placeholder]="'worlds.search.placeholder' | t"
+      [value]="store.query()"
+      (input)="search($event)"
+    />
+  </div>
+
+  <div class="tabs" role="group" [attr.aria-label]="'worlds.tabs.label' | t">
+    @for (tab of tabs; track tab.status) {
+      <button type="button" class="tab" [attr.aria-pressed]="store.tab() === tab.status" (click)="store.showTab(tab.status)">
+        {{ tab.label | t }}
+      </button>
+    }
+  </div>
+
+  @if (!creating() && store.actionError(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (store.loading()) {
+    <ob-skeleton [lines]="3" [label]="'worlds.loading' | t" />
+  } @else if (store.error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="store.reload()">{{ 'worlds.retry' | t }}</button>
+    </div>
+  } @else if (store.items().length === 0) {
+    <ob-empty-state
+      icon="empty-chat"
+      [message]="
+        (store.query().trim() !== '' ? 'worlds.empty.search' : store.tab() === 'archived' ? 'worlds.empty.archived' : 'worlds.empty.active')
+          | t
+      "
+    />
+  } @else {
+    <ul class="list">
+      @for (world of store.items(); track world.id) {
+        <li class="card">
+          <div class="card-text">
+            <h2 class="card-title">{{ world.name }}</h2>
+            <p class="meta">{{ entriesOf(world) }}</p>
+            @if (world.description) {
+              <p class="excerpt">{{ world.description }}</p>
+            }
+          </div>
+          <div class="card-actions">
+            <a class="button" [routerLink]="['/worlds', world.id]">{{ 'worlds.open' | t }}</a>
+            <button type="button" class="button" (click)="toggleArchive(world)">
+              {{ (world.status === 'archived' ? 'worlds.unarchive' : 'worlds.archive') | t }}
+            </button>
+            @if (confirmingDelete() === world.id) {
+              <span class="confirm" role="group" [attr.aria-label]="'worlds.delete.confirm' | t: { name: world.name }">
+                <span>{{ 'worlds.delete.confirm' | t: { name: world.name } }}</span>
+                <button type="button" class="button danger" (click)="confirmRemove(world)">{{ 'worlds.delete.yes' | t }}</button>
+                <button type="button" class="button" (click)="confirmingDelete.set(null)">{{ 'worlds.delete.no' | t }}</button>
+              </span>
+            } @else {
+              <button type="button" class="button danger" (click)="confirmingDelete.set(world.id)">
+                {{ 'worlds.delete' | t }}
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -1,0 +1,19 @@
+<section class="screen">
+  <header class="header">
+    <h1 class="title">{{ 'screen.characterLore' | t }}</h1>
+    <a class="button" [routerLink]="['/characters', id()]">{{ 'lore.backToProfile' | t }}</a>
+  </header>
+
+  <p class="note">{{ 'lore.own.intro' | t }}</p>
+
+  @if (loading()) {
+    <ob-skeleton [lines]="3" [label]="'lore.loading' | t" />
+  } @else if (error(); as failure) {
+    <div class="error" role="alert">
+      <p>{{ failure.textKey | t }}</p>
+      <button type="button" class="button" (click)="load()">{{ 'lore.retry' | t }}</button>
+    </div>
+  } @else if (book(); as own) {
+    <lyr-book-editor [bookId]="own.id" />
+  }
+</section>

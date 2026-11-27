@@ -92,6 +92,24 @@ def test_a_world_is_created_read_listed_replaced_and_deleted(client: TestClient)
     assert client.get(f"{API}/lore/books/{other['id']}").status_code == 404
 
 
+def test_a_world_is_archived_and_restored_and_an_own_book_is_not(client: TestClient, engine: Engine) -> None:
+    world = make_world(client)
+    archived = client.post(f"{API}/lore/books/{world['id']}/archive")
+    assert (archived.status_code, archived.json()["status"]) == (200, "archived")
+    assert client.get(f"{API}/lore/worlds").json() == {"items": []}
+    assert [item["id"] for item in client.get(f"{API}/lore/worlds", params={"status": "archived"}).json()["items"]] == [
+        world["id"]
+    ]
+    restored = client.post(f"{API}/lore/books/{world['id']}/unarchive")
+    assert (restored.status_code, restored.json()["status"]) == (200, "active")
+
+    own = client.get(f"{API}/characters/{add_character(engine)}/lore").json()
+    refused = client.post(f"{API}/lore/books/{own['id']}/archive")
+    assert (refused.status_code, refused.json()["code"]) == (409, "CONFLICT")
+    missing = client.post(f"{API}/lore/books/{new_id()}/archive")
+    assert (missing.status_code, missing.json()["code"]) == (404, "NOT_FOUND")
+
+
 def test_a_world_refuses_a_blank_name_a_value_out_of_range_and_a_minor(client: TestClient) -> None:
     for body in ({"name": "  "}, {"description": "senza nome"}, {"name": "Mondo", "scan_depth": 21}):
         refused = client.post(f"{API}/lore/worlds", json=body)

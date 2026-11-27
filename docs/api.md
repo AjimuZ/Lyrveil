@@ -703,6 +703,7 @@ delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3) and
 | --- | --- |
 | `GET`, `POST /lore/worlds` | List (`status`, `q`) and create worlds. |
 | `GET`, `PUT`, `DELETE /lore/books/{id}` | A world or an own book, with its settings. `DELETE` is for worlds only. |
+| `POST /lore/books/{id}/archive`, `/unarchive` | Moves a world out of or back into the active list (P12.5a). An own book is `409`. |
 | `GET /characters/{id}/lore` | The character's own book, created empty on first use. |
 | `GET`, `POST /lore/books/{id}/entries` | List (`q`, `enabled`) and create entries. |
 | `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |

@@ -1,0 +1,122 @@
+:host {
+  display: block;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--ob-space-5);
+  padding: var(--ob-space-4);
+  background: var(--ob-elevated);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.subtitle {
+  margin: 0 0 var(--ob-space-4);
+}
+
+.hint {
+  margin: var(--ob-space-1) 0 0;
+  color: var(--ob-text-muted);
+}
+
+.warning {
+  margin: 0 0 var(--ob-space-4);
+  padding: var(--ob-space-2) var(--ob-space-3);
+  border: 1px solid var(--ob-danger);
+  border-radius: var(--ob-radius-sm);
+}
+
+.error,
+.field-error {
+  margin: 0 0 var(--ob-space-3);
+  color: var(--ob-danger);
+}
+
+.field-error {
+  margin: var(--ob-space-1) 0 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ob-space-1);
+  margin-bottom: var(--ob-space-4);
+}
+
+.control {
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+
+  &[aria-invalid="true"] {
+    border-color: var(--ob-danger);
+  }
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ob-space-4);
+  margin-bottom: var(--ob-space-4);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ob-space-2);
+  min-height: 44px;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--ob-space-4);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--ob-space-2) var(--ob-space-4);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+  border: 1px solid var(--ob-control-border);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-quick) steps(2),
+    border-color var(--ob-quick) steps(2);
+
+  &:hover:not(:disabled) {
+    background: var(--ob-hover);
+  }
+
+  &:disabled {
+    color: var(--ob-text-muted);
+    cursor: not-allowed;
+  }
+
+  &.primary {
+    background: var(--ob-primary);
+    color: var(--ob-bg);
+    border-color: var(--ob-primary);
+
+    &:hover:not(:disabled) {
+      background: var(--ob-primary-hover);
+    }
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ob-space-2);
+}

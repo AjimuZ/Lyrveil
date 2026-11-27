@@ -1,0 +1,173 @@
+<form class="form" novalidate aria-labelledby="entry-form-title" (submit)="submit($event)">
+  <h3 class="subtitle" id="entry-form-title">{{ (entry() === null ? 'lore.form.new' : 'lore.form.edit') | t }}</h3>
+
+  @if (entry()?.never_inserted) {
+    <p class="warning" role="status">{{ 'lore.neverInserted' | t }}</p>
+  }
+  @if (generalError(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <div class="field">
+    <label for="entry-title">{{ 'lore.title' | t }}</label>
+    <input
+      id="entry-title"
+      class="control"
+      type="text"
+      autocomplete="off"
+      [value]="title()"
+      [attr.aria-invalid]="errors().title !== undefined"
+      [attr.aria-describedby]="errors().title !== undefined ? 'entry-title-error' : null"
+      (input)="title.set(valueOf($event))"
+    />
+    @if (errors().title; as message) {
+      <p class="field-error" id="entry-title-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="entry-content">{{ 'lore.content' | t }}</label>
+    <textarea
+      id="entry-content"
+      class="control"
+      rows="6"
+      [value]="content()"
+      [attr.aria-invalid]="errors().content !== undefined"
+      [attr.aria-describedby]="errors().content !== undefined ? 'entry-content-hint entry-content-error' : 'entry-content-hint'"
+      (input)="content.set(valueOf($event))"
+    ></textarea>
+    <p class="hint" id="entry-content-hint">{{ 'lore.contentHint' | t }}</p>
+    @if (errors().content; as message) {
+      <p class="field-error" id="entry-content-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="entry-keys">{{ 'lore.keys' | t }}</label>
+    <input
+      id="entry-keys"
+      class="control"
+      type="text"
+      autocomplete="off"
+      [value]="keys()"
+      [attr.aria-invalid]="errors().keys !== undefined"
+      [attr.aria-describedby]="errors().keys !== undefined ? 'entry-keys-hint entry-keys-error' : 'entry-keys-hint'"
+      (input)="keys.set(valueOf($event))"
+    />
+    <p class="hint" id="entry-keys-hint">{{ 'lore.keysHint' | t }}</p>
+    @if (errors().keys; as message) {
+      <p class="field-error" id="entry-keys-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="entry-secondary">{{ 'lore.secondaryKeys' | t }}</label>
+    <input
+      id="entry-secondary"
+      class="control"
+      type="text"
+      autocomplete="off"
+      [value]="secondaryKeys()"
+      [attr.aria-invalid]="errors().secondary_keys !== undefined"
+      [attr.aria-describedby]="errors().secondary_keys !== undefined ? 'entry-secondary-hint entry-secondary-error' : 'entry-secondary-hint'"
+      (input)="secondaryKeys.set(valueOf($event))"
+    />
+    <p class="hint" id="entry-secondary-hint">{{ 'lore.secondaryKeysHint' | t }}</p>
+    @if (errors().secondary_keys; as message) {
+      <p class="field-error" id="entry-secondary-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="entry-exclude">{{ 'lore.excludeKeys' | t }}</label>
+    <input
+      id="entry-exclude"
+      class="control"
+      type="text"
+      autocomplete="off"
+      [value]="excludeKeys()"
+      [attr.aria-invalid]="errors().exclude_keys !== undefined"
+      [attr.aria-describedby]="errors().exclude_keys !== undefined ? 'entry-exclude-hint entry-exclude-error' : 'entry-exclude-hint'"
+      (input)="excludeKeys.set(valueOf($event))"
+    />
+    <p class="hint" id="entry-exclude-hint">{{ 'lore.excludeKeysHint' | t }}</p>
+    @if (errors().exclude_keys; as message) {
+      <p class="field-error" id="entry-exclude-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="checks">
+    <label class="check">
+      <input type="checkbox" [checked]="constant()" (change)="constant.set(checked($event))" />
+      <span>{{ 'lore.constant' | t }}</span>
+    </label>
+    <label class="check">
+      <input type="checkbox" [checked]="enabled()" (change)="enabled.set(checked($event))" />
+      <span>{{ 'lore.enabled' | t }}</span>
+    </label>
+    <label class="check">
+      <input type="checkbox" [checked]="caseSensitive()" (change)="caseSensitive.set(checked($event))" />
+      <span>{{ 'lore.caseSensitive' | t }}</span>
+    </label>
+  </div>
+
+  <div class="pair">
+    <div class="field">
+      <label for="entry-priority">{{ 'lore.priority' | t }}</label>
+      <input
+        id="entry-priority"
+        class="control"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        [value]="priority()"
+        [attr.aria-invalid]="errors().priority !== undefined"
+        [attr.aria-describedby]="errors().priority !== undefined ? 'entry-priority-hint entry-priority-error' : 'entry-priority-hint'"
+        (input)="priority.set(valueOf($event))"
+      />
+      <p class="hint" id="entry-priority-hint">{{ 'lore.priorityHint' | t }}</p>
+      @if (errors().priority; as message) {
+        <p class="field-error" id="entry-priority-error">{{ message }}</p>
+      }
+    </div>
+    <div class="field">
+      <label for="entry-order">{{ 'lore.order' | t }}</label>
+      <input
+        id="entry-order"
+        class="control"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        [value]="insertionOrder()"
+        [attr.aria-invalid]="errors().insertion_order !== undefined"
+        [attr.aria-describedby]="errors().insertion_order !== undefined ? 'entry-order-hint entry-order-error' : 'entry-order-hint'"
+        (input)="insertionOrder.set(valueOf($event))"
+      />
+      <p class="hint" id="entry-order-hint">{{ 'lore.orderHint' | t }}</p>
+      @if (errors().insertion_order; as message) {
+        <p class="field-error" id="entry-order-error">{{ message }}</p>
+      }
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="entry-note">{{ 'lore.note' | t }}</label>
+    <textarea
+      id="entry-note"
+      class="control"
+      rows="2"
+      [value]="note()"
+      [attr.aria-invalid]="errors().note !== undefined"
+      [attr.aria-describedby]="errors().note !== undefined ? 'entry-note-error' : null"
+      (input)="note.set(valueOf($event))"
+    ></textarea>
+    @if (errors().note; as message) {
+      <p class="field-error" id="entry-note-error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="actions">
+    <button type="button" class="button" (click)="closed.emit()">{{ 'lore.cancel' | t }}</button>
+    <button type="submit" class="button primary" [disabled]="busy()">{{ 'lore.save' | t }}</button>
+  </div>
+</form>

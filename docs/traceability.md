@@ -78,7 +78,7 @@ Maps each [requirement](requirements.md) group to its design, phase and tests. T
 | R-CRD-06 | Greetings and lorebook | [Character cards](character-system.md#character-cards), [ADR 0049](decisions/0049-worlds-and-lore-entries.md) | P10, P12 | T-CRD-03, T-LOR-05 |
 | R-PSN-01, R-PSN-04 | Personas | [ADR 0048](decisions/0048-user-personas.md), [Frontend](frontend.md#12-personas) | P11 | T-PSN-01, T-PSN-02, T-PSN-06 |
 | R-PSN-02, R-PSN-03 | Persona per conversation, knowledge | [ADR 0048](decisions/0048-user-personas.md), [Prompting](prompting.md#blocks-10-to-12), [Memory](memory-engine.md#shared-memory) | P11 | T-PSN-03 to T-PSN-05 |
-| R-LOR-01, R-LOR-02 | Lore books, entries and links | [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [Data model](data-model.md#version-11-tables-planned), [Frontend](frontend.md#11-worlds-and-lore-planned) | P12 | T-LOR-02, T-LOR-04, T-LOR-07 |
+| R-LOR-01, R-LOR-02 | Lore books, entries and links | [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [Data model](data-model.md#version-11-tables-planned), [Frontend](frontend.md#11-worlds-and-lore-partly-built) | P12 | T-LOR-02, T-LOR-04, T-LOR-07 |
 | R-LOR-03, R-LOR-04 | Activation, budget, prefix, diagnostics | [Prompting](prompting.md#blocks-10-to-12), [Context composition](memory-engine.md#planned-for-version-11) | P12 | T-LOR-01, T-LOR-03, T-LOR-06, T-QLT-05 |
 | R-LOR-05 | Lorebook exchange | [ADR 0049](decisions/0049-worlds-and-lore-entries.md), [API](api.md#lore-planned) | P12 | T-LOR-05, T-LOR-08 |
 

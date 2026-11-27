@@ -277,6 +277,19 @@ def put_book(book_id: str, body: BookIn, service: LoreService = Service) -> Book
     return _book_out(service.update_book(book_id, body.model_dump(exclude_none=True)))
 
 
+@router.post("/lore/books/{book_id}/archive", response_model=BookOut)
+def archive_world(book_id: str, service: LoreService = Service) -> BookOut:
+    """Moves a world to the archived list; its entries and links stay and keep working. 404 for an unknown book and 409
+    `CONFLICT` for an own book, which follows its character. Archiving an archived world changes nothing."""
+    return _book_out(service.set_archived(book_id, True))
+
+
+@router.post("/lore/books/{book_id}/unarchive", response_model=BookOut)
+def unarchive_world(book_id: str, service: LoreService = Service) -> BookOut:
+    """Brings an archived world back to the active list; the refusals of the archive route."""
+    return _book_out(service.set_archived(book_id, False))
+
+
 @router.delete("/lore/books/{book_id}", status_code=204)
 def delete_book(book_id: str, service: LoreService = Service) -> Response:
     """Deletes a world with its entries and links: 404 when it does not exist and 409 `CONFLICT` for an own book, which

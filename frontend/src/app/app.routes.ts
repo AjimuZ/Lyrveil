@@ -61,6 +61,12 @@ export const routes: Routes = [
     data: { screen: 'screen.characterMemory' satisfies TextKey },
   },
   {
+    path: 'characters/:id/lore',
+    loadComponent: () =>
+      import('./features/lore/character-lore-screen').then((module) => module.CharacterLoreScreen),
+    data: { screen: 'screen.characterLore' satisfies TextKey },
+  },
+  {
     path: 'gallery',
     loadComponent: () => import('./features/gallery/gallery-screen').then((module) => module.GalleryScreen),
     data: { screen: 'screen.gallery' satisfies TextKey },
@@ -69,6 +75,16 @@ export const routes: Routes = [
     path: 'scenarios',
     loadComponent: () => import('./features/scenarios/scenarios-screen').then((module) => module.ScenariosScreen),
     data: { screen: 'screen.scenarios' satisfies TextKey },
+  },
+  {
+    path: 'worlds',
+    loadComponent: () => import('./features/lore/worlds-screen').then((module) => module.WorldsScreen),
+    data: { screen: 'screen.worlds' satisfies TextKey },
+  },
+  {
+    path: 'worlds/:id',
+    loadComponent: () => import('./features/lore/world-screen').then((module) => module.WorldScreen),
+    data: { screen: 'screen.world' satisfies TextKey },
   },
   unavailable('settings', 'screen.settings'),
   {
