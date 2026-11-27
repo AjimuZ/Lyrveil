@@ -340,6 +340,8 @@
 - An editor that several screens share is a component with a component-level store (`providers: [Store]`), so each open book or document has its own state.
 - Show server validation next to the right field by mapping the Italian detail's quoted label to a field name in a pure, unit-tested function, with a general error above the form for anything unmapped.
 - A form component that re-reads its inputs only at init is recreated with `@for (target of [id]; track target)`, so a change of target gives it fresh fields.
+- Open a toggleable panel in e2e by reading the toggle's aria-expanded after the toggle is visible. Do not check the panel's own visibility first, because it may not have rendered yet.
+- A spec that places a server error on a form field should use the server's real wording, so a gap in the wording match shows up.
 
 ---
 
@@ -3415,4 +3417,15 @@ Docs updated: CHANGELOG, `api.md`, `character-system.md` (new Lorebooks section)
   - `test lint` includes ruff format --check on backend tests, so wrap lines over 120 characters in the shape ruff format produces.
   - Frontend specs, including the new keyword-test and world-links specs, have still not run under `ng test`. Run `npm test` in `frontend` at the end of the plan.
   - T-LOR-07 (e2e) has not been run. It is in tests/e2e/specs/lore.spec.mjs.
+---
+
+## 2026-11-27T19:49:54Z - P12.EXIT
+- I ran the unit, integration, e2e and lint levels, fixed what failed, and recorded the evidence in docs/verification/2026-11-27-p12-exit.md. T-LOR-01 to T-LOR-08 pass. Final counts: Pester 262, backend unit 1255, orchestrator unit 592, Vitest 286 tests in 46 files, Node 18, backend integration 560, orchestrator integration 209, Playwright 115, lint clean (1565 links, 0 broken). Three things failed on the first runs. (1) keyword-test.spec.ts did not compile under ng test because of TS2532 on indexed entries; I changed the spec to use `?.`. (2) bookFieldOf did not place the server's `Il nome non può essere vuoto.` refusal on the name field. That was a real product defect, so I fixed it in lore.model.ts. (3) The e2e personas.spec.mjs failed on its context-panel helper, which could close an already-open panel, and on a "no combobox" assertion that the world-link picker had made false. I fixed both in the spec, and the second e2e run passed in full with T-LOR-07 included. The roadmap now shows P12 as "In progress", with the automated exit passed and P12.6 and P12.EXIT-HW pending. It lists the evidence. I also updated the changelog, docs/README.md and docs/testing.md. I did not run the docker or gpu levels, and P12.6 and AC-24 have not run.
+- Files changed: docs/verification/2026-11-27-p12-exit.md, docs/roadmap.md, docs/README.md, docs/testing.md, CHANGELOG.md, frontend/src/app/features/lore/lore.model.ts, frontend/src/app/features/lore/keyword-test.spec.ts, tests/e2e/specs/personas.spec.mjs
+- **Learnings for future iterations:**
+  - The unit, integration, e2e and lint levels all passed in the final state. docker and gpu were not run, and P12.6 (T-QLT-05 with lore, needs the GPU) and P12.EXIT-HW (AC-24, manual) are still pending.
+  - test lint does not type-check specs, so only ng test finds spec compile errors. Run the unit level after writing frontend specs.
+  - The conversation context panel now holds a world-link select, so an e2e check on the panel must not assume it has no combobox. Use aria-expanded on the Dettagli button to know whether the panel is open.
+  - The server words the empty-name refusal without guillemets, so label-based field matching in lore.model.ts needs a special case for it.
+  - Piping a level through grep or tail works in the sandbox and keeps the output readable.
 ---

@@ -24,8 +24,12 @@ async function openPicker(page) {
 /** Returns the panel that holds the conversation's details, opening it when the layout hides it. */
 async function contextPanel(page) {
   const panel = page.locator('#context-panel');
-  if (!(await panel.isVisible())) {
-    await page.getByRole('button', { name: 'Dettagli', exact: true }).click();
+  // The button exists only once the conversation has loaded, and its `aria-expanded` says whether the panel is open;
+  // checking the panel itself before that would click a button that closes a panel which is about to appear.
+  const toggle = page.getByRole('button', { name: 'Dettagli', exact: true });
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
   }
   await expect(panel).toBeVisible();
   return panel;
@@ -87,7 +91,7 @@ test('a second persona starts a chat with a note, and the context panel shows an
   await expect(panel.getByLabel('Cosa sa di te', { exact: true })).toHaveValue('Siete colleghi da due anni.');
 
   // There is no way to change the persona of an existing conversation; the note can be edited.
-  await expect(panel.getByRole('combobox')).toHaveCount(0);
+  await expect(panel.getByLabel('Persona', { exact: true })).toHaveCount(0);
   await panel.getByLabel('Cosa sa di te', { exact: true }).fill('Siete amici da sempre.');
   await panel.getByRole('button', { name: 'Salva la nota' }).click();
   await expect(panel.getByText('Nota salvata.')).toBeVisible();

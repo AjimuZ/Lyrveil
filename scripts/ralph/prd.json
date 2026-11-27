@@ -3775,8 +3775,8 @@
         "The P12 section lists the evidence, and the phase table shows the automated part as passed and the quality and manual parts (P12.6, P12.EXIT-HW) as pending, so the phase is not marked done."
       ],
       "priority": 158,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "I ran the unit, integration, e2e and lint levels, fixed what failed, and recorded the evidence in docs/verification/2026-11-27-p12-exit.md. T-LOR-01 to T-LOR-08 pass. Final counts: Pester 262, backend unit 1255, orchestrator unit 592, Vitest 286 tests in 46 files, Node 18, backend integration 560, orchestrator integration 209, Playwright 115, lint clean (1565 links, 0 broken). Three things failed on the first runs. (1) keyword-test.spec.ts did not compile under ng test because of TS2532 on indexed entries; I changed the spec to use `?.`. (2) bookFieldOf did not place the server's `Il nome non può essere vuoto.` refusal on the name field. That was a real product defect, so I fixed it in lore.model.ts. (3) The e2e personas.spec.mjs failed on its context-panel helper, which could close an already-open panel, and on a \"no combobox\" assertion that the world-link picker had made false. I fixed both in the spec, and the second e2e run passed in full with T-LOR-07 included. The roadmap now shows P12 as \"In progress\", with the automated exit passed and P12.6 and P12.EXIT-HW pending. It lists the evidence. I also updated the changelog, docs/README.md and docs/testing.md. I did not run the docker or gpu levels, and P12.6 and AC-24 have not run.",
       "dependsOn": [
         "P12.1a",
         "P12.1b",

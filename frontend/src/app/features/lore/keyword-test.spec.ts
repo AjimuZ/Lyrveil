@@ -82,11 +82,11 @@ describe('KeywordTest', () => {
     expect(root.querySelector('[data-testid="keyword-test-summary"]')?.textContent).toContain('1 su 2 voci');
     const entries = root.querySelectorAll('[data-testid="keyword-test-entry"]');
     expect(entries).toHaveLength(2);
-    expect(entries[0].textContent).toContain('Il faro');
-    expect(entries[0].textContent).toContain('Compare la parola chiave «faro».');
-    expect(entries[0].getAttribute('data-active')).toBe('true');
-    expect(entries[1].textContent).toContain('Non attiva');
-    expect(entries[1].textContent).toContain('Nessuna parola chiave compare nel testo.');
+    expect(entries[0]?.textContent).toContain('Il faro');
+    expect(entries[0]?.textContent).toContain('Compare la parola chiave «faro».');
+    expect(entries[0]?.getAttribute('data-active')).toBe('true');
+    expect(entries[1]?.textContent).toContain('Non attiva');
+    expect(entries[1]?.textContent).toContain('Nessuna parola chiave compare nel testo.');
   });
 
   it("shows the server's reason and keeps the last result when a test fails", async () => {

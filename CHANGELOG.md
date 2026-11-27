@@ -11,6 +11,11 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Automated exit of the worlds and lore phase (P12.EXIT). T-LOR-01 to T-LOR-08 pass with the `unit`, `integration`,
+  `e2e` and `lint` levels, so the "not yet run" and "have not run" notes of the P12 entries below no longer apply to
+  them. The run found one defect: an empty world name was refused by the server but shown on no field, and the book
+  form now shows it next to **Nome**. T-QLT-05 with lore active (P12.6) and AC-24 in a manual run (P12.EXIT-HW) have
+  not run. See [docs/verification/2026-11-27-p12-exit.md](docs/verification/2026-11-27-p12-exit.md).
 - World links and **Prova le parole chiave** (P12.5b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). A
   world's page has **Collegamenti**: it lists the characters, scenarios and conversations the world is linked to, and
   **Collega** and **Scollega** change them. The character profile (**Mondi**), the form of an existing scenario and the

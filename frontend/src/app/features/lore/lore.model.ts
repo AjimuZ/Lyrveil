@@ -258,10 +258,17 @@ function labelled<F extends string>(detail: string, labels: readonly (readonly [
 /**
  * Returns the field of the book form that a refusal's Italian `detail` names, or null when it names none. The server
  * words each refusal as «nome», «descrizione», «messaggi da leggere» or «budget di token» (lore_rules.py), so the form
- * can show the text next to the field.
+ * can show the text next to the field. The empty-name refusal is the one worded without a label
+ * (`Il nome non può essere vuoto.`), so it is matched by its text.
  */
 export function bookFieldOf(detail: string | null): BookField | null {
-  return detail === null ? null : labelled(detail, BOOK_LABELS);
+  if (detail === null) {
+    return null;
+  }
+  if (detail.startsWith('Il nome non può essere vuoto')) {
+    return 'name';
+  }
+  return labelled(detail, BOOK_LABELS);
 }
 
 /**

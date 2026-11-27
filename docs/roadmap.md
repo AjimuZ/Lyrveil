@@ -16,7 +16,7 @@ Each phase leaves the project coherent and startable. Check an item only after i
 | P09 | Audit and public release | Planned |
 | P10 | Version 1.1: Character Card import and export | In progress: automated exit passed; manual part (P10.EXIT-HW) pending |
 | P11 | Version 1.1: user personas | In progress: automated exit passed; manual part (P11.EXIT-HW) pending |
-| P12 | Version 1.1: worlds and lore | Planned |
+| P12 | Version 1.1: worlds and lore | In progress: automated exit passed; quality part (P12.6) and manual part (P12.EXIT-HW) pending |
 
 Through P03, the project delivers the complete working path from character creation to persistent conversation. Later phases add advanced memory, images and orchestration on top of it.
 
@@ -284,6 +284,10 @@ Evidence:
 
 Exit: T-LOR-01 to T-LOR-08 pass. T-QLT-05 meets its hard targets on the default profile with lore active. AC-24 holds
 in a manual run.
+
+Evidence:
+
+- [P12 automated exit: the `unit`, `integration`, `e2e` and `lint` levels, with T-LOR-01 to T-LOR-08](verification/2026-11-27-p12-exit.md). T-QLT-05 with lore active (P12.6) and AC-24 in a manual run on the real application (P12.EXIT-HW) are pending, so the phase is not done.
 
 ## After 1.0
 

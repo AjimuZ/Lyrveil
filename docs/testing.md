@@ -1427,7 +1427,9 @@ written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
 Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). T-LOR-04 is written in P12.1a; the
 P12.1a session could not start a test run, so its first run is the `unit` and `integration` levels of the orchestrator.
 T-LOR-01 to T-LOR-03 are written in P12.2a and P12.2b, T-LOR-06 in P12.3, and T-LOR-05 and T-LOR-08 in P12.4, as
-below. T-LOR-07 is written in P12.5b.
+below. T-LOR-07 is written in P12.5b. All eight tests passed in the P12 exit run, after the first runs of the files that
+had been written and not run ([evidence](verification/2026-11-27-p12-exit.md)). T-QLT-05 with lore active (P12.6) and
+AC-24 in a manual run (P12.EXIT-HW) are pending.
 
 - **T-LOR-04.** `tests/unit/test_lore_rules.py` holds the limits, the content guard on titles, contents and world names,
   the keys with no stem (`lui`), the stored key text with its stems and the block-maximum flag.
