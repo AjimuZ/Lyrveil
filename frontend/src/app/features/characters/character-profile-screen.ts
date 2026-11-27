@@ -19,6 +19,7 @@ import { TranslatePipe } from '../../core/i18n/translate-pipe';
 import { TextKey, TextParams, Translator } from '../../core/i18n/translator';
 import { Conversation } from '../chats/chats.model';
 import { GENDER_OPTIONS, LANGUAGE_OPTIONS } from '../chats/new-chat-dialog';
+import { WorldLinks } from '../lore/world-links';
 import { AvatarTools } from './avatar-tools';
 import { PurgePreview, StoredCharacter, VersionDiff, VersionSummary } from './card.model';
 import { CharactersStore } from './characters-store';
@@ -63,7 +64,7 @@ function labelOf(options: readonly Option[], value: string): TextKey | null {
  */
 @Component({
   selector: 'lyr-character-profile',
-  imports: [TranslatePipe, RouterLink, AvatarTools],
+  imports: [TranslatePipe, RouterLink, AvatarTools, WorldLinks],
   templateUrl: './character-profile-screen.html',
   styleUrl: './character-profile-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

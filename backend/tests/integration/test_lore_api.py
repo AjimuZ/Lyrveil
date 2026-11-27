@@ -261,6 +261,40 @@ def test_a_deleted_link_leaves_the_world_and_its_target(client: TestClient, engi
     assert client.post(f"{API}/lore/books/{world['id']}/links", json={"character_id": character_id}).status_code == 201
 
 
+def test_the_worlds_linked_to_a_target_are_listed_with_their_name_and_status(
+    client: TestClient, engine: Engine
+) -> None:
+    first = make_world(client, "Aldara")
+    second = make_world(client, "Brume")
+    character_id = add_character(engine)
+    other_character_id = add_character(engine, "Bruno")
+    for world in (first, second):
+        assert (
+            client.post(f"{API}/lore/books/{world['id']}/links", json={"character_id": character_id}).status_code == 201
+        )
+    assert client.post(f"{API}/lore/books/{second['id']}/archive").status_code == 200
+
+    listed = client.get(f"{API}/lore/links", params={"character_id": character_id})
+    assert listed.status_code == 200, listed.text
+    assert [(item["book_id"], item["book_name"], item["book_status"]) for item in listed.json()["items"]] == [
+        (first["id"], "Aldara", "active"),
+        (second["id"], "Brume", "archived"),
+    ]
+    assert client.get(f"{API}/lore/links", params={"character_id": other_character_id}).json() == {"items": []}
+
+    # A removed link leaves the list at once, so the target's next reply no longer reads that world.
+    link_id = listed.json()["items"][0]["id"]
+    assert client.delete(f"{API}/lore/links/{link_id}").status_code == 204
+    after = client.get(f"{API}/lore/links", params={"character_id": character_id}).json()["items"]
+    assert [item["book_id"] for item in after] == [second["id"]]
+
+    for params in ({}, {"character_id": character_id, "scenario_id": new_id()}):
+        refused = client.get(f"{API}/lore/links", params=params)
+        assert (refused.status_code, refused.json()["code"]) == (422, "VALIDATION_ERROR"), params
+    unknown = client.get(f"{API}/lore/links", params={"scenario_id": new_id()})
+    assert (unknown.status_code, unknown.json()["code"]) == (404, "NOT_FOUND")
+
+
 def test_a_conversation_copies_its_scenarios_links_and_later_scenario_changes_do_not_reach_it(
     client: TestClient, engine: Engine
 ) -> None:

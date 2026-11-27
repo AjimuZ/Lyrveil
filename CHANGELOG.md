@@ -11,6 +11,14 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- World links and **Prova le parole chiave** (P12.5b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). A
+  world's page has **Collegamenti**: it lists the characters, scenarios and conversations the world is linked to, and
+  **Collega** and **Scollega** change them. The character profile (**Mondi**), the form of an existing scenario and the
+  conversation's context panel have **Mondi collegati**, with the same two actions, and a note that says when a change
+  applies (a scenario's links reach only the chats that start afterwards). **Prova le parole chiave**, in the editor of
+  every book, takes a pasted text and shows each entry as active or not, with the key that matched or the reason it did
+  not; it uses no model. The new route `GET /lore/links` lists the worlds linked to one target. The new frontend specs,
+  the route test and the browser test T-LOR-07 have not run, and the full test levels have not run.
 - **Mondi** and the lore book editor (P12.5a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). The new
   **Mondi** screen (`/worlds`) lists worlds with a search and the **Attivi** and **Archiviati** tabs, and creates,
   archives, restores and deletes them. A world's page (`/worlds/:id`) edits its name, description, **Messaggi da
@@ -19,8 +27,8 @@ an entry says "not yet run", the test was written and has not run.
   **Nota**, with a search and an **Attiva** switch on each row. Each error appears in Italian next to its field, and an
   entry too long to ever enter a prompt is marked and announced when saved. The character profile has a **Lore** button
   that opens the character's own book at `/characters/:id/lore` with the same editor. Two new routes,
-  `POST /lore/books/{id}/archive` and `/unarchive`, serve the archive button. Not built yet: the links to characters,
-  scenarios and conversations, **Prova le parole chiave**, and the import and export buttons. The new frontend specs and
+  `POST /lore/books/{id}/archive` and `/unarchive`, serve the archive button. Not built yet in that change: the import and export
+  buttons (the links and **Prova le parole chiave** follow in P12.5b, above). The new frontend specs and
   the archive route test have not run, and the full test levels have not run.
 - Lorebooks in and out of cards (P12.4, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). Saving a card
   import now turns the card's `character_book` into the character's own lore book, and the import report has a `lore`

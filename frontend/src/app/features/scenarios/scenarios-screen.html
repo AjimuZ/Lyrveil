@@ -91,6 +91,14 @@
         <button type="submit" class="button primary" [disabled]="busy()">{{ 'scenarios.save' | t }}</button>
       </div>
     </form>
+
+    @if (editing(); as target) {
+      @if (target !== 'new') {
+        <lyr-world-links kind="scenario" [targetId]="target" />
+      } @else {
+        <p class="note">{{ 'scenarios.worldsAfterSave' | t }}</p>
+      }
+    }
   }
 
   <div class="search">

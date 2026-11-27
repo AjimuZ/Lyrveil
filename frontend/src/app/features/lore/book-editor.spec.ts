@@ -67,6 +67,14 @@ describe('BookEditor', () => {
     backend.expectOne(`/api/v1/lore/books/${shown.id}`).flush(shown);
     backend.expectOne((request) => request.url === `/api/v1/lore/books/${shown.id}/entries`).flush({ items: entries });
     await settle();
+    if (shown.kind === 'world') {
+      // A world also lists what it is linked to, and the characters, scenarios and conversations it can be linked to.
+      backend.expectOne(`/api/v1/lore/books/${shown.id}/links`).flush({ items: [] });
+      for (const path of ['characters', 'scenarios', 'conversations']) {
+        backend.expectOne((request) => request.url === `/api/v1/${path}`).flush({ items: [] });
+      }
+      await settle();
+    }
   }
 
   /** Answers the reads that follow a change of the entries: the list and the book. */

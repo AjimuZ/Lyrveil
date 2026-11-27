@@ -218,4 +218,10 @@
       </ul>
     }
   </section>
+
+  <lyr-keyword-test [bookId]="bookId()" />
+
+  @if (isWorld()) {
+    <lyr-world-targets [bookId]="bookId()" />
+  }
 }

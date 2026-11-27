@@ -7,7 +7,9 @@ import { ObEmptyState } from '../../shared/ui/empty-state';
 import { ObSkeleton } from '../../shared/ui/skeleton';
 import { BookEditorStore } from './book-editor-store';
 import { EntryForm } from './entry-form';
+import { KeywordTest } from './keyword-test';
 import { BookField, EntryFields, LORE_LIMITS, LoreBook, LoreEntry, bookFieldOf } from './lore.model';
+import { WorldTargets } from './world-targets';
 
 /**
  * The editor of the book named by `bookId`. A world has its **Nome**, **Descrizione**, **Messaggi da leggere** and
@@ -17,11 +19,14 @@ import { BookField, EntryFields, LORE_LIMITS, LoreBook, LoreEntry, bookFieldOf }
  * confirmation. Each refusal of the server is shown next to the field it names. An entry too long to ever enter a
  * prompt is marked in its row and announced when it is saved, because it is stored but no reply reads it.
  *
+ * Below the entries, **Prova le parole chiave** tests a pasted text on the book, and a world also has the list of
+ * characters, scenarios and conversations it is linked to.
+ *
  * `removed` fires after the server deleted the world, so the screen can leave.
  */
 @Component({
   selector: 'lyr-book-editor',
-  imports: [TranslatePipe, EntryForm, ObEmptyState, ObSkeleton],
+  imports: [TranslatePipe, EntryForm, KeywordTest, ObEmptyState, ObSkeleton, WorldTargets],
   providers: [BookEditorStore],
   templateUrl: './book-editor.html',
   styleUrl: './book-editor.scss',

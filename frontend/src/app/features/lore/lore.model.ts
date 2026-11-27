@@ -73,6 +73,124 @@ export interface EntryFields {
   readonly note: string;
 }
 
+/** What a world can be linked to. */
+export type LinkKind = 'character' | 'scenario' | 'conversation';
+
+export const LINK_KINDS: readonly LinkKind[] = ['character', 'scenario', 'conversation'];
+
+/** One link as `GET /lore/books/{id}/links` answers: exactly one of the three ids is set. */
+export interface LoreLink {
+  readonly id: string;
+  readonly book_id: string;
+  readonly character_id: string | null;
+  readonly scenario_id: string | null;
+  readonly conversation_id: string | null;
+  readonly created_at: string;
+}
+
+export interface LoreLinkList {
+  readonly items: readonly LoreLink[];
+}
+
+/** One link as `GET /lore/links` answers for a target: with the name and status of the linked world. */
+export interface TargetLink extends LoreLink {
+  readonly book_name: string;
+  readonly book_status: BookStatus;
+}
+
+export interface TargetLinkList {
+  readonly items: readonly TargetLink[];
+}
+
+/** Returns the kind and id a link points at, or null for a row that names no target. */
+export function targetOf(link: LoreLink): { readonly kind: LinkKind; readonly id: string } | null {
+  if (link.character_id !== null) {
+    return { kind: 'character', id: link.character_id };
+  }
+  if (link.scenario_id !== null) {
+    return { kind: 'scenario', id: link.scenario_id };
+  }
+  if (link.conversation_id !== null) {
+    return { kind: 'conversation', id: link.conversation_id };
+  }
+  return null;
+}
+
+/** The query or body that names one target: `{ character_id: id }`, `{ scenario_id: id }` or `{ conversation_id: id }`. */
+export function targetParams(kind: LinkKind, id: string): Record<string, string> {
+  return { [`${kind}_id`]: id };
+}
+
+/** Why an entry is active or not, as `POST /lore/books/{id}/match` answers (backend `MatchReason`). */
+export type MatchReason =
+  | 'matched'
+  | 'constant'
+  | 'disabled'
+  | 'no_keys'
+  | 'no_key_matched'
+  | 'secondary_not_matched'
+  | 'excluded';
+
+/** One entry's outcome in the keyword test. The three keys are the texts as typed in the entry. */
+export interface EntryMatch {
+  readonly entry_id: string;
+  readonly title: string;
+  readonly active: boolean;
+  readonly reason: MatchReason;
+  readonly matched_key: string | null;
+  readonly matched_secondary_key: string | null;
+  readonly excluded_key: string | null;
+}
+
+export interface EntryMatchList {
+  readonly items: readonly EntryMatch[];
+}
+
+/** The longest text `POST /lore/books/{id}/match` accepts. */
+export const MAX_MATCH_TEXT_CHARS = 20_000;
+
+/**
+ * Returns the catalog key of the sentence that says why an entry is active or not. A match that also needed a
+ * secondary key has its own sentence, which names both.
+ */
+export function matchReasonKey(match: EntryMatch):
+  | 'lore.test.reason.matched'
+  | 'lore.test.reason.matchedSecondary'
+  | 'lore.test.reason.constant'
+  | 'lore.test.reason.disabled'
+  | 'lore.test.reason.noKeys'
+  | 'lore.test.reason.noKeyMatched'
+  | 'lore.test.reason.secondaryNotMatched'
+  | 'lore.test.reason.excluded' {
+  switch (match.reason) {
+    case 'matched':
+      return match.matched_secondary_key === null ? 'lore.test.reason.matched' : 'lore.test.reason.matchedSecondary';
+    case 'constant':
+      return 'lore.test.reason.constant';
+    case 'disabled':
+      return 'lore.test.reason.disabled';
+    case 'no_keys':
+      return 'lore.test.reason.noKeys';
+    case 'no_key_matched':
+      return 'lore.test.reason.noKeyMatched';
+    case 'secondary_not_matched':
+      return 'lore.test.reason.secondaryNotMatched';
+    case 'excluded':
+      return 'lore.test.reason.excluded';
+  }
+}
+
+/**
+ * The values that fill the sentence of `matchReasonKey`: `key` is the exclude key for an excluded entry and the primary
+ * key that matched otherwise, and `secondary` is the secondary key that matched. Each is '' when it does not apply.
+ */
+export function matchReasonParams(match: EntryMatch): { readonly key: string; readonly secondary: string } {
+  return {
+    key: match.excluded_key ?? match.matched_key ?? '',
+    secondary: match.matched_secondary_key ?? '',
+  };
+}
+
 /** The limits the server enforces (backend `lyrveil.domain.lore`). */
 export const LORE_LIMITS = {
   name: 120,

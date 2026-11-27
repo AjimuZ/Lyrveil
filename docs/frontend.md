@@ -521,7 +521,7 @@ retry (the list and retry routes are planned), tokens per second, recent transit
 ### 11. Worlds and lore (partly built)
 
 Version 1.1, P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The list, the world editor and the own book
-are built (P12.5a, below); the rest of the list is planned.
+are built (P12.5a), and so are the links and the keyword test (P12.5b, below); the rest of the list is planned.
 
 - **Mondi** (`/worlds`) lists worlds with search, the **Attivi** and **Archiviati** tabs, **Nuovo mondo** and
   **Importa un lorebook**.
@@ -533,7 +533,7 @@ are built (P12.5a, below); the rest of the list is planned.
 - **Prova le parole chiave** takes a pasted text and shows which entries would be active, with the key that matched or
   the reason they stayed inactive.
 - The character profile opens the own book at `/characters/:id/lore` with the same editor.
-- The scenario form and the conversation's context panel get a **Mondi** choice.
+- The scenario form and the conversation's context panel get a **Mondi collegati** list (built in P12.5b).
 - Diagnostic mode in the Memory Studio lists **Voci di lore** apart from the memories (built in P12.3): for each entry
   that was active for the reply, its title, its book, whether it was in the prompt or cut, its block and the key that
   matched. The block token counts of that view do not show `lore_constant` and `lore_activated` yet.
@@ -559,9 +559,29 @@ Delivered in P12.5a (`features/lore/`, over the routes of [API](api.md#lore-plan
   its row, and saving one shows a notice, because it is stored but no reply reads it. The editor takes the flag from the
   server and does not estimate tokens itself, so it appears after the entry is saved.
 - The character profile has a **Lore** button, and the navigation a **Mondi** link.
-- Not delivered: the world's links to characters, scenarios and conversations, **Importa un lorebook** and the export
-  button, **Prova le parole chiave**, the **Mondi** choice in the scenario form and the context panel, and the
-  `backend/openapi.json` types (the interfaces are in `lore.model.ts`).
+- Not delivered: **Importa un lorebook** and the export button, and the `backend/openapi.json` types (the interfaces
+  are in `lore.model.ts`).
+
+Delivered in P12.5b (links and the keyword test, `features/lore/`):
+
+- **Collegamenti** (`world-targets.ts`) closes the world editor: it lists what the world is linked to (a character, a
+  scenario or a conversation, by name, with a link to the character or the chat) and has **Scollega** per row. Below,
+  **Tipo di destinazione** and **Destinazione** choose one more target and **Collega** links it; a target already linked
+  is not offered. A target that is not in the lists the picker reads (archived, for example) is shown as **Non
+  elencato**, so its link can still be removed.
+- **Mondi collegati** (`world-links.ts`, `lyr-world-links`) is the same list seen from the other side: it lists the
+  worlds linked to one target, with **Scollega** and a picker of the active worlds not yet linked with **Collega**. It
+  reads `GET /lore/links`. It sits in the character profile under **Mondi**, in the form of an existing scenario (a new
+  scenario says to save it first), and in the conversation's context panel. A note says when a change applies: a
+  character's worlds reach all its conversations, a conversation's from its next reply, and a scenario's only the
+  conversations that start afterwards.
+- **Prova le parole chiave** (`keyword-test.ts`) is in the editor of every book, a world or an own book. **Testo da
+  provare** is sent to `POST /lore/books/{id}/match` with **Prova il testo**; the answer lists every entry with
+  **Attiva** or **Non attiva** and one sentence: the key that matched (and the secondary key when the entry needs one),
+  that it is always active, disabled, has no keys, that no key appears, or the exclude key that switched it off. It runs
+  the matcher alone: no model is loaded and nothing is stored. It tests the entries as they are saved.
+- The specs `keyword-test.spec.ts` and `world-links.spec.ts` and the model spec cover the behavior; the browser test
+  T-LOR-07 (`tests/e2e/specs/lore.spec.mjs`) drives the whole flow. Neither level was run when this was written.
 
 ### 12. Personas
 

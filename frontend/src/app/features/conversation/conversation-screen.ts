@@ -26,6 +26,7 @@ import { ObSkeleton } from '../../shared/ui/skeleton';
 import { Translator } from '../../core/i18n/translator';
 import { Announcer } from '../../core/shell/announcer';
 import { WIDE_QUERY, matchesMedia, watchMedia } from '../../core/shell/viewport';
+import { WorldLinks } from '../lore/world-links';
 import { PERSONA_LIMITS } from '../personas/persona.model';
 import { ShortcutService } from '../shortcuts/shortcut-service';
 import { ChatFind, foldText } from './chat-find';
@@ -114,7 +115,8 @@ export interface DayRow {
  *
  * The context panel (P08.2) holds links to the character's profile and Memory Studio, the part of the panel that
  * other screens back today, and from P11.4 the chat's persona (a name only: it never changes) with an editable note of
- * what the character knows of the user, saved with `PATCH` and applied from the next reply. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
+ * what the character knows of the user, saved with `PATCH` and applied from the next reply, and from P12.5b the worlds
+ * linked to this chat, which can be linked and unlinked there. From 1024 px it is a collapsible 320 px column beside the messages, its state remembered
  * per browser; below that the same content opens in a dialog on request.
  *
  * Keyboard and assistive technology (P08.3): the messages are a `role="log"` that is not live itself, so a streaming
@@ -135,6 +137,7 @@ export interface DayRow {
     ObIcon,
     ObSkeleton,
     VirtualSpacer,
+    WorldLinks,
   ],
   providers: [ConversationStore],
   host: { '(document:visibilitychange)': 'becameVisible()', '(keydown.escape)': 'escape($event)' },

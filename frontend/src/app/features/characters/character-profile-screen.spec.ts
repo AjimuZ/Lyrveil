@@ -112,6 +112,9 @@ describe('CharacterProfileScreen', () => {
     await settle();
     // The avatar tools list the avatars once the character is known; this screen's tests do not look at them.
     backend.expectOne('/api/v1/characters/c1/assets?kind=avatar').flush({ items: [] });
+    // The linked worlds are read once the character is shown; this screen's tests do not look at them.
+    backend.expectOne('/api/v1/lore/links?character_id=c1').flush({ items: [] });
+    backend.expectOne('/api/v1/lore/worlds?status=active').flush({ items: [] });
     await settle();
   });
 

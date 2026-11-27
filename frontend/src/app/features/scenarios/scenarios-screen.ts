@@ -7,6 +7,7 @@ import { ObEmptyState } from '../../shared/ui/empty-state';
 import { ObSkeleton } from '../../shared/ui/skeleton';
 import { TextKey } from '../../core/i18n/translator';
 import { Character, LANGUAGE_CODES } from '../chats/chats.model';
+import { WorldLinks } from '../lore/world-links';
 import { SCENARIO_LIMITS, Scenario, ScenarioStatus } from './scenario.model';
 import { ScenariosStore } from './scenarios-store';
 
@@ -28,11 +29,12 @@ const LANGUAGE_LABELS = {
  * the chat list that opens the new-chat picker with this scenario chosen), edit, archive or restore, and delete with an
  * inline confirmation. The form (title, description, setting, opening message, optional character, language) creates
  * a scenario or replaces the fields of the one being edited; a refusal of the server stays on screen with its reason.
- * A note says that conversations already started keep their own copy.
+ * A note says that conversations already started keep their own copy. While an existing scenario is edited, the worlds
+ * linked to it are listed under the form, with the controls to link and unlink one.
  */
 @Component({
   selector: 'lyr-scenarios-screen',
-  imports: [RouterLink, TranslatePipe, ObEmptyState, ObSkeleton],
+  imports: [RouterLink, TranslatePipe, ObEmptyState, ObSkeleton, WorldLinks],
   templateUrl: './scenarios-screen.html',
   styleUrl: './scenarios-screen.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

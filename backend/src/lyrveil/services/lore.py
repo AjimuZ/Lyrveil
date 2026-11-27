@@ -317,20 +317,7 @@ class LoreService:
         target the world is already linked to. A link added to a scenario reaches only the conversations that start
         afterwards: each copies the scenario's links once, when it starts.
         """
-        given = {
-            name: value
-            for name, value in (
-                ("character_id", character_id),
-                ("scenario_id", scenario_id),
-                ("conversation_id", conversation_id),
-            )
-            if value is not None
-        }
-        if len(given) != 1:
-            raise ValidationFailedError(
-                "Un collegamento ha una sola destinazione: indica un personaggio, uno scenario o una conversazione."
-            )
-        target, target_id = next(iter(given.items()))
+        target, target_id = self._one_target(character_id, scenario_id, conversation_id)
         now = to_utc_text(self._clock())
 
         def work(connection: Any) -> LoreLink:
@@ -348,6 +335,51 @@ class LoreService:
             return link
 
         return write(self._engine, work)
+
+    def list_target_links(
+        self,
+        *,
+        character_id: str | None = None,
+        scenario_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> list[tuple[LoreLink, LoreBook]]:
+        """Returns the links that point at one character, scenario or conversation, oldest first, each with its world
+        (in any status: an archived world keeps reaching its targets, so it is listed too).
+
+        Raises ValidationFailedError unless exactly one target is given and NotFoundError for an unknown target.
+        """
+        target, target_id = self._one_target(character_id, scenario_id, conversation_id)
+
+        def work(connection: Any) -> list[tuple[LoreLink, LoreBook]]:
+            if not repository.target_exists(connection, target, target_id):
+                raise NotFoundError(_NO_TARGETS[target])
+            pairs: list[tuple[LoreLink, LoreBook]] = []
+            for link in repository.list_target_links(connection, target, target_id):
+                book = repository.get_book(connection, link.book_id)
+                if book is not None:  # The foreign key makes a link without its world impossible; skip defensively.
+                    pairs.append((link, book))
+            return pairs
+
+        return read(self._engine, work)
+
+    @staticmethod
+    def _one_target(character_id: str | None, scenario_id: str | None, conversation_id: str | None) -> tuple[str, str]:
+        """Returns the one given target as (column, id); raises ValidationFailedError for none or several."""
+        given = {
+            name: value
+            for name, value in (
+                ("character_id", character_id),
+                ("scenario_id", scenario_id),
+                ("conversation_id", conversation_id),
+            )
+            if value is not None
+        }
+        if len(given) != 1:
+            raise ValidationFailedError(
+                "Un collegamento ha una sola destinazione: indica un personaggio, uno scenario o una conversazione."
+            )
+        target, target_id = next(iter(given.items()))
+        return target, target_id
 
     def delete_link(self, link_id: str) -> None:
         """Removes a link; the world, its entries and the target stay. A conversation that already read the world stops

@@ -1,0 +1,52 @@
+<section class="panel" aria-labelledby="keyword-test-title" data-testid="keyword-test">
+  <h2 class="section" id="keyword-test-title">{{ 'lore.test.title' | t }}</h2>
+  <p class="note">{{ 'lore.test.note' | t }}</p>
+
+  <form class="form" novalidate (submit)="run($event)">
+    <div class="field">
+      <label for="keyword-test-text">{{ 'lore.test.text' | t }}</label>
+      <textarea
+        id="keyword-test-text"
+        class="control"
+        rows="4"
+        [attr.maxlength]="maxChars"
+        [value]="text()"
+        [attr.aria-invalid]="attempted() && !textValid()"
+        [attr.aria-describedby]="attempted() && !textValid() ? 'keyword-test-error' : null"
+        (input)="text.set(valueOf($event))"
+      ></textarea>
+      @if (attempted() && !textValid()) {
+        <p class="field-error" id="keyword-test-error">{{ 'lore.test.error.text' | t }}</p>
+      }
+    </div>
+    @if (error(); as failure) {
+      <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+    }
+    <div class="actions">
+      <button type="submit" class="button primary" [disabled]="busy()">{{ 'lore.test.run' | t }}</button>
+    </div>
+  </form>
+
+  @if (results(); as found) {
+    @if (found.length === 0) {
+      <p class="note" role="status">{{ 'lore.test.empty' | t }}</p>
+    } @else {
+      <p class="summary" role="status" data-testid="keyword-test-summary">
+        {{ 'lore.test.summary' | t: { active: activeCount(), total: found.length } }}
+      </p>
+      <ul class="list" data-testid="keyword-test-results">
+        @for (match of found; track match.entry_id) {
+          <li class="card" data-testid="keyword-test-entry" [attr.data-active]="match.active">
+            <h3 class="card-title">
+              {{ match.title || ('lore.test.untitled' | t) }}
+              <span class="badge" [class.on]="match.active">
+                {{ (match.active ? 'lore.test.active' : 'lore.test.inactive') | t }}
+              </span>
+            </h3>
+            <p class="reason">{{ reasonKey(match) | t: reasonParams(match) }}</p>
+          </li>
+        }
+      </ul>
+    }
+  }
+</section>

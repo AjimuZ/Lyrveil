@@ -281,6 +281,22 @@ def list_links(connection: Connection, book_id: str) -> list[LoreLink]:
     return [_link(row) for row in rows]
 
 
+def list_target_links(connection: Connection, target: str, target_id: str) -> list[LoreLink]:
+    """Returns the links that point at one target (`character_id`, `scenario_id` or `conversation_id`), oldest first.
+    The column name comes from the service, never from a request."""
+    if target not in _TARGET_TABLES:
+        raise ValueError(f"unknown link target: {target}")
+    rows = (
+        connection.execute(
+            text(f"SELECT {_LINK_COLUMNS} FROM lore_links WHERE {target} = :target_id ORDER BY created_at, id"),
+            {"target_id": target_id},
+        )
+        .mappings()
+        .all()
+    )
+    return [_link(row) for row in rows]
+
+
 def get_link(connection: Connection, link_id: str) -> LoreLink | None:
     """Returns the link, or None when no row has that id."""
     row = (

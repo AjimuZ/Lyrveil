@@ -697,7 +697,8 @@ the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 ### Lore (planned)
 
 Planned for version 1.1, phase P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The first seven rows are
-delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3) and the import and export routes (P12.4).
+delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3), the import and export routes (P12.4) and
+the list of worlds linked to one target (P12.5b).
 
 | Method and path | Purpose |
 | --- | --- |
@@ -708,6 +709,7 @@ delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3) and
 | `GET`, `POST /lore/books/{id}/entries` | List (`q`, `enabled`) and create entries. |
 | `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |
 | `GET`, `POST /lore/books/{id}/links`, `DELETE /lore/links/{id}` | The characters, scenarios and conversations a world is linked to. |
+| `GET /lore/links` | The worlds linked to one target: `character_id`, `scenario_id` or `conversation_id` (exactly one), each link with the world's `book_name` and `book_status` (P12.5b). |
 | `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. |
 | `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. |
 | `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. |
@@ -727,6 +729,10 @@ delivered (P12.1b), and so are the match route (P12.2a), `lore_refs` (P12.3) and
   - A link names exactly one of `character_id`, `scenario_id` and `conversation_id`; none or two is
     `422 VALIDATION_ERROR`. Linking an own book, or a world to a target it is already linked to, is `409 CONFLICT`. A
     conversation in the trash is an unknown target. `DELETE /lore/links/{id}` removes only the link.
+  - `GET /lore/links` takes the same three names as query parameters and needs exactly one (`422 VALIDATION_ERROR`
+    otherwise); an unknown target is `404`. It lists the target's links oldest first, archived worlds included, because
+    an archived world keeps reaching its targets. A removed link leaves the list at once and the target's next reply
+    does not read the world.
   - `q` keeps the worlds whose name or description, or the entries whose title, content, keys or note, contain every
     word of it, ignoring case and accents.
 - `POST /lore/books/{id}/match` (P12.2a) takes `{"text", "language"}`: `text` is up to 20,000 characters and is read as

@@ -148,6 +148,9 @@
       </ul>
     }
 
+    <h2 class="section">{{ 'profile.worlds' | t }}</h2>
+    <lyr-world-links kind="character" [targetId]="c.id" />
+
     <h2 class="section">{{ 'profile.versions' | t }}</h2>
     <p class="note">{{ 'profile.versions.note' | t }}</p>
     <ul class="list" data-testid="versions">

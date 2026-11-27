@@ -1427,7 +1427,7 @@ written; all of them passed in the P11 exit run, with T-MOD-05 and block 10
 Planned for version 1.1 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). T-LOR-04 is written in P12.1a; the
 P12.1a session could not start a test run, so its first run is the `unit` and `integration` levels of the orchestrator.
 T-LOR-01 to T-LOR-03 are written in P12.2a and P12.2b, T-LOR-06 in P12.3, and T-LOR-05 and T-LOR-08 in P12.4, as
-below. T-LOR-07 is not written.
+below. T-LOR-07 is written in P12.5b.
 
 - **T-LOR-04.** `tests/unit/test_lore_rules.py` holds the limits, the content guard on titles, contents and world names,
   the keys with no stem (`lui`), the stored key text with its stems and the block-maximum flag.
@@ -1468,7 +1468,15 @@ below. T-LOR-07 is not written.
   sends either to the runtime. `tests/integration/test_migrations.py` checks that migration 0022 adds the column and
   that the downgrade drops it. The frontend spec `memory-studio-screen.spec.ts` checks **Voci di lore**. In the P12.3
   session the new file passed (3 tests), and so did `test_migrations.py` and `test_diagnostics.py` (69); the frontend
-  spec and the full levels did not run. T-LOR-07 (E2E) is not written.
+  spec and the full levels did not run.
+- **T-LOR-07.** `tests/e2e/specs/lore.spec.mjs` (P12.5b, written, not run in that session) creates a world in the
+  browser, adds an entry, links the world to two characters from its editor, uses **Prova le parole chiave** (the entry
+  is active for a text with its key and inactive for another), has a reply to a message with the key read the entry and
+  finds it under **Voci di lore** in diagnostic mode, then removes one link from the character's profile and checks that
+  the next reply's `lore_refs` is empty while the world and the other link stay. `test_lore_api.py` holds the route that
+  lists a target's links, and the frontend specs `keyword-test.spec.ts`, `world-links.spec.ts` and `lore.model.spec.ts`
+  hold the keyword test, the link list and the wording of each reason. The keyword test needs no model because the
+  route runs the matcher alone; the E2E stack has the fake runtimes, so it does not prove that no model is loaded.
 - **T-LOR-05.** `tests/unit/test_lorebook.py` (P12.4) holds the converter: the field mapping, the four applied
   decorators and the kept ones with their `@@@` fallbacks, `secondary_keys` only with `selective`, the `use_regex` and
   keyless entries disabled and reported, the unknown fields in `source_json`, the entries left out for their content

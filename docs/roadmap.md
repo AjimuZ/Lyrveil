@@ -277,7 +277,7 @@ Evidence:
   version 2 of the global instructions.
 - [x] P12.3 `lore_refs` in the assemblies and **Voci di lore** in diagnostic mode.
 - [x] P12.4 `character_book` and `lorebook_v3` import and export, and the migration of the books stored by P10.
-- [ ] P12.5 **Mondi**, the own book of a character, the links from characters, scenarios and conversations, and
+- [x] P12.5 **Mondi**, the own book of a character, the links from characters, scenarios and conversations, and
   **Prova le parole chiave**.
 - [ ] P12.6 Run the consistency protocol (T-QLT-05) again on the default profile, with a world of 40 entries linked to
   the protocol's character, and record the result next to the 1.0 run.

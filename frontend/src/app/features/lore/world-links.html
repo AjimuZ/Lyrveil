@@ -1,0 +1,49 @@
+<section class="links" aria-labelledby="world-links-title" data-testid="world-links">
+  <h3 class="title" id="world-links-title">{{ 'lore.links.title' | t }}</h3>
+  <p class="note">{{ note() | t }}</p>
+
+  @if (error(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (loading() && linked().length === 0) {
+    <p class="note" role="status">{{ 'lore.links.loading' | t }}</p>
+  } @else if (linked().length === 0) {
+    <p class="note">{{ 'lore.links.none' | t }}</p>
+  } @else {
+    <ul class="list">
+      @for (link of linked(); track link.id) {
+        <li class="item" data-testid="world-link">
+          <span class="name">
+            <a [routerLink]="['/worlds', link.book_id]">{{ link.book_name }}</a>
+            @if (link.book_status === 'archived') {
+              <span class="badge">{{ 'lore.links.archived' | t }}</span>
+            }
+          </span>
+          <button
+            type="button"
+            class="button"
+            [disabled]="busy()"
+            [attr.aria-label]="'lore.links.remove.aria' | t: { name: link.book_name }"
+            (click)="remove(link)"
+          >
+            {{ 'lore.links.remove' | t }}
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="add">
+    <label class="label" for="world-links-pick">{{ 'lore.links.pick' | t }}</label>
+    <select class="control" id="world-links-pick" [disabled]="busy()" (change)="pick($event)">
+      <option value="" [selected]="chosen() === ''">{{ 'lore.links.pick.none' | t }}</option>
+      @for (world of available(); track world.id) {
+        <option [value]="world.id" [selected]="world.id === chosen()">{{ world.name }}</option>
+      }
+    </select>
+    <button type="button" class="button primary" [disabled]="chosen() === '' || busy()" (click)="add()">
+      {{ 'lore.links.add' | t }}
+    </button>
+  </div>
+</section>

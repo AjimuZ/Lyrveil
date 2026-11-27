@@ -125,6 +125,17 @@ class LinkList(BaseModel):
     items: list[LinkOut]
 
 
+class TargetLinkOut(LinkOut):
+    """A link as a target's screen lists it: with the name and status of the linked world."""
+
+    book_name: str
+    book_status: BookStatus
+
+
+class TargetLinkList(BaseModel):
+    items: list[TargetLinkOut]
+
+
 class LinkIn(BaseModel):
     """The target of a link: exactly one of the three ids. The service refuses any other count."""
 
@@ -383,6 +394,26 @@ def create_link(book_id: str, body: LinkIn, service: LoreService = Service) -> L
             scenario_id=body.scenario_id,
             conversation_id=body.conversation_id,
         )
+    )
+
+
+@router.get("/lore/links", response_model=TargetLinkList)
+def list_target_links(
+    character_id: str | None = None,
+    scenario_id: str | None = None,
+    conversation_id: str | None = None,
+    service: LoreService = Service,
+) -> TargetLinkList:
+    """Lists the worlds linked to one target, oldest link first, with each world's name and status. Give exactly one of
+    `character_id`, `scenario_id` and `conversation_id`: 422 `VALIDATION_ERROR` otherwise, and 404 for an unknown
+    target."""
+    return TargetLinkList(
+        items=[
+            TargetLinkOut(**_link_out(link).model_dump(), book_name=book.name, book_status=book.status)
+            for link, book in service.list_target_links(
+                character_id=character_id, scenario_id=scenario_id, conversation_id=conversation_id
+            )
+        ]
     )
 
 

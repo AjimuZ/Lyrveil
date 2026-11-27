@@ -1,8 +1,67 @@
-import { bookFieldOf, entryFieldOf, formatKeys, isOrderNumber, parseKeys } from './lore.model';
+import {
+  EntryMatch,
+  LoreLink,
+  bookFieldOf,
+  entryFieldOf,
+  formatKeys,
+  isOrderNumber,
+  matchReasonKey,
+  matchReasonParams,
+  parseKeys,
+  targetOf,
+  targetParams,
+} from './lore.model';
 
 const NO_KEYS = { keys: [], secondary_keys: [], exclude_keys: [] } as const;
 
+function outcome(overrides: Partial<EntryMatch>): EntryMatch {
+  return {
+    entry_id: 'e1',
+    title: 'Il faro',
+    active: false,
+    reason: 'no_key_matched',
+    matched_key: null,
+    matched_secondary_key: null,
+    excluded_key: null,
+    ...overrides,
+  };
+}
+
 describe('lore model', () => {
+  it('names the one target of a link and builds the body or query that names it', () => {
+    const link: LoreLink = {
+      id: 'l1',
+      book_id: 'w1',
+      character_id: null,
+      scenario_id: 's1',
+      conversation_id: null,
+      created_at: '2026-11-27T10:00:00.000Z',
+    };
+    expect(targetOf(link)).toEqual({ kind: 'scenario', id: 's1' });
+    expect(targetOf({ ...link, scenario_id: null, character_id: 'c1' })).toEqual({ kind: 'character', id: 'c1' });
+    expect(targetOf({ ...link, scenario_id: null, conversation_id: 'v1' })).toEqual({ kind: 'conversation', id: 'v1' });
+    expect(targetOf({ ...link, scenario_id: null })).toBeNull();
+    expect(targetParams('conversation', 'v1')).toEqual({ conversation_id: 'v1' });
+  });
+
+  it('words the keyword test from the reason, naming the key that decided it', () => {
+    const matched = outcome({ active: true, reason: 'matched', matched_key: 'faro' });
+    expect(matchReasonKey(matched)).toBe('lore.test.reason.matched');
+    expect(matchReasonParams(matched)).toEqual({ key: 'faro', secondary: '' });
+
+    const both = outcome({ active: true, reason: 'matched', matched_key: 'faro', matched_secondary_key: 'notte' });
+    expect(matchReasonKey(both)).toBe('lore.test.reason.matchedSecondary');
+    expect(matchReasonParams(both)).toEqual({ key: 'faro', secondary: 'notte' });
+
+    // An excluded entry may also have matched a key; the exclude key is the one that decided it.
+    const excluded = outcome({ reason: 'excluded', matched_key: 'faro', excluded_key: 'tempesta' });
+    expect(matchReasonKey(excluded)).toBe('lore.test.reason.excluded');
+    expect(matchReasonParams(excluded).key).toBe('tempesta');
+
+    expect(matchReasonKey(outcome({ reason: 'disabled' }))).toBe('lore.test.reason.disabled');
+    expect(matchReasonKey(outcome({ reason: 'constant', active: true }))).toBe('lore.test.reason.constant');
+  });
+
   it('places a refusal of the server on the field its Italian detail names', () => {
     expect(bookFieldOf('Il nome non può essere vuoto.')).toBe('name');
     expect(bookFieldOf('Il campo «messaggi da leggere» deve essere un numero intero tra 1 e 20.')).toBe('scan_depth');

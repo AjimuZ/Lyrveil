@@ -1,0 +1,62 @@
+<section class="panel" aria-labelledby="book-targets-title" data-testid="world-targets">
+  <h2 class="section" id="book-targets-title">{{ 'lore.targets.title' | t }}</h2>
+  <p class="note">{{ 'lore.targets.note' | t }}</p>
+
+  @if (error(); as failure) {
+    <p class="error" role="alert">{{ failure.detail ?? (failure.textKey | t) }}</p>
+  }
+
+  @if (loading()) {
+    <p class="note" role="status">{{ 'lore.targets.loading' | t }}</p>
+  } @else if (rows().length === 0) {
+    <p class="note">{{ 'lore.targets.none' | t }}</p>
+  } @else {
+    <ul class="list">
+      @for (row of rows(); track row.link.id) {
+        <li class="item" data-testid="world-target">
+          <span class="name">
+            <span class="kind">{{ kindKey(row.kind) | t }}:</span>
+            @let name = row.label !== '' ? row.label : ('lore.targets.unlisted' | t);
+            @if (row.route; as route) {
+              <a [routerLink]="route">{{ name }}</a>
+            } @else {
+              {{ name }}
+            }
+          </span>
+          <button
+            type="button"
+            class="button"
+            [disabled]="busy()"
+            [attr.aria-label]="'lore.targets.remove.aria' | t: { kind: (kindKey(row.kind) | t), name: name }"
+            (click)="remove(row)"
+          >
+            {{ 'lore.targets.remove' | t }}
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="add">
+    <div class="field">
+      <label for="target-kind">{{ 'lore.targets.kind' | t }}</label>
+      <select id="target-kind" class="control" [disabled]="busy()" (change)="chooseKind($event)">
+        @for (option of kinds; track option.kind) {
+          <option [value]="option.kind" [selected]="option.kind === kind()">{{ option.label | t }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="target-pick">{{ 'lore.targets.pick' | t }}</label>
+      <select id="target-pick" class="control" [disabled]="busy()" (change)="pick($event)">
+        <option value="" [selected]="chosen() === ''">{{ 'lore.targets.pick.none' | t }}</option>
+        @for (item of available(); track item.id) {
+          <option [value]="item.id" [selected]="item.id === chosen()">{{ item.label }}</option>
+        }
+      </select>
+    </div>
+    <button type="button" class="button primary" [disabled]="chosen() === '' || busy()" (click)="add()">
+      {{ 'lore.targets.add' | t }}
+    </button>
+  </div>
+</section>

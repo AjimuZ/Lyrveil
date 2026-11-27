@@ -285,6 +285,7 @@
         <p class="context-hint" role="status">{{ 'conv.context.noteSaved' | t }}</p>
       }
     </form>
+    <lyr-world-links kind="conversation" [targetId]="conversation.id" />
     <ul class="context-links">
       <li>
         <a class="button" [routerLink]="['/characters', conversation.character_id]">{{ 'conv.context.profile' | t }}</a>

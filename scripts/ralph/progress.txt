@@ -3407,3 +3407,12 @@ Docs updated: CHANGELOG, `api.md`, `character-system.md` (new Lorebooks section)
   - An Angular output named like a native event (for example `cancel`) is flagged by lint, and `output<void>()` is flagged by `no-invalid-void-type`. Use `closed` and `output()`.
   - Renaming a `###` heading in `docs/frontend.md` breaks anchors elsewhere. The lint level catches this; `docs/traceability.md` linked to the old anchor.
 ---
+
+## 2026-11-27T19:23:39Z - P12.5b
+- The only lint failure was one line in backend/tests/integration/test_lore_api.py that was over 120 characters (ruff E501 and ruff format). I wrapped it, and `scripts/lyrveil.cmd test lint` now passes in full. The world links, the keyword test and the e2e spec from attempt 1 were already in the working tree, and I didn't change them. I didn't run the backend integration, e2e, docker or frontend `ng test` levels, so T-LOR-07 and the frontend specs are unverified.
+- Files changed: backend/tests/integration/test_lore_api.py
+- **Learnings for future iterations:**
+  - `test lint` includes ruff format --check on backend tests, so wrap lines over 120 characters in the shape ruff format produces.
+  - Frontend specs, including the new keyword-test and world-links specs, have still not run under `ng test`. Run `npm test` in `frontend` at the end of the plan.
+  - T-LOR-07 (e2e) has not been run. It is in tests/e2e/specs/lore.spec.mjs.
+---
