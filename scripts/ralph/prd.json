@@ -3616,8 +3616,8 @@
         "`POST /lore/books/{id}/match` with `{\"text\", \"language\"}` answers each entry with its matched key or the reason it stayed inactive, with no model loaded."
       ],
       "priority": 151,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "I added the deterministic lore matcher of ADR 0049 and `POST /lore/books/{id}/match`. The 15 new unit tests for the matcher passed (T-LOR-01). Lint passes in full. The two new API tests in `test_lore_api.py` have not run, because the integration level takes no test filter and the full suite is left to the orchestrator.\n\n- **Matcher** (`services/lore_matcher.py`). It is pure, with no model, regular expression or recursion.\n  - The window holds the newest `scan_depth` messages. Each message is stemmed separately, so a key never matches across two messages.\n  - Keys match as contiguous stem sequences in the stored order. A case-sensitive entry matches its exact text at word boundaries instead.\n  - A secondary key must also match when the entry has any. Any matching exclude key deactivates the entry.\n  - A disabled entry stays off even when constant. A constant entry is always on and ignores its exclude keys.\n  - Keys saved in another language than the window's are stemmed again.\n- **Result per entry.** `active`, a `reason`, and the keys as typed. `reason` is `matched` or `constant` when active. Otherwise it is `disabled`, `no_keys`, `no_key_matched`, `secondary_not_matched` or `excluded`.\n- **Route and service.** `LoreService.match` and the route read the book's entries and write nothing. The body is `text` (up to 20,000 characters) and an optional `language`. A blank `language` uses the book's key language.\n- **Scan depth.** The pasted text counts as one message, so the book's `scan_depth` does not limit it on this route. The unit tests cover depth.\n- **Docs.** I updated `docs/api.md`, `docs/data-model.md`, `docs/testing.md` and `CHANGELOG.md`.",
       "dependsOn": [
         "P12.1b"
       ],

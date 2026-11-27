@@ -3,7 +3,8 @@
 A book is a character's own book or a world. This service owns the rows and the rules the database cannot hold: every
 title, content and world name passes the content guard of ADR 0037, keys are stemmed when an entry is saved and a key
 with no stem is refused, a book holds at most 500 entries, and a link has exactly one target and only a world is
-linked. The matcher and the prompt blocks belong to later tasks of P12.
+linked. `match` runs the keyword matcher of `lore_matcher` on a pasted text; the selection and the prompt blocks belong
+to later tasks of P12.
 """
 
 import unicodedata
@@ -28,6 +29,7 @@ from lyrveil.domain.lore import (
 )
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import lore as repository
+from lyrveil.services.lore_matcher import EntryMatch, match_entries
 from lyrveil.services.lore_rules import checked_book, checked_entry
 
 NO_BOOK = "Libro di lore non trovato."
@@ -283,6 +285,20 @@ class LoreService:
             repository.delete_link(connection, link_id)
 
         write(self._engine, work)
+
+    def match(self, book_id: str, text: str, language: str | None = None) -> list[tuple[LoreEntry, EntryMatch]]:
+        """Runs the matcher of ADR 0049 on `text` as the only message of the window and returns every entry of the book
+        with its outcome, by `insertion_order`. It reads no model and writes nothing. `language` stems the text; when
+        blank, the language of the book's keys is used. The window holds one message, so the book's `scan_depth` does
+        not limit it here. Raises NotFoundError for an unknown book."""
+
+        def work(connection: Any) -> tuple[list[LoreEntry], str]:
+            book = self._book(connection, book_id)
+            return repository.list_entries(connection, book_id, None), self._language(connection, book)
+
+        entries, book_language = read(self._engine, work)
+        results = match_entries(entries, [text], 1, language or book_language)
+        return list(zip(entries, results, strict=True))
 
     @staticmethod
     def _language(connection: Any, book: LoreBook) -> str:

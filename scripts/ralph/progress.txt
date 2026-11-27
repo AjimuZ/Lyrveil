@@ -328,6 +328,8 @@
 - Run the lint level and read the real [FAIL] lines before fixing: a truncated log hid the actual ruff format and mypy errors.
 - To copy rows that a template owns into a new instance, do it in the same write transaction that creates the instance, with a new id per row. Later edits to the template then cannot reach the copy.
 - Put search `q` filtering in the service with an accent-and-case fold over the row's text fields, as ScenarioService does, instead of writing SQL for it.
+- Keep matching and selection logic in a pure module (no engine, no model) so the service, the API and the future prompt builder share it and unit tests need no database.
+- Reasons for an inactive result are a StrEnum code returned by the API, so the interface can localize the text itself.
 
 ---
 
@@ -3238,4 +3240,26 @@ The roadmap checkbox is left for the orchestrator.
   - The entry and book request bodies are untyped (`Any`) on purpose, so every refusal comes from lore_rules with the field and limit in the detail. An explicit JSON null is dropped (`exclude_none`) and reads as the default.
   - A link is refused for an own book but allowed for an archived world. A deleted-in-trash conversation counts as an unknown target (404).
   - The reply that reads own book, character worlds and conversation worlds (rest of T-LOR-02) needs the matcher and prompt blocks from later P12 tasks; persistence.list_links and the conversation's copied links are the data they will read.
+---
+
+## 2026-11-27T18:16:01Z - P12.2a
+- I added the deterministic lore matcher of ADR 0049 and `POST /lore/books/{id}/match`. The 15 new unit tests for the matcher passed (T-LOR-01). Lint passes in full. The two new API tests in `test_lore_api.py` have not run, because the integration level takes no test filter and the full suite is left to the orchestrator.
+
+- **Matcher** (`services/lore_matcher.py`). It is pure, with no model, regular expression or recursion.
+  - The window holds the newest `scan_depth` messages. Each message is stemmed separately, so a key never matches across two messages.
+  - Keys match as contiguous stem sequences in the stored order. A case-sensitive entry matches its exact text at word boundaries instead.
+  - A secondary key must also match when the entry has any. Any matching exclude key deactivates the entry.
+  - A disabled entry stays off even when constant. A constant entry is always on and ignores its exclude keys.
+  - Keys saved in another language than the window's are stemmed again.
+- **Result per entry.** `active`, a `reason`, and the keys as typed. `reason` is `matched` or `constant` when active. Otherwise it is `disabled`, `no_keys`, `no_key_matched`, `secondary_not_matched` or `excluded`.
+- **Route and service.** `LoreService.match` and the route read the book's entries and write nothing. The body is `text` (up to 20,000 characters) and an optional `language`. A blank `language` uses the book's key language.
+- **Scan depth.** The pasted text counts as one message, so the book's `scan_depth` does not limit it on this route. The unit tests cover depth.
+- **Docs.** I updated `docs/api.md`, `docs/data-model.md`, `docs/testing.md` and `CHANGELOG.md`.
+- Files changed: backend/src/lyrveil/services/lore_matcher.py, backend/src/lyrveil/services/lore.py, backend/src/lyrveil/api/lore.py, backend/tests/unit/test_lore_matcher.py, backend/tests/integration/test_lore_api.py, docs/api.md, docs/data-model.md, docs/testing.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The unit file test_lore_matcher.py passed (15 tests). The two new API tests in test_lore_api.py have not run, because `scripts/lyrveil.cmd test integration` rejects a -k filter. If the integration run fails, look at test_lore_api.py first.
+  - A key such as `C++` or `uno` has no stem and is refused on save, so test keys must hold at least one non-stop-word letter or digit.
+  - The matcher's ScanWindow.of(messages, scan_depth, language) and match_entry(entry, window) are meant for the later prompt builder, which reads the real message list. match_entries takes messages oldest first with the current message last.
+  - The match route treats the pasted text as one message, so the book's scan_depth does not limit it there. The unit tests cover depth.
+  - The Bash tool refuses file writes through printf and redirects. Use Edit or Write instead.
 ---

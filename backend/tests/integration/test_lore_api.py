@@ -293,3 +293,40 @@ def test_deleting_a_scenario_keeps_the_links_its_conversations_copied(client: Te
     ).json()
     assert client.delete(f"{API}/scenarios/{scenario['id']}").status_code == 204
     assert [link["conversation_id"] for link in links_of(client, world["id"])] == [conversation["id"]]
+
+
+def test_match_answers_each_entry_with_its_key_or_its_reason(client: TestClient) -> None:
+    world = make_world(client)
+    ids = {}
+    for name, body in {
+        "lupo": {"title": "Lupo", "content": "Un lupo.", "keys": ["lupo"]},
+        "sogno": {"content": "Un faro.", "keys": ["faro"], "exclude_keys": ["sogno"]},
+        "spento": {"content": "Spento.", "keys": ["faro"], "enabled": False},
+        "sempre": {"content": "Sempre.", "constant": True},
+        "nave": {"content": "Una nave.", "keys": ["nave"]},
+    }.items():
+        response = client.post(f"{API}/lore/books/{world['id']}/entries", json=body)
+        assert response.status_code == 201, response.text
+        ids[name] = response.json()["id"]
+
+    response = client.post(
+        f"{API}/lore/books/{world['id']}/match", json={"text": "Nel sogno vidi i lupi e un faro.", "language": "it"}
+    )
+
+    assert response.status_code == 200, response.text
+    found = {item["entry_id"]: item for item in response.json()["items"]}
+    assert len(found) == 5
+    assert (found[ids["lupo"]]["active"], found[ids["lupo"]]["matched_key"]) == (True, "lupo")
+    assert (found[ids["sogno"]]["reason"], found[ids["sogno"]]["excluded_key"]) == ("excluded", "sogno")
+    assert found[ids["spento"]]["reason"] == "disabled"
+    assert found[ids["sempre"]]["reason"] == "constant"
+    assert found[ids["nave"]]["reason"] == "no_key_matched"
+
+
+def test_match_refuses_a_missing_text_and_an_unknown_book(client: TestClient) -> None:
+    world = make_world(client)
+    url = f"{API}/lore/books/{world['id']}/match"
+
+    assert client.post(url, json={"language": "it"}).status_code == 422
+    assert client.post(url, json={"text": "x" * 20_001}).status_code == 422
+    assert client.post(f"{API}/lore/books/{new_id()}/match", json={"text": "x"}).status_code == 404

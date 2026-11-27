@@ -11,6 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- The lore matcher and `POST /lore/books/{id}/match` (P12.2a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)).
+  Sending `{"text", "language"}` to a book answers each entry with the key that matched or the reason it stayed
+  inactive, with no model loaded. Keys match by stem sequence in Italian and English, a case-sensitive entry matches its
+  exact text at word boundaries, secondary keys must also match, exclude keys deactivate, disabled entries stay off and
+  constant entries are always on. There are no screens yet and no prompt reads lore. The unit tests (T-LOR-01) passed;
+  the API tests in `test_lore_api.py` have not run.
 - Lore routes and links (P12.1b, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)). The API now lists,
   creates, edits and deletes worlds and entries, opens a character's own book (`GET /characters/{id}/lore`, created
   empty on first use) and links a world to exactly one character, scenario or conversation. An invalid entry is refused

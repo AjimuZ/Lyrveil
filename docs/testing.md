@@ -1435,6 +1435,12 @@ the orchestrator. The other tests are not written, except the two below from P12
   the three tables, one own book per character, the 500-entry trigger and the links.
   `tests/integration/test_lore_api.py` (P12.1b, written, not run in that session) holds the API half: the status codes of
   the lore routes, an invalid entry refused with its field and limit, and the own book that `DELETE` refuses.
+- **T-LOR-01.** `tests/unit/test_lore_matcher.py` (P12.2a) holds the matcher: stem sequences in Italian and English
+  (contiguous, in order, never across two messages), exact case-sensitive keys at word boundaries, secondary and exclude
+  keys, disabled and constant entries, the scan depth, keys saved in another language stemmed again, and the key `lui`
+  refused on save. The unit file ran with 15 passed. `tests/integration/test_lore_api.py` holds the route
+  `POST /lore/books/{id}/match`; it was written and not run in that session, because the integration level takes no
+  test filter.
 - **T-LOR-02, link part.** The same file holds the links: exactly one target, only a world is linked, and a conversation
   started from a scenario copies the scenario's links, so a later change of the scenario's links leaves it unchanged. The
   reply that reads the three kinds of books is not written.

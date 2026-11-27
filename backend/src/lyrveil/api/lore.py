@@ -1,19 +1,25 @@
 """Lore routes of docs/api.md (Lore): worlds, books, entries and links, and a character's own book.
 
-The match, import and export routes belong to later tasks of P12. Not in the committed OpenAPI document yet, like the
-persona routes: `include_in_schema` is off until `backend/openapi.json` is regenerated with Docker.
+The match route runs the keyword matcher with no model. The import and export routes belong to later tasks of P12. Not
+in the committed OpenAPI document yet, like the persona routes: `include_in_schema` is off until `backend/openapi.json`
+is regenerated with Docker.
 """
 
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine
 
 from lyrveil.domain.lore import BookKind, BookStatus, LoreBook, LoreEntry, LoreLink
 from lyrveil.services.lore import LoreService
+from lyrveil.services.lore_matcher import MatchReason
 
 router = APIRouter(tags=["lore"], include_in_schema=False)
+
+# A pasted test text is a few messages at most; the bound keeps one request from holding the worker on a huge text.
+MAX_MATCH_TEXT_CHARS = 20_000
+MAX_LANGUAGE_CHARS = 16
 
 
 class BookOut(BaseModel):
@@ -117,6 +123,34 @@ class LinkIn(BaseModel):
     character_id: str | None = None
     scenario_id: str | None = None
     conversation_id: str | None = None
+
+
+class MatchIn(BaseModel):
+    """The text to try the keywords on, and the language that stems it (a code such as `it` or `en`; blank means the
+    language of the book's keys)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(max_length=MAX_MATCH_TEXT_CHARS)
+    language: str | None = Field(default=None, max_length=MAX_LANGUAGE_CHARS)
+
+
+class EntryMatchOut(BaseModel):
+    """One entry's outcome. `reason` is `matched` or `constant` when `active`, else why it stayed inactive. The three
+    keys are the texts as typed: the primary key that matched, the secondary key that matched, and the exclude key that
+    deactivated the entry."""
+
+    entry_id: str
+    title: str
+    active: bool
+    reason: MatchReason
+    matched_key: str | None
+    matched_secondary_key: str | None
+    excluded_key: str | None
+
+
+class MatchOut(BaseModel):
+    items: list[EntryMatchOut]
 
 
 def _book_out(book: LoreBook) -> BookOut:
@@ -262,6 +296,27 @@ def delete_entry(entry_id: str, service: LoreService = Service) -> Response:
     """Deletes an entry; 404 when it does not exist."""
     service.delete_entry(entry_id)
     return Response(status_code=204)
+
+
+@router.post("/lore/books/{book_id}/match", response_model=MatchOut)
+def match_book(book_id: str, body: MatchIn, service: LoreService = Service) -> MatchOut:
+    """Runs the keyword matcher on `text`, as one message, and answers every entry of the book by `insertion_order` with
+    whether it is active, the key that matched or the reason it stayed inactive. It loads no model and changes nothing.
+    404 for an unknown book, 422 `VALIDATION_ERROR` for a missing or over-long text."""
+    return MatchOut(
+        items=[
+            EntryMatchOut(
+                entry_id=entry.id,
+                title=entry.title,
+                active=result.active,
+                reason=result.reason,
+                matched_key=result.matched_key,
+                matched_secondary_key=result.matched_secondary_key,
+                excluded_key=result.excluded_key,
+            )
+            for entry, result in service.match(book_id, body.text, body.language)
+        ]
+    )
 
 
 @router.get("/lore/books/{book_id}/links", response_model=LinkList)

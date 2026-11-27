@@ -696,7 +696,7 @@ the context panel use these routes (P11.4, [Frontend](frontend.md#12-personas)).
 ### Lore (planned)
 
 Planned for version 1.1, phase P12 ([ADR 0049](decisions/0049-worlds-and-lore-entries.md)). The first seven rows are
-delivered (P12.1b); the match, import and export routes and `lore_refs` are not built.
+delivered (P12.1b), and so is the match route (P12.2a); the import and export routes and `lore_refs` are not built.
 
 | Method and path | Purpose |
 | --- | --- |
@@ -706,7 +706,7 @@ delivered (P12.1b); the match, import and export routes and `lore_refs` are not 
 | `GET`, `POST /lore/books/{id}/entries` | List (`q`, `enabled`) and create entries. |
 | `GET`, `PUT`, `DELETE /lore/entries/{id}` | Read, replace, delete an entry. |
 | `GET`, `POST /lore/books/{id}/links`, `DELETE /lore/links/{id}` | The characters, scenarios and conversations a world is linked to. |
-| `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. Not delivered. |
+| `POST /lore/books/{id}/match` | Runs the matcher on `{"text", "language"}`, with no model, and answers each entry with its matched key or the reason it stayed inactive. |
 | `POST /lore/worlds/import` | Imports a `lorebook_v3` file as a new world, with a report. Not delivered. |
 | `GET /lore/books/{id}/export` | Exports the book as `lorebook_v3`. Not delivered. |
 
@@ -727,6 +727,15 @@ delivered (P12.1b); the match, import and export routes and `lore_refs` are not 
     conversation in the trash is an unknown target. `DELETE /lore/links/{id}` removes only the link.
   - `q` keeps the worlds whose name or description, or the entries whose title, content, keys or note, contain every
     word of it, ignoring case and accents.
+- `POST /lore/books/{id}/match` (P12.2a) takes `{"text", "language"}`: `text` is up to 20,000 characters and is read as
+  the one message of the window; `language` is optional, a code such as `it` or `en` (up to 16 characters), and a blank
+  one stems with the language of the book's keys. It loads no model and writes nothing. It answers `200`
+  `{"items": [...]}`, one item per entry of the book by `insertion_order`, each with `entry_id`, `title`, `active`,
+  `reason`, `matched_key`, `matched_secondary_key` and `excluded_key` (the key texts as typed, or null).
+  - `reason` is `matched` or `constant` for an active entry. Otherwise it is `disabled`, `no_keys` (no key and not
+    constant), `no_key_matched`, `secondary_not_matched` or `excluded`.
+  - A disabled entry stays inactive even when it is constant, and a constant entry ignores its exclude keys.
+  - A missing or over-long `text` is `422 VALIDATION_ERROR`; an unknown book is `404`.
 - `POST /conversations` with a `scenario_id` copies the scenario's links into the new conversation (one link to each
   world); a later change to the scenario's links does not reach it.
 - `GET /messages/{id}/diagnostics` gains `lore_refs`.

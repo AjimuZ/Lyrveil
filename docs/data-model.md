@@ -835,7 +835,7 @@ Delivered in revision `0021` (P12.1a):
   prompt builder counts with the runtime when it exists (P12.2).
 - `priority` and `insertion_order` are refused beyond ±1,000,000, a bound the ADR does not give.
 - Titles, contents and world names pass the content guard; descriptions and notes never reach a prompt, so they do not.
-  Not built yet: the matcher and the assembly column below.
+  The matcher is built (P12.2a, `services/lore_matcher.py`); the assembly column below is not.
 
 Delivered in P12.1b: the routes, `LoreService` links (`add_link`, `list_links`, `delete_link`) and the copy of a
 scenario's links. `ConversationService.create` copies each `lore_links` row of the scenario into a row of the new
