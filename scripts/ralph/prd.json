@@ -1,7 +1,7 @@
 {
   "project": "lyrveil",
   "branchName": "main",
-  "description": "Lyrveil 1.0 from the documented design: phases P01 to P09 of docs/roadmap.md, split into tasks of one session each, with phase exit tasks and hardware tasks kept apart.",
+  "description": "Lyrveil from the documented design: phases P01 to P09 of docs/roadmap.md (1.0) and P10 to P12 (1.1), split into tasks of one session each, with phase exit tasks and hardware tasks kept apart.",
   "userStories": [
     {
       "id": "P00.1",
@@ -3171,6 +3171,649 @@
         "path": "docs/testing.md",
         "section": "GPU and quality levels",
         "line": "`gpu` and `quality` have no tests (TestCommand.psm1: gpu = $null, quality = $null); the hardware exits need them."
+      }
+    },
+    {
+      "id": "P10.1",
+      "title": "Character Card parser for V1, V2 and V3 JSON and PNG/APNG chunks",
+      "description": "Implement `lyrveil.domain.tavern_card` per ADR 0047 and docs/character-system.md (Character cards): the card models and a parser that detects V1, V2 or V3 from the content, not the extension, and reads the `ccv3` and `chara` tEXt chunks of PNG and APNG with Lyrveil's own length- and CRC-checked reader (`ccv3` wins), with the limits of ADR 0047 and the content guard of ADR 0037 on every string except data URIs. Add synthetic test fixtures written for this project (V1, V2 and V3 JSON, a V2 PNG, a V3 PNG with both chunks, an APNG); no third-party card file enters the repository.",
+      "acceptanceCriteria": [
+        "T-CRD-01 passes: V1, V2 and V3 JSON, and PNG and APNG with `chara`, `ccv3` or both (`ccv3` wins) parse; a bad chunk length or CRC, bad base64, bad JSON, nesting over 64 levels, a file over 64 MB, an unknown `spec` and a CHARX archive (`415`) are refused with distinct errors.",
+        "A minor described in any string of the card, unused fields and lorebook entries included, is refused as `CONTENT_POLICY_BLOCKED` with its source path, such as `data.character_book.entries[3].content` (the unit part of T-CRD-04); data URIs are not checked.",
+        "The fixtures are synthetic and live with the backend's test data, and no global Pillow limit changes."
+      ],
+      "priority": 132,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.EXIT"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.1 Parser for V1, V2 and V3 JSON and for the `ccv3` and `chara` chunks of PNG and APNG, with the limits and"
+      }
+    },
+    {
+      "id": "P10.2a",
+      "title": "Card imports: `card_imports`, `character_sources` and the import routes",
+      "description": "Add the `card_imports` and `character_sources` tables of docs/data-model.md (P10: character cards) with their migration, and `POST /characters/imports`, `GET /characters/imports/{id}`, `DELETE /characters/imports/{id}` and the source route of docs/api.md, in `lyrveil.services.card_import` and `lyrveil.api.characters`. An import parses the file with the P10.1 parser and stores the parsed card unchanged with the file's SHA-256, its format and the import time. For a PNG card the image is staged through the upload path, whose re-encode removes every chunk. No import writes a character.",
+      "acceptanceCriteria": [
+        "T-CRD-02 passes: an import stores the parsed card unchanged with the file hash, `GET .../source` returns it, and any refusal (a parser error, or `422 CONTENT_POLICY_BLOCKED` with the source path) stores no row and no file.",
+        "An unsaved import expires with its staged avatar, and `DELETE /characters/imports/{id}` discards it with `204`.",
+        "Remote `uri` values in a card are never fetched, and a test proves that an import makes no outbound request."
+      ],
+      "priority": 133,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.1"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import"
+      },
+      "splitFrom": "P10.2"
+    },
+    {
+      "id": "P10.2b",
+      "title": "Direct mapping, placeholders and macros, and the import report",
+      "description": "Implement the deterministic direct mapping of docs/character-system.md (Character cards) from a parsed card to a `CharacterDraft` with its fields marked **dalla card**, the placeholder and macro rules of ADR 0047, the explicit adult-age rule, and the import report returned by `GET /characters/imports/{id}`. Render `{{char}}` and `{{user}}` at prompt time, and keep the card fields that never reach a prompt out of every prompt.",
+      "acceptanceCriteria": [
+        "T-CRD-03 passes: traits by paragraph, examples from `<START>` blocks, pairs over the limits left out and reported, macros replaced and listed in the report (`<BOT>`, `<USER>` and `<char>` become the two placeholders; comment and hidden-key macros removed; `random` and `pick` keep their first option; `reverse` evaluated; `roll` and any other removed), and greetings offered as scenarios only when asked.",
+        "The age part of T-CRD-04 passes: the draft's age stays empty unless the card states an adult age in an explicit form (`27 years old`, `27 anni`, `age: 27`), and then it is marked **dalla card**.",
+        "T-CRD-06 passes: `{{char}}` and `{{user}}` render at prompt time with the character's first name and the user's display name, and `system_prompt`, `post_history_instructions` and `creator_notes` never reach a reply, draft, extraction or proactive prompt; the stable-prefix test T-MOD-05 still passes."
+      ],
+      "priority": 134,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.2a"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.2 `card_imports` and `character_sources`, the direct mapping, the placeholders and macros, and the import"
+      },
+      "splitFrom": "P10.2"
+    },
+    {
+      "id": "P10.3",
+      "title": "The `card_conversion` job and `CARD_TOO_LONG`",
+      "description": "Add the optional `card_conversion` job, started by `POST /characters/imports/{id}/conversion` (`202`), per ADR 0047: it reuses the grammar, validation and single repair of assisted creation (ADR 0013), reads the card text as data, and writes a `CharacterDraft` in the character's language, Italian by default, keeping proper names, with its fields marked **proposto**.",
+      "acceptanceCriteria": [
+        "T-CRD-05 passes with the fake runtime: a valid draft, a repaired one, two refusals, and `CARD_TOO_LONG` answered before any generation when the card text, counted by the runtime, leaves less room than the draft's `max_length` plus the template.",
+        "An age written by the conversion model is never used: the converted draft keeps the age of the direct mapping (the conversion part of T-CRD-04).",
+        "The card text reaches the conversion prompt as delimited data, and the job's state and result appear in `GET /characters/imports/{id}`."
+      ],
+      "priority": 135,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.2b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.3 The `card_conversion` job with the assisted creation's grammar and repair, and `CARD_TOO_LONG`."
+      }
+    },
+    {
+      "id": "P10.4",
+      "title": "Save an import through `POST /characters` with `import_id`",
+      "description": "Saving an import is the normal `POST /characters` with `import_id`, so every card rule applies (ADR 0047): the staged PNG image, or a V3 `icon` asset named `main` with a data URI, becomes the primary avatar; greetings become scenarios when asked; the age stays required and adult; version 1 has the actor `import`; the character keeps a link to its `character_sources` row.",
+      "acceptanceCriteria": [
+        "Saving with `import_id` creates the character with version 1 by the actor `import` and links its source, and a missing or under-18 age is refused as for any card (T-CRD-04 at the API).",
+        "`first_mes` with `scenario`, and each `alternate_greetings` entry with the same description, become scenarios only when the save asks for them; `group_only_greetings` stays in the source only.",
+        "A PNG card's image becomes the primary avatar with every chunk removed, a JSON card with a V3 `icon` `main` data URI gets that avatar, otherwise there is none, and an import cannot be saved twice."
+      ],
+      "priority": 136,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.2b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.4 Saving an import through `POST /characters` with `import_id`: avatar, scenarios from greetings, and the"
+      }
+    },
+    {
+      "id": "P10.5a",
+      "title": "Card export as V3 JSON, V2 JSON and PNG with `extensions.lyrveil`",
+      "description": "Implement `lyrveil.services.card_export` and `GET /characters/{id}/card?format=&scenario_ids=` per ADR 0047 (Export): the free text rendered deterministically from the current card, `extensions.lyrveil` with the complete native card and `text_sha256`, the kept source fields of an imported character, and a PNG of the primary avatar with a `ccv3` and a V2 `chara` chunk. `character_book` stays empty until P12.",
+      "acceptanceCriteria": [
+        "T-CRD-07 passes: the V3 and V2 envelope values and every required field, both PNG chunks, `extensions.lyrveil`, the kept source fields and unknown `extensions` keys of an imported character, and no conversation, memory, persona, other image or user name in any format.",
+        "`description`, `personality`, `mes_example` (as `<START>` blocks of `{{user}}:` and `{{char}}:` lines) and `scenario`, `first_mes` and `alternate_greetings` from the chosen `scenario_ids` are rendered deterministically: two exports of an unchanged card are equal apart from `modification_date`.",
+        "A character without an avatar gets a clear error for `png` and still exports JSON, and a character without a source has an empty `creator`, its version number as `character_version` and its `created_at` as `creation_date`."
+      ],
+      "priority": 137,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.4"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an"
+      },
+      "splitFrom": "P10.5"
+    },
+    {
+      "id": "P10.5b",
+      "title": "Import of an embedded Lyrveil card, and the round trips",
+      "description": "On import, a card with `extensions.lyrveil` whose `text_sha256` matches its free text is imported from the embedded card with the rules of the native format. When the hash differs, the import report names the changed fields, preselects the embedded card, and offers the direct mapping as **Usa i testi modificati** (ADR 0047, Round trip).",
+      "acceptanceCriteria": [
+        "T-CRD-08 passes: Lyrveil, then a V3 PNG, then Lyrveil gives an equal card; a card edited elsewhere names its changed fields; a card, then Lyrveil, then a card keeps every unknown field.",
+        "The embedded card goes through the same validation and content guard as a native import, so a tampered embedded card with a matching hash cannot bypass a card rule."
+      ],
+      "priority": 138,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.5a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.5 Export as V3 JSON, V2 JSON and PNG, with `extensions.lyrveil`, the kept source fields, and import of an"
+      },
+      "splitFrom": "P10.5",
+      "effort": "high"
+    },
+    {
+      "id": "P10.6",
+      "title": "The Creator's import preview, and its import and export actions",
+      "description": "In the Creator (docs/frontend.md), add the import of a card file, JSON or PNG, with its preview: the report, fields marked **dalla card** or **proposto**, the runtime token count or a labelled estimate, **Struttura con il modello**, **Usa i testi modificati** and the choice of scenarios, then **Salva personaggio**. Add the export actions for V3 JSON, V2 JSON, PNG and the native format, and **Scarica la card originale**.",
+      "acceptanceCriteria": [
+        "T-CRD-09 passes in the `e2e` level: import a PNG card, read the preview, enter the age, save with scenarios, export as PNG.",
+        "The age stays empty and required unless it is marked **dalla card**, and a content-policy or parser refusal shows its Italian message with the source path.",
+        "The native format's import and export stay reachable from the same actions, and the new components have unit specs, Italian texts and only design-token colors."
+      ],
+      "priority": 139,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.3",
+        "P10.5b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "P10.6 The Creator's import preview, and its import and export actions, including those of the native format."
+      }
+    },
+    {
+      "id": "P10.EXIT",
+      "title": "Verify the automated P10 exit and record the evidence",
+      "description": "Run every automated test the P10 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-CRD-01 to T-CRD-09 pass with the `scripts\\lyrveil.cmd test` levels, a V2 PNG and a V3 JSON card from the test fixtures import, and both directions of the round trip hold; a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P10 section lists the evidence, and the phase table shows the automated part as passed and the manual part (P10.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 140,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.1",
+        "P10.2a",
+        "P10.2b",
+        "P10.3",
+        "P10.4",
+        "P10.5a",
+        "P10.5b",
+        "P10.6"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "T-CRD-01 to T-CRD-09 pass. A V2 PNG and a V3 JSON card from the test fixtures import, and both directions of the round trip hold. AC-21 and AC-22 hold in a manual run."
+      }
+    },
+    {
+      "id": "P10.EXIT-HW",
+      "title": "Verify the P10 manual acceptance run (AC-21, AC-22)",
+      "description": "AC-21 and AC-22 in a manual run on the real stack with the default text profile.",
+      "acceptanceCriteria": [
+        "AC-21 holds: a community character card imported from a PNG, reviewed in the Creator, and a chat with the character, recorded with date and steps.",
+        "AC-22 holds: a character exported as a PNG card and imported again with no change to the card.",
+        "The roadmap marks P10 done and lists the evidence."
+      ],
+      "priority": 141,
+      "passes": false,
+      "notes": "BLOCKED: waiting for a person: Dopo P10.EXIT, con la GPU libera: importa da PNG una card della community, rivedila nel Creator e chatta con il personaggio (AC-21); esporta un personaggio come card PNG e reimportala senza modifiche (AC-22); poi unblock per registrare le prove.",
+      "dependsOn": [
+        "P10.EXIT"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P10: Character cards",
+        "line": "T-CRD-01 to T-CRD-09 pass. A V2 PNG and a V3 JSON card from the test fixtures import, and both directions of the round trip hold. AC-21 and AC-22 hold in a manual run."
+      }
+    },
+    {
+      "id": "P11.1a",
+      "title": "`user_personas` and the migration from the two user settings",
+      "description": "Add `user_personas` (docs/data-model.md, P11: user personas) with the fields and checks of ADR 0048, `conversations.persona_id` and `persona_note`, `scenarios.persona_id` and `memories.persona_id`, and one migration that creates the default persona from `user.display_name` and `user.grammatical_gender`, or from their defaults `Utente` and `non_indicato` when no row exists, sets it on every conversation and shared memory, and removes the two keys.",
+      "acceptanceCriteria": [
+        "T-PSN-01 passes on a database with the two settings and on one without them.",
+        "The database refuses an age outside NULL or 18 to 120, a name over 40 characters and a second default persona (the database half of T-PSN-02), and the existing migration tests still pass."
+      ],
+      "priority": 142,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P10.EXIT"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,"
+      },
+      "splitFrom": "P11.1"
+    },
+    {
+      "id": "P11.1b",
+      "title": "Persona routes, and the persona of a conversation",
+      "description": "Add the persona routes of docs/api.md (`GET`, `POST /personas`; `GET`, `PUT`, `DELETE /personas/{id}`; `/default`; `/archive` and `/unarchive`) with the content guard of ADR 0037 on every text, drop the two keys from the settings API, and let a new conversation take `persona_id` and a `persona_note` of up to 600 characters.",
+      "acceptanceCriteria": [
+        "T-PSN-02 passes at the API: name length, age NULL or 18 to 120, the content guard on every text, exactly one default, a used persona can only be archived, an unused one can be deleted, and the default cannot be archived or deleted until another is the default.",
+        "The conversation half of T-PSN-04 passes: `persona_id` cannot change after a conversation is created, and its `persona_note` can.",
+        "A new conversation without `persona_id` gets the scenario's persona when the scenario names one, otherwise the default; an archived persona is refused for new conversations and keeps its existing ones working."
+      ],
+      "priority": 143,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.1a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,"
+      },
+      "splitFrom": "P11.1",
+      "effort": "high"
+    },
+    {
+      "id": "P11.2",
+      "title": "The conversation's persona in every prompt, and block 10",
+      "description": "Replace every use of `user.display_name` and `user.grammatical_gender` (`UserProfile` in `lyrveil.context.minimal` and its callers) with the conversation's persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and proactive prompts. Add block 10 (age, `appearance`, `about` and `persona_note`) in the stable text after block 3, with the budget and cut order of docs/prompting.md (Blocks 10 to 12).",
+      "acceptanceCriteria": [
+        "T-PSN-03 passes: the conversation's persona reaches block 1, block 3, block 10, the anchor, the stop sequences, the reply checks and the extraction and proactive prompts, and no text of another persona reaches any prompt.",
+        "The prompt half of T-PSN-04 passes: a persona or note edit changes block 10 from the next reply only, and T-MOD-05 (stable prefix) still passes with block 10.",
+        "Block 10 has a budget of 0 tokens minimum, 150 as the target and 300 at most; under pressure `appearance` is cut first, then `about`, and the name and gender are never cut."
+      ],
+      "priority": 144,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.1b"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and"
+      }
+    },
+    {
+      "id": "P11.3",
+      "title": "Shared memories read by persona",
+      "description": "**Condividi** stores the origin conversation's `persona_id` on the shared memory, and a conversation with `shares_memory` reads only the shared memories of its own persona (ADR 0048, docs/memory-engine.md).",
+      "acceptanceCriteria": [
+        "T-PSN-05 passes: with `shares_memory`, a conversation reads the shared memories of its own persona and never those of another.",
+        "Sharing a memory records the persona of its origin conversation, and the existing shared-memory tests still pass."
+      ],
+      "priority": 145,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.1b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "P11.3 Shared memories read by persona."
+      }
+    },
+    {
+      "id": "P11.4",
+      "title": "**Le tue persone**, the persona in the new-chat picker, and the note in the context panel",
+      "description": "Add **Le tue persone** of docs/frontend.md (12. Personas) with the knowledge warning of ADR 0048, link it from **Impostazioni generali**, add the persona and the note to the new-chat picker, and show and edit the note in the context panel.",
+      "acceptanceCriteria": [
+        "T-PSN-06 passes in the `e2e` level: create a second persona, start a chat with it and a note, and see both in the context panel.",
+        "The form shows \"Ciò che scrivi qui lo sa ogni personaggio che parla con questa persona.\", the picker preselects the default or the scenario's persona and hides archived ones, and an existing conversation offers no way to change its persona."
+      ],
+      "priority": 146,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.2",
+        "P11.3"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "P11.4 **Le tue persone**, the persona and note in the new-chat picker, and the note in the context panel."
+      }
+    },
+    {
+      "id": "P11.EXIT",
+      "title": "Verify the automated P11 exit and record the evidence",
+      "description": "Run every automated test the P11 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-PSN-01 to T-PSN-06 pass with the `scripts\\lyrveil.cmd test` levels, and the stable-prefix test T-MOD-05 still passes with block 10; a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P11 section lists the evidence, and the phase table shows the automated part as passed and the manual part (P11.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 147,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.1a",
+        "P11.1b",
+        "P11.2",
+        "P11.3",
+        "P11.4"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "T-PSN-01 to T-PSN-06 pass. The stable-prefix test still passes with block 10 (T-MOD-05). AC-23 holds in a manual run."
+      }
+    },
+    {
+      "id": "P11.EXIT-HW",
+      "title": "Verify the P11 manual acceptance run (AC-23)",
+      "description": "AC-23 in a manual run on the real stack with the default text profile.",
+      "acceptanceCriteria": [
+        "AC-23 holds: conversations started with two different personas, and neither character knows the other persona, recorded with date and steps.",
+        "The roadmap marks P11 done and lists the evidence."
+      ],
+      "priority": 148,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.EXIT"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P11: User personas",
+        "line": "T-PSN-01 to T-PSN-06 pass. The stable-prefix test still passes with block 10 (T-MOD-05). AC-23 holds in a manual run."
+      }
+    },
+    {
+      "id": "P12.1a",
+      "title": "`lore_books`, `lore_entries` and `lore_links`, with validation and stemmed keys",
+      "description": "Add the three tables of docs/data-model.md (P12: worlds and lore) and their domain models per ADR 0049: own books (at most one per character) and worlds, `scan_depth` from 1 to 20 (default 4), `token_budget` from 50 to 900, the entry fields and limits, keys stemmed on save with the steps of docs/memory-engine.md (Stemming), and the content guard of ADR 0037 with the card rules on titles, contents and world names.",
+      "acceptanceCriteria": [
+        "T-LOR-04 passes: the field limits, the content guard on titles, contents and names, the 500-entry limit, and an entry over its block's maximum stored and flagged as never inserted.",
+        "A key with no stem left after stop-word removal, such as `lui`, is refused on save, and a stored key keeps its text and its stems.",
+        "The database allows at most one own book per character."
+      ],
+      "priority": 149,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P11.EXIT"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.1 `lore_books`, `lore_entries` and `lore_links`, with the content guard and the stemmed keys."
+      },
+      "splitFrom": "P12.1"
+    },
+    {
+      "id": "P12.1b",
+      "title": "Lore routes and links, and a scenario's links copied at a conversation's start",
+      "description": "Add the lore routes of docs/api.md (worlds, books, entries and links, and `GET /characters/{id}/lore`, which creates the own book empty on first use), and copy a scenario's world links into a conversation that starts from it; later edits of the scenario do not change the conversation.",
+      "acceptanceCriteria": [
+        "Each lore route of docs/api.md answers with its documented status codes, an invalid entry is refused with its field and limit, and `DELETE /lore/books/{id}` is refused for an own book.",
+        "A link targets exactly one character, scenario or conversation; starting a conversation from a scenario copies its links, and a later change to the scenario's links leaves that conversation unchanged (the link part of T-LOR-02)."
+      ],
+      "priority": 150,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.1a"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.1 `lore_books`, `lore_entries` and `lore_links`, with the content guard and the stemmed keys."
+      },
+      "splitFrom": "P12.1",
+      "effort": "high"
+    },
+    {
+      "id": "P12.2a",
+      "title": "The lore matcher and `POST /lore/books/{id}/match`",
+      "description": "Implement the deterministic matcher of ADR 0049 (Activation): the scan window of the newest `scan_depth` messages from both sides, contiguous stem sequences in Italian and English, exact case-sensitive keys at word boundaries, secondary and excluded keys, disabled and constant entries, with no regular expression and no recursion. Expose it as `POST /lore/books/{id}/match`.",
+      "acceptanceCriteria": [
+        "T-LOR-01 passes: stem sequences in Italian and English, exact case-sensitive keys, secondary and excluded keys, disabled and constant entries, the scan depth, and keys refused for having no stem.",
+        "`POST /lore/books/{id}/match` with `{\"text\", \"language\"}` answers each entry with its matched key or the reason it stayed inactive, with no model loaded."
+      ],
+      "priority": 151,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.1b"
+      ],
+      "taskType": "feature_standard",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.2 The matcher, the selection by budget and priority, and blocks 11 and 12 with the new reduction order and"
+      },
+      "splitFrom": "P12.2",
+      "effort": "high"
+    },
+    {
+      "id": "P12.2b",
+      "title": "Lore selection, blocks 11 and 12, the reduction order and global instructions v2",
+      "description": "Per ADR 0049 and docs/prompting.md (Blocks 10 to 12): resolve the books a reply reads (the own book, the character's worlds and the conversation's worlds); select entries by priority, own book first, then insertion order, within the block and book budgets; render constant entries in block 11 of the stable text after block 10 and activated entries in block 12 of the dynamic context after block 5; apply the new reduction order of docs/memory-engine.md (Planned for version 1.1); and ship version 2 of the global instructions with the order card, `[sicuro]` memory, lore, `[incerto]` memory.",
+      "acceptanceCriteria": [
+        "T-LOR-02 passes: a reply reads the own book, the character's worlds and the conversation's worlds, and no link of another conversation applies.",
+        "T-LOR-03 passes: priority, own book first, insertion order, block and book budgets, the new reduction order, block 11 in the stable text and block 12 in the dynamic context, and the prefix stays byte-identical over twelve replies while the activated entries change.",
+        "`{{char}}` and `{{user}}` in entries render as in cards, and the existing prompt tests, T-MOD-05 included, still pass with version 2 of the global instructions."
+      ],
+      "priority": 152,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.2a"
+      ],
+      "taskType": "problem_very_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.2 The matcher, the selection by budget and priority, and blocks 11 and 12 with the new reduction order and"
+      },
+      "splitFrom": "P12.2"
+    },
+    {
+      "id": "P12.3",
+      "title": "`lore_refs` in the assemblies, and **Voci di lore** in diagnostic mode",
+      "description": "Record `lore_refs` on each assembly (the entry, its book, the hash of its content, the key that matched, the block, and kept or cut), return them from `GET /messages/{id}/diagnostics`, and list them under **Voci di lore** in diagnostic mode, apart from the memories. Extraction never reads lore.",
+      "acceptanceCriteria": [
+        "T-LOR-06 passes: each assembly stores `lore_refs`, diagnostic mode shows them apart from the memories, and extraction never reads lore.",
+        "A cut entry appears in `lore_refs` as cut, with its block."
+      ],
+      "priority": 153,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.2b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.3 `lore_refs` in the assemblies and **Voci di lore** in diagnostic mode."
+      }
+    },
+    {
+      "id": "P12.4",
+      "title": "`character_book` and `lorebook_v3` import and export, and the migration of P10's books",
+      "description": "Per ADR 0049 (Import and export): a card's `character_book` becomes the character's own book when the import is saved; a `lorebook_v3` file imports as a world (`POST /lore/worlds/import`); a world or an own book exports as `lorebook_v3` (`GET /lore/books/{id}/export`); the card export of P10 fills `character_book` from the own book; and a migration converts the books stored in `character_sources` by earlier imports.",
+      "acceptanceCriteria": [
+        "T-LOR-05 passes: the field mapping, the decorators applied (`@@activate`, `@@dont_activate`, `@@additional_keys`, `@@exclude_keys`) or kept, `use_regex` entries and entries left without a usable key imported disabled and listed in the report, unknown fields kept in `source_json`, and the migration converts the stored sources.",
+        "T-LOR-08 passes: a `lorebook_v3` round trip keeps every field, and the decorators that were not applied come back as lines at the start of the content.",
+        "A card export of a character with an own book carries it as `character_book`, and T-CRD-07 and T-CRD-08 still pass."
+      ],
+      "priority": 154,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.1b"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.4 `character_book` and `lorebook_v3` import and export, and the migration of the books stored by P10."
+      }
+    },
+    {
+      "id": "P12.5a",
+      "title": "**Mondi** and the lore book editor",
+      "description": "Add **Mondi** (`/worlds`, `/worlds/:id`) of docs/frontend.md (11. Worlds and lore): the list of worlds with status and search, the world editor with its settings and entries (keys, secondary and excluded keys, flags, priority, insertion order, note), and the character's own book at `/characters/:id/lore`, opened from the profile. The editor says when an entry is too long to ever be inserted.",
+      "acceptanceCriteria": [
+        "A world can be created, edited, archived and deleted, and its entries created, edited and deleted, with each validation error shown in Italian next to its field.",
+        "The character profile opens the own book at `/characters/:id/lore` with the same entry editor.",
+        "The new components have unit specs, Italian texts and only design-token colors."
+      ],
+      "priority": 155,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.1b"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.5 **Mondi**, the own book of a character, the links from characters, scenarios and conversations, and"
+      },
+      "splitFrom": "P12.5"
+    },
+    {
+      "id": "P12.5b",
+      "title": "World links, and **Prova le parole chiave**",
+      "description": "Add the links of a world to characters, scenarios and conversations, in the world editor and from the character, scenario and conversation screens, and **Prova le parole chiave**: paste a text and see which entries would be active and why, through `POST /lore/books/{id}/match`.",
+      "acceptanceCriteria": [
+        "T-LOR-07 passes in the `e2e` level: create a world, add entries, link it to two characters, use **Prova le parole chiave**, and see an entry under **Voci di lore**.",
+        "Removing a link stops the world from reaching that target's next reply, and the keyword test works with no model loaded."
+      ],
+      "priority": 156,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.5a",
+        "P12.2a",
+        "P12.3"
+      ],
+      "taskType": "feature_multi_component",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.5 **Mondi**, the own book of a character, the links from characters, scenarios and conversations, and"
+      },
+      "splitFrom": "P12.5"
+    },
+    {
+      "id": "P12.6",
+      "title": "T-QLT-05 again on the default profile with a world of 40 entries",
+      "description": "Run the consistency protocol (T-QLT-05) of docs/consistency-engine.md again on the default text profile, with a world of 40 entries linked to the protocol's character, and record the result next to the 1.0 run of P04.10. It needs the real model and a GPU free of other programs.",
+      "acceptanceCriteria": [
+        "The protocol's scripted conversations run through `scripts\\lyrveil.cmd test quality` with the 40-entry world linked, and a dated file in `docs/verification/` records the commands, versions and every target with and without lore.",
+        "T-QLT-05 meets its hard targets on the default profile with lore active, or each miss is recorded as a failure with its cause, never as a pass."
+      ],
+      "priority": 157,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.3",
+        "P12.4",
+        "P04.10"
+      ],
+      "taskType": "integration_sensitive",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "P12.6 Run the consistency protocol (T-QLT-05) again on the default profile, with a world of 40 entries linked to"
+      }
+    },
+    {
+      "id": "P12.EXIT",
+      "title": "Verify the automated P12 exit and record the evidence",
+      "description": "Run every automated test the P12 exit names, fix what fails within the phase, and record dated evidence. The exit line is the source of this task.",
+      "acceptanceCriteria": [
+        "T-LOR-01 to T-LOR-08 pass with the `scripts\\lyrveil.cmd test` levels, and a dated file in `docs/verification/` records the exact commands, versions and result counts.",
+        "The P12 section lists the evidence, and the phase table shows the automated part as passed and the quality and manual parts (P12.6, P12.EXIT-HW) as pending, so the phase is not marked done."
+      ],
+      "priority": 158,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.1a",
+        "P12.1b",
+        "P12.2a",
+        "P12.2b",
+        "P12.3",
+        "P12.4",
+        "P12.5a",
+        "P12.5b"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "T-LOR-01 to T-LOR-08 pass. T-QLT-05 meets its hard targets on the default profile with lore active. AC-24 holds in a manual run."
+      }
+    },
+    {
+      "id": "P12.EXIT-HW",
+      "title": "Verify the P12 quality and manual exit (T-QLT-05 with lore, AC-24)",
+      "description": "T-QLT-05 with lore active from P12.6, and AC-24 in a manual run on the real stack with the default text profile.",
+      "acceptanceCriteria": [
+        "AC-24 holds: a world linked to two characters, and one of its entries reaching a reply in diagnostic mode, recorded with date and steps.",
+        "T-QLT-05 meets its hard targets with lore active (P12.6), and the roadmap marks P12 done and lists the evidence."
+      ],
+      "priority": 159,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P12.EXIT",
+        "P12.6"
+      ],
+      "taskType": "bug_complex",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "P12: Worlds and lore",
+        "line": "T-LOR-01 to T-LOR-08 pass. T-QLT-05 meets its hard targets on the default profile with lore active. AC-24 holds in a manual run."
       }
     }
   ]
