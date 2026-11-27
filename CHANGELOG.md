@@ -11,6 +11,12 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Changed
 
+- Lore books, entries and links in the database (P12.1a, [ADR 0049](docs/decisions/0049-worlds-and-lore-entries.md)).
+  Migration 0021 adds `lore_books`, `lore_entries` and `lore_links`, with the field limits, one own book per character
+  and at most 500 entries in a book. `LoreService` stores worlds, own books and entries: titles, contents and world
+  names pass the content guard, keys are stemmed on save, and a key with no stem left, such as `lui`, is refused. An
+  entry whose rendered text is over its block's maximum is stored and flagged as never inserted. There are no routes or
+  screens yet and no prompt reads lore. The tests (T-LOR-04) have not run.
 - Automated exit of the personas phase (P11.EXIT). T-PSN-01 to T-PSN-06 and the stable-prefix test T-MOD-05 with
   block 10 pass with the `unit`, `integration`, `e2e` and `lint` levels, so the "written and not run" notes of the P11
   entries no longer apply. The manual part (AC-23 on the real application, P11.EXIT-HW) has not run. See

@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, text
@@ -37,7 +38,8 @@ SCHEDULING = "0016"
 NOTIFICATIONS = "0017"
 CARD_IMPORTS = "0018"
 CARD_CONVERSION = "0019"
-HEAD = "0020"
+PERSONAS = "0020"
+HEAD = "0021"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -74,7 +76,8 @@ TABLES_WITH_LIFECYCLE = {*TABLES_WITH_PROPOSALS, "model_lifecycle_events"}
 TABLES_WITH_SCHEDULING = {*TABLES_WITH_LIFECYCLE, "scheduled_events"}
 TABLES_WITH_NOTIFICATIONS = {*TABLES_WITH_SCHEDULING, "notifications"}
 TABLES_WITH_CARD_IMPORTS = {*TABLES_WITH_NOTIFICATIONS, "card_imports", "character_sources"}
-TABLES = {*TABLES_WITH_CARD_IMPORTS, "user_personas"}
+TABLES_WITH_PERSONAS = {*TABLES_WITH_CARD_IMPORTS, "user_personas"}
+TABLES = {*TABLES_WITH_PERSONAS, "lore_books", "lore_entries", "lore_links"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -117,6 +120,7 @@ def test_the_revisions_follow_one_another() -> None:
         NOTIFICATIONS,
         CARD_IMPORTS,
         CARD_CONVERSION,
+        PERSONAS,
         HEAD,
     }
 
@@ -149,6 +153,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", PERSONAS, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == TABLES_WITH_PERSONAS
     assert alembic(database_path, "downgrade", CARD_CONVERSION, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES_WITH_CARD_IMPORTS
     assert alembic(database_path, "downgrade", NOTIFICATIONS, cwd=tmp_path).returncode == 0
@@ -694,3 +700,192 @@ def test_a_new_conversation_takes_the_default_persona(engine: Engine) -> None:
         default_id = connection.execute(text("SELECT id FROM user_personas WHERE is_default = 1")).scalar_one()
         row = connection.execute(text("SELECT persona_id, persona_note FROM conversations")).one()
     assert tuple(row) == (default_id, "")
+
+
+BOOK_INSERT = (
+    "INSERT INTO lore_books (id, kind, character_id, name, description, scan_depth, token_budget, status, "
+    "created_at, updated_at) VALUES (:id, :kind, :character_id, :name, :description, :scan_depth, :token_budget, "
+    ":status, :now, :now)"
+)
+ENTRY_INSERT = (
+    "INSERT INTO lore_entries (id, book_id, title, content, keys_json, secondary_keys_json, exclude_keys_json, "
+    "keys_stem_json, case_sensitive, constant, enabled, priority, insertion_order, note, source_json, created_at, "
+    "updated_at) VALUES (:id, :book_id, :title, :content, :keys_json, '[]', '[]', '{}', :case_sensitive, :constant, "
+    ":enabled, 0, 100, :note, '{}', :now, :now)"
+)
+
+
+def insert_book(connection: sqlite3.Connection, book_id: str, **overrides: object) -> None:
+    """Inserts a valid world, changing the columns named in `overrides`."""
+    row: dict[str, object] = {
+        "id": book_id,
+        "kind": "world",
+        "character_id": None,
+        "name": "Aldara",
+        "description": "",
+        "scan_depth": 4,
+        "token_budget": None,
+        "status": "active",
+        "now": NOW,
+        **overrides,
+    }
+    connection.execute(BOOK_INSERT, row)
+
+
+def insert_entry(connection: sqlite3.Connection, entry_id: str, **overrides: Any) -> None:
+    """Inserts a valid entry in book `w`, changing the columns named in `overrides` (`book_id` included)."""
+    row: dict[str, Any] = {
+        "id": entry_id,
+        "book_id": "w",
+        "title": "",
+        "content": "Un faro.",
+        "keys_json": "[]",
+        "case_sensitive": 0,
+        "constant": 0,
+        "enabled": 1,
+        "note": "",
+        "now": NOW,
+        **overrides,
+    }
+    connection.execute(ENTRY_INSERT, row)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"kind": "group"}, id="unknown kind"),
+        pytest.param({"character_id": "c"}, id="a world with a character"),
+        pytest.param({"kind": "character"}, id="an own book without a character"),
+        pytest.param({"name": ""}, id="empty name"),
+        pytest.param({"name": "x" * 121}, id="name over 120"),
+        pytest.param({"description": "x" * 2001}, id="description over 2000"),
+        pytest.param({"scan_depth": 0}, id="scan depth under 1"),
+        pytest.param({"scan_depth": 21}, id="scan depth over 20"),
+        pytest.param({"token_budget": 49}, id="token budget under 50"),
+        pytest.param({"token_budget": 901}, id="token budget over 900"),
+        pytest.param({"status": "deleted"}, id="unknown status"),
+    ],
+)
+def test_a_lore_book_that_breaks_a_documented_rule_is_refused(
+    database_path: Path, tmp_path: Path, overrides: dict[str, object]
+) -> None:
+    """The database half of T-LOR-04 for books."""
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        seed_chat(connection)
+        insert_book(connection, "ok-edge", name="x" * 120, description="x" * 2000, scan_depth=20, token_budget=900)
+        insert_book(connection, "ok-low", scan_depth=1, token_budget=50)
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            insert_book(connection, "bad", **overrides)
+    finally:
+        connection.close()
+
+
+def test_the_database_allows_one_own_book_per_character(database_path: Path, tmp_path: Path) -> None:
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        seed_chat(connection)
+        connection.execute(
+            "INSERT INTO characters (id, first_name, age, created_at, updated_at) VALUES ('d', 'Bruno', 30, ?, ?)",
+            (NOW, NOW),
+        )
+        insert_book(connection, "own-c", kind="character", character_id="c", name="Alba")
+        insert_book(connection, "own-d", kind="character", character_id="d", name="Bruno")
+        insert_book(connection, "w1")
+        insert_book(connection, "w2")
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            insert_book(connection, "second-c", kind="character", character_id="c", name="Alba bis")
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            insert_book(connection, "nobody", kind="character", character_id="missing")
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"title": "x" * 81}, id="title over 80"),
+        pytest.param({"content": "x" * 8001}, id="content over 8000"),
+        pytest.param({"note": "x" * 501}, id="note over 500"),
+        pytest.param({"keys_json": json.dumps(["k"] * 17)}, id="17 keys"),
+        pytest.param({"keys_json": "not json"}, id="keys that are not JSON"),
+        pytest.param({"keys_json": '{"a": 1}'}, id="keys that are not a list"),
+        pytest.param({"enabled": 2}, id="enabled is not a boolean"),
+        pytest.param({"constant": 2}, id="constant is not a boolean"),
+        pytest.param({"book_id": "missing"}, id="an unknown book"),
+    ],
+)
+def test_a_lore_entry_that_breaks_a_documented_rule_is_refused(
+    database_path: Path, tmp_path: Path, overrides: dict[str, object]
+) -> None:
+    """The database half of T-LOR-04 for entries."""
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        insert_book(connection, "w")
+        insert_entry(connection, "ok-edge", title="x" * 80, content="x" * 8000, note="x" * 500)
+        insert_entry(connection, "ok-keys", keys_json=json.dumps(["k"] * 16))
+        with pytest.raises(sqlite3.IntegrityError):
+            insert_entry(connection, "bad", **overrides)
+    finally:
+        connection.close()
+
+
+def test_a_book_holds_at_most_500_entries_in_the_database(database_path: Path, tmp_path: Path) -> None:
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        insert_book(connection, "w")
+        insert_book(connection, "other")
+        for index in range(500):
+            insert_entry(connection, f"e{index}")
+        with pytest.raises(sqlite3.IntegrityError, match="at most 500"):
+            insert_entry(connection, "e500")
+        insert_entry(connection, "o0", book_id="other")
+    finally:
+        connection.close()
+
+
+def test_a_link_names_one_target_and_only_a_world_can_be_linked(database_path: Path, tmp_path: Path) -> None:
+    assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
+    connection = open_database(database_path)
+    try:
+        seed_chat(connection)
+        connection.execute(
+            "INSERT INTO scenarios (id, title, created_at, updated_at) VALUES ('s', 'Faro', ?, ?)", (NOW, NOW)
+        )
+        # A conversation with no messages, so that it can be deleted: messages restrict the deletion of their chat.
+        connection.execute(
+            "INSERT INTO conversations (id, character_id, title, created_at, updated_at) "
+            "VALUES ('x', 'c', 'Bosco', ?, ?)",
+            (NOW, NOW),
+        )
+        insert_book(connection, "w")
+        insert_book(connection, "own-c", kind="character", character_id="c", name="Alba")
+        link = "INSERT INTO lore_links (id, book_id, character_id, scenario_id, conversation_id, created_at) VALUES "
+        connection.execute(f"{link} ('l1', 'w', 'c', NULL, NULL, ?)", (NOW,))
+        connection.execute(f"{link} ('l2', 'w', NULL, 's', NULL, ?)", (NOW,))
+        connection.execute(f"{link} ('l3', 'w', NULL, NULL, 'x', ?)", (NOW,))
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            connection.execute(f"{link} ('again', 'w', 'c', NULL, NULL, ?)", (NOW,))
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            connection.execute(f"{link} ('none', 'w', NULL, NULL, NULL, ?)", (NOW,))
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+            connection.execute(f"{link} ('two', 'w', 'c', 's', NULL, ?)", (NOW,))
+        with pytest.raises(sqlite3.IntegrityError, match="only a world"):
+            connection.execute(f"{link} ('own', 'own-c', NULL, NULL, 'x', ?)", (NOW,))
+        insert_book(connection, "w2")
+        connection.execute(f"{link} ('l4', 'w2', NULL, NULL, 'v', ?)", (NOW,))
+        with pytest.raises(sqlite3.IntegrityError, match="only a world"):
+            connection.execute("UPDATE lore_links SET book_id = 'own-c' WHERE id = 'l4'")
+
+        connection.execute("DELETE FROM conversations WHERE id = 'x'")
+        assert connection.execute("SELECT id FROM lore_links ORDER BY id").fetchall() == [("l1",), ("l2",), ("l4",)]
+        connection.execute("DELETE FROM scenarios WHERE id = 's'")
+        assert connection.execute("SELECT id FROM lore_links ORDER BY id").fetchall() == [("l1",), ("l4",)]
+        connection.execute("DELETE FROM lore_books WHERE id = 'w'")
+        assert connection.execute("SELECT id FROM lore_links").fetchall() == [("l4",)]
+    finally:
+        connection.close()

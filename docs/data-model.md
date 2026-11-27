@@ -812,6 +812,31 @@ Delivered in revision `0020` (P11.1a):
 | `character_id`, `scenario_id`, `conversation_id` | TEXT | Exactly one is set, by `CHECK`. Unique with `book_id` |
 | `created_at` | TEXT | |
 
+Delivered in revision `0021` (P12.1a):
+
+- The three tables exist with real foreign keys, because they are new: a purge of a character deletes its own book and
+  its links, a book's entries and links follow the book, and a deleted scenario or conversation takes its links.
+- `CHECK`s hold the lengths, the ranges (`scan_depth` 1 to 20, `token_budget` NULL or 50 to 900), the two lists of
+  `kind` and `status`, that a character book has a `character_id` and a world has none, at most 16 items in each key list,
+  and that `source_json` and `keys_stem_json` are JSON. The partial unique index `ux_lore_books_character` allows one
+  own book per character. `content` has an upper limit only; `LoreService` refuses an empty one.
+- `lore_links` has one partial unique index per target kind, and the triggers `lore_links_world_only` and
+  `lore_links_world_only_update` refuse a link to a book that is not a world. The trigger `lore_entries_limit` refuses a
+  501st entry in a book; the service checks the same limit first and answers with an Italian detail.
+- `keys_stem_json` is an object `{"language": "it", "keys": [[stem, ...], ...], "secondary_keys": [...],
+  "exclude_keys": [...]}`: for every key of a list, in the list's order, its stem sequence. `LoreService` writes it on
+  every save with the language of the book: the character's `primary_language` for an own book, Italian for a world,
+  which has no character. The key text stays in `keys_json` as typed (trimmed, without blanks or repeats), so a matcher
+  that reads another language can stem it again. A key with no stem left after stop-word removal, such as `lui`, is
+  refused on save.
+- "Over its block's maximum" is a save-time estimate on the rendered line `- {title}: {content}` with
+  `estimate_tokens` (one token per three characters, rounded up, plus one), against 600 tokens for a constant entry
+  (block 11) and 900 for the others (block 12). It is read with the entry as `never_inserted` and is not a column. The
+  prompt builder counts with the runtime when it exists (P12.2).
+- `priority` and `insertion_order` are refused beyond ±1,000,000, a bound the ADR does not give.
+- Titles, contents and world names pass the content guard; descriptions and notes never reach a prompt, so they do not.
+  Not built yet: the routes, links in the service, the matcher and the assembly column below.
+
 `prompt_assemblies` gains `lore_refs_json`: for each entry considered, its id, book, content hash, matched key, block,
 and whether it was kept. Deleting a world asks for confirmation and deletes its entries and links. A conversation that
 starts from a scenario copies the scenario's links. Purging a conversation deletes its links.

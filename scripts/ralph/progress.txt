@@ -325,6 +325,7 @@
 - Run `scripts/lyrveil.cmd test lint` after frontend changes: it also runs the strict Angular build, which catches template type errors and renamed doc anchors.
 - When a docs heading changes (for example '(planned)' removed), grep docs/traceability.md for the old anchor in the same change.
 - An exit task that edits docs after the levels have run should re-run lint and state in the evidence file which files changed after the test runs.
+- Run the lint level and read the real [FAIL] lines before fixing: a truncated log hid the actual ruff format and mypy errors.
 
 ---
 
@@ -3193,4 +3194,14 @@ I did not run the docker and gpu levels, since the P11 exit names no test from t
   - P11.EXIT-HW (AC-23 manual run with the real text model) is still pending; the P11 phase row says so and must not be marked Done until it runs.
   - The e2e level now has 114 specs and the frontend has 38 Vitest files with 252 tests; later exit files should use these counts as the baseline.
   - The scenario form still has no Persona choice, so scenarios.persona_id is covered at the API only.
+---
+
+## 2026-11-27T18:05:17Z - P12.1a
+- Fixed the two lint failures from attempt 1: a ruff format layout in persistence/lore.py and a mypy --strict arg-type error in the insert_entry helper of test_migrations.py. The lint level now passes in full. The lore tests (T-LOR-04) have not been run: a targeted pytest run was denied, so the unit and integration levels will be their first run.
+- Files changed: backend/migrations/versions/0021_lore.py, backend/src/lyrveil/domain/lore.py, backend/src/lyrveil/persistence/lore.py, backend/src/lyrveil/services/lore.py, backend/src/lyrveil/services/lore_rules.py, backend/tests/unit/test_lore_rules.py, backend/tests/integration/test_lore.py, backend/tests/integration/test_migrations.py, CHANGELOG.md, docs/data-model.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The lint level passes, but the new lore tests have not run. A targeted pytest call was denied in this session, so the orchestrator's unit and integration levels are their first run; if they fail, look at test_lore_rules.py, test_lore.py and the lore tests in test_migrations.py first.
+  - ruff format wants the long f-string inside text(...) kept on one line, with text( wrapped over three lines. An implicit string concatenation inside text() gets joined.
+  - Test helpers that accept **overrides must not also have a named parameter that tests override, because mypy --strict rejects the dict unpacking. Put the default in the row and let overrides replace it.
+  - Lore has no routes or screens yet, and no prompt reads lore. The next P12 tasks build on LoreService and persistence/lore.py.
 ---
