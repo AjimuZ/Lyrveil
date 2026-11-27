@@ -356,8 +356,8 @@ def purge(connection: Connection, character_id: str) -> None:
     extraction runs, summary checkpoints, prompt assemblies), its generated image rows and image proposals, its
     message variants, messages
     and conversations (the search triggers clear their index rows), then its traits, asset rows, visual profile,
-    versions and the character row. The caller owns the transaction, the confirmation and the asset and image files,
-    which it removes after the commit."""
+    versions, imported source card and the character row. The caller owns the transaction, the confirmation and the
+    asset and image files, which it removes after the commit."""
     params = {"id": character_id}
     owned_conversations = "SELECT id FROM conversations WHERE character_id = :id"
     owned_messages = f"SELECT id FROM messages WHERE conversation_id IN ({owned_conversations})"
@@ -391,6 +391,7 @@ def purge(connection: Connection, character_id: str) -> None:
         "DELETE FROM character_assets WHERE character_id = :id",
         "DELETE FROM character_visual_profiles WHERE character_id = :id",
         "DELETE FROM character_versions WHERE character_id = :id",
+        "DELETE FROM character_sources WHERE character_id = :id",
         "DELETE FROM characters WHERE id = :id",
     ):
         connection.execute(text(sql), params)

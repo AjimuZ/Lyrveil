@@ -59,7 +59,8 @@ class DailyBackup:
     Idle means: the database exists, no generation job is `running`, and `PRAGMA data_version` of a read-only
     connection is unchanged since the previous look, so no connection committed a write in between. The first look
     only records the baseline. After each backup the volume keeps the newest `keep` backups. Never raises from
-    run_forever; failures are logged and retried after RETRY_AFTER_FAILURE.
+    run_forever; failures are logged and retried after RETRY_AFTER_FAILURE. `housekeeping`, when given, runs once after
+    each written backup, in the same worker thread; the backend passes the expiry of unsaved card imports.
     """
 
     def __init__(
@@ -70,7 +71,9 @@ class DailyBackup:
         clock: Callable[[], datetime] = _utc_now,
         check_interval_s: float = CHECK_INTERVAL_S,
         keep: int = KEEP_BACKUPS,
+        housekeeping: Callable[[], object] | None = None,
     ) -> None:
+        self._housekeeping = housekeeping
         self._data_root = data_root
         self._zone = zone
         self._clock = clock
@@ -148,7 +151,18 @@ class DailyBackup:
             backup_bytes=path.stat().st_size,
             pruned_count=len(pruned),
         )
+        self._run_housekeeping()
         return path
+
+    def _run_housekeeping(self) -> None:
+        """Runs the clean-up the owner passed (the expiry of unsaved card imports) after a written backup. A failure is
+        logged and never turns a finished backup into a failed one."""
+        if self._housekeeping is None:
+            return
+        try:
+            self._housekeeping()
+        except Exception:
+            logger.warning("daily_housekeeping_failed", exc_info=True)
 
     def clear_unfinished(self) -> int:
         """Deletes what a backup cut by a stop left in backups/ and returns how many entries it removed. Call it once

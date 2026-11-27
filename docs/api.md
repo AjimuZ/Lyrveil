@@ -267,6 +267,19 @@ Planned for version 1.1, phase P10, and not built ([ADR 0047](decisions/0047-cha
 | `GET /characters/{id}/card?format=&scenario_ids=` | Exports a card: `format` is `v3json` (the default), `v2json` or `png`. |
 | `GET /characters/{id}/source` | The stored source card of an imported character, as JSON. `404` for a character that was not imported. |
 
+- **Delivered in P10.2a** (not in `backend/openapi.json`): `POST /characters/imports`, `GET` and `DELETE
+  /characters/imports/{id}`, `GET /characters/imports/{id}/source` and `GET /characters/{id}/source`.
+  - The import answer has every field below; `direct_draft`, `report` and `embedded_lyrveil` are null and
+    `conversion_job_id` is null until their steps exist. `preview` has the keys `name`, `nickname`, `creator`, `version`,
+    `tags`, `creator_notes`, `system_prompt`, `post_history_instructions`, `greeting_count`, `has_avatar` and
+    `has_lorebook`.
+  - `GET .../imports/{id}/source` returns the stored card as JSON, exactly as stored. It is the import's own route: the
+    character's `GET /characters/{id}/source` answers `404 NOT_FOUND` until the save step (P10.4) writes a source.
+  - `GET` answers `404 NOT_FOUND` for an unknown import and for one that expired unsaved. `DELETE` answers `204`, `404`
+    for an unknown import and `409 CONFLICT` for a saved one, and removes the row.
+  - The avatar of a PNG card is re-encoded by the upload path, so `413 PAYLOAD_TOO_LARGE` also covers a PNG card over
+    15 MB or 8192 x 8192 pixels, and `415 UNSUPPORTED_MEDIA` a PNG whose pixels do not decode.
+  - An import only reads the card: no remote `uri` is fetched.
 - **The import answer.** It is `{"id", "status", "format", "container", "source_sha256", "preview", "direct_draft",
   "report", "embedded_lyrveil", "conversion_job_id", "expires_at"}`.
   - `preview` holds the source fields that no draft uses: name, nickname, creator, version, tags, creator notes, the

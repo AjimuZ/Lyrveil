@@ -427,8 +427,9 @@ Delivered in P03.5 (backend only; the Creator has no import or export button yet
 
 Planned for version 1.1, phase P10. The rules and their reasons are in
 [ADR 0047](decisions/0047-character-card-import-and-export.md), which replaces the Character Card part of ADR 0021.
-Only step 1 and the check of step 2 are built (P10.1, backend only, with no route yet). Steps 3 to 6, the mapping,
-the placeholders and the export are planned.
+Built so far, backend only: step 1 and the check of step 2 (P10.1), and the part of step 3 that stores the parsed card
+and stages the avatar, with the routes to read, discard and expire an import (P10.2a, `lyrveil.services.card_import`).
+The direct mapping and its report, the placeholders, the conversion, the save and the export are planned.
 
 **Parser (delivered in P10.1).** `lyrveil.domain.tavern_card.parse_card` takes the bytes of a file and returns the
 card. The card comes with its spec (V1, V2 or V3), its container (JSON, PNG or APNG), the chunk it was read from, the

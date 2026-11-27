@@ -1358,7 +1358,8 @@ Executed only on real hardware, with the results recorded in `docs/verification/
 ### Character cards
 
 Planned for version 1.1 ([ADR 0047](decisions/0047-character-card-import-and-export.md)). T-CRD-01 and the unit part
-of T-CRD-04 are written, in `backend/tests/unit/test_tavern_card.py` (P10.1). The other tests are not written yet. The
+of T-CRD-04 are written, in `backend/tests/unit/test_tavern_card.py` (P10.1), and T-CRD-02 is written in
+`backend/tests/integration/test_card_imports.py` (P10.2a). The other tests are not written yet. The
 fixtures are original synthetic cards written for the tests. No community card is committed
 ([R-PUB-06](requirements.md#17-publication)). The V1, V2 and V3 JSON cards are in `backend/tests/fixtures/tavern_cards`.
 The PNG and APNG cards are built from them, chunk by chunk, by the test module.

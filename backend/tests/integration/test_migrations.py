@@ -33,7 +33,8 @@ IMAGES = "0013"
 PROPOSALS = "0014"
 LIFECYCLE = "0015"
 SCHEDULING = "0016"
-HEAD = "0017"
+NOTIFICATIONS = "0017"
+HEAD = "0018"
 CONVERSATION_TABLES = {"alembic_version", "application_settings", "generation_jobs", "characters", "conversations"}
 MESSAGE_TABLES = {*CONVERSATION_TABLES, "messages", "message_variants"}
 
@@ -68,7 +69,8 @@ TABLES_WITH_IMAGES = {*TABLES_WITH_ASSEMBLIES, "generated_images"}
 TABLES_WITH_PROPOSALS = {*TABLES_WITH_IMAGES, "image_proposals"}
 TABLES_WITH_LIFECYCLE = {*TABLES_WITH_PROPOSALS, "model_lifecycle_events"}
 TABLES_WITH_SCHEDULING = {*TABLES_WITH_LIFECYCLE, "scheduled_events"}
-TABLES = {*TABLES_WITH_SCHEDULING, "notifications"}
+TABLES_WITH_NOTIFICATIONS = {*TABLES_WITH_SCHEDULING, "notifications"}
+TABLES = {*TABLES_WITH_NOTIFICATIONS, "card_imports", "character_sources"}
 
 
 def alembic(database_path: Path, *command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -108,6 +110,7 @@ def test_the_revisions_follow_one_another() -> None:
         PROPOSALS,
         LIFECYCLE,
         SCHEDULING,
+        NOTIFICATIONS,
         HEAD,
     }
 
@@ -140,6 +143,8 @@ def test_upgrading_twice_changes_nothing_and_downgrading_removes_the_tables(
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert alembic(database_path, "upgrade", "head", cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES
+    assert alembic(database_path, "downgrade", NOTIFICATIONS, cwd=tmp_path).returncode == 0
+    assert user_tables(database_path) == TABLES_WITH_NOTIFICATIONS
     assert alembic(database_path, "downgrade", SCHEDULING, cwd=tmp_path).returncode == 0
     assert user_tables(database_path) == TABLES_WITH_SCHEDULING
     assert alembic(database_path, "downgrade", PROPOSALS, cwd=tmp_path).returncode == 0

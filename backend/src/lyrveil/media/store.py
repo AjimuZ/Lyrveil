@@ -13,6 +13,9 @@ from lyrveil.logs import get_logger
 DEFAULT_MEDIA_ROOT = Path("/data/media")
 # Unfinished writes live here; it sits on the same file system as their targets, so the final move is atomic.
 STAGING = ".staging"
+# The avatars of card imports wait in `.staging/imports/<import id>/avatar.png` until the import is saved or expires.
+IMPORT_STAGING = "imports"
+IMPORT_AVATAR = "avatar.png"
 # A media file sits in a category folder at least: `assets/<character id>/<asset id>.png`, never at the root itself.
 _MIN_DEPTH = 2
 # A job identifier is a generated UUID; nothing else names a folder of the staging area.
@@ -126,6 +129,47 @@ class MediaStore:
             leftover.unlink(missing_ok=True)
         with contextlib.suppress(OSError):
             target.parent.rmdir()
+
+    def stage_import_avatar(self, import_id: str, data: bytes) -> str:
+        """Writes `data`, the re-encoded avatar of a card import, as `.staging/imports/<import id>/avatar.png` and
+        returns that path relative to the media root, which the `card_imports` row keeps. An earlier file of the same
+        import is replaced. Raises MediaPathError for an id that is not a plain identifier, and OSError when the disk
+        fails, after removing the partial file. The folder survives clear_staging, which removes loose files only."""
+        target = self._import_avatar_path(import_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.parent / f"{uuid.uuid4().hex}.part"
+        try:
+            with partial.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(partial, target)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
+        return f"{STAGING}/{IMPORT_STAGING}/{import_id}/{IMPORT_AVATAR}"
+
+    def read_import_avatar(self, import_id: str) -> bytes | None:
+        """Returns the staged avatar of the import, or None when it has none. Raises MediaPathError as
+        stage_import_avatar."""
+        try:
+            return self._import_avatar_path(import_id).read_bytes()
+        except FileNotFoundError:
+            return None
+
+    def discard_import_avatar(self, import_id: str) -> None:
+        """Removes the staged avatar of the import and its folder; nothing staged is no error."""
+        target = self._import_avatar_path(import_id)
+        target.unlink(missing_ok=True)
+        for leftover in target.parent.glob("*.part"):
+            leftover.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            target.parent.rmdir()
+
+    def _import_avatar_path(self, import_id: str) -> Path:
+        if not _JOB_ID.fullmatch(import_id):
+            raise MediaPathError("the import id is not a plain identifier")
+        return self._root.resolve() / STAGING / IMPORT_STAGING / import_id / IMPORT_AVATAR
 
     def _staged_path(self, job_id: str) -> Path:
         if not _JOB_ID.fullmatch(job_id):

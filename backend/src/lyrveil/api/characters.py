@@ -1,9 +1,12 @@
 """Character routes of docs/api.md (Characters): list, create with the whole card, read and save the card, its
 versions with diff and restore, duplicate, archive, purge, the tag vocabulary the Creator offers, the assisted
-draft, the exchange routes (export, import and the JSON Schema of the format) and the load of the demo characters.
+draft, the exchange routes (export, import and the JSON Schema of the format), the card import routes (P10.2a) and the
+load of the demo characters.
 Not in the committed OpenAPI document yet, for the reason given in lyrveil.api.conversations.
 """
 
+import json
+from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
@@ -18,6 +21,7 @@ from lyrveil.domain.characters import CharacterSummary, StoredCharacter, Version
 from lyrveil.domain.exchange import MAX_IMPORT_BYTES, json_schema
 from lyrveil.images.tags import CARD_CATEGORIES, load_vocabulary
 from lyrveil.media.store import MediaStore
+from lyrveil.services.card_import import CardImportService, ImportView
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.character_exchange import CharacterExchangeService
 from lyrveil.services.characters import CharacterService
@@ -112,6 +116,37 @@ class ImportOut(BaseModel):
     assets_without_data: int
 
 
+class CardPreviewOut(BaseModel):
+    name: str
+    nickname: str
+    creator: str
+    version: str
+    tags: list[str]
+    creator_notes: str
+    system_prompt: str
+    post_history_instructions: str
+    greeting_count: int
+    has_avatar: bool
+    has_lorebook: bool
+
+
+class CardImportOut(BaseModel):
+    """An import of docs/api.md (Character cards). `direct_draft` and `report` are null until the direct mapping exists,
+    `embedded_lyrveil` until the round trip does, and `conversion_job_id` until a conversion starts."""
+
+    id: str
+    status: str
+    format: str
+    container: str
+    source_sha256: str
+    preview: CardPreviewOut
+    direct_draft: dict[str, Any] | None
+    report: dict[str, Any] | None
+    embedded_lyrveil: dict[str, Any] | None
+    conversion_job_id: str | None
+    expires_at: str
+
+
 class DemoOut(BaseModel):
     """The demo characters a load created, and the full names it skipped as already loaded."""
 
@@ -149,6 +184,23 @@ def _out(character: CharacterSummary) -> CharacterOut:
         status=character.status,
         created_at=character.created_at,
         updated_at=character.updated_at,
+    )
+
+
+def _import_out(view: ImportView) -> CardImportOut:
+    stored = view.stored
+    return CardImportOut(
+        id=stored.id,
+        status=stored.status,
+        format=stored.format,
+        container=stored.container,
+        source_sha256=stored.source_sha256,
+        preview=CardPreviewOut(**asdict(view.preview)),
+        direct_draft=None if stored.direct_draft_json is None else json.loads(stored.direct_draft_json),
+        report=None if stored.report_json is None else json.loads(stored.report_json),
+        embedded_lyrveil=None,
+        conversion_job_id=stored.conversion_job_id,
+        expires_at=stored.expires_at,
     )
 
 
@@ -197,6 +249,18 @@ def get_exchange(request: Request) -> CharacterExchangeService:
 
 
 Exchange = Depends(get_exchange)
+
+
+def get_card_imports(request: Request) -> CardImportService:
+    """Returns the card import service on the application's engine and media store."""
+    engine: Engine | None = request.app.state.engine
+    if engine is None:
+        raise RuntimeError("the character routes need a database")
+    media: MediaStore = request.app.state.media
+    return CardImportService(engine, media)
+
+
+CardImports = Depends(get_card_imports)
 
 
 @router.get("", response_model=CharacterList)
@@ -254,6 +318,42 @@ async def import_character(
     )
 
 
+@router.post("/imports", response_model=CardImportOut, status_code=201)
+async def import_card(
+    file: Annotated[UploadFile, File()], card_imports: CardImportService = CardImports
+) -> CardImportOut:
+    """Reads a V1, V2 or V3 character card (JSON, or PNG or APNG with a `ccv3` or `chara` chunk) and answers `201` with
+    the stored import: the parsed card is kept unchanged with the file's SHA-256, the avatar of a PNG card is staged
+    re-encoded, and no character is written. The card is only read; no remote `uri` is fetched. Answers 413
+    `PAYLOAD_TOO_LARGE` over 64 MB (or for an avatar over the upload limits), 415 `UNSUPPORTED_MEDIA` for a file that is
+    neither JSON nor PNG, a CHARX archive included, 422 `IMPORT_INVALID` for a broken chunk, base64 or JSON or a missing
+    or unknown `spec`, and 422 `CONTENT_POLICY_BLOCKED` naming the source path when a string describes a minor. Nothing
+    is stored in those cases."""
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    return _import_out(await run_in_threadpool(card_imports.import_file, data))
+
+
+@router.get("/imports/{import_id}", response_model=CardImportOut)
+def read_card_import(import_id: str, card_imports: CardImportService = CardImports) -> CardImportOut:
+    """Returns the import with its preview. Answers 404 `NOT_FOUND` for an unknown import and for one that expired
+    unsaved. Declared before `/{character_id}`, so "imports" is no id."""
+    return _import_out(card_imports.get(import_id))
+
+
+@router.get("/imports/{import_id}/source")
+def read_card_import_source(import_id: str, card_imports: CardImportService = CardImports) -> Response:
+    """Returns the parsed card of the import exactly as it was stored. Answers 404 `NOT_FOUND` as the import route."""
+    return Response(content=card_imports.source_json(import_id), media_type="application/json")
+
+
+@router.delete("/imports/{import_id}", status_code=204)
+def discard_card_import(import_id: str, card_imports: CardImportService = CardImports) -> Response:
+    """Discards an unsaved import and its staged avatar. Answers 204, 404 `NOT_FOUND` for an unknown import and 409
+    `CONFLICT` for one that was saved as a character."""
+    card_imports.discard(import_id)
+    return Response(status_code=204)
+
+
 @router.post("/demo", response_model=DemoOut, status_code=201)
 def load_demo_characters(request: Request) -> DemoOut:
     """Adds the original demo characters that are not loaded yet, as new active characters flagged `is_demo`, and
@@ -302,6 +402,13 @@ def save_character(
     404 `NOT_FOUND` for an unknown character and 422 `VALIDATION_ERROR` or `CONTENT_POLICY_BLOCKED` as the create route
     does."""
     return _detail(service.update(character_id, _as_card(body)))
+
+
+@router.get("/{character_id}/source")
+def read_character_source(character_id: str, card_imports: CardImportService = CardImports) -> Response:
+    """Returns the card an imported character came from, exactly as it was stored. Answers 404 `NOT_FOUND` for an
+    unknown character and for one that was not imported from a card."""
+    return Response(content=card_imports.character_source_json(character_id), media_type="application/json")
 
 
 @router.get("/{character_id}/export")

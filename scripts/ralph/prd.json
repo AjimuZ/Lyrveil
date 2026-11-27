@@ -3205,8 +3205,8 @@
         "Remote `uri` values in a card are never fetched, and a test proves that an import makes no outbound request."
       ],
       "priority": 133,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Added migration 0018 (`card_imports`, `character_sources`) and `lyrveil.services.card_import`. The routes are `POST /characters/imports`, `GET` and `DELETE /characters/imports/{id}`, `GET /characters/imports/{id}/source` and `GET /characters/{id}/source`. An import parses the card with `parse_card` and stores it unchanged with the file's SHA-256, format and container. The avatar of a PNG card goes through `images.prepare_upload` and is staged at `.staging/imports/<id>/avatar.png`. Any refusal leaves no row and no file. Unsaved imports expire after 7 days, at startup and after each written daily backup (a new `DailyBackup` `housekeeping` hook). Verification: `test lint` passed. `tests/integration/test_card_imports.py` (17 tests) and `test_migrations.py` passed, and so did the daily backup, startup and character exchange tests, all run through `scripts/lyrveil.cmd test unit <paths>`. The full unit, integration, e2e and docker levels were not run.",
       "dependsOn": [
         "P10.1"
       ],

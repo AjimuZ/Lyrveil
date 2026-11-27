@@ -70,6 +70,7 @@ from lyrveil.runtimes.comfyui import ComfyUiRuntime
 from lyrveil.runtimes.koboldcpp import KoboldCppRuntime
 from lyrveil.scheduling.service import SchedulerService
 from lyrveil.services.ai_resources import AiResources
+from lyrveil.services.card_import import CardImportService
 from lyrveil.services.character_creator import CharacterCreatorService
 from lyrveil.services.chat_inference import ChatInferenceService, ReplySettings, recover_interrupted_replies
 from lyrveil.services.daily_backup import DailyBackup
@@ -406,6 +407,12 @@ def main() -> int:
         media_store.clear_staging()
     except OSError:
         logger.warning("media_staging_cleanup_failed", exc_info=True)
+    # Imports nobody saved expire after 7 days (ADR 0047); a failure only leaves them for the daily backup to remove.
+    card_imports = CardImportService(engine, media_store)
+    try:
+        card_imports.expire()
+    except (SQLAlchemyError, OSError):
+        logger.warning("card_import_expiry_failed", exc_info=True)
     orchestrator = OrchestratorClient(settings.control_token)
     launch_levels: LaunchLevels | None = None
     model_profiles: ModelProfiles | None = None
@@ -433,7 +440,7 @@ def main() -> int:
         maintenance=None if model_profiles is None else ModelMaintenance(model_profiles, orchestrator),
         image_runtime=ComfyUiRuntime,
     )
-    daily_backup = DailyBackup(DATA_ROOT, settings.zone)
+    daily_backup = DailyBackup(DATA_ROOT, settings.zone, housekeeping=card_imports.expire)
     uvicorn.run(
         create_app(
             settings,

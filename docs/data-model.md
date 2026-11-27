@@ -655,7 +655,7 @@ service (`services/notifications.py`), the routes and the `notification.created`
 
 ## Version 1.1 tables (planned)
 
-Not built. Each phase adds its tables in a new Alembic revision after `0017`. Columns added to `conversations`,
+Not built, except the P10 tables of revision `0018`. Each phase adds its tables in a new Alembic revision after `0017`. Columns added to `conversations`,
 `scenarios` and `memories` stay plain columns, with no foreign key: SQLite cannot add one without rebuilding the table,
 which would drop its search triggers (see [`scenarios`](#scenarios)). The services enforce them, as they do for
 `scenario_id`.
@@ -683,6 +683,16 @@ which would drop its search triggers (see [`scenarios`](#scenarios)). The servic
 
 An expired row that is not `saved` is deleted with its staged avatar when the backend starts and by the daily backup
 job.
+
+Delivered in revision `0018` (P10.2a), together with `character_sources`:
+
+- `direct_draft_json` and `report_json` are nullable and stay NULL until the direct mapping (P10.2b) fills them.
+- `container` is `png` for a PNG and for an APNG. `source_json` is the parsed card as JSON text with non-ASCII
+  characters escaped, so every string stores whatever the file held.
+- The staged avatar is the re-encoded image, at `.staging/imports/<id>/avatar.png`. `clear_staging` leaves that folder
+  alone.
+- The `DELETE` route removes the row, so `discarded` is not written yet. The index `(expires_at)` serves the expiry.
+- Nothing writes `character_sources` yet: the save step (P10.4) does. A purge of the character deletes its row.
 
 `character_sources`, the original card of an imported character:
 

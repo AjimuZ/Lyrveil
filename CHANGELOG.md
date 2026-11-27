@@ -62,6 +62,15 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Card imports, in the backend only (P10.2a, [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)).
+  `POST /characters/imports` reads a V1, V2 or V3 card and stores it in the new `card_imports` table (migration 0018)
+  unchanged, with the file's SHA-256, its format and the time. `GET /characters/imports/{id}` answers the import with a
+  preview, `GET .../imports/{id}/source` returns the stored card, and `DELETE .../imports/{id}` discards it with its
+  staged avatar. The avatar of a PNG card goes through the upload path, so the staged image holds no chunk. A refusal
+  (a parser error or `422 CONTENT_POLICY_BLOCKED` with the source path) stores no row and no file. An import that is
+  not saved expires after 7 days, at startup and after each daily backup. Remote `uri` values are never fetched, and no
+  character is written yet. `character_sources` (migration 0018) and `GET /characters/{id}/source` exist, but nothing
+  writes that table before the save step (P10.4).
 - The Character Card parser, in the backend only and not yet reachable from the API (P10.1,
   [ADR 0047](docs/decisions/0047-character-card-import-and-export.md)). `lyrveil.domain.tavern_card` reads V1, V2 and V3
   cards from JSON, and from the `ccv3` or `chara` `tEXt` chunk of a PNG or APNG (`ccv3` wins). It detects the format
