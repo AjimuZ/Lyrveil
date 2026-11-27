@@ -50,6 +50,9 @@ class ConversationOut(BaseModel):
     scenario_title: str | None = None
     last_message: LastMessageOut | None = None
     activity: Activity | None = None
+    persona_id: str | None = None
+    persona_name: str | None = None
+    persona_note: str = ""
 
 
 class ConversationList(BaseModel):
@@ -64,6 +67,8 @@ class CreateConversation(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     language: str | None = Field(default=None, min_length=2, max_length=16)
     shares_memory: bool = False
+    persona_id: str | None = Field(default=None, min_length=1)
+    persona_note: str | None = None
 
 
 class ReadMark(BaseModel):
@@ -74,7 +79,8 @@ class ReadMark(BaseModel):
 
 class PatchConversation(BaseModel):
     """Only the fields present in the body change; `title` null or blank restores the character's name and `language`
-    null inherits the character's."""
+    null inherits the character's. `persona_note` null or blank clears the note. `persona_id` is declared only so that
+    sending it is refused with `VALIDATION_ERROR` by the service: a conversation's persona never changes."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -83,6 +89,8 @@ class PatchConversation(BaseModel):
     archived: bool = False
     language: str | None = Field(default=None, min_length=2, max_length=16)
     shares_memory: bool = False
+    persona_id: str | None = None
+    persona_note: str | None = None
 
 
 def _out(conversation: Conversation) -> ConversationOut:
@@ -116,6 +124,9 @@ def _out(conversation: Conversation) -> ConversationOut:
             )
         ),
         activity=conversation.activity,
+        persona_id=conversation.persona_id,
+        persona_name=conversation.persona_name,
+        persona_note=conversation.persona_note,
     )
 
 
@@ -145,8 +156,10 @@ def list_conversations(
 
 @router.post("", response_model=ConversationOut, status_code=201)
 def create_conversation(body: CreateConversation, service: ConversationService = Service) -> ConversationOut:
-    """Starts a conversation with a character, optionally from a scenario: 404 when the character or the scenario does
-    not exist, 409 when the character or the scenario is archived or the scenario is for another character."""
+    """Starts a conversation with a character, optionally from a scenario and with a persona and a note. Without
+    `persona_id` it takes the scenario's persona, else the default one, and the persona never changes afterwards.
+    404 when the character, the scenario or the persona does not exist, 409 when the character, the scenario or the
+    persona is archived or the scenario is for another character, 422 for a note over 600 characters."""
     return _out(
         service.create(
             body.character_id,
@@ -154,6 +167,8 @@ def create_conversation(body: CreateConversation, service: ConversationService =
             title=body.title,
             language=body.language,
             shares_memory=body.shares_memory,
+            persona_id=body.persona_id,
+            persona_note=body.persona_note,
         )
     )
 
@@ -168,8 +183,9 @@ def get_conversation(conversation_id: str, service: ConversationService = Servic
 def patch_conversation(
     conversation_id: str, body: PatchConversation, service: ConversationService = Service
 ) -> ConversationOut:
-    """Changes the title, the pin, the archive state, the language or the shared-memory flag; 404 when the
-    conversation does not exist or is deleted."""
+    """Changes the title, the pin, the archive state, the language, the shared-memory flag or the persona note; 404 when
+    the conversation does not exist or is deleted, 422 `VALIDATION_ERROR` for `persona_id` or a note over 600
+    characters."""
     return _out(service.update(conversation_id, body.model_dump(exclude_unset=True)))
 
 

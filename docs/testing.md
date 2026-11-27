@@ -1397,8 +1397,11 @@ The PNG and APNG cards are built from them, chunk by chunk, by the test module.
 
 Planned for version 1.1 ([ADR 0048](decisions/0048-user-personas.md)). T-PSN-01 and the database half of T-PSN-02
 (lengths, age, one default, the default never archived, the delete rule and the fixed `persona_id`) are written in
-`backend/tests/integration/test_migrations.py` (P11.1a) and were not run when they were written. The other tests are
-not written yet.
+`backend/tests/integration/test_migrations.py` (P11.1a) and were not run when they were written. The API half of
+T-PSN-02 (name, age, gender, the content guard on every text and on the note, the default, the archive and delete
+rules) and the conversation half of T-PSN-04 (`persona_id` fixed, `persona_note` editable) are written in
+`backend/tests/integration/test_personas.py` (P11.1b), together with the choice of persona for a new conversation; they
+were not run when they were written. The prompt half of T-PSN-04 and the other tests are not written yet.
 
 | ID | Test | Level | Phase |
 | --- | --- | --- | --- |

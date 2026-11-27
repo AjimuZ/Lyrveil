@@ -66,6 +66,7 @@ def _checked(fields: dict[str, Any]) -> dict[str, object]:
         raise ValidationFailedError("Il titolo non può essere vuoto.")
     clean["character_id"] = fields.get("character_id") or None
     clean["language"] = (fields.get("language") or "").strip() or None
+    clean["persona_id"] = fields.get("persona_id") or None
     return clean
 
 
@@ -78,9 +79,11 @@ class ScenarioService:
 
     def create(self, fields: dict[str, Any]) -> Scenario:
         """Returns a new active scenario. `fields` holds `title` (required) and optionally `description`, `setting`,
-        `opening_message`, `character_id` (None means any character) and `language` (None inherits).
+        `opening_message`, `character_id` (None means any character), `language` (None inherits) and `persona_id` (the
+        persona the new-chat picker preselects, None for none).
 
-        Raises what `_checked` raises, and NotFoundError when `character_id` names no character.
+        Raises what `_checked` raises, and NotFoundError when `character_id` names no character or `persona_id` names
+        no persona.
         """
         clean = _checked(fields)
         now = to_utc_text(self._clock())
@@ -134,7 +137,8 @@ class ScenarioService:
 
     def update(self, scenario_id: str, fields: dict[str, Any]) -> Scenario:
         """Replaces every editable field of the scenario (PUT) and returns it. Conversations already started from it
-        keep their copy. Raises NotFoundError for an unknown scenario or character, and what `_checked` raises."""
+        keep their copy. Raises NotFoundError for an unknown scenario, character or persona, and what `_checked`
+        raises."""
         clean = _checked(fields)
         now = to_utc_text(self._clock())
 
@@ -181,3 +185,6 @@ class ScenarioService:
         character_id = clean["character_id"]
         if character_id is not None and not repository.character_exists(connection, str(character_id)):
             raise NotFoundError(_NO_CHARACTER)
+        persona_id = clean["persona_id"]
+        if persona_id is not None and not repository.persona_exists(connection, str(persona_id)):
+            raise NotFoundError("Persona non trovata.")

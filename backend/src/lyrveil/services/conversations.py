@@ -11,20 +11,59 @@ from typing import Any
 from sqlalchemy import Connection, Engine
 
 from lyrveil.domain.conversations import RESTORE_WINDOW, Conversation, ConversationStatus
-from lyrveil.domain.errors import ConflictError, NotFoundError
+from lyrveil.domain.errors import ConflictError, NotFoundError, ValidationFailedError
 from lyrveil.domain.identifiers import from_utc_text, new_id, to_utc_text
 from lyrveil.domain.messages import Author, MessageStatus, VariantSource, VariantStatus, content_hash
-from lyrveil.domain.scenarios import ScenarioStatus
+from lyrveil.domain.personas import MAX_NOTE_CHARS, PersonaStatus
+from lyrveil.domain.scenarios import Scenario, ScenarioStatus
 from lyrveil.jobs.scheduler import read, write
 from lyrveil.persistence import conversations as repository
 from lyrveil.persistence import messages as message_repository
+from lyrveil.persistence import personas as persona_repository
 from lyrveil.persistence import scenarios as scenario_repository
 from lyrveil.persistence.search import match_query
 from lyrveil.scheduling.store import cancel_pending_events
+from lyrveil.services.personas import NO_PERSONA, guard_text
 
-# The fields PATCH may change (docs/api.md, Conversations).
-PATCHABLE = frozenset({"title", "pinned", "archived", "language", "shares_memory"})
+# The fields PATCH may change (docs/api.md, Conversations). `persona_id` is not one of them: it never changes.
+PATCHABLE = frozenset({"title", "pinned", "archived", "language", "shares_memory", "persona_note"})
 _NO_CHAT = "Conversazione non trovata."
+_NOTE_LABEL = "nota sulla persona"
+
+
+def _checked_note(note: str | None) -> str:
+    """Returns the persona note trimmed. Raises ValidationFailedError over MAX_NOTE_CHARS and ContentPolicyBlockedError
+    when the note fails the content guard, as the text of a persona does: the model reads both."""
+    value = (note or "").strip()
+    if len(value) > MAX_NOTE_CHARS:
+        raise ValidationFailedError(f"Il campo «{_NOTE_LABEL}» supera {MAX_NOTE_CHARS} caratteri.")
+    guard_text(value, _NOTE_LABEL)
+    return value
+
+
+def _persona_for_new_chat(connection: Connection, requested: str | None, scenario: Scenario | None) -> str:
+    """Returns the id of the persona a new conversation takes: `requested` when given, else the scenario's persona, else
+    the default one.
+
+    An archived persona is never chosen for a new conversation: a `requested` one raises ConflictError, and one that
+    only the scenario names is skipped for the default persona, because the user did not pick it. Raises NotFoundError
+    when `requested` names no persona.
+    """
+    if requested is not None:
+        persona = persona_repository.get(connection, requested)
+        if persona is None:
+            raise NotFoundError(NO_PERSONA)
+        if persona.status is PersonaStatus.ARCHIVED:
+            raise ConflictError("La persona è archiviata.")
+        return persona.id
+    if scenario is not None and scenario.persona_id is not None:
+        named = persona_repository.get(connection, scenario.persona_id)
+        if named is not None and named.status is PersonaStatus.ACTIVE:
+            return named.id
+    default = persona_repository.default_id(connection)
+    if default is None:
+        raise RuntimeError("no default persona: migration 0020 has not run")
+    return default
 
 
 def _utc_now() -> datetime:
@@ -79,17 +118,24 @@ class ConversationService:
         title: str | None = None,
         language: str | None = None,
         shares_memory: bool = False,
+        persona_id: str | None = None,
+        persona_note: str | None = None,
     ) -> Conversation:
         """Returns a new active conversation with the character. The title defaults to the character's name and the
         language to the scenario's, else to inheriting the character's. A character can have any number of
         conversations; each one has its own history, so none reads another's.
 
         With a `scenario_id` the conversation stores a copy of the scenario (Scenario.snapshot), and a non-empty
-        opening message becomes its first message, written by the character. Raises NotFoundError when the character,
-        or the scenario, does not exist, and ConflictError when the character is archived, the scenario is archived,
-        or the scenario is for another character.
+        opening message becomes its first message, written by the character.
+
+        The conversation's persona is fixed here (ADR 0048): `persona_id`, else the scenario's persona, else the
+        default one. `persona_note` (up to MAX_NOTE_CHARS) is what the character knows of the user at the start; it
+        can be edited later, the persona cannot. Raises NotFoundError when the character, the scenario or the persona
+        does not exist, ConflictError when the character, the scenario or the requested persona is archived or the
+        scenario is for another character, and ValidationFailedError or ContentPolicyBlockedError for a refused note.
         """
         now = to_utc_text(self._clock())
+        note = _checked_note(persona_note)
 
         def work(connection: Any) -> Conversation:
             character = repository.find_character(connection, character_id)
@@ -105,6 +151,7 @@ class ConversationService:
                     raise ConflictError("Lo scenario è archiviato.")
                 if scenario.character_id not in (None, character.id):
                     raise ConflictError("Lo scenario è pensato per un altro personaggio.")
+            chosen_persona = _persona_for_new_chat(connection, persona_id, scenario)
             conversation_id = new_id()
             repository.insert(
                 connection,
@@ -116,6 +163,8 @@ class ConversationService:
                 now=now,
                 scenario_id=scenario_id,
                 scenario_snapshot=None if scenario is None else scenario.snapshot(),
+                persona_id=chosen_persona,
+                persona_note=note,
             )
             if scenario is not None and scenario.opening_message:
                 _write_opening_message(connection, conversation_id, scenario.opening_message, now)
@@ -153,18 +202,25 @@ class ConversationService:
 
         `changes` holds only the fields to change, from PATCHABLE: `title` (blank restores the character's name),
         `pinned` (a new pin takes the current time and an existing one is kept), `archived`, `language` (None
-        inherits) and `shares_memory`. Raises ValueError for any other key.
+        inherits), `shares_memory` and `persona_note` (blank clears it; it applies from the next reply). Raises
+        ValidationFailedError for `persona_id`, which never changes, or an invalid note, and ValueError for any other
+        key.
         """
+        if "persona_id" in changes:
+            raise ValidationFailedError("La persona di una conversazione non si cambia dopo la creazione.")
         unknown = set(changes) - PATCHABLE
         if unknown:
             raise ValueError(f"not patchable: {sorted(unknown)}")
         now = to_utc_text(self._clock())
+        note = _checked_note(changes["persona_note"]) if "persona_note" in changes else None
 
         def work(connection: Any) -> Conversation:
             current = repository.get(connection, conversation_id)
             if current is None or current.status is ConversationStatus.DELETED:
                 raise NotFoundError(_NO_CHAT)
             columns: dict[str, object] = {}
+            if note is not None:
+                columns["persona_note"] = note
             if "title" in changes:
                 columns["title"] = (changes["title"] or "").strip() or current.character_name
             if "pinned" in changes:

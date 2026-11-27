@@ -28,6 +28,7 @@ from lyrveil.api import (
     messages,
     model_settings,
     notifications,
+    personas,
     scenarios,
     system,
 )
@@ -334,6 +335,7 @@ def create_app(
     app.include_router(characters.router, prefix=API_PREFIX)
     app.include_router(assets.router, prefix=API_PREFIX)
     app.include_router(scenarios.router, prefix=API_PREFIX)
+    app.include_router(personas.router, prefix=API_PREFIX)
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(memories.router, prefix=API_PREFIX)

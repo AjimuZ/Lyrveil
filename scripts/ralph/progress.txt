@@ -318,6 +318,8 @@
 - To add a column that points at another table to a table with full-text triggers, use a plain column plus BEFORE DELETE and UPDATE triggers instead of REFERENCES, so the downgrade can still use DROP COLUMN.
 - A data migration that reads `application_settings` should decode `value_json` and fall back to the documented default when a value is out of range, so a bad stored value never stops the upgrade.
 - Write timestamps in migrations with SQLite `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`. It matches the app's millisecond UTC format without importing application code.
+- Validate ranges in the service rather than with pydantic constraints when the API contract says `422 VALIDATION_ERROR` with an Italian detail. Keep the pydantic model to plain types.
+- Keep database rules, such as CHECKs and triggers, as the backstop and enforce the same rules first in the service so the user gets a specific 409 or 422 instead of an IntegrityError.
 
 ---
 
@@ -3094,4 +3096,24 @@ Not in this task: prompts still use the default `Utente` and `non_indicato`, and
   - Shared memories written before P11.3 still get NULL `persona_id`. The CHECK only forbids a persona on conversation-scope memories.
   - `memory_extraction.revise` snapshots `SELECT * FROM memories`, so memory revision snapshots now include `persona_id`.
   - Prompts still read the `UserProfile` defaults in `lyrveil.context.minimal`. The migration removes the two keys, but nothing read them, so behaviour does not change until P11.2.
+---
+
+## 2026-11-27T17:14:07Z - P11.1b
+- Added the persona routes: GET and POST /personas, GET, PUT and DELETE /personas/{id}, POST /personas/{id}/default, /archive and /unarchive. New conversations now take persona_id and persona_note. Only `test lint` ran, and it passed. The new tests in test_personas.py have not run, because the shell blocked a pytest run, so the orchestrator's integration level is their first run.
+
+- **Persona rules:** the content guard covers name, appearance and about. The service checks name length, age (NULL or 18 to 120) and gender. There is always exactly one default, and it can't be archived or deleted. A persona with conversations, deleted ones included, can only be archived. An unused persona can be deleted.
+- **Persona of a new conversation:** an explicit persona_id wins; an unknown id is 404 and an archived one is 409. Otherwise it takes the scenario's persona if that persona is active, else the default. If the scenario names an archived persona, the default takes over silently, because the user did not pick it.
+- **Note and fixed persona:** the persona_note limit is 600 characters and the note also passes the content guard. PATCH edits the note and answers 422 VALIDATION_ERROR for any persona_id, even the current one. Conversations now answer persona_id, persona_name and persona_note.
+- **Scenarios:** they take and answer an optional persona_id; an unknown one is 404. This was not listed in the task, but a scenario cannot name a persona otherwise. The persona is not copied into the scenario snapshot.
+- **Settings API:** it already listed only `app.diagnostic_mode`, so there was no code to remove for the two keys. I recorded this in docs/api.md. I left the `user.*` rows in docs/configuration.md because the prompts still use those defaults until P11.2.
+- **Docs and tests:** I updated docs/api.md, docs/data-model.md, docs/testing.md and CHANGELOG.md. The roadmap checkbox is untouched.
+- Files changed: backend/src/lyrveil/domain/personas.py, backend/src/lyrveil/persistence/personas.py, backend/src/lyrveil/services/personas.py, backend/src/lyrveil/api/personas.py, backend/src/lyrveil/main.py, backend/src/lyrveil/domain/scenarios.py, backend/src/lyrveil/persistence/scenarios.py, backend/src/lyrveil/services/scenarios.py, backend/src/lyrveil/api/scenarios.py, backend/src/lyrveil/domain/conversations.py, backend/src/lyrveil/persistence/conversations.py, backend/src/lyrveil/services/conversations.py, backend/src/lyrveil/api/conversations.py, backend/tests/integration/test_personas.py, docs/api.md, docs/data-model.md, docs/testing.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `test lint` passed (ruff, format, mypy --strict, docs checks). `backend/tests/integration/test_personas.py` has not run, so the orchestrator's integration level is its first run.
+  - The settings API (`GET` and `PATCH /settings` in api/diagnostics.py) never exposed `user.display_name` or `user.grammatical_gender`, so there was nothing to remove in code. The rows in docs/configuration.md stay until P11.2 stops reading the defaults.
+  - `persistence.personas.make_default` clears the old default before setting the new one, because `ux_user_personas_default` is checked row by row. An archived persona cannot become the default (409), because of the `ck_user_personas_default_active` constraint.
+  - `conversation_count` on a persona counts every conversation, deleted ones included, which matches the `user_personas_in_use` trigger.
+  - For P11.2 and later: `Conversation` now carries `persona_id`, `persona_name` and `persona_note`. `persona_id` can still be NULL for rows inserted outside the service. For prompts, read the persona row by `persona_id` and fall back to the default persona.
+  - `services.personas.guard_text(value, label)` is the shared content-guard helper, used by the conversation note too.
+  - Persona and conversation routes stay `include_in_schema=False`, so `backend/openapi.json` and the frontend types are unchanged until a Docker regeneration.
 ---

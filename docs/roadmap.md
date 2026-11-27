@@ -253,7 +253,7 @@ Evidence:
 **Depends on:** P10. **Areas:** settings, conversations, prompts, memory. Design:
 [ADR 0048](decisions/0048-user-personas.md).
 
-- [ ] P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,
+- [x] P11.1 `user_personas`, the migration from the two settings, `conversations.persona_id` and `persona_note`,
   `scenarios.persona_id` and `memories.persona_id`.
 - [ ] P11.2 The persona in block 1, block 3, the anchor, the stop sequences, the reply checks and the extraction and
   proactive prompts, and the new block 10.

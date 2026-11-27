@@ -18,7 +18,8 @@ class ScenarioStatus(StrEnum):
 class Scenario:
     """One scenario row. `character_id` None means usable with any character; `language` None inherits the character's.
 
-    `description`, `setting` and `opening_message` are never None, only empty.
+    `description`, `setting` and `opening_message` are never None, only empty. `persona_id` is the persona the new-chat
+    picker preselects (ADR 0048), None when the scenario names none; it is not part of `snapshot`.
     """
 
     id: str
@@ -31,6 +32,7 @@ class Scenario:
     status: ScenarioStatus
     created_at: str
     updated_at: str
+    persona_id: str | None = None
 
     def snapshot(self) -> dict[str, object]:
         """Returns the copy a conversation stores when it starts from this scenario (`scenario_snapshot_json`).

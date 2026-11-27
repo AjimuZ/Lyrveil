@@ -24,6 +24,7 @@ _SELECT = f"""
 SELECT c.id, c.character_id, ch.first_name, ch.last_name, c.title, c.language, ch.primary_language, c.status,
        c.pinned_at, c.shares_memory, c.next_seq, c.last_read_seq, c.last_message_at, c.created_at, c.updated_at,
        c.deleted_at, c.scenario_id, json_extract(c.scenario_snapshot_json, '$.title') AS scenario_title,
+       c.persona_id, c.persona_note, (SELECT p.name FROM user_personas AS p WHERE p.id = c.persona_id) AS persona_name,
        (SELECT a.id FROM character_assets AS a
         WHERE a.character_id = c.character_id AND a.kind = 'avatar' AND a.is_primary = 1 AND a.deleted_at IS NULL
         LIMIT 1) AS avatar_asset_id,
@@ -85,6 +86,9 @@ def _conversation(row: RowMapping) -> Conversation:
         scenario_title=row["scenario_title"],
         last_message=_last_message(row["last_message_json"]),
         activity=_activity(row["pending_json"]),
+        persona_id=row["persona_id"],
+        persona_name=row["persona_name"],
+        persona_note=row["persona_note"],
     )
 
 
@@ -148,18 +152,21 @@ def insert(
     now: str,
     scenario_id: str | None = None,
     scenario_snapshot: dict[str, object] | None = None,
+    persona_id: str | None = None,
+    persona_note: str = "",
 ) -> None:
     """Adds an active conversation with `next_seq` 1 and every cursor at 0. A conversation that starts from a scenario
     stores its id and `scenario_snapshot`, the copy that later edits of the scenario never change.
 
-    The conversation takes the default persona (ADR 0048), which revision 0020 creates and which always exists after
-    it; its `persona_id` never changes afterwards. Choosing another persona at creation arrives with the new-chat
-    picker (P11.4)."""
+    The conversation stores `persona_id` and `persona_note` (ADR 0048); the service has already checked that the
+    persona exists and is active. Without a `persona_id` it takes the default persona, which revision 0020 creates, so
+    the column stays set. The `conversations_persona_fixed` trigger refuses any later change of `persona_id`."""
     connection.execute(
         text(
             "INSERT INTO conversations (id, character_id, scenario_id, scenario_snapshot_json, title, language, "
-            "shares_memory, persona_id, created_at, updated_at) VALUES (:id, :character_id, :scenario_id, :snapshot, "
-            ":title, :language, :shares_memory, (SELECT id FROM user_personas WHERE is_default = 1), :now, :now)"
+            "shares_memory, persona_id, persona_note, created_at, updated_at) VALUES (:id, :character_id, "
+            ":scenario_id, :snapshot, :title, :language, :shares_memory, "
+            "COALESCE(:persona_id, (SELECT id FROM user_personas WHERE is_default = 1)), :persona_note, :now, :now)"
         ),
         {
             "id": conversation_id,
@@ -169,6 +176,8 @@ def insert(
             "title": title,
             "language": language,
             "shares_memory": int(shares_memory),
+            "persona_id": persona_id,
+            "persona_note": persona_note,
             "now": now,
         },
     )

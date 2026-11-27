@@ -654,9 +654,11 @@ What P04.9a delivers (`api/memories.py`, `services/memory_studio.py`, `persisten
   and `sources`. All three answer `404` for an unknown or deleted chat.
 - **Events.** The WebSocket event `memory.updated` is not published by these routes yet.
 
-### Personas (planned)
+### Personas
 
-Planned for version 1.1, phase P11, and not built ([ADR 0048](decisions/0048-user-personas.md)).
+Version 1.1, phase P11 ([ADR 0048](decisions/0048-user-personas.md)). The routes below, the persona of a conversation
+and `persona_id` of scenarios are built (P11.1b); like the scenario and conversation routes they are not in the committed
+OpenAPI document yet. Prompts still read the default name and gender (P11.2) and no screen manages personas (P11.4).
 
 | Method and path | Purpose |
 | --- | --- |
@@ -668,12 +670,26 @@ Planned for version 1.1, phase P11, and not built ([ADR 0048](decisions/0048-use
 - A persona answers `{"id", "name", "grammatical_gender", "age", "appearance", "about", "is_default", "status",
   "conversation_count", "created_at", "updated_at"}`. A text that describes a minor is `422 CONTENT_POLICY_BLOCKED`
   naming the field, and an age under 18 is `422 VALIDATION_ERROR`.
-- `DELETE` answers `409 CONFLICT` while a conversation uses the persona or while it is the default. `archive` answers
-  `409` for the default persona.
-- `POST /conversations` takes `persona_id`, which defaults to the default persona, and `persona_note`. `PATCH
-  /conversations/{id}` accepts `persona_note`, and answers `422 VALIDATION_ERROR` for `persona_id`, which never changes.
-  Scenarios take an optional `persona_id`.
-- From P11, `GET` and `PUT /settings` no longer list `user.display_name` and `user.grammatical_gender`.
+- `GET /personas` lists the default first, then by name. `POST` creates an active persona that is not the default. `PUT`
+  replaces every editable field (`name`, `grammatical_gender`, `age`, `appearance`, `about`); one left out takes its
+  default. `name` is trimmed and takes 1 to 40 characters, `appearance` 600, `about` 1,200; `grammatical_gender` is
+  `femminile`, `maschile` or `non_indicato`; `age` is `null` or 18 to 120. Every refusal of a value is `422
+  VALIDATION_ERROR` with an Italian detail, and a text that fails the content guard is `422 CONTENT_POLICY_BLOCKED`.
+- `DELETE` answers `409 CONFLICT` while a conversation uses the persona (a deleted conversation that can still be
+  restored counts) or while it is the default, and `204` otherwise. `archive` answers `409` for the default persona.
+  `default` moves the flag to the persona and answers `409` for an archived one; there is always exactly one default.
+- `POST /conversations` takes `persona_id` and `persona_note`. Without `persona_id` the conversation takes the
+  scenario's persona when the scenario names an active one, otherwise the default persona. An unknown `persona_id` is
+  `404`, an archived one `409`, a note over 600 characters `422 VALIDATION_ERROR` and a note that fails the content
+  guard `422 CONTENT_POLICY_BLOCKED`. A conversation answers
+  `persona_id`, `persona_name` and `persona_note`.
+- `PATCH /conversations/{id}` accepts `persona_note` (blank clears it) and answers `422 VALIDATION_ERROR` for
+  `persona_id`, which never changes, even when it equals the current one. An archived persona keeps its conversations
+  working.
+- Scenarios take and answer an optional `persona_id`; an unknown one is `404`. Deleting a persona clears it from the
+  scenarios that name it.
+- `GET` and `PATCH /settings` never list `user.display_name` and `user.grammatical_gender`: the settings routes answer
+  only `app.diagnostic_mode`, and revision `0020` deleted the two rows.
 
 ### Lore (planned)
 

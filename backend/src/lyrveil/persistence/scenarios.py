@@ -11,10 +11,10 @@ from sqlalchemy import Connection, RowMapping, text
 from lyrveil.domain.scenarios import Scenario, ScenarioStatus
 
 _SELECT = (
-    "SELECT id, title, description, setting, opening_message, character_id, language, status, created_at, updated_at "
-    "FROM scenarios"
+    "SELECT id, title, description, setting, opening_message, character_id, language, status, created_at, updated_at, "
+    "persona_id FROM scenarios"
 )
-_COLUMNS = ("title", "description", "setting", "opening_message", "character_id", "language")
+_COLUMNS = ("title", "description", "setting", "opening_message", "character_id", "language", "persona_id")
 
 
 def _scenario(row: RowMapping) -> Scenario:
@@ -29,6 +29,7 @@ def _scenario(row: RowMapping) -> Scenario:
         status=ScenarioStatus(row["status"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        persona_id=row["persona_id"],
     )
 
 
@@ -38,13 +39,19 @@ def character_exists(connection: Connection, character_id: str) -> bool:
     return found is not None
 
 
+def persona_exists(connection: Connection, persona_id: str) -> bool:
+    """Returns whether a persona row has that id, in any status."""
+    found = connection.execute(text("SELECT 1 FROM user_personas WHERE id = :id"), {"id": persona_id}).first()
+    return found is not None
+
+
 def insert(connection: Connection, scenario_id: str, fields: dict[str, object], now: str) -> None:
     """Adds an active scenario. `fields` holds exactly the keys of _COLUMNS."""
     connection.execute(
         text(
             "INSERT INTO scenarios (id, title, description, setting, opening_message, character_id, language, "
-            "created_at, updated_at) VALUES (:id, :title, :description, :setting, :opening_message, :character_id, "
-            ":language, :now, :now)"
+            "persona_id, created_at, updated_at) VALUES (:id, :title, :description, :setting, :opening_message, "
+            ":character_id, :language, :persona_id, :now, :now)"
         ),
         {**fields, "id": scenario_id, "now": now},
     )

@@ -34,6 +34,7 @@ class ScenarioOut(BaseModel):
     status: ScenarioStatus
     created_at: str
     updated_at: str
+    persona_id: str | None = None
 
 
 class ScenarioList(BaseModel):
@@ -51,6 +52,7 @@ class ScenarioIn(BaseModel):
     opening_message: str = Field(default="", max_length=MAX_OPENING_CHARS)
     character_id: str | None = None
     language: str | None = Field(default=None, max_length=16)
+    persona_id: str | None = None
 
 
 def _out(scenario: Scenario) -> ScenarioOut:
@@ -65,6 +67,7 @@ def _out(scenario: Scenario) -> ScenarioOut:
         status=scenario.status,
         created_at=scenario.created_at,
         updated_at=scenario.updated_at,
+        persona_id=scenario.persona_id,
     )
 
 
@@ -93,7 +96,8 @@ def list_scenarios(
 
 @router.post("", response_model=ScenarioOut, status_code=201)
 def create_scenario(body: ScenarioIn, service: ScenarioService = Service) -> ScenarioOut:
-    """Creates a scenario: 422 for a blank title or a text that describes a minor, 404 for an unknown character."""
+    """Creates a scenario: 422 for a blank title or a text that describes a minor, 404 for an unknown character or
+    persona."""
     return _out(service.create(body.model_dump()))
 
 
@@ -105,7 +109,8 @@ def get_scenario(scenario_id: str, service: ScenarioService = Service) -> Scenar
 
 @router.put("/{scenario_id}", response_model=ScenarioOut)
 def put_scenario(scenario_id: str, body: ScenarioIn, service: ScenarioService = Service) -> ScenarioOut:
-    """Replaces the editable fields; running conversations keep their copy. 404 for an unknown scenario or character."""
+    """Replaces the editable fields; running conversations keep their copy. 404 for an unknown scenario, character or
+    persona."""
     return _out(service.update(scenario_id, body.model_dump()))
 
 

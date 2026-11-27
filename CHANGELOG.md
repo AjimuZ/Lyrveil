@@ -62,6 +62,15 @@ an entry says "not yet run", the test was written and has not run.
 
 ### Added
 
+- Persona routes and the persona of a conversation (P11.1b, [ADR 0048](docs/decisions/0048-user-personas.md)).
+  `GET` and `POST /personas`, `GET`, `PUT` and `DELETE /personas/{id}`, `POST /personas/{id}/default`, `/archive` and
+  `/unarchive` manage the user's personas. Every text passes the content guard, the age is empty or 18 to 120, exactly
+  one persona is the default and is never archived or deleted, a persona that a conversation uses can only be archived,
+  and an unused one can be deleted. `POST /conversations` takes `persona_id` and `persona_note` (up to 600
+  characters): without a `persona_id` the chat takes the scenario's persona, else the default one, and an archived
+  persona is refused for new chats while its chats keep working. `PATCH /conversations/{id}` edits the note and
+  refuses `persona_id`, which never changes. Scenarios take an optional `persona_id`. Prompts still read the default
+  name and gender, and no screen manages personas yet. The tests are written and not yet run.
 - User personas in the database (P11.1a, [ADR 0048](docs/decisions/0048-user-personas.md)). Migration 0020 adds
   `user_personas` and creates the default persona from the settings `user.display_name` and
   `user.grammatical_gender`, or from `Utente` and `non_indicato` when they were never set. Every existing conversation

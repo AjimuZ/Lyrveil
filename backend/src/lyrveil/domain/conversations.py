@@ -56,6 +56,8 @@ class Conversation:
     reply still being produced never count; it is 0 while a chat has none. `last_message` is None until a message has
     finished. `activity` is None while the character does nothing in the chat. `scenario_title` is the title
     in the copy taken when the chat started from a scenario; `scenario_id` is None once that scenario is deleted.
+    `persona_id` is the user's persona (ADR 0048), fixed at creation and None only for a row written outside the
+    service; `persona_name` is its current name; `persona_note` is what the character knows of the user at the start.
     """
 
     id: str
@@ -77,6 +79,9 @@ class Conversation:
     scenario_title: str | None = None
     last_message: LastMessage | None = None
     activity: Activity | None = None
+    persona_id: str | None = None
+    persona_name: str | None = None
+    persona_note: str = ""
 
     @property
     def pinned(self) -> bool:

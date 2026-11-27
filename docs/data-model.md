@@ -762,8 +762,11 @@ Delivered in revision `0020` (P11.1a):
   `user_personas_clear_scenarios` sets `scenarios.persona_id` to NULL when its persona is deleted.
 - `memories.persona_id` has the `CHECK` `persona_id IS NULL OR scope = 'shared'`. A shared memory written before P11.3
   still has NULL.
-- `conversations.persona_id` is nullable in the schema. The conversation insert sets the default persona; the picker's
-  choice arrives with P11.4. The index `ix_conversations_persona` serves the delete check.
+- `conversations.persona_id` is nullable in the schema. `ConversationService.create` always sets it: the requested
+  persona, else the active persona that the scenario names, else the default one; the persistence insert falls back to
+  the default persona when it gets none. The index `ix_conversations_persona` serves the delete check.
+- `PersonaService` (P11.1b) enforces the same rules before the database does, so a refusal has an Italian detail: the
+  default persona is not archived or deleted, and a persona with conversations, deleted ones included, is only archived.
 
 ### P12: worlds and lore
 
